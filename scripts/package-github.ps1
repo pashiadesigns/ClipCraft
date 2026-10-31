@@ -15,6 +15,9 @@ if (Test-Path -LiteralPath $release) { throw 'Release staging already exists; in
 $env:CARGO_BUILD_JOBS = '2'
 $env:RUST_TEST_THREADS = '2'
 $pwsh = (Get-Process -Id $PID).Path
+$targetRoot = if ($env:CARGO_TARGET_DIR) { [IO.Path]::GetFullPath($env:CARGO_TARGET_DIR) } else { Join-Path $root 'target' }
+$desktopExe = Join-Path $targetRoot 'release/capture-desktop.exe'
+$cliExe = Join-Path $targetRoot 'release/capture-cli.exe'
 & node scripts/source-audit.mjs
 if ($LASTEXITCODE -ne 0) { throw 'Source audit failed.' }
 & node --test scripts/source-audit.test.mjs scripts/release-metadata.test.mjs
@@ -26,13 +29,13 @@ if ($LASTEXITCODE -ne 0) { throw 'Rust checks failed.' }
 New-Item -ItemType Directory -Path $release -Force | Out-Null
 & cargo build --release --workspace --locked --offline *> (Join-Path $release 'build.log')
 if ($LASTEXITCODE -ne 0) { throw 'Release build failed; inspect build.log.' }
-& node scripts/check-windows-imports.mjs target/release/capture-desktop.exe *> (Join-Path $release 'windows-imports.json')
+& node scripts/check-windows-imports.mjs $desktopExe *> (Join-Path $release 'windows-imports.json')
 if ($LASTEXITCODE -ne 0) { throw 'Windows startup import verification failed.' }
 $package = Join-Path $release 'package'
 $public = Join-Path $release 'public'
 New-Item -ItemType Directory -Path $package,$public -Force | Out-Null
-Copy-Item -LiteralPath target/release/capture-desktop.exe -Destination (Join-Path $package 'ClipCraft.exe')
-Copy-Item -LiteralPath target/release/capture-cli.exe -Destination $package
+Copy-Item -LiteralPath $desktopExe -Destination (Join-Path $package 'ClipCraft.exe')
+Copy-Item -LiteralPath $cliExe -Destination $package
 $fixture = Join-Path $release 'fixture'
 & (Join-Path $package 'capture-cli.exe') demo --out-dir $fixture
 if ($LASTEXITCODE -ne 0) { throw 'Demo generation failed.' }
