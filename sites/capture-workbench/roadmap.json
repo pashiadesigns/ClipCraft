@@ -5113,7 +5113,8 @@
       "updated": "2026-10-31",
       "evidence": [
         "User isolated persistent lag to Blur/Eraser and raster effects; removing them restores smooth interaction. Earlier guide performance accepted. docs/pixel-effects-fix.md.",
-        "2026-10-31T19:46:35.146108+00:00: pixel-effects-fix-20261031-194607, SHA256 0c7ed4fdfbe53dbe3b031e6d91bcb54850b37f9c55174f70ee4fef77012ed17a; 527 tests/fmt/Clippy, 21 unchanged plus three new optimized fixture comparisons. Bounded patch equality/cache invalidation, four-edge crop/source pan/Undo and window placement commands tested. Headless Library/property/erased-alpha output inspected. Native L6/P1 pending; 76 current user passes preserved. Public desktop alpha50 unchanged. docs/pixel-effects-fix.md."
+        "2026-10-31T19:46:35.146108+00:00: pixel-effects-fix-20261031-194607, SHA256 0c7ed4fdfbe53dbe3b031e6d91bcb54850b37f9c55174f70ee4fef77012ed17a; 527 tests/fmt/Clippy, 21 unchanged plus three new optimized fixture comparisons. Bounded patch equality/cache invalidation, four-edge crop/source pan/Undo and window placement commands tested. Headless Library/property/erased-alpha output inspected. Native L6/P1 pending; 76 current user passes preserved. Public desktop alpha50 unchanged. docs/pixel-effects-fix.md.",
+        "User passed L6 and partially passed P1 on lean beta review: performance and continuous blue join accepted. Surround color/separator correction in UX-073."
       ]
     },
     {
@@ -5158,7 +5159,7 @@
       "category": "Editing",
       "status": "needs_verification",
       "priority": "next",
-      "description": "Import local images into isolated managed stamp storage; search names and place independent editable Image objects. Curated built-in packs and categories remain outside this batch.",
+      "description": "Import and search local image stamps, then use repeated cursor placement and edit placed images. Starter business symbols tracked separately in EDIT-082.",
       "completion": "Verify import persists after original file removal, search, placement, original pixel retention, opacity, Undo and project reopen.",
       "depends_on": [
         "EDIT-018"
@@ -5168,7 +5169,8 @@
       "evidence": [
         "Approved lean beta batch; qualification underway. docs/lean-beta-work.md.",
         "Shared engine and headless production checks pass for the lean scope. Native file-picker/printer review and consolidated candidate qualification remain. docs/lean-beta-work.md.",
-        "LEAN BETA REVIEW READY 2026-10-31T20:15:09.037768+00:00: lean-beta-review-20261031-201403; SHA256 4c4fb4b6524ae307941d7cce05d276fc078cf33fb7668362ccded019690a85b2. 538 Rust tests/fmt/Clippy,24 unchanged plus one installed-font optimized export/viewport comparison, and four PDF/JPEG output fixtures pass. PNG/JPEG/PDF/page preview and Windows print path, installed font families, import/search/place image stamps, Library bulk tags/export/delete and non-evicting storage controls implemented. Headless production panels inspected.76 user passes/history preserved; L6/P1/Q1/Q2 native review pending. Public desktop alpha50 unchanged; automation PAUSED. docs/lean-beta-work.md."
+        "LEAN BETA REVIEW READY 2026-10-31T20:15:09.037768+00:00: lean-beta-review-20261031-201403; SHA256 4c4fb4b6524ae307941d7cce05d276fc078cf33fb7668362ccded019690a85b2. 538 Rust tests/fmt/Clippy,24 unchanged plus one installed-font optimized export/viewport comparison, and four PDF/JPEG output fixtures pass. PNG/JPEG/PDF/page preview and Windows print path, installed font families, import/search/place image stamps, Library bulk tags/export/delete and non-evicting storage controls implemented. Headless production panels inspected.76 user passes/history preserved; L6/P1/Q1/Q2 native review pending. Public desktop alpha50 unchanged; automation PAUSED. docs/lean-beta-work.md.",
+        "User passed import/search/Undo; initial immediate placement rejected. Step-like repeated placement and persistent stamp identity prepared for review."
       ]
     },
     {
@@ -5195,15 +5197,46 @@
       "id": "ENG-005",
       "title": "Public auditable source and portable GitHub releases",
       "category": "Engineering",
-      "status": "needs_verification",
-      "priority": "next",
+      "status": "shipped",
+      "priority": "done",
       "description": "Apache-2.0 public source, Windows checks and portable preview packaging, dependency advisory scans, SPDX inventory, checksums and GitHub artifact attestations. Signed installers are a separate follow-up.",
       "completion": "Verify a clean source checkout builds, publish a matching source tag and portable ZIP, run hosted checks and advisory scan, and verify downloaded checksums and attestations.",
-      "schedule_status": "unscheduled",
       "updated": "2026-10-31",
       "evidence": [
         "User authorized public GitHub source and portable downloads; Apache-2.0 selected.",
-        "Local Rust fmt/tests/Clippy, release tooling tests, workflow lint and Windows resource source comparison pass. Account creation/authentication, hosted runs and publication pending. See docs/github-releases.md."
+        "Local Rust fmt/tests/Clippy, release tooling tests, workflow lint and Windows resource source comparison pass. Account creation/authentication, hosted runs and publication pending. See docs/github-releases.md.",
+        "Published https://github.com/pashiadesigns/ClipCraft/releases/tag/v0.1.0-preview.1 from fac53917db1dfc85f38d1fc3f6465b50917056db. Hosted run 41245864088 passed 538 tests/fmt/Clippy, packaging and advisory scan (0 known vulnerabilities, 5 maintenance warnings). Public ZIP SHA256 bd21de19d55d06307812f17ea9d55417a2595db7af7896e0e7f0f0d74d215c7e, all package/source hashes, 217-component SPDX schema, source/ref/workflow provenance and SBOM attestations verified."
+      ],
+      "released_in": "0.1.0-preview.1"
+    },
+    {
+      "id": "UX-073",
+      "title": "Review corrections: Library surround, text overflow and export preview",
+      "category": "Experience",
+      "status": "needs_verification",
+      "priority": "next",
+      "description": "Use #252729 around Library with no footer separator; Shrink preserves text-frame bounds; optional Preview export after opens the completed file.",
+      "completion": "Confirm P1 color correction, Q2 overflow fix, and Q3 export-preview launch after automated qualification.",
+      "schedule_status": "unscheduled",
+      "updated": "2026-10-31",
+      "evidence": [
+        "User requested during GitHub setup; local checks and review candidate preparation underway.",
+        "Local review-corrections-20261031-222926; SHA256 5a18ed3df9d997b39997fff2088fecfef0d2b9d7bb00864dd800fba0bd6d4f5e; 540 tests/fmt/Clippy and 25 optimized export/viewport comparisons pass. Headless production UI and pointer workflows inspected; native confirmation remains. Not in published preview.1."
+      ]
+    },
+    {
+      "id": "EDIT-082",
+      "title": "Essential business-guide starter stamps",
+      "category": "Editing",
+      "status": "needs_verification",
+      "priority": "next",
+      "description": "Nine original transparent starter symbols: green check and check circle, red X and X circle, caution, exclamation and red exclamation circle, question and information. Shared Step press-origin flow; cursor preview, release commit, repeat placement, Undo and manual stamp reselection.",
+      "completion": "Verify built-ins without imports; search keywords, live cursor/drag/release, one-step Undo, saved identity and existing-stamp selection without premature Move switching.",
+      "schedule_status": "unscheduled",
+      "updated": "2026-10-31",
+      "evidence": [
+        "User requested during GitHub setup; local checks and review candidate preparation underway.",
+        "Local review-corrections-20261031-222926; SHA256 5a18ed3df9d997b39997fff2088fecfef0d2b9d7bb00864dd800fba0bd6d4f5e; 540 tests/fmt/Clippy and 25 optimized export/viewport comparisons pass. Headless production UI and pointer workflows inspected; native confirmation remains. Not in published preview.1."
       ]
     }
   ]

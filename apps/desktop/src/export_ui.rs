@@ -7,6 +7,7 @@ pub(super) struct Dialog {
     texture: Option<egui::TextureHandle>,
     options: Options,
     print: bool,
+    preview_after: bool,
     page: usize,
     error: String,
 }
@@ -28,6 +29,7 @@ impl Editor {
                         ..Default::default()
                     },
                     print,
+                    preview_after: false,
                     page: 0,
                     error: String::new(),
                 })
@@ -69,6 +71,7 @@ impl Editor {
             ui.label(format!("{} × {} pixels",d.pixels.width(),d.pixels.height()));
             if let Err(e)=&pages{ui.colored_label(egui::Color32::LIGHT_RED,e.to_string());}
             if !d.error.is_empty(){ui.colored_label(egui::Color32::LIGHT_RED,&d.error);}
+            ui.horizontal(|ui| { ui.label("Preview export after"); ui.checkbox(&mut d.preview_after, ""); });
             ui.horizontal(|ui|{save=ui.button("Save export…").clicked();print=ui.add_enabled(pages.is_ok(),egui::Button::new("Print…")).on_hover_text("Choose a printer and its paper settings. No print job is sent until you accept the Windows dialog.").clicked();cancel=ui.button("Close").clicked();});
         });
         if cancel || crate::text_edit::cancel_on_escape(&modal) {
@@ -101,6 +104,15 @@ impl Editor {
                     Ok(()) => {
                         self.last_directory = path.parent().unwrap().to_path_buf();
                         self.status = format!("Exported {}", path.display());
+                        if d.preview_after {
+                            #[cfg(windows)]
+                            if let Err(error) = windows::open_export(&path) {
+                                self.status = format!(
+                                    "Exported {}, but preview could not open: {error}",
+                                    path.display()
+                                );
+                            }
+                        }
                         return;
                     }
                     Err(e) => d.error = e.to_string(),

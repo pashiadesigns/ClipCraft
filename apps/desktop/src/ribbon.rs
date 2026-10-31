@@ -527,11 +527,7 @@ impl Editor {
     }
     pub(super) fn show_ribbon(&mut self, ui: &mut egui::Ui) -> [Response; 4] {
         egui::Panel::top("workspace_ribbon")
-            .frame(egui::Frame::new().fill(if self.shell.library {
-                crate::tabs::BACKGROUND
-            } else {
-                Color32::from_rgb(37, 39, 41)
-            }))
+            .frame(egui::Frame::new().fill(crate::shell::SURROUND))
             .show(ui, |ui| {
                 // One panel avoids a separator through the active tab's join.
                 ui.spacing_mut().item_spacing.y = 0.0;

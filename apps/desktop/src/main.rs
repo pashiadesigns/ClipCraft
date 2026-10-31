@@ -774,7 +774,7 @@ impl eframe::App for Editor {
                 .frame(
                     egui::Frame::new()
                         .fill(if self.shell.library {
-                            tabs::BACKGROUND
+                            shell::SURROUND
                         } else {
                             shell::CANVAS
                         })

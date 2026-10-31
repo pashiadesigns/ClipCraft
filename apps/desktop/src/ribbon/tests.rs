@@ -8,6 +8,118 @@ struct Layout {
 }
 
 #[test]
+#[ignore = "Production UI image export; synthetic content and no desktop access"]
+fn website_ui_previews() {
+    let root = std::env::var("CLIPCRAFT_WEBSITE_UI").expect("Set output directory");
+    for scene in ["editor", "stamps", "export"] {
+        let ctx = egui::Context::default();
+        crate::shell::configure(&ctx);
+        let mut e = crate::canvas::tests::editor(&ctx);
+        let storage = tempfile::tempdir().unwrap();
+        e.history = crate::history::HistoryPanel::isolated(storage.path());
+        e.session = capture_core::Session::new(
+            capture_core::Document::canvas(640, 400, [255, 255, 255, 255]).unwrap(),
+        )
+        .unwrap();
+        e.shell.badges = false;
+        e.shell.properties = true;
+        e.tool = None;
+        for (id, kind, start, end, text) in [
+            (
+                1,
+                crate::Kind::Text,
+                [30., 25.],
+                [610., 90.],
+                "Make every step clear",
+            ),
+            (
+                2,
+                crate::Kind::Rectangle,
+                [65., 135.],
+                [295., 280.],
+                "Review the details",
+            ),
+            (
+                3,
+                crate::Kind::Callout,
+                [350., 145.],
+                [580., 275.],
+                "Share with confidence",
+            ),
+            (
+                4,
+                crate::Kind::Text,
+                [65., 320.],
+                [580., 370.],
+                "Capture. Annotate. Explain.",
+            ),
+        ] {
+            let mut a = e.new_annotation(kind, start, end);
+            a.id = id;
+            a.color = [24, 145, 193, 255];
+            if kind == crate::Kind::Rectangle {
+                a.fill = Some([224, 242, 249, 255]);
+                a.corner_radius = 16.;
+            }
+            let t = a.text.get_or_insert_with(Default::default);
+            t.content = text.into();
+            t.size_points = if id == 1 { 28. } else { 17. };
+            t.color = Some([37, 39, 41, 255]);
+            t.bold = id == 1;
+            e.execute(crate::Command::Add { annotation: a });
+        }
+        assert_eq!(e.session.document.annotations.len(), 4, "{}", e.status);
+        e.session.document.validate().unwrap();
+        e.status = "Synthetic onboarding guide".into();
+        e.select_only(Some(2));
+        if scene == "stamps" {
+            e.choose_tool(
+                crate::shell::TOOLS
+                    .iter()
+                    .position(|t| t.id == capture_core::toolbar::ToolId::Stamp)
+                    .unwrap(),
+            );
+        }
+        if scene == "export" {
+            e.begin_export(false);
+        }
+        e.needs_render = true;
+        let mut frame_time = 0.0;
+        let mut render = || {
+            frame_time += 1.0;
+            PaintedOutput(ctx.run_ui(
+                egui::RawInput {
+                    time: Some(frame_time),
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        egui::vec2(1280., 800.),
+                    )),
+                    focused: true,
+                    ..Default::default()
+                },
+                |ui| {
+                    e.show_shell(ui);
+                    if e.needs_render {
+                        e.refresh_canvas_display(&ctx);
+                    }
+                    egui::CentralPanel::default()
+                        .frame(
+                            egui::Frame::new()
+                                .fill(crate::shell::CANVAS)
+                                .inner_margin(12),
+                        )
+                        .show(ui, |ui| e.show_workspace(ui));
+                    e.show_export(&ctx, None);
+                },
+            ))
+        };
+        let first = render();
+        let output = render();
+        dump_meshes(&ctx, &root, scene, first, output);
+    }
+}
+
+#[test]
 fn library_tab_reclaims_ribbon_space_with_connected_full_workspace_border() {
     for width in [900., 1280., 1920.] {
         let ctx = egui::Context::default();
@@ -58,7 +170,7 @@ fn library_tab_reclaims_ribbon_space_with_connected_full_workspace_border() {
                     egui::CentralPanel::default()
                         .frame(
                             egui::Frame::new()
-                                .fill(crate::tabs::BACKGROUND)
+                                .fill(crate::shell::SURROUND)
                                 .inner_margin(egui::Margin {
                                     left: 5,
                                     right: 5,

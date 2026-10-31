@@ -15,3 +15,6 @@
 
 .editor-preview { margin-top: 32px; }
 .editor-preview > img { display: block; width: 100%; height: auto; }
+
+/* Current production UI previews, with full-size image links. */
+.ui-gallery{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:24px;margin:64px 7%}.gallery-intro,.gallery-editor{grid-column:1/-1}.gallery-intro h3{font-size:30px;margin-bottom:16px}.gallery-intro p{color:var(--muted);max-width:850px;font-size:14px}.ui-gallery figure{overflow:hidden;border:1px solid var(--line);border-radius:12px;background:#1b1e20}.ui-gallery a{display:block}.ui-gallery img{display:block;width:100%;height:auto}.ui-gallery figcaption{padding:18px 20px;font-size:13px;color:var(--muted)}.ui-gallery figcaption strong{display:block;color:var(--text);font-size:16px;margin-bottom:5px}@media(max-width:760px){.ui-gallery{grid-template-columns:1fr;margin:36px 6%;gap:20px}.gallery-intro h3{font-size:26px}}

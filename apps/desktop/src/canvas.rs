@@ -30,6 +30,7 @@ fn drawing_shift(ui: &egui::Ui) -> bool {
 
 impl Editor {
     pub(super) fn cancel_gesture(&mut self) {
+        self.stamps.cancel_drag();
         self.marquee = None;
         self.quick_controls.format_source = None;
         self.quick_controls.format_locked = false;
@@ -293,6 +294,9 @@ impl Editor {
         if self.crop.is_some() {
             self.crop_canvas(ui, &response, transform, interactive);
             self.canvas_pointer(ui, &response, transform, interactive);
+            return;
+        }
+        if self.stamp_placement_input(ui, &response, transform, interactive) {
             return;
         }
         let interaction_area = if self.tool.is_none() {

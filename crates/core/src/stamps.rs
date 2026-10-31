@@ -6,6 +6,7 @@ use crate::{
     history::{Entry, History, Origin},
 };
 use std::path::Path;
+pub mod builtin;
 pub struct Library(pub History);
 impl Library {
     pub fn open(root: &Path) -> Result<Self> {
@@ -31,8 +32,18 @@ impl Library {
     }
     pub fn payload(&self, id: &str) -> Result<ObjectPayload> {
         let pixels = self.0.load(id)?.render()?;
-        ImagePayload::from_rgba(pixels.width(), pixels.height(), pixels.into_raw())?.into_objects()
+        from_pixels(pixels)
     }
+}
+fn from_pixels(pixels: image::RgbaImage) -> Result<ObjectPayload> {
+    let mut payload = ImagePayload::from_rgba(pixels.width(), pixels.height(), pixels.into_raw())?
+        .into_objects()?;
+    for object in &mut payload.objects {
+        if let Some(bitmap) = &object.image {
+            object.image = Some(std::sync::Arc::new((**bitmap).clone().into_stamp()));
+        }
+    }
+    Ok(payload)
 }
 #[cfg(test)]
 mod tests {
@@ -59,7 +70,7 @@ mod tests {
             .unwrap();
         let result = session.document.clone();
         assert_eq!(result.annotations[0].kind, crate::Kind::Image);
-        assert!(result.annotations[0].image.is_some());
+        assert!(result.annotations[0].image.as_ref().unwrap().is_stamp());
         let saved = dir.path().join("stamp.capture.json");
         result.save(&saved).unwrap();
         assert_eq!(

@@ -20,8 +20,13 @@ source import and cannot be attributed to its initial commit.
 ```powershell
 Get-FileHash ./clipcraft-0.1.0-preview.1-windows-x64.zip -Algorithm SHA256
 # Compare with the matching line in SHA256SUMS.txt.
-gh attestation verify ./clipcraft-0.1.0-preview.1-windows-x64.zip --repo OWNER/ClipCraft
+gh attestation verify ./clipcraft-0.1.0-preview.1-windows-x64.zip `
+  --repo pashiadesigns/ClipCraft --deny-self-hosted-runners `
+  --signer-workflow pashiadesigns/ClipCraft/.github/workflows/windows.yml `
+  --source-ref refs/tags/v0.1.0-preview.1
 ```
+
+Repeat with `--predicate-type https://spdx.dev/Document` to verify the SPDX inventory attestation.
 
 Check the attested repository, source commit/tag and workflow. Build information
 states whether it ran on GitHub or locally. Checksums detect changed bytes;

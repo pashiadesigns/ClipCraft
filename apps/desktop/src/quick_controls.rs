@@ -1340,7 +1340,7 @@ mod tests {
         e.apply_quick_text(TextAction::Size(1.0));
         for (a, b) in e.session.document.annotations.iter().zip(&before) {
             assert_eq!(*a, b.change_text_size(1.0, true, [640, 400]).unwrap());
-            assert_ne!(a.end, b.end);
+            assert_eq!(a.end, b.end);
         }
         e.execute(Command::Undo);
         assert_eq!(e.session.document.annotations, before);
@@ -1358,6 +1358,9 @@ mod tests {
         assert_eq!(e.session.document.annotations[0], preview);
         e.execute(Command::Undo);
         assert_eq!(e.session.document.annotations, before);
+        // Only explicit ResizeShape can fail because the text exceeds the canvas.
+        e.session.document.annotations[1].text.as_mut().unwrap().fit =
+            capture_core::text::TextFit::ResizeShape;
         // A failed member must not partially resize its multi-selection peers.
         e.session.document.annotations[1]
             .text

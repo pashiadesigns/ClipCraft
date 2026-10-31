@@ -1,5 +1,24 @@
 use crate::{Command, Editor, Kind, egui};
 
+/// Shared press-origin resolution for click-and-place tools (Step and Stamp).
+pub(super) fn placement_origin(ui: &egui::Ui) -> Option<egui::Pos2> {
+    ui.input(|i| {
+        i.events
+            .iter()
+            .find_map(|event| match event {
+                egui::Event::PointerButton {
+                    pos,
+                    button: egui::PointerButton::Primary,
+                    pressed: true,
+                    ..
+                } => Some(*pos),
+                _ => None,
+            })
+            .or_else(|| i.pointer.press_origin())
+            .or_else(|| i.pointer.interact_pos())
+    })
+}
+
 impl Editor {
     /// A newly pressed Step is visible immediately, but creation and numbering
     /// form one document transaction when the pointer is released.
@@ -37,26 +56,7 @@ impl Editor {
             && !self.view.panning
             && self.edit_drag.is_none()
             && self.group_drag.is_none()
-            && let Some(pointer) = ui
-                .input(|i| {
-                    i.events
-                        .iter()
-                        .find_map(|event| {
-                            if let egui::Event::PointerButton {
-                                pos,
-                                button: egui::PointerButton::Primary,
-                                pressed: true,
-                                ..
-                            } = event
-                            {
-                                Some(*pos)
-                            } else {
-                                None
-                            }
-                        })
-                        .or_else(|| i.pointer.press_origin())
-                })
-                .or(pointer)
+            && let Some(pointer) = placement_origin(ui)
             && transform
                 .viewport
                 .intersect(transform.image)

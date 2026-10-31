@@ -211,7 +211,9 @@ Generated from roadmap.json. Edit that source and run node scripts/build.mjs; do
 | EDIT-080: Installed local font families | Editing | Needs verification | Next |
 | EDIT-081: Import and search custom image stamps | Editing | Needs verification | Next |
 | LIB-012: Bulk tags export deletion and storage limits | Library | Needs verification | Next |
-| ENG-005: Public auditable source and portable GitHub releases | Engineering | Needs verification | Next |
+| ENG-005: Public auditable source and portable GitHub releases | Engineering | Shipped | Delivered |
+| UX-073: Review corrections: Library surround, text overflow and export preview | Experience | Needs verification | Next |
+| EDIT-082: Essential business-guide starter stamps | Editing | Needs verification | Next |
 
 ## Completion checks and evidence
 
@@ -3573,6 +3575,7 @@ Completion: Match bounded patches to full exports with overlaps, transparency an
 
 - Evidence: User isolated persistent lag to Blur/Eraser and raster effects; removing them restores smooth interaction. Earlier guide performance accepted. docs/pixel-effects-fix.md.
 - Evidence: 2026-10-31T19:46:35.146108+00:00: pixel-effects-fix-20261031-194607, SHA256 0c7ed4fdfbe53dbe3b031e6d91bcb54850b37f9c55174f70ee4fef77012ed17a; 527 tests/fmt/Clippy, 21 unchanged plus three new optimized fixture comparisons. Bounded patch equality/cache invalidation, four-edge crop/source pan/Undo and window placement commands tested. Headless Library/property/erased-alpha output inspected. Native L6/P1 pending; 76 current user passes preserved. Public desktop alpha50 unchanged. docs/pixel-effects-fix.md.
+- Evidence: User passed L6 and partially passed P1 on lean beta review: performance and continuous blue join accepted. Surround color/separator correction in UX-073.
 - Release not scheduled; priorities are not version promises.
 - Depends on: UX-071, EDIT-078
 
@@ -3606,13 +3609,14 @@ Completion: Verify shared editing/render metrics, bold/italic face resolution, U
 
 **Needs verification** · Next · Updated 2026-10-31
 
-Import local images into isolated managed stamp storage; search names and place independent editable Image objects. Curated built-in packs and categories remain outside this batch.
+Import and search local image stamps, then use repeated cursor placement and edit placed images. Starter business symbols tracked separately in EDIT-082.
 
 Completion: Verify import persists after original file removal, search, placement, original pixel retention, opacity, Undo and project reopen.
 
 - Evidence: Approved lean beta batch; qualification underway. docs/lean-beta-work.md.
 - Evidence: Shared engine and headless production checks pass for the lean scope. Native file-picker/printer review and consolidated candidate qualification remain. docs/lean-beta-work.md.
 - Evidence: LEAN BETA REVIEW READY 2026-10-31T20:15:09.037768+00:00: lean-beta-review-20261031-201403; SHA256 4c4fb4b6524ae307941d7cce05d276fc078cf33fb7668362ccded019690a85b2. 538 Rust tests/fmt/Clippy,24 unchanged plus one installed-font optimized export/viewport comparison, and four PDF/JPEG output fixtures pass. PNG/JPEG/PDF/page preview and Windows print path, installed font families, import/search/place image stamps, Library bulk tags/export/delete and non-evicting storage controls implemented. Headless production panels inspected.76 user passes/history preserved; L6/P1/Q1/Q2 native review pending. Public desktop alpha50 unchanged; automation PAUSED. docs/lean-beta-work.md.
+- Evidence: User passed import/search/Undo; initial immediate placement rejected. Step-like repeated placement and persistent stamp identity prepared for review.
 - Release not scheduled; priorities are not version promises.
 - Depends on: EDIT-018
 
@@ -3632,7 +3636,7 @@ Completion: Verify atomic conflicts, tag persistence, selected export and unique
 
 ### ENG-005: Public auditable source and portable GitHub releases
 
-**Needs verification** · Next · Updated 2026-10-31
+**Shipped** · Delivered · Updated 2026-10-31
 
 Apache-2.0 public source, Windows checks and portable preview packaging, dependency advisory scans, SPDX inventory, checksums and GitHub artifact attestations. Signed installers are a separate follow-up.
 
@@ -3640,4 +3644,29 @@ Completion: Verify a clean source checkout builds, publish a matching source tag
 
 - Evidence: User authorized public GitHub source and portable downloads; Apache-2.0 selected.
 - Evidence: Local Rust fmt/tests/Clippy, release tooling tests, workflow lint and Windows resource source comparison pass. Account creation/authentication, hosted runs and publication pending. See docs/github-releases.md.
+- Evidence: Published https://github.com/pashiadesigns/ClipCraft/releases/tag/v0.1.0-preview.1 from fac53917db1dfc85f38d1fc3f6465b50917056db. Hosted run 41245864088 passed 538 tests/fmt/Clippy, packaging and advisory scan (0 known vulnerabilities, 5 maintenance warnings). Public ZIP SHA256 bd21de19d55d06307812f17ea9d55417a2595db7af7896e0e7f0f0d74d215c7e, all package/source hashes, 217-component SPDX schema, source/ref/workflow provenance and SBOM attestations verified.
+- Release: 0.1.0-preview.1
+
+### UX-073: Review corrections: Library surround, text overflow and export preview
+
+**Needs verification** · Next · Updated 2026-10-31
+
+Use #252729 around Library with no footer separator; Shrink preserves text-frame bounds; optional Preview export after opens the completed file.
+
+Completion: Confirm P1 color correction, Q2 overflow fix, and Q3 export-preview launch after automated qualification.
+
+- Evidence: User requested during GitHub setup; local checks and review candidate preparation underway.
+- Evidence: Local review-corrections-20261031-222926; SHA256 5a18ed3df9d997b39997fff2088fecfef0d2b9d7bb00864dd800fba0bd6d4f5e; 540 tests/fmt/Clippy and 25 optimized export/viewport comparisons pass. Headless production UI and pointer workflows inspected; native confirmation remains. Not in published preview.1.
+- Release not scheduled; priorities are not version promises.
+
+### EDIT-082: Essential business-guide starter stamps
+
+**Needs verification** · Next · Updated 2026-10-31
+
+Nine original transparent starter symbols: green check and check circle, red X and X circle, caution, exclamation and red exclamation circle, question and information. Shared Step press-origin flow; cursor preview, release commit, repeat placement, Undo and manual stamp reselection.
+
+Completion: Verify built-ins without imports; search keywords, live cursor/drag/release, one-step Undo, saved identity and existing-stamp selection without premature Move switching.
+
+- Evidence: User requested during GitHub setup; local checks and review candidate preparation underway.
+- Evidence: Local review-corrections-20261031-222926; SHA256 5a18ed3df9d997b39997fff2088fecfef0d2b9d7bb00864dd800fba0bd6d4f5e; 540 tests/fmt/Clippy and 25 optimized export/viewport comparisons pass. Headless production UI and pointer workflows inspected; native confirmation remains. Not in published preview.1.
 - Release not scheduled; priorities are not version promises.

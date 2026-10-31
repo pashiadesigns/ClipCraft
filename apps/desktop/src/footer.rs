@@ -16,9 +16,14 @@ impl Editor {
     pub(super) fn show_footer(&mut self, ui: &mut egui::Ui) {
         egui::Panel::bottom("status")
             .exact_size(46.)
+            .show_separator_line(!self.shell.library)
             .frame(
                 egui::Frame::new()
-                    .fill(shell::BAR)
+                    .fill(if self.shell.library {
+                        shell::SURROUND
+                    } else {
+                        shell::BAR
+                    })
                     .inner_margin(egui::Margin::symmetric(8, 4)),
             )
             .show(ui, |ui| {

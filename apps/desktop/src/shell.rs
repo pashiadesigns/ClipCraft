@@ -2,6 +2,7 @@ use crate::{Editor, Kind, egui, readiness};
 use capture_core::toolbar::ToolId;
 use egui::Color32;
 
+pub(super) const SURROUND: Color32 = Color32::from_rgb(37, 39, 41);
 pub(super) const BAR: Color32 = Color32::from_rgb(46, 51, 53);
 const PANE: Color32 = Color32::from_rgb(56, 62, 65);
 pub const CANVAS: Color32 = Color32::from_rgb(19, 22, 22);
@@ -443,6 +444,9 @@ impl Editor {
         self.shell.property_tab = PropertyTab::Tool;
         let tool = TOOLS[index];
         self.stamps.active = tool.id == ToolId::Stamp;
+        if !self.stamps.active {
+            self.stamps.disarm();
+        }
         if matches!(tool.id, ToolId::Crop | ToolId::CutOut)
             && self.quick_controls.canvas_tool() != tool.id
         {
@@ -663,7 +667,12 @@ impl Editor {
             );
             return;
         }
-        if self.stamps.active && !self.shell.effects {
+        if self.stamps.active
+            && !self.shell.effects
+            && !self
+                .selected_annotation()
+                .is_some_and(|a| a.kind == Kind::Image)
+        {
             self.stamp_properties(ui);
             return;
         }

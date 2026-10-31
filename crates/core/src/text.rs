@@ -500,10 +500,8 @@ pub fn fitted_style(style: &TextStyle, size: [f32; 2]) -> TextStyle {
 }
 
 impl Annotation {
-    /// Explicit font-size controls must affect the visible plain-text label,
-    /// even when its requested size was being reduced by shrink-to-fit. Keep
-    /// Shrink as the typing policy, growing the text frame only when necessary.
-    /// Shape/callout labels retain their chosen overflow behavior.
+    /// Size controls retain the object's overflow policy. Shrink never changes
+    /// frame geometry; only ResizeShape may enlarge it.
     pub fn change_text_size(&self, size: f32, relative: bool, canvas: [u32; 2]) -> Result<Self> {
         let Some(style) = self.text.as_ref() else {
             return Ok(self.clone());
@@ -511,38 +509,13 @@ impl Annotation {
         if !size.is_finite() {
             return Err(Error::Invalid("Font size must be finite".into()));
         }
-        let (min, max) = content_bounds(self);
-        let plain_shrink = self.kind == crate::Kind::Text && style.fit == TextFit::Shrink;
-        let base = if plain_shrink && relative {
-            fitted_style(style, [max[0] - min[0], max[1] - min[1]]).size_points
-        } else {
-            style.size_points
-        };
-        let requested = if relative { base + size } else { size }.clamp(6.0, 144.0);
         let mut next = self.clone();
-        next.text.as_mut().unwrap().size_points = requested;
-        let changed = next.text.as_ref().unwrap();
-        if plain_shrink
-            && !changed.content.is_empty()
-            && fitted_style(changed, [max[0] - min[0], max[1] - min[1]]).size_points
-                < requested - 0.001
-        {
-            // Even one large glyph must fit a narrow frame. Wrapping keeps the
-            // original width except for this minimum-glyph-width requirement.
-            let widest = editing_layout(changed, (max[0] - min[0]).max(1.0))
-                .rows
-                .iter()
-                .flat_map(|r| r.characters.iter())
-                .map(|c| c.advance)
-                .fold(0.0_f32, f32::max);
-            let (body_min, body_max) = next.body_bounds();
-            let width = (body_max[0] - body_min[0]).max(widest.ceil() + 2.0 * changed.padding);
-            next.start = body_min;
-            next.end = [body_min[0] + width, body_max[1]];
-            next.text.as_mut().unwrap().fit = TextFit::ResizeShape;
-            next = next.fit_text_shape(canvas)?;
-            next.text.as_mut().unwrap().fit = TextFit::Shrink;
-        }
+        next.text.as_mut().unwrap().size_points = (if relative {
+            style.size_points + size
+        } else {
+            size
+        })
+        .clamp(6.0, 144.0);
         next.fit_text_shape(canvas)
     }
 
@@ -861,57 +834,42 @@ mod tests {
     }
 
     #[test]
-    fn explicit_plain_text_size_changes_visible_glyphs_and_preserves_overflow_policy() {
-        let effective = |a: &Annotation| {
-            let (min, max) = content_bounds(a);
-            fitted_style(a.text.as_ref().unwrap(), [max[0] - min[0], max[1] - min[1]]).size_points
-        };
+    fn explicit_plain_text_size_preserves_shrink_bounds_and_undo() {
         for wrap in [false, true] {
             let mut original = annotation();
             original.end = [125.0, 44.0];
-            let t = original.text.as_mut().unwrap();
-            t.content = "Small text frame with several words".into();
-            t.size_points = 40.0;
-            t.wrap = wrap;
-            let visible = effective(&original);
-            assert!(visible < 30.0);
-            let bigger = original.change_text_size(1.0, true, [640, 400]).unwrap();
-            let target = (visible + 1.0).max(6.0);
-            assert!(
-                (effective(&bigger) - target).abs() < 0.05,
-                "{} vs {target}",
-                effective(&bigger)
+            let style = original.text.as_mut().unwrap();
+            style.content = "Small text frame with several words".into();
+            style.size_points = 40.0;
+            style.wrap = wrap;
+            let changed = original.change_text_size(144.0, false, [640, 400]).unwrap();
+            assert_eq!(changed.start, original.start);
+            assert_eq!(changed.end, original.end);
+            let (min, max) = content_bounds(&changed);
+            let resolved = fitted_style(
+                changed.text.as_ref().unwrap(),
+                [max[0] - min[0], max[1] - min[1]],
             );
-            assert_eq!(bigger.text.as_ref().unwrap().fit, TextFit::Shrink);
-            assert_eq!(bigger.text.as_ref().unwrap().wrap, wrap);
-            assert_eq!(
-                bigger.text.as_ref().unwrap().content,
-                original.text.as_ref().unwrap().content
-            );
-            let smaller = bigger.change_text_size(-1.0, true, [640, 400]).unwrap();
-            assert!((effective(&smaller) - (target - 1.0).max(6.0)).abs() < 0.05);
-            let exact = bigger.change_text_size(28.0, false, [640, 400]).unwrap();
-            assert!((effective(&exact) - 28.0).abs() < 0.05);
+            assert!(resolved.size_points < 40.0);
+            assert_eq!(changed.text.as_ref().unwrap().size_points, 144.0);
+            assert_eq!(changed.text.as_ref().unwrap().fit, TextFit::Shrink);
             let mut document = Document::blank(640, 400).unwrap();
             document.annotations.push(original.clone());
-            let pixels = document.render().unwrap();
             let mut session = Session::new(document).unwrap();
             session
                 .execute(Command::Update {
-                    annotation: bigger.clone(),
+                    annotation: changed.clone(),
                 })
                 .unwrap();
-            assert_ne!(session.document.render().unwrap(), pixels);
             let reopened: Document =
                 serde_json::from_slice(&serde_json::to_vec(&session.document).unwrap()).unwrap();
-            assert_eq!(reopened.annotations[0], bigger);
+            assert_eq!(reopened.annotations[0], changed);
             assert_eq!(
                 reopened.render().unwrap(),
                 session.document.render().unwrap()
             );
             session.execute(Command::Undo).unwrap();
             assert_eq!(session.document.annotations[0], original);
-            assert_eq!(session.document.render().unwrap(), pixels);
         }
     }
 
@@ -920,7 +878,10 @@ mod tests {
         let mut a = annotation();
         a.end = [50.0, 35.0];
         assert!(a.change_text_size(f32::NAN, false, [640, 400]).is_err());
+        assert!(a.change_text_size(144.0, false, [60, 40]).is_ok());
+        a.text.as_mut().unwrap().fit = TextFit::ResizeShape;
         assert!(a.change_text_size(144.0, false, [60, 40]).is_err());
+        a.text.as_mut().unwrap().fit = TextFit::Shrink;
         for kind in [Kind::Rectangle, Kind::Callout] {
             a.kind = kind;
             let changed = a.change_text_size(1.0, true, [640, 400]).unwrap();

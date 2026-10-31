@@ -1,6 +1,40 @@
 {
   "releases": [
     {
+      "version": "0.1.0-preview.1",
+      "date": "2026-10-31",
+      "channel": "preview",
+      "title": "Public source preview and portable Windows build",
+      "summary": "First source-linked ClipCraft preview. Includes the latest editor and lean beta work, with portable ZIP packaging and an auditable build/dependency inventory.",
+      "changes": {
+        "Distribution": [
+          "Complete buildable Rust source under Apache-2.0, with original assets, synthetic fixtures and third-party notices.",
+          "Portable Windows x64 application and CLI; checksums, SPDX dependency inventory and exact source commit.",
+          "GitHub workflows for checks, dependency advisories and draft prereleases. GitHub-built packages include artifact attestations."
+        ],
+        "Included functionality": [
+          "Capture controller, region/window/fullscreen/Steps workflows and configurable hotkeys.",
+          "Editable tools, groups, guides, raster effects, Library and image-frame cropping.",
+          "PNG/JPEG/raster-PDF export and Windows print dialog; installed fonts, imported stamps and Library bulk actions."
+        ]
+      },
+      "limitations": [
+        "Unsigned preview software; signed Windows installers are a separate planned milestone.",
+        "Native regression checks for raster-effect interactions, Library/cropping/window restoration, printing/export dialogs, and the new fonts/stamps/Library controls remain pending.",
+        "Automated tests and headless checks are evidence for their tested scope, not full native parity or a security certification.",
+        "Video/All-in-One capture, mixed formatting in one text box, centralized enterprise deployment policies and an in-app updater are not included.",
+        "Editable projects retain original pixels; share flattened output when redacting. PDF is raster, and installed fonts are not embedded.",
+        "Some roadmap evidence points to private historical local checks, which are not included in the public source.",
+        "Initial RustSec scan reports no known vulnerabilities but five maintenance warnings. See docs/security-model.md for packages and advisory IDs; warnings are not suppressed.",
+        "Post-build user review: L6 performance and Q1 exports/printing passed. Library surround, shrink-on-overflow and repeated Stamp placement corrections, preview-after-export and starter stamps are in the next local review build, not this download."
+      ],
+      "asset": {
+        "file": "clipcraft-0.1.0-preview.1-windows-x64.zip",
+        "bytes": 13045999,
+        "sha256": "bd21de19d55d06307812f17ea9d55417a2595db7af7896e0e7f0f0d74d215c7e"
+      }
+    },
+    {
       "version": "0.1.0-alpha.50",
       "date": "2026-10-31",
       "channel": "alpha",
@@ -532,7 +566,7 @@
       "changes": {
         "Added": [
           "Fill/No Fill for rectangles, rounded rectangles, ellipses and polygons, with independent RGBA color and opacity.",
-          "Editable polygons with 3–64 sides, live resizing and one-step Undo. Geometry is adapted from MIT-licensed DesignCraft with attribution."
+          "Editable polygons with 3\u201364 sides, live resizing and one-step Undo. Geometry is adapted from MIT-licensed DesignCraft with attribution."
         ],
         "Verified": [
           "122 Rust tests, formatting and strict Clippy; native Fill/No Fill, opacity and side-count Undo/Redo, live fill color, resizing and saved output.",
@@ -661,7 +695,7 @@
         "Added": [
           "Library sidebar with image counts and UTC year filters that combine with instant search.",
           "Newest, oldest, name and stored-size sorting with deterministic tie breakers.",
-          "Independent 50–200% Library thumbnail sizing, a 100% reset and absolute UTC snapshot timestamps."
+          "Independent 50\u2013200% Library thumbnail sizing, a 100% reset and absolute UTC snapshot timestamps."
         ],
         "Improved": [
           "Recent tray hides during Library browsing and restores its previous visibility in Editor. The grid fits normal and minimum supported window sizes."
@@ -964,7 +998,7 @@
           "Cancel and nested-popup Escape preserve the document. Invalid sizes and unchanged dimensions do not consume history."
         ],
         "Verified": [
-          "Native 640 × 400 to 320 × 200 resize, Undo/Redo, saved dimensions and all seven editable objects. Native clipboard matches all 64000 resized pixels.",
+          "Native 640 \u00d7 400 to 320 \u00d7 200 resize, Undo/Redo, saved dimensions and all seven editable objects. Native clipboard matches all 64000 resized pixels.",
           "Revert restores all 256000 original pixels and Undo recovers the resized objects. Shared tests cover alpha edges, source retention, invalid input and save/reopen."
         ]
       },
@@ -1043,7 +1077,7 @@
       "summary": "Fit the canvas, inspect actual pixels or zoom in for precise editing while keeping document geometry and exported pixels intact.",
       "changes": {
         "Added": [
-          "View and status-strip zoom controls: Zoom In/Out, Zoom to Fit, Shrink to Fit, Actual Size and 10–1600% presets.",
+          "View and status-strip zoom controls: Zoom In/Out, Zoom to Fit, Shrink to Fit, Actual Size and 10\u20131600% presets.",
           "Ctrl++ / Ctrl+- zoom the canvas; Ctrl+0 restores actual size. Wheel and Shift+wheel pan; Ctrl+wheel zooms at the pointer; Space+drag pans."
         ],
         "Improved": [
@@ -1391,7 +1425,7 @@
       "summary": "Create multiline text boxes with portable fonts, size, color, and opacity controls, then move and resize them on the canvas.",
       "changes": {
         "Added": [
-          "Text boxes with Ubuntu Light and Hack Regular fonts, 6–144 pt sizes, and color/opacity controls.",
+          "Text boxes with Ubuntu Light and Hack Regular fonts, 6\u2013144 pt sizes, and color/opacity controls.",
           "Multiline text, word wrapping, and clipping to resizable text boxes.",
           "A text-edit dialog with Apply/Cancel and one-step undo for a completed edit. Double-click text to edit it again."
         ],

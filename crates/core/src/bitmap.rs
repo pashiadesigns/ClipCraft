@@ -8,6 +8,8 @@ use std::sync::{Arc, OnceLock};
 #[serde(deny_unknown_fields)]
 pub struct Bitmap {
     raster: Arc<RasterImage>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    stamp: bool,
     /// Presence identifies a captured cursor. Indices preserve Windows XOR
     /// pixels so an I-beam still inverts the background after it is moved.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -25,6 +27,7 @@ pub struct Bitmap {
 impl PartialEq for Bitmap {
     fn eq(&self, other: &Self) -> bool {
         (Arc::ptr_eq(&self.raster, &other.raster) || self.raster == other.raster)
+            && self.stamp == other.stamp
             && self.cursor_invert == other.cursor_invert
             && self.view == other.view
             && self.focus == other.focus
@@ -32,6 +35,13 @@ impl PartialEq for Bitmap {
 }
 
 impl Bitmap {
+    pub fn is_stamp(&self) -> bool {
+        self.stamp
+    }
+    pub fn into_stamp(mut self) -> Self {
+        self.stamp = true;
+        self
+    }
     pub fn view(&self) -> crate::image_frame::ImageView {
         self.view.unwrap_or_default()
     }
@@ -85,6 +95,7 @@ impl Bitmap {
     pub fn new(raster: Arc<RasterImage>) -> Result<Self> {
         let value = Self {
             raster,
+            stamp: false,
             cursor_invert: None,
             view: None,
             focus: None,

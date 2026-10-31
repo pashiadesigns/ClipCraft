@@ -1,12 +1,14 @@
 # ClipCraft
 
+[![Windows checks](https://github.com/pashiadesigns/ClipCraft/actions/workflows/windows.yml/badge.svg?branch=main)](https://github.com/pashiadesigns/ClipCraft/actions/workflows/windows.yml)
+
 ClipCraft is a local Windows screenshot capture and annotation editor written in Rust.
 It includes an editable document engine, desktop application, and command-line tools.
 This is preview software; release notes identify tested behavior and open checks.
 
 ## Downloads
 
-Open this repository's **Releases** page for Windows x64 portable ZIPs. Extract the
+Open the [GitHub Releases page](https://github.com/pashiadesigns/ClipCraft/releases) for Windows x64 portable ZIPs. Extract the
 whole archive and run `ClipCraft.exe`; no ClipCraft account is required. These
 previews are **unsigned**. Signed Windows installers are planned separately.
 Organizations can build from source or review the checksums, dependency inventory,
