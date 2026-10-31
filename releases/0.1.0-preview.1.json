@@ -22,6 +22,7 @@
     "Automated tests and headless checks are evidence for their tested scope, not full native parity or a security certification.",
     "Video/All-in-One capture, mixed formatting in one text box, centralized enterprise deployment policies and an in-app updater are not included.",
     "Editable projects retain original pixels; share flattened output when redacting. PDF is raster, and installed fonts are not embedded.",
-    "Some roadmap evidence points to private historical local checks, which are not included in the public source."
+    "Some roadmap evidence points to private historical local checks, which are not included in the public source.",
+    "Initial RustSec scan reports no known vulnerabilities but five maintenance warnings. See docs/security-model.md for packages and advisory IDs; warnings are not suppressed."
   ]
 }

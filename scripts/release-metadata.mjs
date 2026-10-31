@@ -29,7 +29,7 @@ export function dependencyInventory(metadata, lockText, info, assets=[]) {
   return {spdxVersion:'SPDX-2.3',dataLicense:'CC0-1.0',SPDXID:'SPDXRef-DOCUMENT',name:`ClipCraft-${info.version}-windows-x64`,
     documentNamespace:`https://spdx.org/spdxdocs/clipcraft-${info.version}-${info.commit}-${sha256(Buffer.from(info.created)).slice(0,12)}`,
     creationInfo:{created:info.created,creators:['Tool: ClipCraft-release-metadata-1']},
-    documentComment:'Resolved Windows workspace build/test dependencies plus bundled source/font assets. Not an assertion that all packages are linked into both executables.',
+    comment:'Resolved Windows workspace build/test dependencies plus bundled source/font assets. Not an assertion that all packages are linked into both executables.',
     packages,relationships};
 }
 export function writeMetadata(root, metadataPath, packageRoot, version) {
