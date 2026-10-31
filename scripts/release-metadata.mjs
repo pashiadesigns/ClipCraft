@@ -44,7 +44,8 @@ export function writeMetadata(root, metadataPath, packageRoot, version) {
     cargo_lock_sha256:sha256(readFileSync(resolve(root,'Cargo.lock'))),authenticode_signed:false};
   const assets=[
     {name:'ClipCraft bundled Ubuntu fonts',version:'bundled',license:'Ubuntu-font-1.0',source:'crates/core/assets/fonts; licenses/text-fonts/Ubuntu-*'},
-    {name:'ClipCraft bundled Hack fonts',version:'bundled',license:'MIT',source:'crates/core/assets/fonts; licenses/text-fonts/Hack-LICENSE.md'},
+    {name:'ClipCraft bundled Hack fonts',version:'bundled',license:'MIT AND Bitstream-Vera',source:'crates/core/assets/fonts; licenses/text-fonts/Hack-LICENSE.md'},
+    {name:'epaint bundled font assets',version:metadata.packages.find(p=>p.name==='epaint_default_fonts')?.version||'bundled',license:'OFL-1.1 AND Ubuntu-font-1.0 AND MIT AND Bitstream-Vera',source:'epaint_default_fonts/fonts; embedded license texts in THIRD-PARTY-NOTICES.txt'},
     {name:'DesignCraft adapted geometry and rendering helpers',version:'ea08e4c2ba290f092063c99d70c4bdd5afc45887',license:'MIT',source:'licenses/designcraft/PROVENANCE.txt'}];
   const sbom=dependencyInventory(metadata,readFileSync(resolve(root,'Cargo.lock'),'utf8'),info,assets);
   writeFileSync(resolve(packageRoot,'sbom.spdx.json'),JSON.stringify(sbom,null,2)+'\n');
