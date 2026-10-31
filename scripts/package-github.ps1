@@ -46,13 +46,27 @@ if ($LASTEXITCODE -ne 0) { throw 'Export roundtrip differs.' }
 Copy-Item -LiteralPath (Join-Path $fixture 'demo.capture.json') -Destination (Join-Path $package 'example.capture.json')
 Copy-Item -LiteralPath LICENSE,NOTICE,SECURITY.md,README.md -Destination $package
 Copy-Item -LiteralPath $notesPath -Destination (Join-Path $package 'release-notes.json')
-Copy-Item -LiteralPath docs/security-model.md,docs/github-releases.md -Destination $package
+$packageDocs = Join-Path $package 'docs'
+New-Item -ItemType Directory -Path $packageDocs -Force | Out-Null
+Copy-Item -LiteralPath docs/building.md,docs/security-model.md,docs/github-releases.md -Destination $packageDocs
+@"
+ClipCraft $Version - unsigned Windows x64 preview
+
+Extract the entire ZIP and run ClipCraft.exe. No ClipCraft account is required.
+Open example.capture.json for a synthetic editable document. Use the File menu
+for exports, printing and options. See release-notes.md for pending checks.
+
+The ZIP contains portable executables; it is not a signed Windows installer.
+Library/settings are stored in your Windows user profile by default. See
+docs/security-model.md for data handling and docs/github-releases.md for
+checksums, source commit and build attestation verification.
+"@ | Set-Content -LiteralPath (Join-Path $package 'READ-ME.txt') -Encoding utf8
 & cargo metadata --format-version 1 --locked --offline --filter-platform x86_64-pc-windows-msvc | Set-Content -LiteralPath (Join-Path $release 'cargo-metadata.json') -Encoding utf8
 if ($LASTEXITCODE -ne 0) { throw 'Dependency resolution metadata failed.' }
 & node scripts/release-metadata.mjs (Join-Path $release 'cargo-metadata.json') $package $Version
 if ($LASTEXITCODE -ne 0) { throw 'SBOM/notices/build provenance preparation failed.' }
-$packageHashes = Get-ChildItem -LiteralPath $package -File | Sort-Object Name | ForEach-Object {
-    (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant() + '  ' + $_.Name
+$packageHashes = Get-ChildItem -LiteralPath $package -Recurse -File | Sort-Object FullName | ForEach-Object {
+    (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant() + '  ' + $_.FullName.Substring($package.Length + 1).Replace('\','/')
 }
 $packageHashes | Set-Content -LiteralPath (Join-Path $package 'PACKAGE-SHA256SUMS.txt') -Encoding utf8
 $zip = Join-Path $public "clipcraft-$Version-windows-x64.zip"
