@@ -1,0 +1,26 @@
+{
+  "version": "0.1.0-alpha.42",
+  "date": "2026-10-30",
+  "channel": "alpha",
+  "title": "Save and reuse object formatting",
+  "summary": "Save a selected object's formatting as a local template, then apply it to matching objects with one click.",
+  "changes": {
+    "Added": [
+      "Working Quick Styles for Text, Line, Step, rectangles, ellipses, polygons and callouts, plus intensity presets for Blur and Pixelate.",
+      "Save as template captures one selected object's formatting. Use an automatic name or enter your own; templates persist locally across restarts.",
+      "Click any preset or saved template to update a compatible selection immediately. The active tile has a visible border, and one Undo reverses the batch.",
+      "Templates retain each object's position, size, paths, callout pointer and individual text. Existing arrow styles remain available."
+    ],
+    "Verified": [
+      "Native repeated callout preset changes, custom save and batch application, active borders and one-step Undo passed.",
+      "Native Text, Line, Rectangle, Step, Ellipse, Polygon, Blur and Pixelate presets produce eight independently checked editable objects and 256000 exact clipboard pixels.",
+      "Local checks cover atomic batch application, no-op history, content/geometry preservation, persistence, malformed data and locked storage."
+    ]
+  },
+  "limitations": [
+    "The new templates apply to existing objects of exactly one type. They do not yet set defaults for newly drawn objects. Arrow drawing defaults retain their existing behavior.",
+    "Simplify and advanced tool options remain unfinished. Text entry is still dialog-based; inline centered text in shapes, text boxes and callouts is the next priority.",
+    "Template tiles show a type/color glyph rather than a complete preview of every formatting property.",
+    "Crisp vector zoom, smooth callout joins, continuous editable autosave and draggable toolbar ordering remain tracked. Physical middle-button drag verification is pending."
+  ]
+}

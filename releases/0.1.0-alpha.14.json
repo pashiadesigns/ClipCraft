@@ -1,0 +1,26 @@
+{
+  "version": "0.1.0-alpha.14",
+  "date": "2026-10-30",
+  "channel": "alpha",
+  "title": "Zoom and pan without changing your image",
+  "summary": "Fit the canvas, inspect actual pixels or zoom in for precise editing while keeping document geometry and exported pixels intact.",
+  "changes": {
+    "Added": [
+      "View and status-strip zoom controls: Zoom In/Out, Zoom to Fit, Shrink to Fit, Actual Size and 10–1600% presets.",
+      "Ctrl++ / Ctrl+- zoom the canvas; Ctrl+0 restores actual size. Wheel and Shift+wheel pan; Ctrl+wheel zooms at the pointer; Space+drag pans."
+    ],
+    "Improved": [
+      "Actual Size accounts for display pixel density. Magnified image pixels stay sharp, and the image and selection overlays remain clipped to the workspace.",
+      "Zoom and pan are independent of document history and reset for replacement documents. Fit modes adapt to available space."
+    ],
+    "Verified": [
+      "Native drawings at 25% and panned 200% save exact predicted image coordinates. A 40 by 20 screen-pixel drag at 200% moves an object by exactly 20 by 10 image pixels, with one-step Undo and Redo.",
+      "Native Copy All while zoomed and panned preserves all 256000 fixture pixels. Regression checks cover density, fit modes, pan bounds, keyboard ownership and headless pointer gestures."
+    ]
+  },
+  "limitations": [
+    "Pixel grid, canvas snapping, workspace backgrounds and persistent view preferences remain planned. Zoom choices are an original implementation; exact Snagit zoom behavior is not yet qualified.",
+    "Space+drag and pointer-centered Ctrl+wheel have headless input coverage; broader native mouse, touchpad and mixed-DPI migration testing remains unfinished.",
+    "Window, scrolling and video capture, advanced editing and full reference interface parity remain unfinished. Native Save As inspection is still blocked."
+  ]
+}

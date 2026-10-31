@@ -1,0 +1,41 @@
+{
+  "note": "Unmodified original font binaries for bold and italic variants. Regular faces remain the existing epaint_default_fonts bytes; original font licensing retained.",
+  "files": [
+    {
+      "file": "Ubuntu-Bold.ttf",
+      "url": "https://raw.githubusercontent.com/google/fonts/bed55e0de5cfa8f5fb94f9a1f49409b5ec504469/ufl/ubuntu/Ubuntu-Bold.ttf",
+      "bytes": 331612,
+      "sha256": "679b5c1e09cab3156bb8ef529735f9382bf31ca7ac737382ab959297f8d82ad4"
+    },
+    {
+      "file": "Ubuntu-LightItalic.ttf",
+      "url": "https://raw.githubusercontent.com/google/fonts/bed55e0de5cfa8f5fb94f9a1f49409b5ec504469/ufl/ubuntu/Ubuntu-LightItalic.ttf",
+      "bytes": 407728,
+      "sha256": "8fc50d6238be2076f602578d846c81a680f3c1ad58c372cc272b4dee6e68ff90"
+    },
+    {
+      "file": "Ubuntu-BoldItalic.ttf",
+      "url": "https://raw.githubusercontent.com/google/fonts/bed55e0de5cfa8f5fb94f9a1f49409b5ec504469/ufl/ubuntu/Ubuntu-BoldItalic.ttf",
+      "bytes": 354956,
+      "sha256": "875d776e7f33c50b1d1b594791da0eba9865648f232f08bcba00bba9dfa01d96"
+    },
+    {
+      "file": "Hack-Bold.ttf",
+      "url": "https://raw.githubusercontent.com/source-foundry/Hack/32afc7c23dc2dd4f4172333364fee4dcb7f586da/build/ttf/Hack-Bold.ttf",
+      "bytes": 317628,
+      "sha256": "5bbf531eff7f8a0c2559c9a0656718e2828a012a9b1f60b5f54006d59a4de8d4"
+    },
+    {
+      "file": "Hack-Italic.ttf",
+      "url": "https://raw.githubusercontent.com/source-foundry/Hack/32afc7c23dc2dd4f4172333364fee4dcb7f586da/build/ttf/Hack-Italic.ttf",
+      "bytes": 316156,
+      "sha256": "096fb67a2b85f3c866e9cb3e965b27c2c10b977315f4d3d7f095674be35091c1"
+    },
+    {
+      "file": "Hack-BoldItalic.ttf",
+      "url": "https://raw.githubusercontent.com/source-foundry/Hack/32afc7c23dc2dd4f4172333364fee4dcb7f586da/build/ttf/Hack-BoldItalic.ttf",
+      "bytes": 322288,
+      "sha256": "64f74a079700b7dfe128551a1e28875d5ba980971e55f5e0f0596e37bdc6a6bc"
+    }
+  ]
+}

@@ -1,0 +1,26 @@
+{
+  "version": "0.1.0-alpha.24",
+  "date": "2026-10-30",
+  "channel": "alpha",
+  "title": "Local history and editable recovery",
+  "summary": "Keep recent captures and saved revisions in a local Library, with thumbnails and editable snapshot recovery.",
+  "changes": {
+    "Added": [
+      "Persistent local snapshots on opening, creating, pasting, capturing and explicit saving. Up to 50 snapshots and 512 MB of retained data.",
+      "Library thumbnails, recent-image tray and File > Open Recent reopen editable copies with unsaved-change protection.",
+      "Shared CLI history list, record and open commands."
+    ],
+    "Protected": [
+      "Atomic index updates and a process lock merge snapshots from multiple windows. Missing or corrupt history leaves the open image intact."
+    ],
+    "Verified": [
+      "Native revision recovery restores seven objects and matches all 256000 pixels; restart and missing-file recovery verified.",
+      "Real capture and Open Recent recovery each match 256000 synthetic pixels. 90 regular Rust tests, formatting and strict Clippy."
+    ]
+  },
+  "limitations": [
+    "Edits after the last snapshot require saving; per-edit recovery and retention preferences are planned.",
+    "Search, tags/folders, bulk import and full reference Library layout remain unfinished.",
+    "Expired snapshot deletion failures are reported and may leave files on disk; the open image remains intact."
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "version": "0.1.0-alpha.50",
+  "date": "2026-10-31",
+  "channel": "alpha",
+  "title": "Core editor and ribbon workspace",
+  "summary": "A consolidated release of the user-verified editor: crisp vector display, live editing, grouped ribbons, object controls and compact properties.",
+  "changes": {
+    "Added": [
+      "Home, Tool Settings, Export and Advanced Settings ribbons with persistent Favorites and tool ordering.",
+      "Objects pane with descriptive labels, drag stacking, visibility and locking.",
+      "Raster Preview, Fit to Screen, automatic transparent canvas growth and trimming, and rotate handles.",
+      "Independent Step outlines, underline and strikethrough, shared format painting and live mixed-selection text formatting."
+    ],
+    "Improved": [
+      "Inline Text properties for shapes, callouts and Steps with Back to Object; color controls update live and saved colors support Update/Remove.",
+      "Consistent grouped Quick Styles, custom-style popup, live creation previews and remembered formatting.",
+      "Stable corner handles and continuous rounding, first-object alignment with canvas expansion, Crop panning and zooming, and compact footer controls.",
+      "Property instructions are in circled-question-mark header tooltips; Selection actions have distinct icons."
+    ],
+    "Verified": [
+      "All64 accumulated manual checks passed by the user across the recorded candidate builds; exact tested-build attribution is preserved.",
+      "364 automated Rust tests, formatting and strict Clippy; synthetic egui interaction and render fixtures.",
+      "Exact optimized export/viewport/previous-fixture equality, portable projects, Undo and existing Library persistence checks."
+    ]
+  },
+  "limitations": [
+    "Clipboard paste into the current canvas, Simplify, persistent groups and additional selection masks remain unfinished.",
+    "Text outlines, per-object shadows, advanced Line/Arrow configuration and additional typography options are still planned or in development.",
+    "Two bundled font families and basic left-to-right text layout; system fonts and mixed styling within one text box are not yet available.",
+    "This unsigned Windows alpha retains the existing Library capacity and capture qualification limitations."
+  ]
+}

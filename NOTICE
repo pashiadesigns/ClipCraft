@@ -1,0 +1,11 @@
+ClipCraft
+Copyright 2026 ClipCraft contributors
+
+Original ClipCraft source and assets are licensed under Apache-2.0.
+Third-party components retain their licenses. This repository includes:
+- MIT-licensed DesignCraft adaptations listed in licenses/designcraft/PROVENANCE.txt.
+- Ubuntu and Hack font assets with licenses in licenses/text-fonts/.
+- Rust dependencies identified in Cargo.lock and the release SPDX inventory.
+
+Release packages include THIRD-PARTY-NOTICES.txt. Nothing in this notice grants
+rights to third-party trademarks or assets not distributed with this repository.

@@ -1,0 +1,23 @@
+{
+  "version": "0.1.0-alpha.15",
+  "date": "2026-10-30",
+  "channel": "alpha",
+  "title": "Restore the original image with one undoable action",
+  "summary": "Edit > Revert to Original removes editable annotations while keeping the original image intact, with Undo, Redo and normal unsaved-change protection.",
+  "changes": {
+    "Added": [
+      "Edit > Revert to Original restores the document's embedded source image. One Undo recovers all annotations, and Redo restores the original again.",
+      "The shared CLI command revert_original performs the same operation. An empty revert preserves Redo and does not add a history step."
+    ],
+    "Verified": [
+      "Native revert, disabled state, Undo/Redo, unsaved replacement cancellation and save/reopen using a seven-object synthetic project.",
+      "Native Copy All matches all 256000 source pixels after revert and all 256000 annotated pixels after Undo.",
+      "Engine checks preserve transparent RGBA, colored canvas backgrounds, original source data and saved-state tracking."
+    ]
+  },
+  "limitations": [
+    "This is ClipCraft's independent revert behavior. Snagit's detailed revert semantics still need direct comparison, so that broader roadmap item remains Needs verification.",
+    "Undo history lasts for the current session. Saving a reverted project and reopening it preserves the original image but does not retain removed objects as persistent history.",
+    "Pixel grid, snapping, crop/resize, library history and full reference interface parity remain unfinished. Native Save As inspection is still blocked."
+  ]
+}

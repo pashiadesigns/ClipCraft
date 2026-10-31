@@ -1,0 +1,25 @@
+{
+  "version": "0.1.0-alpha.22",
+  "date": "2026-10-30",
+  "channel": "alpha",
+  "title": "Resize confirmation with one-step Undo",
+  "summary": "Confirm flattening before resizing editable objects, with cancellation that preserves your image and one Undo to restore everything.",
+  "changes": {
+    "Added": [
+      "Resize Image displays Flatten Objects when editable objects are present. Flatten All commits the resize; Cancel, Escape and close preserve the existing document.",
+      "Flattening and resizing are one undoable command. Original pixels remain available for Revert, and saved projects retain the flattened composite."
+    ],
+    "Fixed": [
+      "Very small image sizes no longer fail editable-text limits after flattening confirmation. Revert status correctly describes restoration of the previous image state."
+    ],
+    "Verified": [
+      "Native Cancel/Escape, confirmation, Undo/Redo, save and64000 exact clipboard pixels; all256000 stored pre-resize composite pixels and original source retained.",
+      "85 regular Rust tests, formatting and strict Clippy cover history, persistence, input ownership and invalid-input rollback."
+    ]
+  },
+  "limitations": [
+    "ClipCraft keeps the original image behind the warning; reference candidate-preview behavior and accepted reference filter output remain unverified.",
+    "Print units/DPI, selected-object flattening, interactive/off-canvas crop and complete reference UI parity remain unfinished.",
+    "Editable projects retain original source pixels; share flattened PNG output when originals should not be recoverable."
+  ]
+}

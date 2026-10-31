@@ -1,0 +1,27 @@
+{
+  "version": "0.1.0-alpha.7",
+  "date": "2026-10-29",
+  "channel": "alpha",
+  "title": "Callouts, clipboard images, and object ordering",
+  "summary": "Add editable rectangular callouts, align text inside its box, copy the rendered image, and change which annotation appears in front.",
+  "changes": {
+    "Added": [
+      "Rectangular callouts with editable text, RGBA fill and outline, padding, a movable pointer, and body resizing. Save and reopen them as editable projects.",
+      "Horizontal and vertical text alignment in the Text and Callout editing dialog, using the shared renderer and command history.",
+      "Copy All through the toolbar or Ctrl+Shift+C and New from Clipboard through Ctrl+Shift+N. Clipboard imports create a flattened, unsaved document.",
+      "Bring Forward, Bring to Front, Send Backward, and Send to Back in Image > Arrange. Ctrl+Shift+F/B move the selected annotation one position."
+    ],
+    "Improved": [
+      "Arrange shortcuts respect text/property input, modal dialogs and active gestures. Boundary actions leave the document and history unchanged.",
+      "Full shortcut labels fit beside the temporary readiness badges. The responsive toolbar shows one Move control at compact and maximized sizes.",
+      "Successful file operations retain their folder for the current session; native dialog verification of this behavior remains pending."
+    ]
+  },
+  "limitations": [
+    "This is an incremental alpha, not complete interface or behavioral parity. Red target labels remain on broader scopes that still need verification or more features.",
+    "Native editor, save/restart, rendering and clipboard pixel checks passed. Windows Save As/export dialog inspection is blocked by the inspection tool; folder retention and clipboard Save-and-continue were not fully exercised in this pass.",
+    "Callouts currently have one rectangular body and triangular pointer. Additional shapes, shadows, pointer styles and inline text entry remain planned; text still uses two bundled fonts and a dialog.",
+    "Object Cut/Copy/Paste, broader clipboard compatibility, align/flatten/flip/rotate, screen capture, global hotkeys, library and video remain unfinished. Folder preferences do not persist across restarts.",
+    "Windows x64 portable alpha; not code-signed. Editable projects retain original pixels; share flattened images when redacting content. Full reference layout, Windows snap layouts and maximized drag-to-restore remain incomplete."
+  ]
+}

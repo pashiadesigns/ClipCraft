@@ -1,0 +1,22 @@
+{
+  "version": "0.1.0-alpha.33",
+  "date": "2026-10-30",
+  "channel": "alpha",
+  "title": "Interactive rectangular crop",
+  "summary": "Drag a crop rectangle, move or resize its handles, then apply or cancel. One Undo restores your image and editable objects.",
+  "changes": {
+    "Added": [
+      "Crop tool with eight handles, reverse-direction drawing, movement, thirds grid, live dimensions and outside shading.",
+      "Properties hide while cropping. Crop/Cancel controls stay near the selection; projects with objects show an explicit Flatten and crop action."
+    ],
+    "Verified": [
+      "130 Rust tests, formatting and strict Clippy; exact transparent-pixel crop, source retention, invalid inputs, persistence, boundary clamping and draft cancellation.",
+      "Native reverse drag, move, resize, Cancel, one-step Undo/Redo, saved output and actual OS clipboard comparisons."
+    ]
+  },
+  "limitations": [
+    "Applying crop flattens the complete composite. Undo restores the previous editable objects; non-destructive off-canvas object editing remains unfinished.",
+    "Trim, crop aspect presets, numeric crop entry, object rotation and grouping remain planned.",
+    "Unsigned Windows x64 alpha. Full Snagit UI/behavior parity is not claimed."
+  ]
+}

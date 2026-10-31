@@ -1,0 +1,22 @@
+{
+  "version": "0.1.0-alpha.18",
+  "date": "2026-10-30",
+  "channel": "alpha",
+  "title": "Pixel grid for precise magnified editing",
+  "summary": "Toggle a workspace pixel grid from View or Ctrl+G while inspecting an image at high zoom.",
+  "changes": {
+    "Added": [
+      "View > Pixel Grid and Ctrl+G show an overlay at 600% zoom and above. The grid follows image pixels while panning and stays clipped to the visible canvas.",
+      "The toggle stays enabled below its visibility threshold and reports its state. Only visible grid lines are drawn."
+    ],
+    "Verified": [
+      "Native 800% and panned 1600% viewing, hidden grid at 400%, menu and keyboard toggles, and shortcut suppression during a resize draft.",
+      "Native clipboard output remains identical to all 3072 original fixture pixels. View changes leave editable documents and Undo/Redo untouched.",
+      "Automated alignment checks cover multiple display densities and large panned images; a real UI input/painting regression verifies document and history preservation."
+    ]
+  },
+  "limitations": [
+    "Grid state lasts for the current editor session. Saved preferences, snapping, alignment guides and background controls remain planned.",
+    "Reference menu presence was observed; the installed reference grid behavior and exact styling remain unverified."
+  ]
+}

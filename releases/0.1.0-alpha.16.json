@@ -1,0 +1,23 @@
+{
+  "version": "0.1.0-alpha.16",
+  "date": "2026-10-30",
+  "channel": "alpha",
+  "title": "Verified solid-black redaction",
+  "summary": "Redact sensitive areas with verified opaque covering pixels in flattened output, with clearer controls and editable movement and undo.",
+  "changes": {
+    "Improved": [
+      "Redact properties show solid-black behavior and omit color and stroke-width controls that have no effect. The drag preview is fully opaque.",
+      "The sidebar explains that PNG and Copy All flatten the result while editable project files retain original image data. The notice stays visible when selecting an existing redaction."
+    ],
+    "Verified": [
+      "Native reverse-direction drawing, movement, one-step Undo/Redo and saved geometry on an original color-grid fixture.",
+      "All 52671 covered pixels are opaque black and all 203329 outside pixels are unchanged, checked against an independently generated mask. Native Copy All matches all 256000 pixels.",
+      "Engine checks cover fractional boundaries, reverse selections, full-edge coverage, transparent source pixels, save/reopen and PNG output."
+    ]
+  },
+  "limitations": [
+    "Editable projects intentionally retain the original image and editable objects. Share flattened PNG or clipboard output when original pixels must remain concealed.",
+    "This scope is opaque rectangular redaction. Blur, pixelation and automatic sensitive-data detection are not implemented.",
+    "Native Export file-picker inspection remains blocked. PNG verification uses the saved native project through the shared renderer; native clipboard output is directly verified."
+  ]
+}

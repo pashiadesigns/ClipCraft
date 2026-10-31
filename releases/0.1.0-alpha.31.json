@@ -1,0 +1,22 @@
+{
+  "version": "0.1.0-alpha.31",
+  "date": "2026-10-30",
+  "channel": "alpha",
+  "title": "Filled shapes and editable polygons",
+  "summary": "Fill rectangles and ellipses, draw polygons, and preview color, opacity and side-count changes on the object.",
+  "changes": {
+    "Added": [
+      "Fill/No Fill for rectangles, rounded rectangles, ellipses and polygons, with independent RGBA color and opacity.",
+      "Editable polygons with 3–64 sides, live resizing and one-step Undo. Geometry is adapted from MIT-licensed DesignCraft with attribution."
+    ],
+    "Verified": [
+      "122 Rust tests, formatting and strict Clippy; native Fill/No Fill, opacity and side-count Undo/Redo, live fill color, resizing and saved output.",
+      "Exact native clipboard comparisons plus real project save/reopen, alpha-compositing, invalid-input and old no-fill compatibility tests."
+    ]
+  },
+  "limitations": [
+    "Rotation, per-corner rounding, stars, shadows, grouping and interactive crop remain unfinished.",
+    "Use alpha.31 or newer for projects containing polygons or general shape fills. Older builds may omit fills.",
+    "Unsigned Windows x64 alpha. Reference behavioral parity is not claimed; native tests use original synthetic fixtures."
+  ]
+}

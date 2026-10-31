@@ -1,0 +1,245 @@
+{
+  "version": 1,
+  "width": 640,
+  "height": 400,
+  "source_png": "",
+  "annotations": [
+    {
+      "id": 1,
+      "kind": "callout",
+      "start": [
+        55.0,
+        55.0
+      ],
+      "end": [
+        370.5,
+        184.5
+      ],
+      "color": [
+        159,
+        34,
+        45,
+        200
+      ],
+      "width": 5,
+      "text": {
+        "content": "Native callout check\nCenter and middle",
+        "font": "ubuntu_light",
+        "size_points": 18.0,
+        "horizontal": "center",
+        "vertical": "bottom"
+      },
+      "callout": {
+        "fill": [
+          25,
+          171,
+          240,
+          127
+        ],
+        "outline": [
+          21,
+          55,
+          89,
+          223
+        ],
+        "pointer": [
+          410.5,
+          259.5
+        ],
+        "padding": 12.0
+      }
+    },
+    {
+      "id": 2,
+      "kind": "callout",
+      "start": [
+        410.0,
+        45.0
+      ],
+      "end": [
+        615.0,
+        155.0
+      ],
+      "color": [
+        25,
+        35,
+        45,
+        255
+      ],
+      "width": 2,
+      "text": {
+        "content": "Separate fill,\noutline and text",
+        "font": "ubuntu_light",
+        "size_points": 15.0
+      },
+      "callout": {
+        "fill": [
+          80,
+          180,
+          235,
+          150
+        ],
+        "outline": [
+          15,
+          95,
+          145,
+          255
+        ],
+        "pointer": [
+          375.0,
+          100.0
+        ],
+        "padding": 12.0
+      }
+    },
+    {
+      "id": 3,
+      "kind": "callout",
+      "start": [
+        130.0,
+        270.0
+      ],
+      "end": [
+        555.0,
+        370.0
+      ],
+      "color": [
+        25,
+        35,
+        45,
+        255
+      ],
+      "width": 2,
+      "text": {
+        "content": "Move the body and pointer together.\nResize the box or drag its pointer handle.",
+        "font": "ubuntu_light",
+        "size_points": 15.0
+      },
+      "callout": {
+        "fill": [
+          185,
+          225,
+          185,
+          255
+        ],
+        "outline": [
+          50,
+          100,
+          55,
+          255
+        ],
+        "pointer": [
+          65.0,
+          220.0
+        ],
+        "padding": 12.0
+      }
+    },
+    {
+      "id": 4,
+      "kind": "callout",
+      "start": [
+        35.5,
+        196.5
+      ],
+      "end": [
+        260.5,
+        256.5
+      ],
+      "color": [
+        35,
+        35,
+        35,
+        255
+      ],
+      "width": 3,
+      "text": {
+        "content": "Created natively",
+        "font": "ubuntu_light",
+        "size_points": 18.0
+      },
+      "callout": {
+        "fill": [
+          255,
+          240,
+          180,
+          255
+        ],
+        "outline": [
+          180,
+          65,
+          35,
+          180
+        ],
+        "pointer": [
+          103.0,
+          280.5
+        ],
+        "padding": 8.0
+      }
+    },
+    {
+      "id": 5,
+      "kind": "text",
+      "start": [
+        21.0,
+        7.0
+      ],
+      "end": [
+        391.0,
+        44.0
+      ],
+      "color": [
+        239,
+        85,
+        55,
+        255
+      ],
+      "width": 3,
+      "text": {
+        "content": "Right and bottom",
+        "font": "hack_regular",
+        "size_points": 24.0,
+        "vertical": "bottom"
+      }
+    },
+    {
+      "id": 6,
+      "kind": "arrow",
+      "start": [
+        122.0,
+        106.0
+      ],
+      "end": [
+        482.0,
+        306.0
+      ],
+      "color": [
+        239,
+        85,
+        55,
+        255
+      ],
+      "width": 3
+    },
+    {
+      "id": 7,
+      "kind": "arrow",
+      "start": [
+        456.5,
+        224.5
+      ],
+      "end": [
+        556.5,
+        299.5
+      ],
+      "color": [
+        239,
+        85,
+        55,
+        255
+      ],
+      "width": 3
+    }
+  ]
+}

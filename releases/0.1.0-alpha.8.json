@@ -1,0 +1,24 @@
+{
+  "version": "0.1.0-alpha.8",
+  "date": "2026-10-29",
+  "channel": "alpha",
+  "title": "Text formatting in the properties pane",
+  "summary": "Format selected text and callouts directly in the sidebar, expand Advanced controls, and dismiss New Image with its title close button.",
+  "changes": {
+    "Added": [
+      "Selected text and callout objects expose bundled-font selection, font size and text color/opacity in the right properties pane.",
+      "An Advanced disclosure exposes horizontal and vertical alignment plus callout padding. Changes use the shared document history and renderer.",
+      "New Image has an accessible title close button that cancels the draft and preserves the existing document."
+    ],
+    "Improved": [
+      "Properties headings and original preview icons follow the selected object. The object list follows its editable controls, and position fields can collapse.",
+      "Verified Copy All and New from Clipboard through their menus, including the flattened, unsaved result and exact native clipboard pixel comparisons."
+    ]
+  },
+  "limitations": [
+    "Text content still uses a dialog. Two bundled fonts are supported; installed fonts, rich styles, text effects and exact reference layout remain incomplete.",
+    "The color picker can round channel values. Callouts have one rectangular body and triangular pointer; overall object opacity and additional styles remain planned.",
+    "Windows Save As/export dialog inspection remains blocked. Clipboard Save-and-continue, external clipboard compatibility and folder persistence need further verification.",
+    "This unsigned Windows x64 alpha does not yet include released screen capture, global hotkeys, library, video or full interface parity. Red version labels indicate unfinished broader scopes."
+  ]
+}

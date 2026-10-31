@@ -1,0 +1,25 @@
+{
+  "version": "0.1.0-alpha.48",
+  "date": "2026-10-30",
+  "channel": "alpha",
+  "title": "Text fitting and compact formatting controls",
+  "summary": "Control text overflow and wrapping, with a compact row for alignment, distribution, justification and everyday text formatting.",
+  "changes": {
+    "Added": [
+      "Advanced text fitting: Do not autofit, Shrink text on overflow and Resize shape to fit text. New text defaults to shrinking on overflow; older projects keep their previous layout.",
+      "Wrap text in shape checkbox. Wrapped shape fitting keeps width and fits height; unwrapped fitting adjusts width and height to the text lines.",
+      "One compact icon row under Alignment & Distribution and Quick Text Settings, with full-name hover labels and remembered enclosed dropdown choices.",
+      "Working Bold, Italic, Increase font size and Decrease font size buttons with selection-wide edits and active state. Real licensed font variants are shared by inline editing and export.",
+      "Fitting, wrapping, bold and italic persist in saved templates and editable projects. Live shape resizing and inline text use the shared document layout."
+    ],
+    "Verified": [
+      "Native fitting modes, wrapping, bold/italic, geometry Undo/Redo and exact clipboard output; automated template, batch, invalid-input, persistence and multi-zoom caret checks.",
+      "The user confirmed all four alpha47 modifier workflows pass physical testing: Alt duplication, Alt centered resize, Shift proportions and Shift+Alt combined, each with one-step Undo."
+    ]
+  },
+  "limitations": [
+    "Do not autofit clips overflowing text to the content box. Resize shape rejects a result larger than the canvas; choose Shrink or enlarge the canvas instead.",
+    "Text formatting applies to the whole object. Mixed formatting within a text box, underline and text effects remain planned.",
+    "Full core-tool options, Simplify, crisp vector zoom, editable Library autosave and toolbar ordering remain unfinished."
+  ]
+}

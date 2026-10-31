@@ -1,0 +1,24 @@
+{
+  "version": "0.1.0-alpha.25",
+  "date": "2026-10-30",
+  "channel": "alpha",
+  "title": "Instant Library search",
+  "summary": "Find local snapshots by name, source and dimensions, then reopen an editable copy.",
+  "changes": {
+    "Added": [
+      "Instant case-insensitive multiword Library search with matching counts, Clear and an empty-result message.",
+      "CLI history list --query uses the same matching rules."
+    ],
+    "Preserved": [
+      "Refresh and returning to Library retain the session filter. Recent tray stays unfiltered, and searches leave stored snapshots untouched."
+    ],
+    "Verified": [
+      "Native source/name/dimension filtering, Clear, no-results, refresh, recent tray and filtered recovery with256000 exact pixels.",
+      "91 regular Rust tests, formatting and strict Clippy; nine CLI cases and unchanged history hashes."
+    ]
+  },
+  "limitations": [
+    "Search text is session-only. Tags, folders, application/website navigation and full reference Library layout remain planned.",
+    "Matching is literal local metadata search; reference search semantics are not yet verified."
+  ]
+}

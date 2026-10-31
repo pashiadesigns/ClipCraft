@@ -1,0 +1,10 @@
+{
+  "name": "clipcraft-site",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.mjs && node scripts/build-worker.mjs",
+    "check": "node --test scripts/release.test.mjs scripts/roadmap.test.mjs",
+    "dev": "node scripts/serve.mjs"
+  }
+}

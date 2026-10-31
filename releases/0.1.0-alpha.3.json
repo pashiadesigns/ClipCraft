@@ -1,0 +1,26 @@
+{
+  "version": "0.1.0-alpha.3",
+  "date": "2026-10-29",
+  "channel": "alpha",
+  "title": "Add editable text to your images",
+  "summary": "Create multiline text boxes with portable fonts, size, color, and opacity controls, then move and resize them on the canvas.",
+  "changes": {
+    "Added": [
+      "Text boxes with Ubuntu Light and Hack Regular fonts, 6–144 pt sizes, and color/opacity controls.",
+      "Multiline text, word wrapping, and clipping to resizable text boxes.",
+      "A text-edit dialog with Apply/Cancel and one-step undo for a completed edit. Double-click text to edit it again."
+    ],
+    "Improved": [
+      "Text stays editable in saved projects and uses the same renderer for the canvas and PNG export.",
+      "Draft text is protected when closing the application and does not let Delete remove the selected object while typing.",
+      "Release packages now include the bundled fonts' detailed license notices."
+    ]
+  },
+  "limitations": [
+    "Windows x64 portable preview; the application is not code-signed.",
+    "Text supports two bundled fonts and basic left-to-right layout. Unsupported glyphs show an error; complex-script shaping and installed-font selection are not included.",
+    "Text is entered in a dialog. Rich text, inline canvas typing, rotation, and callouts remain planned.",
+    "Screen capture and global hotkeys are not included yet. Region capture remains development-only pending native verification.",
+    "Editable projects retain original pixels. Share a flattened PNG for redacted content."
+  ]
+}

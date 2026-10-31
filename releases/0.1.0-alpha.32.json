@@ -1,0 +1,22 @@
+{
+  "version": "0.1.0-alpha.32",
+  "date": "2026-10-30",
+  "channel": "alpha",
+  "title": "Rotate and flip the complete image",
+  "summary": "Turn screenshots clockwise, counterclockwise or 180 degrees, and flip them horizontally or vertically with one-step Undo.",
+  "changes": {
+    "Added": [
+      "Image > Rotate quarter and half turns, plus Arrange > Flip Image Horizontal/Vertical. Exact pixel mappings preserve transparency without resampling.",
+      "Flatten confirmation when objects are present. Cancel preserves the document; one Undo restores the editable objects and original dimensions."
+    ],
+    "Verified": [
+      "126 Rust tests, formatting and strict Clippy. All five native saved outputs match independent pixel mappings across 1,280,000 pixels.",
+      "Original-source retention, no-op Redo, invalid input rollback, real save/reopen and native clipboard comparisons."
+    ]
+  },
+  "limitations": [
+    "These commands transform the whole image and flatten editable objects after confirmation. Selected-object rotation and flips remain unfinished.",
+    "Custom image angles, grouping, interactive crop and full reference UI parity remain unfinished.",
+    "Unsigned Windows x64 alpha. Testing uses original synthetic fixtures; full Snagit behavioral parity is not claimed."
+  ]
+}

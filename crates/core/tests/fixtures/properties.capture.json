@@ -1,0 +1,390 @@
+{
+  "version": 1,
+  "width": 640,
+  "height": 400,
+  "source_png": "",
+  "annotations": [
+    {
+      "id": 1,
+      "kind": "text",
+      "start": [
+        18,
+        8
+      ],
+      "end": [
+        620,
+        45
+      ],
+      "color": [
+        45,
+        80,
+        155,
+        255
+      ],
+      "width": 3,
+      "text": {
+        "content": "ClipCraft - vector display fixture",
+        "font": "ubuntu_light",
+        "size_points": 25,
+        "horizontal": "center",
+        "vertical": "middle",
+        "padding": 6,
+        "fit": "shrink",
+        "wrap": true,
+        "bold": true,
+        "italic": false
+      }
+    },
+    {
+      "id": 2,
+      "kind": "step",
+      "start": [
+        35,
+        65
+      ],
+      "end": [
+        105,
+        135
+      ],
+      "color": [
+        198,
+        54,
+        72,
+        255
+      ],
+      "width": 3,
+      "text": {
+        "content": "1",
+        "font": "ubuntu_light",
+        "size_points": 30,
+        "horizontal": "center",
+        "vertical": "middle",
+        "padding": 6,
+        "fit": "shrink",
+        "wrap": true,
+        "bold": false,
+        "italic": false
+      }
+    },
+    {
+      "id": 3,
+      "kind": "rectangle",
+      "start": [
+        150,
+        65
+      ],
+      "end": [
+        300,
+        135
+      ],
+      "color": [
+        45,
+        80,
+        155,
+        255
+      ],
+      "width": 3,
+      "corner_radius": 18,
+      "fill": [
+        215,
+        232,
+        252,
+        255
+      ],
+      "text": {
+        "content": "Rounded",
+        "font": "ubuntu_light",
+        "size_points": 18,
+        "horizontal": "center",
+        "vertical": "middle",
+        "padding": 6,
+        "fit": "shrink",
+        "wrap": true,
+        "bold": false,
+        "italic": false
+      }
+    },
+    {
+      "id": 4,
+      "kind": "ellipse",
+      "start": [
+        335,
+        65
+      ],
+      "end": [
+        475,
+        135
+      ],
+      "color": [
+        45,
+        80,
+        155,
+        255
+      ],
+      "width": 3,
+      "fill": [
+        210,
+        240,
+        228,
+        255
+      ],
+      "text": {
+        "content": "Ellipse",
+        "font": "ubuntu_light",
+        "size_points": 18,
+        "horizontal": "center",
+        "vertical": "middle",
+        "padding": 6,
+        "fit": "shrink",
+        "wrap": true,
+        "bold": false,
+        "italic": true
+      }
+    },
+    {
+      "id": 5,
+      "kind": "polygon",
+      "start": [
+        515,
+        60
+      ],
+      "end": [
+        605,
+        140
+      ],
+      "color": [
+        45,
+        80,
+        155,
+        255
+      ],
+      "width": 3,
+      "points": [
+        [
+          560,
+          60
+        ],
+        [
+          605,
+          90
+        ],
+        [
+          590,
+          140
+        ],
+        [
+          530,
+          140
+        ],
+        [
+          515,
+          90
+        ]
+      ],
+      "fill": [
+        248,
+        220,
+        160,
+        255
+      ]
+    },
+    {
+      "id": 6,
+      "kind": "callout",
+      "start": [
+        30,
+        180
+      ],
+      "end": [
+        215,
+        255
+      ],
+      "color": [
+        45,
+        80,
+        155,
+        255
+      ],
+      "width": 3,
+      "corner_radius": 18,
+      "callout": {
+        "fill": [
+          255,
+          238,
+          214,
+          255
+        ],
+        "outline": [
+          165,
+          75,
+          25,
+          255
+        ],
+        "pointer": [
+          200,
+          295
+        ],
+        "padding": 9
+      },
+      "text": {
+        "content": "Joined callout",
+        "font": "ubuntu_light",
+        "size_points": 18,
+        "horizontal": "center",
+        "vertical": "middle",
+        "padding": 6,
+        "fit": "shrink",
+        "wrap": true,
+        "bold": true,
+        "italic": true
+      }
+    },
+    {
+      "id": 7,
+      "kind": "line",
+      "start": [
+        260,
+        180
+      ],
+      "end": [
+        400,
+        240
+      ],
+      "color": [
+        45,
+        80,
+        155,
+        255
+      ],
+      "width": 6
+    },
+    {
+      "id": 8,
+      "kind": "arrow",
+      "start": [
+        460,
+        240
+      ],
+      "end": [
+        600,
+        180
+      ],
+      "color": [
+        45,
+        120,
+        70,
+        170
+      ],
+      "width": 7
+    },
+    {
+      "id": 9,
+      "kind": "pen",
+      "start": [
+        250,
+        275
+      ],
+      "end": [
+        390,
+        295
+      ],
+      "color": [
+        150,
+        55,
+        175,
+        180
+      ],
+      "width": 7,
+      "points": [
+        [
+          250,
+          275
+        ],
+        [
+          280,
+          255
+        ],
+        [
+          320,
+          285
+        ],
+        [
+          350,
+          270
+        ],
+        [
+          390,
+          295
+        ]
+      ]
+    },
+    {
+      "id": 10,
+      "kind": "highlighter",
+      "start": [
+        460,
+        280
+      ],
+      "end": [
+        605,
+        280
+      ],
+      "color": [
+        250,
+        195,
+        20,
+        90
+      ],
+      "width": 18,
+      "points": [
+        [
+          460,
+          280
+        ],
+        [
+          500,
+          290
+        ],
+        [
+          545,
+          270
+        ],
+        [
+          605,
+          280
+        ]
+      ]
+    },
+    {
+      "id": 11,
+      "kind": "text",
+      "start": [
+        20,
+        325
+      ],
+      "end": [
+        620,
+        380
+      ],
+      "color": [
+        45,
+        80,
+        155,
+        255
+      ],
+      "width": 3,
+      "text": {
+        "content": "Original raster stays intact. Objects remain editable.",
+        "font": "hack_regular",
+        "size_points": 19,
+        "horizontal": "center",
+        "vertical": "middle",
+        "padding": 6,
+        "fit": "shrink",
+        "wrap": true,
+        "bold": false,
+        "italic": false
+      }
+    }
+  ]
+}

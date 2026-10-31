@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#111214">
+  <meta name="description" content="Follow ClipCraft's living feature backlog: what's missing, what's being built, what needs verification, and what's shipped.">
+  <title>Features &amp; Roadmap — ClipCraft</title>
+  <link rel="icon" type="image/svg+xml" href="assets/mark.svg"><link rel="stylesheet" href="style.css">
+  <script src="app.js" defer></script><script src="roadmap.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="header"><a href="index.html" class="brand" aria-label="ClipCraft home"><img src="assets/mark.svg" width="30" height="30" alt=""><span>CLIP<span class="brand-light">CRAFT</span></span></a><button class="menu-toggle" aria-expanded="false" aria-controls="navigation">Menu <span aria-hidden="true">+</span></button><nav id="navigation" aria-label="Main navigation"><a href="index.html#highlights">Highlights</a><a href="roadmap.html" aria-current="page">Roadmap</a><a href="index.html#changelog">Changelog</a><a class="nav-download" href="index.html#download">Get the alpha <span aria-hidden="true">↗</span></a></nav></header>
+  <main id="main" class="roadmap-main">
+    <section class="roadmap-intro"><div class="section-label"><span>CLIPCRAFT / FEATURES &amp; ROADMAP</span><span>UPDATED {{ROADMAPDATE}}</span></div><div class="roadmap-title"><p class="eyebrow">A RUNNING RECORD OF THE WORK</p><h1>What's built.<br><em>What's next.</em></h1><p>Every known gap, with a status and a clear finish line. Follow the work from the first implementation to a verified release.</p><p class="roadmap-scope">{{ROADMAPSCOPE}}</p></div><div class="roadmap-stats">{{ROADMAPSTATS}}</div></section>
+    <section class="roadmap-content" aria-label="Feature backlog">
+      <div class="roadmap-controls"><div class="roadmap-search"><label for="feature-search">Find a feature</label><input id="feature-search" type="search" placeholder="Search capture, text, clipboard…" autocomplete="off"><label for="feature-category">Area</label><select id="feature-category"><option value="all">All areas</option>{{ROADMAPCATEGORIES}}</select></div><div class="roadmap-filters" role="group" aria-label="Filter by development status">{{ROADMAPFILTERS}}</div><p id="feature-count" role="status" aria-live="polite">Showing {{ROADMAPCOUNT}} of {{ROADMAPCOUNT}} features</p></div>
+      <noscript><p class="roadmap-notice">All features are listed below. Turn on JavaScript to search and filter.</p></noscript>
+      <div id="feature-list">{{ROADMAPROWS}}</div><p id="feature-empty" class="roadmap-notice" hidden>No matching features. Try another search or status.</p>
+    </section>
+    <section class="roadmap-explainer"><h2>How to read the roadmap.</h2><div><p><strong>Planned</strong> means the feature is missing. <strong>In progress</strong> means implementation has begun. <strong>Needs verification</strong> means code exists but its completion checks are still pending.</p><p><strong>Shipped</strong> requires evidence and a published release. <strong>Deferred</strong> includes a reason. Overdue preserves the original missed version target. Unscheduled means no new version is promised; priorities describe order. Active targets remain provisional.</p><p>The backlog is reviewed after each development pass and published when it changes. The changelog records releases; this page tracks the work still ahead.</p></div></section>
+  </main>
+  <footer><a class="brand" href="index.html"><img src="assets/mark.svg" width="28" height="28" alt=""><span>CLIPCRAFT</span></a><p>Built in Rust. Made for the details.</p><a href="index.html#changelog">Release history ↗</a><div class="footer-bottom"><span>© 2026 CLIPCRAFT</span><span>INDEPENDENT SOFTWARE · EARLY ALPHA</span></div></footer>
+</body>
+</html>

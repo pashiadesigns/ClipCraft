@@ -1,0 +1,24 @@
+{
+  "version": "0.1.0-alpha.34",
+  "date": "2026-10-30",
+  "channel": "alpha",
+  "title": "Editable Blur and Pixelation",
+  "summary": "Draw rectangular visual effects, change their intensity live, and keep regions editable when saving your project.",
+  "changes": {
+    "Added": [
+      "More > Blur creates editable rectangular Blur or Pixelate regions.",
+      "Selected regions offer Type and live Intensity controls with one Undo per released adjustment.",
+      "Move and resize effect regions using their canvas handles; save and reopen them as editable objects."
+    ],
+    "Verified": [
+      "Shared renderer handles transparency, stacked objects and unchanged pixels outside the effect region.",
+      "Native creation, type switching, intensity Undo/Redo, movement, resizing, saved projects and clipboard output pass synthetic checks.",
+      "Pixelation matches an independent block-average calculation across a complete saved image."
+    ]
+  },
+  "limitations": [
+    "Visual effects are not a secure-redaction guarantee. Editable projects retain original pixels; use solid Redact and flattened export when appropriate.",
+    "Only rectangular effect regions are implemented. Ellipse regions, effect Quick Styles and Smart Redact remain unfinished.",
+    "This unsigned Windows alpha does not claim complete Snagit behavior or interface parity."
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "version": "0.1.0-alpha.5",
+  "date": "2026-10-29",
+  "channel": "alpha",
+  "title": "A compact title bar and deeper menus",
+  "summary": "The title and menus now share one row. Expanded File and Image submenus make planned actions easier to find while preserving document protection.",
+  "changes": {
+    "Improved": [
+      "Integrated title/menu row with the document name, unsaved marker, minimize, maximize/restore, and close controls.",
+      "Title dragging and edge resizing, with a minimum window size that keeps the editor controls available.",
+      "File Import and Print submenus, separate Rename and Duplicate entries, and nested Image Arrange, Align, and Rotate menus.",
+      "Individual unfinished menu actions retain red provisional target labels and cannot modify the document.",
+      "Closing a modified image still opens Save and continue, Discard, and Cancel. Cancel preserves the document and Undo returns to the saved state."
+    ]
+  },
+  "limitations": [
+    "Full interface parity remains in progress. Detailed properties, dialogs, Assets, capture controls, library and video views are incomplete.",
+    "Custom chrome does not yet support dragging a maximized window to restore it or native Windows snap layouts. Use the restore button or double-click the title first. Additional DPI and keyboard/accessibility checks remain pending.",
+    "The new Import, Print, Arrange, Align and Rotate menu entries expose planned work; their operations are not implemented.",
+    "Screen capture, global hotkeys, clipboard, callouts, effects and history are not included. Red version targets are provisional.",
+    "Text uses a dialog, two bundled fonts and basic left-to-right layout. Windows x64 portable alpha; not code-signed.",
+    "Editable projects retain original image pixels. Share flattened PNGs when redacting content."
+  ]
+}

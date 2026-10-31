@@ -1,0 +1,27 @@
+{
+  "version": "0.1.0-alpha.12",
+  "date": "2026-10-29",
+  "channel": "alpha",
+  "title": "Windows region capture",
+  "summary": "Capture a screen region into an editable image using the toolbar or the focused Ctrl+Alt+C shortcut.",
+  "changes": {
+    "Added": [
+      "Windows region capture is enabled. The editor hides while you drag over a frozen desktop, then opens the selected pixels as a new unsaved image.",
+      "Each monitor has its own selection overlay, with one shared selection state and physical screen coordinates."
+    ],
+    "Verified": [
+      "Forward capture on the primary display and reverse capture on the negative-coordinate display match all 332800 original fixture pixels, including clipboard transfer and save/reopen.",
+      "Escape and right-click restore the previous saved document. Zero-area clicks keep selection open. Unsaved images retain replacement confirmation and its Cancel action."
+    ],
+    "Fixed": [
+      "Selector windows expose their titles and normal window metadata to accessibility and window navigation.",
+      "Per-monitor overlays avoid the oversized virtual-window input mapping encountered during native verification."
+    ]
+  },
+  "limitations": [
+    "Verification uses this PC's three-display configuration. Mixed DPI, crossing display boundaries during a drag, display hot-plugging, HDR and other configurations still need qualification.",
+    "Ctrl+Alt+C currently requires the editor to be focused. Global capture hotkeys, automatic window selection, scrolling capture and video remain unfinished.",
+    "Full interface parity, advanced formatting and library workflows remain incomplete. Capture supports a desktop up to 64 megapixels and a selected image up to 25 megapixels.",
+    "The native ClipCraft Save As inspection blocker remains. Capture pixel persistence was checked through the shared engine and clipboard, not that dialog."
+  ]
+}

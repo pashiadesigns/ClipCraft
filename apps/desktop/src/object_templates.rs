@@ -1,0 +1,475 @@
+use crate::{Editor, Kind, egui};
+use capture_core::object_styles::ObjectStyle;
+
+impl Editor {
+    pub(super) fn drawing_rectangle_highlighter(&self) -> bool {
+        self.quick_styles
+            .drawing_styles
+            .iter()
+            .rev()
+            .find(|s| s.kind == Kind::Highlighter)
+            .or_else(|| self.quick_controls.drawing_style(Kind::Highlighter))
+            .is_some_and(|s| s.highlighter_rect)
+    }
+    pub(super) fn remember_annotation_style(&mut self, annotation: &crate::Annotation) {
+        if let Ok(style) = ObjectStyle::from_annotation("Last used".into(), annotation) {
+            self.quick_styles
+                .drawing_styles
+                .retain(|s| !s.same_variant(&style));
+            self.quick_styles.drawing_styles.push(style.clone());
+            self.quick_controls.remember_drawing_style(style);
+            if self.tool == Some(annotation.kind) {
+                self.restore_drawing_defaults(self.tool);
+            }
+        }
+    }
+    pub(super) fn restore_drawing_defaults(&mut self, kind: Option<Kind>) {
+        if let Some(style) = kind.and_then(|k| {
+            self.quick_styles
+                .drawing_styles
+                .iter()
+                .rev()
+                .find(|s| s.kind == k)
+                .or_else(|| self.quick_controls.drawing_style(k))
+        }) {
+            self.color = style.color[..3].try_into().unwrap();
+            self.width = style.width;
+            self.quick_styles.alpha = style.color[3];
+        }
+    }
+    pub(super) fn apply_object_template(&mut self, style: &ObjectStyle, custom: bool) {
+        if let Err(error) = style.validate() {
+            self.status = error.to_string();
+            return;
+        }
+        let objects = self.selected_objects();
+        if !objects.iter().all(|a| style.accepts(a.kind)) {
+            self.status = "Select compatible objects to apply this style.".into();
+            return;
+        }
+        if let Some(draft) = &mut self.text_draft {
+            match style.apply_compatible(&draft.preview) {
+                Ok(preview) => {
+                    draft.preview = preview;
+                    self.needs_render = true;
+                }
+                Err(error) => {
+                    self.status = error.to_string();
+                    return;
+                }
+            }
+        } else if !objects.is_empty() {
+            match style.compatible_command(&objects) {
+                Ok(command) => self.execute(command),
+                Err(error) => {
+                    self.status = error.to_string();
+                    return;
+                }
+            }
+        }
+        self.quick_styles
+            .drawing_styles
+            .retain(|s| !s.same_variant(style));
+        self.quick_styles.drawing_styles.push(style.clone());
+        self.quick_controls.remember_drawing_style(style.clone());
+        self.color = style.color[..3].try_into().unwrap();
+        self.width = style.width;
+        self.quick_styles.alpha = style.color[3];
+        if self.tool.is_some() {
+            self.tool = Some(style.kind);
+        }
+        self.quick_styles.template_chosen = Some((style.kind, style.name.clone(), custom));
+        self.status = format!(
+            "{} applied. New objects use this style; Undo restores the selection.",
+            style.name
+        );
+    }
+    pub(super) fn styled_new_annotation(&self, annotation: crate::Annotation) -> crate::Annotation {
+        let Some(style) = self
+            .quick_styles
+            .drawing_styles
+            .iter()
+            .rev()
+            .find(|s| s.kind == annotation.kind)
+            .or_else(|| self.quick_controls.drawing_style(annotation.kind))
+        else {
+            return annotation;
+        };
+        match style.apply(&annotation) {
+            Ok(mut styled) => {
+                styled.color = [
+                    self.color[0],
+                    self.color[1],
+                    self.color[2],
+                    self.quick_styles.alpha,
+                ];
+                styled.width = self.width;
+                styled
+            }
+            Err(_) => annotation,
+        }
+    }
+    fn update_saved_template(&mut self, kind: Kind, name: &str) {
+        let objects = self.selected_objects();
+        let selected = self.selected_annotation();
+        let Some(source) = selected.filter(|a| objects.len() == 1 && a.kind == kind) else {
+            self.status = "Select one object of the saved style's type to update it.".into();
+            return;
+        };
+        let Some(store) = &mut self.quick_styles.templates else {
+            return;
+        };
+        match ObjectStyle::from_annotation(name.into(), &source).and_then(|style| store.save(style))
+        {
+            Ok(()) => {
+                self.quick_styles.template_error.clear();
+                self.quick_styles.template_chosen = Some((kind, name.into(), true));
+                self.status =
+                    format!("Updated {name} from the selection. Existing objects are unchanged.");
+            }
+            Err(error) => self.quick_styles.template_error = error.to_string(),
+        }
+    }
+    pub(super) fn save_selected_template(&mut self) -> bool {
+        let objects = self.selected_objects();
+        if objects.len() != 1 {
+            self.status = "Select one source object to save its formatting.".into();
+            return false;
+        }
+        let selected = self
+            .selected_annotation()
+            .unwrap_or_else(|| objects[0].clone());
+        let a = &selected;
+        let Some(store) = &mut self.quick_styles.templates else {
+            return false;
+        };
+        let name = if self.quick_styles.template_name.trim().is_empty() {
+            let mut n = 1;
+            loop {
+                let name = format!("{:?} {n}", a.kind);
+                if !store
+                    .entries()
+                    .iter()
+                    .any(|s| s.kind == a.kind && s.name.eq_ignore_ascii_case(&name))
+                {
+                    break name;
+                }
+                n += 1;
+            }
+        } else {
+            self.quick_styles.template_name.trim().to_owned()
+        };
+        match ObjectStyle::from_annotation(name.clone(), a).and_then(|s| store.save(s)) {
+            Ok(()) => {
+                self.quick_styles.template_error.clear();
+                self.quick_styles.template_chosen = Some((a.kind, name.clone(), true));
+                self.status =
+                    format!("Saved {name}. Select matching objects and click its tile to apply.");
+                true
+            }
+            Err(error) => {
+                self.quick_styles.template_error = error.to_string();
+                false
+            }
+        }
+    }
+    pub(super) fn object_templates(&mut self, ui: &mut egui::Ui, kind: Kind) {
+        let objects = self.selected_objects();
+        let display_objects = self
+            .selected_annotation()
+            .filter(|_| objects.len() == 1)
+            .map(|a| vec![a])
+            .unwrap_or_else(|| objects.clone());
+        let saved: Vec<_> = self
+            .quick_styles
+            .templates
+            .as_ref()
+            .map(|store| {
+                store
+                    .entries()
+                    .iter()
+                    .filter(|s| s.accepts(kind))
+                    .cloned()
+                    .collect()
+            })
+            .unwrap_or_default();
+        let groups = capture_core::object_styles::groups(kind);
+        let is_active = |style: &ObjectStyle| {
+            style.matches(&display_objects)
+                || (objects.is_empty()
+                    && self.tool == Some(style.kind)
+                    && style.matches(&[self.new_annotation(
+                        style.kind,
+                        [20.0, 20.0],
+                        [80.0, 60.0],
+                    )]))
+        };
+        let mut apply = None;
+        let mut remove = None;
+        let mut update = None;
+        egui::ScrollArea::vertical()
+            .id_salt("object_templates")
+            .max_height(214.0)
+            .show(ui, |ui| {
+                if !saved.is_empty() {
+                    ui.small("Your styles");
+                    egui::Grid::new("saved_templates")
+                        .spacing([5.0, 5.0])
+                        .show(ui, |ui| {
+                            for (index, style) in saved.iter().enumerate() {
+                                let enabled = objects.iter().all(|a| style.accepts(a.kind));
+                                let active = is_active(style);
+                                let response = ui
+                                    .add_enabled_ui(enabled, |ui| {
+                                        crate::style_tile::tile(ui, style, &style.name, active)
+                                    })
+                                    .inner;
+                                if response.clicked() {
+                                    apply = Some((style.clone(), true, None));
+                                }
+                                response.context_menu(|ui| {
+                                    if ui
+                                        .add_enabled(
+                                            objects.len() == 1 && objects[0].kind == style.kind,
+                                            egui::Button::new("Update from selection"),
+                                        )
+                                        .clicked()
+                                    {
+                                        update = Some((style.kind, style.name.clone()));
+                                        ui.close();
+                                    }
+                                    if ui.button("Delete style").clicked() {
+                                        remove = Some((style.kind, style.name.clone()));
+                                        ui.close();
+                                    }
+                                });
+                                if index % 2 == 1 {
+                                    ui.end_row();
+                                }
+                            }
+                        });
+                    ui.separator();
+                }
+                for row in groups.chunks(2) {
+                    ui.horizontal_top(|ui| {
+                        ui.spacing_mut().item_spacing.x = 5.0;
+                        for group in row {
+                            let last = self.quick_controls.style_choice(group.id);
+                            let remembered = group
+                                .styles
+                                .iter()
+                                .find(|s| Some(s.name.as_str()) == last)
+                                .unwrap_or(&group.styles[0]);
+                            let remembered = if kind == Kind::Highlighter {
+                                self.quick_styles
+                                    .drawing_styles
+                                    .iter()
+                                    .find(|s| s.same_variant(remembered))
+                                    .or_else(|| {
+                                        self.quick_controls
+                                            .drawing_variant(kind, remembered.highlighter_rect)
+                                    })
+                                    .unwrap_or(remembered)
+                            } else {
+                                remembered
+                            };
+                            let enabled = objects.iter().all(|a| remembered.accepts(a.kind));
+                            ui.add_enabled_ui(enabled, |ui| {
+                                crate::split_button::show(ui, |ui| {
+                                    let response = crate::style_tile::tile(
+                                        ui,
+                                        remembered,
+                                        group.label,
+                                        is_active(remembered),
+                                    );
+                                    response.clone().on_hover_text(format!(
+                                        "{}: {}. Click to repeat this style.",
+                                        group.label, remembered.name
+                                    ));
+                                    if response.clicked() {
+                                        apply = Some((remembered.clone(), false, Some(group.id)));
+                                    }
+                                    crate::split_button::dropdown_for(
+                                        ui,
+                                        &format!("{} variations", group.label),
+                                        &response,
+                                        |ui| {
+                                            ui.strong(group.label);
+                                            egui::Grid::new(group.id).spacing([5.0, 5.0]).show(
+                                                ui,
+                                                |ui| {
+                                                    for (n, style) in
+                                                        group.styles.iter().enumerate()
+                                                    {
+                                                        if crate::style_tile::tile(
+                                                            ui,
+                                                            style,
+                                                            &style.name,
+                                                            is_active(style),
+                                                        )
+                                                        .clicked()
+                                                        {
+                                                            apply = Some((
+                                                                style.clone(),
+                                                                false,
+                                                                Some(group.id),
+                                                            ));
+                                                            ui.close();
+                                                        }
+                                                        if n % 3 == 2 {
+                                                            ui.end_row();
+                                                        }
+                                                    }
+                                                },
+                                            );
+                                        },
+                                    );
+                                });
+                            });
+                        }
+                    });
+                }
+            });
+        if let Some((style, custom, category)) = apply {
+            self.apply_object_template(&style, custom);
+            if let Some(category) = category {
+                self.quick_controls.remember_style(category, &style.name);
+            }
+        }
+        if let Some((kind, name)) = update {
+            self.update_saved_template(kind, &name);
+        }
+        if let Some((kind, name)) = remove
+            && let Some(store) = &mut self.quick_styles.templates
+        {
+            match store.remove(kind, &name) {
+                Ok(()) => {
+                    self.quick_styles.template_error.clear();
+                    self.status = format!("Deleted {name}. Existing objects are unchanged.");
+                }
+                Err(e) => self.quick_styles.template_error = e.to_string(),
+            }
+        }
+        if !self.quick_styles.template_error.is_empty() {
+            ui.colored_label(egui::Color32::LIGHT_RED, &self.quick_styles.template_error);
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn saved_style_update_delete_and_new_defaults_preserve_document_history() {
+        let ctx = egui::Context::default();
+        let mut e = crate::canvas::tests::editor(&ctx);
+        let a = capture_core::steps::marker(
+            1,
+            [80.0, 80.0],
+            44,
+            [30, 60, 90, 255],
+            (1, false),
+            [640, 400],
+        )
+        .unwrap();
+        e.session.document.annotations = vec![a.clone()];
+        e.select_only(Some(1));
+        e.tool = Some(Kind::Step);
+        let dir = tempfile::tempdir().unwrap();
+        e.quick_styles.templates =
+            Some(capture_core::object_styles::Store::open(dir.path()).unwrap());
+        e.quick_styles.template_name = "My marker".into();
+        e.save_selected_template();
+        let style = capture_core::object_styles::groups(Kind::Step)
+            .remove(0)
+            .styles
+            .remove(2);
+        e.apply_object_template(&style, false);
+        let expected = e.session.document.annotations.clone();
+        e.update_saved_template(Kind::Step, "My marker");
+        assert_eq!(e.session.document.annotations, expected);
+        let loaded = capture_core::object_styles::Store::open(dir.path()).unwrap();
+        assert_eq!(loaded.entries().len(), 1);
+        assert_eq!(loaded.entries()[0].name, "My marker");
+        assert!(loaded.entries()[0].matches(&expected));
+        e.select_only(None);
+        e.apply_object_template(&loaded.entries()[0], true);
+        let mut next = a.clone();
+        next.id = 2;
+        next.text.as_mut().unwrap().content = "2".into();
+        let drawn = e.styled_new_annotation(next.clone());
+        assert_eq!(drawn.color, style.color);
+        assert_eq!(drawn.text.as_ref().unwrap().content, "2");
+        e.quick_styles
+            .templates
+            .as_mut()
+            .unwrap()
+            .remove(Kind::Step, "My marker")
+            .unwrap();
+        assert!(
+            capture_core::object_styles::Store::open(dir.path())
+                .unwrap()
+                .entries()
+                .is_empty()
+        );
+        assert_eq!(e.session.document.annotations, expected);
+        e.execute(crate::Command::Undo);
+        assert_eq!(e.session.document.annotations, vec![a]);
+        assert!(!e.session.can_undo());
+        e.color = [1, 2, 3];
+        e.width = 8;
+        let drawn = e.styled_new_annotation(next);
+        assert_eq!(drawn.color[..3], [1, 2, 3]);
+        assert_eq!(drawn.width, 8);
+    }
+    #[test]
+    fn template_clicks_batch_apply_preserve_labels_and_save_reopen_without_document_edits() {
+        let ctx = egui::Context::default();
+        let mut e = crate::canvas::tests::editor(&ctx);
+        for id in 1..=3 {
+            e.session.document.annotations.push(
+                capture_core::steps::marker(
+                    id,
+                    [id as f32 * 100.0, 100.0],
+                    44,
+                    [120, 20, 40, 255],
+                    (id as u32, false),
+                    [640, 400],
+                )
+                .unwrap(),
+            );
+        }
+        e.tool = Some(Kind::Step);
+        e.select_all_matching();
+        let original = e.session.document.annotations.clone();
+        for style in &capture_core::object_styles::presets(Kind::Step)[..3] {
+            e.apply_object_template(style, false);
+            assert!(style.matches(&e.selected_objects()));
+            for (a, b) in original.iter().zip(&e.session.document.annotations) {
+                assert_eq!(a.start, b.start);
+                assert_eq!(
+                    a.text.as_ref().unwrap().content,
+                    b.text.as_ref().unwrap().content
+                );
+            }
+        }
+        let expected = e.session.document.annotations.clone();
+        e.select_only(Some(1));
+        let dir = tempfile::tempdir().unwrap();
+        e.quick_styles.templates =
+            Some(capture_core::object_styles::Store::open(dir.path()).unwrap());
+        e.save_selected_template();
+        assert_eq!(e.session.document.annotations, expected);
+        let store = capture_core::object_styles::Store::open(dir.path()).unwrap();
+        assert_eq!(store.entries().len(), 1);
+        assert!(store.entries()[0].matches(&[expected[0].clone()]));
+        e.execute(crate::Command::Undo);
+        assert_eq!(
+            e.session.document.annotations[0].color,
+            [135, 196, 105, 255]
+        );
+        e.select_all_matching();
+        e.apply_object_template(&store.entries()[0], true);
+        assert_eq!(e.session.document.annotations, expected);
+    }
+}

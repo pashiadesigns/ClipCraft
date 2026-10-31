@@ -1,0 +1,25 @@
+{
+  "version": "0.1.0-alpha.2",
+  "date": "2026-10-29",
+  "channel": "alpha",
+  "title": "Edit directly on the canvas",
+  "summary": "Select annotations, move them into place, and reshape them with visible handles while keeping each drag easy to undo.",
+  "changes": {
+    "Added": [
+      "Select objects directly on the canvas and drag to move them.",
+      "Resize boxes with corner handles and arrows with endpoint handles.",
+      "Nudge selected objects by one pixel with arrow keys, or ten pixels with Shift."
+    ],
+    "Improved": [
+      "A complete move or resize is one undo step, with live visual feedback and canvas boundary constraints.",
+      "Saved projects retain manipulated geometry, and PNG export uses the same rendering engine.",
+      "Freshly imported images prompt to save even before an annotation is added."
+    ]
+  },
+  "limitations": [
+    "Windows x64 portable preview; the application is not code-signed.",
+    "Screen capture, global hotkeys, text, and callouts are not included yet. Region capture remains a development-only feature pending native verification.",
+    "Selection handles support one annotation at a time. Multi-selection, rotation, and grouping remain planned.",
+    "Editable projects retain original pixels. Share a flattened PNG for redacted content."
+  ]
+}

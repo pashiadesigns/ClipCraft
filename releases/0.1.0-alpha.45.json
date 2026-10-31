@@ -1,0 +1,26 @@
+{
+  "version": "0.1.0-alpha.45",
+  "date": "2026-10-30",
+  "channel": "alpha",
+  "title": "Place, align and keep editing",
+  "summary": "Drag new Steps into position, snap object edges and centers, and see which objects your current tool can edit.",
+  "changes": {
+    "Added": [
+      "New Steps appear on mouse-down and follow the held pointer until release. One Undo removes the marker and restores its sequence number.",
+      "Canvas Snapping in the Image menu aligns moving objects, groups and new Steps to other objects' edges and centers. The toggle is remembered.",
+      "Compatible objects show a cyan border and nodes on hover. Newly drawn annotations stay selected for immediate property edits."
+    ],
+    "Improved": [
+      "Alignment, distribution, text justification and Capture use an enclosing control with a filled triangle dropdown. Last-used arrangement actions still repeat from the main button."
+    ],
+    "Verified": [
+      "Native Step dragging, retained selection, Undo/Redo and numbering, editable reopen and256000exact clipboard pixels.",
+      "Native snapping enabled/disabled yields exact center positions320/317. Local input checks cover different zooms and actual guide painting, group geometry, persistence and one Undo."
+    ]
+  },
+  "limitations": [
+    "Grouped style categories and saved-first style ordering remain in progress; circular curved arrows remain planned.",
+    "Snapping currently covers object/group movement and new Step placement. Drawing endpoints, resizing, angle/grid snapping and broader workspace preferences remain unfinished.",
+    "Simplify, advanced core-tool options, smooth vector display, editable autosave and toolbar reordering remain in the roadmap."
+  ]
+}

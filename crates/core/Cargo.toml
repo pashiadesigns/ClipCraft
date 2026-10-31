@@ -1,0 +1,20 @@
+[package]
+name = "capture-core"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+license.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+image.workspace = true
+thiserror.workspace = true
+base64 = "0.22"
+flate2 = "1"
+ttf-parser = "0.25"
+imageproc = { version = "0.25", default-features = false }
+tempfile = "3"
+ab_glyph = "0.2.32"
+epaint_default_fonts = { version = "0.37", default-features = false }
+vello_cpu = { version = "0.2.0", default-features = false, features = ["std", "u8_pipeline"] }

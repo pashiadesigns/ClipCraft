@@ -1,0 +1,40 @@
+Upstream: https://github.com/storytold/designcraft
+Commit: ea08e4c2ba290f092063c99d70c4bdd5afc45887 (version 0.14.0)
+License chosen: MIT. See accompanying LICENSE-MIT.
+Copyright (c) 2026 ArtCraft Team and the DesignCraft contributors.
+
+Adapted source: crates/geom/src/shapes.rs, ellipse anchors and ellipse_bounds_and_area test.
+ClipCraft destination: crates/core/src/ellipse.rs.
+Changes: replace kurbo/DesignCraft path types with image-coordinate arrays;
+bounded cubic flattening; integrate ClipCraft rendering, selection, persistence
+and Undo. Add invalid-input, degenerate, reversed-drag, alpha and history tests.
+No upstream brand, icons, fonts or other assets are included.
+This adaptation was started after alpha.29 and is not included in that package.
+
+Alpha.31 development: polygon vertex generation from crates/geom/src/shapes.rs adapted in crates/core/src/polygon.rs. Uses bounded side counts, image-coordinate arrays and normalization to the user's drag bounds. Existing tests extended for triangle area, reverse drawing, bounds, hit tests, filled output and saved Undo state.
+
+Post-alpha40: align/distribute bounds algorithms from crates/engine/src/cmd/object.rs adapted in crates/core/src/layout_selection.rs. Same pinned revision and MIT license. Changes: typed LayoutAction, atomic UpdateMany semantics, original annotation geometry, deterministic center ordering, combined centering, clipping rejection and bounded ID validation. No page/spread model, brand assets or upstream rendering stack imported.
+
+Post-alpha44: closest-axis matching from crates/geom/src/snap.rs adapted in
+crates/core/src/snapping.rs. Same pinned revision and MIT license. ClipCraft adds
+annotation body bounds, group anchors, selected-object exclusion, canvas clamping,
+finite-input checks and guide validation. No page/layer types or assets imported.
+
+Post-alpha46: resize modifier geometry from crates/tools/src/select.rs
+(finish_resize, aspect_scale, apply_aspect) and angle constraints from
+crates/geom/src/lib.rs adapted in crates/core/src/resize_modifiers.rs. Same pinned
+revision and MIT license. ClipCraft adds image canvas limits, annotation paths,
+midpoint handles, labels/pointers and atomic command integration. UI preferences,
+duplication commands and gesture plumbing are original ClipCraft code.
+
+Post-ribbon candidate: crates/tools/src/select.rs rotate_zone and Drag::Rotate angle-delta/Shift logic adapted in crates/core/src/rotation.rs. ClipCraft adds validated coordinates, inverse mapping, a fixed-screen-distance node, continuous angle unwrapping and nearest-corner priority at low zoom. This is geometry groundwork; object model/UI integration remains pending.
+
+2026-10-30: geom/src/lib.rs::constrain_angle adapted in crates/core/src/angle_snap.rs; image-coordinate f32 endpoints, exact cardinal axes and bounded ray clipping added. tools/src/frame.rs inspected for initial Shift-drag behavior. Same pinned revision and MIT license.
+Text outline coverage (2026-10-31): crates/core/src/text/outline.rs adapts
+crates/render/src/text.rs::paint_glyphs at the same pinned revision. ClipCraft
+uses an isolated outer-stroke/glyph-knockout mask with shared fitted glyphs,
+underline/strike coverage, bounded width, content clipping and caller alpha.
+Only the coverage helper is implemented; document/UI integration is pending.
+
+2026-10-31: crates/core/src/line_style.rs adapts endpoint-local shapes, tangent direction and path trimming from crates/doc/src/arrow.rs at the same pinned MIT revision. ClipCraft adds independent sizes, circular/quadratic bends, bounded patterns, legacy output preservation, hit/bounds/selection geometry and its own document integration. Native parity remains pending.
+2026-10-31: text/typography.rs adapts the synthesized script size/baseline-shift pattern from compose/src/shape.rs::effective_size at the same pinned MIT revision. ClipCraft adds bounded whole-label spacing and highlight geometry, shared caret/export layout, persisted optional state and original UI. No composition stack imported.
