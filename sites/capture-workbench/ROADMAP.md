@@ -2,7 +2,7 @@
 
 Updated: 2026-11-01
 
-Local Library/template/vector-PDF batch qualified: 594 Rust tests, 42 optimized comparisons and six PDF fixtures. T3 passed; only T1 remains native. Template management and independent previous-version recovery added. Public preview.1/49 downloads unchanged; automation paused.
+User approved release of the reviewed build after thumbnail image replacement, Blank guide sections and compact Library toolbar. T1 remains a known defect, accepted for release and explicitly deferred. Preview.2 qualification/publication underway; automation remains paused.
 
 Generated from roadmap.json. Edit that source and run node scripts/build.mjs; do not edit this generated view.
 
@@ -239,6 +239,8 @@ Generated from roadmap.json. Edit that source and run node scripts/build.mjs; do
 | LIB-016: Integrity checks and previous-version recovery | Library | Needs verification | Next |
 | EDIT-086: Image-frame replacement context menu | Editing | Needs verification | Next |
 | FILE-012: Vector-preserving PDF export | Files | Needs verification | Next |
+| UX-086: Inactive cross-monitor right-border defect | Experience | Deferred | Later |
+| CREATE-005: Empty editable guide sections | Creation | In progress | Next |
 
 ## Completion checks and evidence
 
@@ -3714,6 +3716,7 @@ Completion: Verify pointer gestures, selected-only operations, collision-free na
 - Evidence: Local implementation and automated qualification underway; no published release or native observation yet. docs/library-stamps-work.md.
 - Evidence: Local library-stamps-review-20261101-123859; SHA256 10ef2909755c01043906b4a745243e4114814e6ff77b9d03e8071da1bbdef1c8; 546 tests/fmt/Clippy, 26 optimized image comparisons and Windows imports pass. Headless production UI inspected; native review R1/R2 pending. docs/library-stamps-work.md.
 - Evidence: 2026-11-01 user passed R1 native Library Save As and R2 stamp colors/movement on the previous Library/stamps candidate; release still pending.
+- Evidence: 2026-11-01 release follow-up: Recent-sized image replacement thumbnails and redundant Library toolbar removal. Qualification underway.
 - Release not scheduled; priorities are not version promises.
 - Depends on: LIB-012
 
@@ -3881,15 +3884,16 @@ Completion: Verify both Tab and Show UI restore previous pane states, text/dialo
 
 **Needs verification** · Next · Updated 2026-11-01
 
-Nested shadow color picking, stamp preview after editing, selected-only radius nodes, compact Rename footer, centered Show UI and focus-safe window sizing.
+Nested shadow color picking, stamp preview after editing, selected-only radius nodes, compact Rename footer, centered Show UI.
 
-Completion: Actual popup/input/layout regressions, unchanged output fixtures and native cross-monitor focus review.
+Completion: Actual popup/input/layout regressions and unchanged output fixtures; unresolved cross-monitor focus is separately deferred under UX-086.
 
 - Evidence: User-authorized bounded follow-up 2026-11-01. docs/review-polish-work.md. No native desktop or OS clipboard use.
 - Evidence: Local workflow-review-20261101-154526; SHA256 3b1193a37dff69c8e48158174897cd59447afeefa682e73124cd8f86def97907; 575 tests/fmt/Clippy, 34 optimized image comparisons and Windows imports pass. Native T1–T3 pending. docs/review-polish-work.md. No public binary release.
 - Evidence: T1 failed per user on inferred workflow-review-20261101-154526. Focus-loss edge cropping is not verified fixed. docs/template-followup-work.md.
 - Evidence: template-library-review-20261101-164049; SHA256 89b521f81c08db08517fe52714389b4d2c9f43859f7bf2c15465f03254eff4ef; 584 tests/fmt/Clippy, 36 exact optimized comparisons, production UI/input and imports pass. Unreleased review candidate; native T1/T3 remain. docs/template-followup-work.md.
 - Evidence: recovery-pdf-review-20261101-182023; SHA256 9f642d24c0e7bd025606092ef02effd1c762638e79358f74320548808882fe1b; 594 Rust tests/fmt/Clippy, 42 optimized export/viewport comparisons (36 unchanged), six PDF fixtures, production UI/input and imports pass. Local review only; native T1 unconfirmed. docs/recovery-pdf-work.md.
+- Evidence: 2026-11-01: T1 accepted as a release waiver, not fixed. See deferred UX-086; preserve all previous failure evidence.
 - Release not scheduled; priorities are not version promises.
 - Depends on: UX-075, UX-077, UX-081
 
@@ -4037,6 +4041,7 @@ Completion: Check geometry, grouping, styling, one Undo and save/reopen; clipboa
 
 - Evidence: User-approved bounded batch. docs/recovery-pdf-work.md.
 - Evidence: recovery-pdf-review-20261101-182023; SHA256 9f642d24c0e7bd025606092ef02effd1c762638e79358f74320548808882fe1b; 594 Rust tests/fmt/Clippy, 42 optimized export/viewport comparisons (36 unchanged), six PDF fixtures, production UI/input and imports pass. Local review only; native T1 unconfirmed. docs/recovery-pdf-work.md.
+- Evidence: 2026-11-01 release follow-up: Recent-sized image replacement thumbnails and redundant Library toolbar removal. Qualification underway.
 - Release not scheduled; priorities are not version promises.
 - Depends on: CREATE-002
 
@@ -4052,3 +4057,28 @@ Completion: Inspect PDF structure, redaction safety, rendered fidelity, paginati
 - Evidence: recovery-pdf-review-20261101-182023; SHA256 9f642d24c0e7bd025606092ef02effd1c762638e79358f74320548808882fe1b; 594 Rust tests/fmt/Clippy, 42 optimized export/viewport comparisons (36 unchanged), six PDF fixtures, production UI/input and imports pass. Local review only; native T1 unconfirmed. docs/recovery-pdf-work.md.
 - Release not scheduled; priorities are not version promises.
 - Depends on: FILE-006, FILE-008
+
+### UX-086: Inactive cross-monitor right-border defect
+
+**Deferred** · Later · Updated 2026-11-01
+
+On some multi-monitor setups the right border moves inward while inactive and recovers on focus. Prior corrections did not resolve the reported behavior.
+
+Completion: Reproduce on affected displays, inspect numeric frame/client/egui geometry and verify inactive and focused rendering without altering window placement.
+
+- Evidence: 2026-11-01: user reports T1 still failing, accepts the release gate and requests later review. docs/preview2-release-work.md.
+- Release not scheduled; priorities are not version promises.
+- Depends on: UX-082
+- Deferred: User explicitly deprioritized this cosmetic defect until much later and accepted it for release; no correction claimed.
+
+### CREATE-005: Empty editable guide sections
+
+**In progress** · Next · Updated 2026-11-01
+
+Blank section in both guide insertion menus; no text or image placeholder; uses existing bottom resize and section actions.
+
+Completion: Verify insert, resize, reorder, duplicate/delete, one-step Undo, format guard and save/reopen.
+
+- Evidence: User-requested final release addition; original implementation. docs/preview2-release-work.md.
+- Provisional target: 0.1.0-preview.2
+- Depends on: CREATE-002

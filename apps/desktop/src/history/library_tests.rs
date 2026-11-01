@@ -48,6 +48,9 @@ fn pointer_selection_ranges_marquee_context_and_double_open() {
     };
     let mut first = frame(&mut e, vec![], egui::Modifiers::NONE);
     let warm = frame(&mut e, vec![], egui::Modifiers::NONE);
+    for removed in ["Select visible", "Clear", "Delete…"] {
+        assert!(crate::color_widgets::tests::text_rect(&warm.shapes, removed).is_none());
+    }
     first.0.textures_delta.append(warm.0.textures_delta.clone());
     let cards: Vec<(String, egui::Rect)> = ctx
         .data(|d| d.get_temp(egui::Id::unique("library-cards")))

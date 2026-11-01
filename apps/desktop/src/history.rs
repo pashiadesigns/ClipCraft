@@ -209,8 +209,17 @@ impl Editor {
         entry: &Entry,
         card_size: egui::Vec2,
     ) -> egui::Response {
+        self.history_card_action(ui, entry, card_size, None)
+    }
+    pub(crate) fn history_card_action(
+        &mut self,
+        ui: &mut egui::Ui,
+        entry: &Entry,
+        card_size: egui::Vec2,
+        action: Option<&str>,
+    ) -> egui::Response {
         let ctx = ui.ctx().clone();
-        let active = self.history.active.as_deref() == Some(&entry.id);
+        let active = action.is_none() && self.history.active.as_deref() == Some(&entry.id);
         let available = self.history.available(&entry.id);
         let texture = self.history.thumbnail(entry, &ctx);
         let label = if entry.label.is_empty() {
@@ -226,7 +235,9 @@ impl Editor {
             age(entry.created_ms),
             entry.created_utc(),
             entry.bytes as f64 / 1000.0,
-            if self.shell.library {
+            if let Some(action) = action {
+                action
+            } else if self.shell.library {
                 "Click to select; double-click to open. Shift selects a range; Alt adds or removes items."
             } else if active {
                 "Current image. Selecting it keeps your edits."
@@ -239,7 +250,10 @@ impl Editor {
             egui::WidgetInfo::labeled(
                 egui::Role::Button,
                 available,
-                format!("{} {label}", if active { "Current" } else { "Open" }),
+                format!(
+                    "{} {label}",
+                    action.unwrap_or(if active { "Current" } else { "Open" })
+                ),
             )
         });
         if ui.is_rect_visible(rect) {
@@ -298,11 +312,13 @@ impl Editor {
                     egui::Color32::WHITE,
                 );
             }
-            if if self.shell.library {
-                self.history.library.selected.contains(&entry.id)
-            } else {
-                active
-            } {
+            if action.is_none()
+                && if self.shell.library {
+                    self.history.library.selected.contains(&entry.id)
+                } else {
+                    active
+                }
+            {
                 painter.rect_stroke(
                     rect.shrink(1.0),
                     4,

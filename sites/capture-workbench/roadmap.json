@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "updated": "2026-11-01",
-  "scope": "Local Library/template/vector-PDF batch qualified: 594 Rust tests, 42 optimized comparisons and six PDF fixtures. T3 passed; only T1 remains native. Template management and independent previous-version recovery added. Public preview.1/49 downloads unchanged; automation paused.",
+  "scope": "User approved release of the reviewed build after thumbnail image replacement, Blank guide sections and compact Library toolbar. T1 remains a known defect, accepted for release and explicitly deferred. Preview.2 qualification/publication underway; automation remains paused.",
   "features": [
     {
       "id": "UX-002",
@@ -5462,7 +5462,8 @@
       "evidence": [
         "Local implementation and automated qualification underway; no published release or native observation yet. docs/library-stamps-work.md.",
         "Local library-stamps-review-20261101-123859; SHA256 10ef2909755c01043906b4a745243e4114814e6ff77b9d03e8071da1bbdef1c8; 546 tests/fmt/Clippy, 26 optimized image comparisons and Windows imports pass. Headless production UI inspected; native review R1/R2 pending. docs/library-stamps-work.md.",
-        "2026-11-01 user passed R1 native Library Save As and R2 stamp colors/movement on the previous Library/stamps candidate; release still pending."
+        "2026-11-01 user passed R1 native Library Save As and R2 stamp colors/movement on the previous Library/stamps candidate; release still pending.",
+        "2026-11-01 release follow-up: Recent-sized image replacement thumbnails and redundant Library toolbar removal. Qualification underway."
       ]
     },
     {
@@ -5686,8 +5687,8 @@
       "category": "Experience",
       "status": "needs_verification",
       "priority": "next",
-      "description": "Nested shadow color picking, stamp preview after editing, selected-only radius nodes, compact Rename footer, centered Show UI and focus-safe window sizing.",
-      "completion": "Actual popup/input/layout regressions, unchanged output fixtures and native cross-monitor focus review.",
+      "description": "Nested shadow color picking, stamp preview after editing, selected-only radius nodes, compact Rename footer, centered Show UI.",
+      "completion": "Actual popup/input/layout regressions and unchanged output fixtures; unresolved cross-monitor focus is separately deferred under UX-086.",
       "depends_on": [
         "UX-075",
         "UX-077",
@@ -5700,7 +5701,8 @@
         "Local workflow-review-20261101-154526; SHA256 3b1193a37dff69c8e48158174897cd59447afeefa682e73124cd8f86def97907; 575 tests/fmt/Clippy, 34 optimized image comparisons and Windows imports pass. Native T1–T3 pending. docs/review-polish-work.md. No public binary release.",
         "T1 failed per user on inferred workflow-review-20261101-154526. Focus-loss edge cropping is not verified fixed. docs/template-followup-work.md.",
         "template-library-review-20261101-164049; SHA256 89b521f81c08db08517fe52714389b4d2c9f43859f7bf2c15465f03254eff4ef; 584 tests/fmt/Clippy, 36 exact optimized comparisons, production UI/input and imports pass. Unreleased review candidate; native T1/T3 remain. docs/template-followup-work.md.",
-        "recovery-pdf-review-20261101-182023; SHA256 9f642d24c0e7bd025606092ef02effd1c762638e79358f74320548808882fe1b; 594 Rust tests/fmt/Clippy, 42 optimized export/viewport comparisons (36 unchanged), six PDF fixtures, production UI/input and imports pass. Local review only; native T1 unconfirmed. docs/recovery-pdf-work.md."
+        "recovery-pdf-review-20261101-182023; SHA256 9f642d24c0e7bd025606092ef02effd1c762638e79358f74320548808882fe1b; 594 Rust tests/fmt/Clippy, 42 optimized export/viewport comparisons (36 unchanged), six PDF fixtures, production UI/input and imports pass. Local review only; native T1 unconfirmed. docs/recovery-pdf-work.md.",
+        "2026-11-01: T1 accepted as a release waiver, not fixed. See deferred UX-086; preserve all previous failure evidence."
       ]
     },
     {
@@ -5907,7 +5909,8 @@
       "updated": "2026-11-01",
       "evidence": [
         "User-approved bounded batch. docs/recovery-pdf-work.md.",
-        "recovery-pdf-review-20261101-182023; SHA256 9f642d24c0e7bd025606092ef02effd1c762638e79358f74320548808882fe1b; 594 Rust tests/fmt/Clippy, 42 optimized export/viewport comparisons (36 unchanged), six PDF fixtures, production UI/input and imports pass. Local review only; native T1 unconfirmed. docs/recovery-pdf-work.md."
+        "recovery-pdf-review-20261101-182023; SHA256 9f642d24c0e7bd025606092ef02effd1c762638e79358f74320548808882fe1b; 594 Rust tests/fmt/Clippy, 42 optimized export/viewport comparisons (36 unchanged), six PDF fixtures, production UI/input and imports pass. Local review only; native T1 unconfirmed. docs/recovery-pdf-work.md.",
+        "2026-11-01 release follow-up: Recent-sized image replacement thumbnails and redundant Library toolbar removal. Qualification underway."
       ]
     },
     {
@@ -5928,6 +5931,42 @@
         "User-approved bounded batch. docs/recovery-pdf-work.md.",
         "recovery-pdf-review-20261101-182023; SHA256 9f642d24c0e7bd025606092ef02effd1c762638e79358f74320548808882fe1b; 594 Rust tests/fmt/Clippy, 42 optimized export/viewport comparisons (36 unchanged), six PDF fixtures, production UI/input and imports pass. Local review only; native T1 unconfirmed. docs/recovery-pdf-work.md."
       ]
+    },
+    {
+      "id": "UX-086",
+      "title": "Inactive cross-monitor right-border defect",
+      "category": "Experience",
+      "status": "deferred",
+      "priority": "later",
+      "schedule_status": "unscheduled",
+      "updated": "2026-11-01",
+      "description": "On some multi-monitor setups the right border moves inward while inactive and recovers on focus. Prior corrections did not resolve the reported behavior.",
+      "completion": "Reproduce on affected displays, inspect numeric frame/client/egui geometry and verify inactive and focused rendering without altering window placement.",
+      "depends_on": [
+        "UX-082"
+      ],
+      "blocker": "User explicitly deprioritized this cosmetic defect until much later and accepted it for release; no correction claimed.",
+      "evidence": [
+        "2026-11-01: user reports T1 still failing, accepts the release gate and requests later review. docs/preview2-release-work.md."
+      ]
+    },
+    {
+      "id": "CREATE-005",
+      "title": "Empty editable guide sections",
+      "category": "Creation",
+      "status": "in_progress",
+      "priority": "next",
+      "target_version": "0.1.0-preview.2",
+      "updated": "2026-11-01",
+      "description": "Blank section in both guide insertion menus; no text or image placeholder; uses existing bottom resize and section actions.",
+      "completion": "Verify insert, resize, reorder, duplicate/delete, one-step Undo, format guard and save/reopen.",
+      "depends_on": [
+        "CREATE-002"
+      ],
+      "evidence": [
+        "User-requested final release addition; original implementation. docs/preview2-release-work.md."
+      ],
+      "target_provisional": true
     }
   ]
 }

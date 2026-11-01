@@ -23,7 +23,7 @@ export function validateRoadmap(roadmap, releaseVersions) {
     if (!Array.isArray(feature.evidence) || feature.evidence.some(item => typeof item !== 'string' || !item.trim())) throw new Error('Invalid evidence.');
     if (feature.status === 'shipped' && (!feature.evidence.length || !releaseVersions.includes(feature.released_in))) throw new Error('Shipped features require evidence and a known release.');
     if (feature.status === 'shipped' && feature.target_version) throw new Error('Shipped features must record their release rather than a provisional target.');
-    const version = value => typeof value === 'string' && /^\d+\.\d+\.\d+-alpha\.[1-9]\d*$/.test(value);
+    const version = value => typeof value === 'string' && /^\d+\.\d+\.\d+(?:-(?:alpha|beta|preview|rc)\.[1-9]\d*)?$/.test(value);
     if (feature.target_version && (!version(feature.target_version) || feature.target_provisional !== true)) throw new Error('Invalid provisional target version.');
     if (feature.status !== 'shipped' && !feature.target_version && feature.schedule_status !== 'unscheduled') throw new Error('Unfinished features require a target or explicit unscheduled status.');
     if (feature.original_target_version && (!version(feature.original_target_version) || !feature.target_history?.includes(feature.original_target_version))) throw new Error('Original target requires retained planning history.');

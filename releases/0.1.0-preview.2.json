@@ -1,0 +1,41 @@
+{
+  "version": "0.1.0-preview.2",
+  "date": "2026-11-01",
+  "channel": "preview",
+  "title": "Reviewed editor, Library and template update",
+  "summary": "Consolidates the approved editor and capture refinements with editable templates, vector PDF export, Library management and recovery, and a compact thumbnail-based image replacement workflow.",
+  "changes": {
+    "Templates and image frames": [
+      "Six original editable starter templates, direct File cards and reusable local layouts with rename, duplicate and delete.",
+      "Insert empty, resizable Blank sections alongside Header, Image and Text sections; section changes preserve one-step Undo and saved projects.",
+      "Replace frame content from file, clipboard or Library thumbnail cards; Clear Image retains the frame and its styling."
+    ],
+    "Library": [
+      "Single-click selection, double-click opening, Shift/Alt/marquee multiselection and shared context menus for bulk naming, duplication, export, tags and deletion.",
+      "Compact name-only thumbnails with persistent type overlays, optional details, bulk image import and global tag rename/delete.",
+      "Storage controls moved to General; integrity checks report damaged entries and recovery restores independent copies from up to three retained earlier versions.",
+      "Removed redundant Library action buttons; Refresh remains at the top right."
+    ],
+    "Editor, capture and export": [
+      "Editable limited-palette business vector stamps, repeat Stamp/Step/Redact placement, precise brush cursors, Alt-wheel size adjustment and recent-object snapping limits.",
+      "Text fitting, shadow color picking, compact dialogs, initial text-field focus, Tab interface preview and export preference refinements.",
+      "Per-mode capture settings, capture clipboard defaults, distinct controller icons and optional Editor/Controller Start menu shortcuts.",
+      "PDF retains shapes, vector stamps and outlined glyphs as vectors; screenshots and pixel effects use bounded raster content. PNG/JPEG and Windows printing remain available.",
+      "Capture delay is configured in the controller; the duplicate File-menu control is removed."
+    ],
+    "Verification and distribution": [
+      "Rust unit/workflow tests, production-interface synthetic input, optimized image comparisons and independent PDF rendering/structure checks.",
+      "User review queue cleared for this release; T1 was accepted as a known defect, not verified fixed.",
+      "Portable Windows x64 ZIP with full buildable Apache-2.0 source, checksums, source manifest, SPDX inventory and GitHub build attestations."
+    ]
+  },
+  "limitations": [
+    "Unsigned portable preview; signed installers, enterprise deployment policies and an in-app updater are not included.",
+    "Known deferred T1 issue: on some multi-monitor setups the right border moves inward while inactive and recovers when ClipCraft regains focus. Release acceptance does not mean this defect is fixed.",
+    "Video and All-in-One capture, mixed formatting within one text box, and general SVG/EPS stamp import remain future work.",
+    "PDF text uses vector outlines and is not searchable text. Screenshots, shadows and pixel effects remain raster. Editable project fonts are referenced rather than embedded.",
+    "Editable projects retain source pixels; share flattened exports when redacting. Recovery retains at most three earlier versions per Library item under a separate 256 MB budget and cannot recover revisions discarded by older builds.",
+    "Projects using Blank sections require this release or newer (project format 26); earlier releases reject that newer format.",
+    "Headless and user checks cover the recorded workflows, not complete Snagit parity or an enterprise security certification. No native desktop takeover, print job or OS clipboard access was used in the final automated qualification."
+  ]
+}

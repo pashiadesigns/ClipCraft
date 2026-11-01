@@ -208,6 +208,51 @@ fn plus_menu_inserts_real_editable_text_and_preserves_other_sections() {
 }
 
 #[test]
+fn plus_menu_inserts_blank_section_without_text_or_image() {
+    let ctx = egui::Context::default();
+    crate::shell::configure(&ctx);
+    let mut e = crate::canvas::tests::editor(&ctx);
+    e.session = Session::new(fixture()).unwrap();
+    e.tool = None;
+    e.needs_render = true;
+    frame(&ctx, &mut e, vec![]);
+    frame(&ctx, &mut e, vec![]);
+    let before = serde_json::to_vec(&e.session.document).unwrap();
+    let count = e.session.document.annotations.len();
+    let transform = e.view.current_transform().unwrap();
+    let plus = controls(&e.session.document, transform)[0].add.center();
+    frame(
+        &ctx,
+        &mut e,
+        vec![egui::Event::PointerMoved(plus), button(plus, true)],
+    );
+    frame(&ctx, &mut e, vec![button(plus, false)]);
+    frame(&ctx, &mut e, vec![]);
+    let choice = ctx
+        .data(|d| {
+            d.get_temp::<egui::Rect>(egui::Id::unique((
+                "guide-insert-choice",
+                1u64,
+                "Blank section",
+            )))
+        })
+        .unwrap()
+        .center();
+    frame(
+        &ctx,
+        &mut e,
+        vec![egui::Event::PointerMoved(choice), button(choice, true)],
+    );
+    frame(&ctx, &mut e, vec![button(choice, false)]);
+    let section = &e.session.document.guide.as_ref().unwrap().sections[1];
+    assert_eq!(section.kind, SectionKind::Blank);
+    assert!(section.objects.is_empty());
+    assert_eq!(e.session.document.annotations.len(), count);
+    e.execute(Command::Undo);
+    assert_eq!(serde_json::to_vec(&e.session.document).unwrap(), before);
+}
+
+#[test]
 fn section_action_buttons_stay_in_workspace_gutters_at_fit_and_zoom() {
     let document = fixture();
     let viewport = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(900., 800.));

@@ -30,6 +30,7 @@ const currentBatches = queue.batches.filter(b => b.priority === 'current' && b.c
 const pendingBatches = queue.batches.map(b => ({...b, checks:b.checks.filter(c => c.status !== 'passed')}))
   .filter(b => b.checks.length).sort((a,b) => Number(a.priority !== 'current') - Number(b.priority !== 'current'));
 const passed = queue.batches.flatMap(b => b.checks.filter(c => c.status === 'passed').map(c => ({...c,batch:b.title})));
+const waived = passed.filter(c => c.verification?.acceptance).length;
 const lines = [
   '# ClipCraft manual verification batches', '',
   `Updated ${queue.updated}. **${ready('current')} ready current checks in ${currentBatches} batches, plus ${ready('optional')} optional checks.** Passed checks are collected at the bottom.`, '',
@@ -58,7 +59,7 @@ lines.push('## Not waiting on you', '',
   `Build SHA256: \`${queue.current_build.executable_sha256}\`.`, '',
   'Maintained data: `docs/manual-verification.json`. Regenerate this view with `node scripts/build-manual-verification.mjs`.', '',
   '## Passed checks', '',
-  `${passed.length} batch checks and ${queue.completed_user_checks.length} earlier modifier checks passed. No repeat is needed unless a targeted regression is added.`, '',
+  `${passed.length-waived} batch checks and ${queue.completed_user_checks.length} earlier modifier checks passed.${waived ? ` ${waived} additional check(s) accepted for release with known defects; see their recorded evidence.` : ''} No repeat is needed unless a targeted regression is added.`, '',
   ...queue.completed_user_checks.map(c => `- ${c.title} — ${c.build}, **pass**. Includes release commit and one-step Undo.`), '',
 );
 for(const check of passed) detail(check);

@@ -338,8 +338,16 @@ impl Editor {
                 });
                 self.library_import_progress(ui);
                 let visible = self.history.library.filtered(&entries, &self.history.query);
-                self.library_bulk_bar(ui, &visible);
-                ui.label(format!("{} of {} captures", visible.len(), entries.len()));
+                self.history
+                    .library
+                    .selected
+                    .retain(|id| entries.iter().any(|e| &e.id == id));
+                ui.label(format!(
+                    "{} of {} captures · {} selected",
+                    visible.len(),
+                    entries.len(),
+                    self.history.library.selected.len()
+                ));
                 if !self.history.error.is_empty() {
                     ui.colored_label(egui::Color32::LIGHT_RED, &self.history.error);
                 }

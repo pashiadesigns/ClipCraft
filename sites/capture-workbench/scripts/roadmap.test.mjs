@@ -28,6 +28,16 @@ test('unfinished features require explicit provisional targets without implying 
   roadmap.features[0].status = 'shipped';
   assert.equal(renderTarget(roadmap.features[0]), '');
 });
+
+test('targets support the preview release track while retaining alpha history', () => {
+  const roadmap = sample(), feature = roadmap.features[0];
+  feature.target_version = '0.1.0-preview.2';
+  feature.original_target_version = '0.1.0-alpha.3';
+  feature.target_history = ['0.1.0-alpha.3','0.1.0-preview.2'];
+  assert.equal(validateRoadmap(roadmap, []).features[0].target_version, '0.1.0-preview.2');
+  feature.target_version = '0.1.0-preview.0';
+  assert.throws(() => validateRoadmap(roadmap, []), /provisional target/);
+});
 test('missed targets remain visible beside active work or an unscheduled release', () => {
   const roadmap = sample(), feature = roadmap.features[0];
   feature.original_target_version = feature.missed_target_version = '0.1.0-alpha.3';

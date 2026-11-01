@@ -73,7 +73,7 @@ export function writeMetadata(root, metadataPath, packageRoot, version) {
   for(const dir of ['licenses/designcraft','licenses/text-fonts'])for(const name of readdirSync(resolve(root,dir)).sort())notices.push(`\n===== ${dir}/${name} =====\n`+readFileSync(resolve(root,dir,name),'utf8'));
   writeFileSync(resolve(packageRoot,'THIRD-PARTY-NOTICES.txt'),notices.join('\n'));
   const notes=JSON.parse(readFileSync(resolve(root,'releases',version+'.json'),'utf8').replace(/^\uFEFF/,''));
-  const markdown=[`# ${notes.title}`,notes.summary,'**Unsigned Windows x64 preview. Native checks listed below remain pending.**',...Object.entries(notes.changes).flatMap(([title,items])=>['## '+title,...items.map(s=>'- '+s)]),'## Limitations',...notes.limitations.map(s=>'- '+s),`Source commit: ${commit}`,'Portable ZIP: extract all files and run ClipCraft.exe. See SECURITY.md and the release verification guide.'];
+  const markdown=[`# ${notes.title}`,notes.summary,'**Unsigned Windows x64 preview. See known limitations below.**',...Object.entries(notes.changes).flatMap(([title,items])=>['## '+title,...items.map(s=>'- '+s)]),'## Limitations',...notes.limitations.map(s=>'- '+s),`Source commit: ${commit}`,'Portable ZIP: extract all files and run ClipCraft.exe. See SECURITY.md and the release verification guide.'];
   writeFileSync(resolve(packageRoot,'release-notes.md'),markdown.join('\n\n')+'\n');
   return info;
 }

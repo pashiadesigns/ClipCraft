@@ -41,40 +41,6 @@ impl Editor {
             d.name = tag.into();
         }
     }
-    pub(super) fn library_bulk_bar(&mut self, ui: &mut egui::Ui, visible: &[Entry]) {
-        self.history.library.selected.retain(|id| {
-            self.history
-                .store
-                .as_ref()
-                .is_some_and(|s| s.entries().iter().any(|e| e.id == *id))
-        });
-        let mut action = None;
-        ui.horizontal_wrapped(|ui| {
-            if ui.button("Select visible").clicked() {
-                self.history
-                    .library
-                    .selected
-                    .extend(visible.iter().map(|e| e.id.clone()));
-            }
-            if ui.button("Clear").clicked() {
-                self.history.library.selected.clear();
-            }
-            ui.label(format!("{} selected", self.history.library.selected.len()));
-            ui.add_enabled_ui(!self.history.library.selected.is_empty(), |ui| {
-                if ui.button("Delete…").clicked() {
-                    action = Some(Action::Delete);
-                }
-            });
-        });
-        if let Some(action) = action {
-            let entries = visible
-                .iter()
-                .filter(|e| self.history.library.selected.contains(&e.id))
-                .cloned()
-                .collect();
-            self.begin_library_management(action, entries);
-        }
-    }
     pub(super) fn library_selection_context(
         &mut self,
         response: &egui::Response,

@@ -23,13 +23,18 @@ and GitHub build attestations before deployment.
 - Local Library, range/drag selection, bulk operations, file details and imported image stamps.
 - Original vector starter stamps with independently editable palette colors.
 - PNG/JPEG/PDF export and a Windows print-dialog workflow.
+- Editable image templates, empty guide sections and reusable local layouts.
+- Image-frame replacement from files, clipboard or Library thumbnails; bounded Library version recovery.
 
-Video and All-in-One capture are not implemented. PDF export is raster output,
-not searchable/vector text. Installed fonts are referenced, not embedded; missing
+Video and All-in-One capture are not implemented. PDF preserves vector paths and
+outlined text; screenshots and pixel effects remain raster. PDF text is not searchable.
+Installed fonts in editable projects are referenced, not embedded; missing
 families use a bundled fallback. Preview releases are not an enterprise certification.
 The source branch can include local review changes newer than the latest release;
 use the release notes for the exact download's capabilities. General SVG/EPS stamp
 import is not implemented yet.
+Known issue: on some multi-monitor setups the right window border moves inward
+while ClipCraft is inactive and recovers on focus. This cosmetic defect is deferred.
 See the [feature inventory](sites/capture-workbench/ROADMAP.md) for scoped status;
 historical local evidence links in it are not distributed verification records.
 

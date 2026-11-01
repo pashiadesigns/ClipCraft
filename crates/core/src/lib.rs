@@ -13,7 +13,7 @@ use std::{
 };
 
 pub const MAX_PIXELS: u64 = 25_000_000;
-pub const MAX_PROJECT_VERSION: u32 = 25;
+pub const MAX_PROJECT_VERSION: u32 = 26;
 mod arrow;
 pub mod bitmap;
 pub mod callout;
@@ -283,6 +283,13 @@ impl Document {
     /// Promote documents that use newer editable annotation properties.
     /// Old applications reject these projects instead of silently losing rules.
     pub fn promote_features(&mut self) {
+        if self.guide.as_ref().is_some_and(|g| {
+            g.sections
+                .iter()
+                .any(|s| s.kind == guide_sections::SectionKind::Blank)
+        }) {
+            self.version = self.version.max(26);
+        }
         if self
             .annotations
             .iter()

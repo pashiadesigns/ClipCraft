@@ -25,6 +25,59 @@ fn bytes(d: &Document) -> Vec<u8> {
 }
 
 #[test]
+fn blank_sections_reflow_resize_roundtrip_and_undo_without_placeholder_objects() {
+    let before = guide();
+    let mut s = Session::new(before.clone()).unwrap();
+    execute(
+        &mut s,
+        Action::Insert {
+            after: Some(1),
+            kind: SectionKind::Blank,
+        },
+    );
+    let blank = s.document.guide.as_ref().unwrap().sections[1].clone();
+    assert_eq!(blank.kind, SectionKind::Blank);
+    assert!(blank.objects.is_empty());
+    assert!(blank.marker.is_none());
+    assert_eq!(s.document.annotations.len(), before.annotations.len());
+    assert_eq!(s.document.version, 26);
+    let mut legacy = s.document.clone();
+    legacy.version = 25;
+    assert!(legacy.validate().is_err());
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("blank.capture.json");
+    s.document.save(&path).unwrap();
+    assert_eq!(bytes(&Document::load(&path).unwrap()), bytes(&s.document));
+    if let Ok(dir) = std::env::var("CLIPCRAFT_PREVIEW2_FIXTURE_DIR") {
+        std::fs::create_dir_all(&dir).unwrap();
+        s.document
+            .save(&std::path::Path::new(&dir).join("blank-section.capture.json"))
+            .unwrap();
+    }
+    for action in [
+        Action::Resize {
+            id: blank.id,
+            height: 260.,
+        },
+        Action::Move {
+            id: blank.id,
+            index: 0,
+        },
+        Action::Duplicate { id: blank.id },
+        Action::Remove { id: blank.id },
+    ] {
+        let prior = bytes(&s.document);
+        execute(&mut s, action);
+        s.document.validate().unwrap();
+        assert_eq!(s.document.annotations.len(), before.annotations.len());
+        s.execute(Command::Undo).unwrap();
+        assert_eq!(bytes(&s.document), prior);
+    }
+    s.execute(Command::Undo).unwrap();
+    assert_eq!(bytes(&s.document), bytes(&before));
+}
+
+#[test]
 fn expanded_guide_survives_section_edits_history_reopen_and_undo() {
     let mut s = Session::new(guide()).unwrap();
     // Moving a screenshot across the edge produces a persistent raster base.

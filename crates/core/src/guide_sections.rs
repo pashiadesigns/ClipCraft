@@ -12,6 +12,7 @@ pub enum SectionKind {
     Header,
     Image,
     Text,
+    Blank,
 }
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -84,7 +85,8 @@ impl Layout {
         let mut sections = BTreeSet::new();
         let mut objects = BTreeSet::new();
         for s in &self.sections {
-            if !sections.insert(s.id)
+            if (s.kind == SectionKind::Blank && document.version < 26)
+                || !sections.insert(s.id)
                 || s.id == 0
                 || !s.height.is_finite()
                 || !(48.0..=32768.0).contains(&s.height)
@@ -208,7 +210,7 @@ impl Document {
                 };
                 let mut height = match kind {
                     SectionKind::Header => 120.,
-                    SectionKind::Text => 160.,
+                    SectionKind::Text | SectionKind::Blank => 160.,
                     SectionKind::Image => 360.,
                 };
                 let width = next.width as f32;
@@ -217,6 +219,7 @@ impl Document {
                     SectionKind::Header => "Heading",
                     SectionKind::Text => "Enter section text",
                     SectionKind::Image => "Image section",
+                    SectionKind::Blank => "",
                 };
                 let text = Annotation {
                     id: next_object,
@@ -264,7 +267,7 @@ impl Document {
                     height = (h * scale + 32.).max(48.);
                     next.annotations.push(image);
                     objects.push(next_object);
-                } else if kind != SectionKind::Image {
+                } else if matches!(kind, SectionKind::Header | SectionKind::Text) {
                     objects.push(next_object);
                     next.annotations.push(text);
                 }

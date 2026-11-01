@@ -168,6 +168,7 @@ impl Editor {
                     ("Header", SectionKind::Header),
                     ("Image Section…", SectionKind::Image),
                     ("Text Section", SectionKind::Text),
+                    ("Blank section", SectionKind::Blank),
                 ] {
                     if ui.button(label).clicked() {
                         if kind == SectionKind::Image {
@@ -231,6 +232,7 @@ impl Editor {
                             ("Header", SectionKind::Header),
                             ("Image Section…", SectionKind::Image),
                             ("Text Section", SectionKind::Text),
+                            ("Blank section", SectionKind::Blank),
                         ] {
                             let choice = ui.button(label);
                             #[cfg(test)]

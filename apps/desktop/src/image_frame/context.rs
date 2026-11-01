@@ -102,6 +102,7 @@ impl Editor {
                 }
             }
             Some("From Library…") => {
+                self.history.refresh();
                 ui.ctx().data_mut(|d| {
                     d.insert_temp(
                         egui::Id::unique("frame-library-picker"),
@@ -227,16 +228,43 @@ impl Editor {
                 .max_height((ctx.content_rect().height() - 190.).max(120.))
                 .show(ui, |ui| {
                     if let Some(s) = &store {
-                        for entry in s.entries().iter().filter(|e| e.matches_query(&p.query)) {
-                            if ui
-                                .add_sized(
-                                    [ui.available_width(), 32.],
-                                    egui::Button::new(&entry.label),
-                                )
-                                .clicked()
-                            {
-                                selected = Some(entry.id.clone());
-                            }
+                        let entries = s
+                            .entries()
+                            .iter()
+                            .filter(|e| e.matches_query(&p.query))
+                            .collect::<Vec<_>>();
+                        if entries.is_empty() {
+                            ui.label("No matching images.");
+                        }
+                        let columns = ((ui.available_width() + 8.) / 88.).floor().max(1.) as usize;
+                        for row in entries.chunks(columns) {
+                            ui.horizontal(|ui| {
+                                ui.spacing_mut().item_spacing.x = 8.;
+                                for entry in row {
+                                    ui.vertical(|ui| {
+                                        ui.set_width(80.);
+                                        let response = self.history_card_action(
+                                            ui,
+                                            entry,
+                                            egui::vec2(80., 48.),
+                                            Some("Replace image"),
+                                        );
+                                        #[cfg(test)]
+                                        ctx.data_mut(|d| {
+                                            d.insert_temp(
+                                                egui::Id::unique(("frame-library-card", &entry.id)),
+                                                response.rect,
+                                            )
+                                        });
+                                        if response.clicked() && self.history.available(&entry.id) {
+                                            selected = Some(entry.id.clone());
+                                        }
+                                        ui.add(egui::Label::new(&entry.label).truncate())
+                                            .on_hover_text(&entry.label);
+                                    });
+                                }
+                            });
+                            ui.add_space(12.);
                         }
                     } else {
                         ui.label("Library is unavailable.");
@@ -476,6 +504,19 @@ mod tests {
             )
             .unwrap();
         let before = store.load(&entry.id).unwrap().render().unwrap();
+        for index in 1..8 {
+            store
+                .create(
+                    &Document::canvas(80, 60, [30 * index, 100, 170, 255]).unwrap(),
+                    &format!("Sample {index}"),
+                    capture_core::history::Origin::Canvas,
+                )
+                .unwrap();
+        }
+        e.history.refresh();
+        let ctx = egui::Context::default();
+        crate::shell::configure(&ctx);
+        ctx.style_mut_of(egui::Theme::Dark, |s| s.animation_time = 0.);
         ctx.data_mut(|d| {
             d.insert_temp(
                 egui::Id::unique("frame-library-picker"),
@@ -501,11 +542,32 @@ mod tests {
                 |ui| e.show_frame_library_picker(ui.ctx()),
             ))
         };
-        picker(&mut e, vec![]);
+        let mut initial = picker(&mut e, vec![]);
         let out = picker(&mut e, vec![]);
-        let target = crate::color_widgets::tests::text_rect(&out.shapes, &entry.label)
-            .unwrap()
-            .center();
+        let target = ctx
+            .data(|d| d.get_temp::<egui::Rect>(egui::Id::unique(("frame-library-card", &entry.id))))
+            .unwrap();
+        assert_eq!(target.size(), egui::vec2(80., 48.));
+        assert!(crate::color_widgets::tests::text_rect(&out.shapes, "IMAGE").is_some());
+        assert!(
+            out.textures_delta
+                .set
+                .iter()
+                .any(|(id, _)| *id != egui::TextureId::default())
+                || initial
+                    .textures_delta
+                    .set
+                    .iter()
+                    .any(|(id, _)| *id != egui::TextureId::default())
+        );
+        initial
+            .0
+            .textures_delta
+            .append(out.0.textures_delta.clone());
+        if let Ok(dir) = std::env::var("CLIPCRAFT_HEADLESS_RECOVERY_DIR") {
+            dump_meshes(&ctx, &dir, "frame-library-thumbnails", initial, out);
+        }
+        let target = target.center();
         for pressed in [true, false] {
             picker(
                 &mut e,
