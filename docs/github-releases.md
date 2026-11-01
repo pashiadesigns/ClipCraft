@@ -63,10 +63,12 @@ The Basic signing account was created in East US on 2026-11-01 after the
 maintainer upgraded the Azure subscription. Account billing begins at creation;
 no invoice amount has been verified. The displayed Microsoft terms were accepted
 with maintainer confirmation, and the Identity Verifier role was assigned to the
-maintainer only at signing-account scope. The individual validation form is ready
-for the maintainer's legal-identity review and submission. Identity validation and
-certificate-profile creation are not complete.
-Published previews remain unsigned.
+maintainer only at signing-account scope. The individual validation request was
+submitted; the last observed status was Action Required for the separate identity
+check. The maintainer paused signing until a later build on 2026-11-01. The Azure
+account has not been canceled; pausing setup does not stop account billing.
+Identity validation and certificate-profile creation remain incomplete. Published
+previews remain unsigned.
 
 Before enabling signed releases, protect the release branch and version tags,
 configure narrowly scoped federated signing permission, and qualify the signed

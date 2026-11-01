@@ -2,7 +2,7 @@
 
 Updated: 2026-11-01
 
-Preview.2 remains the immutable unsigned release. Internal security review is published and the Basic Microsoft Artifact Signing account is created; terms and scoped verifier access are complete. Individual identity validation remains pending. No signed build or installer exists. Automation remains paused; no broader development restart.
+Preview.2 remains the immutable unsigned release. Internal security review is published. Microsoft Artifact Signing setup is paused by the maintainer until a later build; the Basic account remains created, individual verification incomplete, and no signed build or installer exists. Automation remains paused; no broader development restart.
 
 Generated from roadmap.json. Edit that source and run node scripts/build.mjs; do not edit this generated view.
 
@@ -242,7 +242,7 @@ Generated from roadmap.json. Edit that source and run node scripts/build.mjs; do
 | UX-086: Inactive cross-monitor right-border defect | Experience | Deferred | Later |
 | CREATE-005: Empty editable guide sections | Creation | Shipped | Delivered |
 | ENG-006: Security regression checks and dated internal review | Engineering | Needs verification | Next |
-| ENG-007: Verified publisher signing and major-release installer | Engineering | In progress | Next |
+| ENG-007: Verified publisher signing and major-release installer | Engineering | Deferred | Later |
 | ENG-008: Protect release branch, version tags and signing access | Engineering | Planned | Next |
 | ENG-009: Unmaintained dependencies and adversarial parser testing | Engineering | Planned | Next |
 
@@ -4136,7 +4136,7 @@ Completion: Record exact reviewed source/package, run malformed-input and opaque
 
 ### ENG-007: Verified publisher signing and major-release installer
 
-**In progress** · Next · Updated 2026-11-01
+**Deferred** · Later · Updated 2026-11-01
 
 Microsoft Artifact Signing individual registration, timestamped application signing and a qualified major-release Windows installer. Portable ZIPs and source remain available.
 
@@ -4144,8 +4144,10 @@ Completion: Complete supported Azure subscription and legal-identity validation;
 
 - Evidence: 2026-11-01: user selected individual Microsoft signing. Official setup/pricing reviewed; awaiting user Azure sign-in. No signing account, identity submission, charge, certificate profile or signed release confirmed. Existing previews remain unsigned. docs/github-releases.md.
 - Evidence: 2026-11-01: Azure Basic signing account deployment in East US succeeded after the maintainer upgraded the subscription. Billing begins at account creation; no invoice amount observed. Microsoft terms accepted and account-scoped Identity Verifier role applied with explicit maintainer confirmation. Individual public validation form open for maintainer legal-identity review/submission; no identity request, certificate profile or signature yet. Published previews remain unsigned. docs/github-releases.md.
+- Evidence: 2026-11-01: individual request submitted by maintainer; Azure last observed Action Required for identity verification. Maintainer then paused signing until a later build. Existing account, accepted terms and verifier role retained; no profile/signature and no cancellation of account billing. No automatic resume authorized.
 - Release not scheduled; priorities are not version promises.
 - Depends on: ENG-005
+- Deferred: The maintainer explicitly paused Microsoft signing until a later build.
 
 ### ENG-008: Protect release branch, version tags and signing access
 

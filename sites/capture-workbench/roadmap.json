@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "updated": "2026-11-01",
-  "scope": "Preview.2 remains the immutable unsigned release. Internal security review is published and the Basic Microsoft Artifact Signing account is created; terms and scoped verifier access are complete. Individual identity validation remains pending. No signed build or installer exists. Automation remains paused; no broader development restart.",
+  "scope": "Preview.2 remains the immutable unsigned release. Internal security review is published. Microsoft Artifact Signing setup is paused by the maintainer until a later build; the Basic account remains created, individual verification incomplete, and no signed build or installer exists. Automation remains paused; no broader development restart.",
   "features": [
     {
       "id": "UX-002",
@@ -6019,20 +6019,23 @@
     {
       "id": "ENG-007",
       "title": "Verified publisher signing and major-release installer",
-      "status": "in_progress",
-      "priority": "next",
+      "status": "deferred",
+      "priority": "later",
       "description": "Microsoft Artifact Signing individual registration, timestamped application signing and a qualified major-release Windows installer. Portable ZIPs and source remain available.",
       "completion": "Complete supported Azure subscription and legal-identity validation; restrict federated signing permission; verify signed payload and installer, upgrade/uninstall behavior, final hashes and provenance before publication.",
       "evidence": [
         "2026-11-01: user selected individual Microsoft signing. Official setup/pricing reviewed; awaiting user Azure sign-in. No signing account, identity submission, charge, certificate profile or signed release confirmed. Existing previews remain unsigned. docs/github-releases.md.",
-        "2026-11-01: Azure Basic signing account deployment in East US succeeded after the maintainer upgraded the subscription. Billing begins at account creation; no invoice amount observed. Microsoft terms accepted and account-scoped Identity Verifier role applied with explicit maintainer confirmation. Individual public validation form open for maintainer legal-identity review/submission; no identity request, certificate profile or signature yet. Published previews remain unsigned. docs/github-releases.md."
+        "2026-11-01: Azure Basic signing account deployment in East US succeeded after the maintainer upgraded the subscription. Billing begins at account creation; no invoice amount observed. Microsoft terms accepted and account-scoped Identity Verifier role applied with explicit maintainer confirmation. Individual public validation form open for maintainer legal-identity review/submission; no identity request, certificate profile or signature yet. Published previews remain unsigned. docs/github-releases.md.",
+        "2026-11-01: individual request submitted by maintainer; Azure last observed Action Required for identity verification. Maintainer then paused signing until a later build. Existing account, accepted terms and verifier role retained; no profile/signature and no cancellation of account billing. No automatic resume authorized."
       ],
       "category": "Engineering",
       "updated": "2026-11-01",
       "schedule_status": "unscheduled",
       "depends_on": [
         "ENG-005"
-      ]
+      ],
+      "deferred_reason": "The maintainer explicitly paused Microsoft signing until a later build.",
+      "blocker": "The maintainer explicitly paused Microsoft signing until a later build."
     },
     {
       "id": "ENG-008",
