@@ -753,7 +753,7 @@ fn vector_geometry(
 /// the ink for one final alpha application. Separate white fills union coverage
 /// without winding cancellation where a rule crosses a glyph or its counter.
 pub(crate) fn paint_vector_coverage(
-    context: &mut vello_cpu::RenderContext,
+    context: &mut impl crate::display::vector::Painter,
     annotation: &Annotation,
     underline: bool,
     strikethrough: bool,

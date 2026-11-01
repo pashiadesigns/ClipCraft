@@ -48,6 +48,7 @@ impl AfterExport {
 }
 
 pub(super) struct Dialog {
+    document: capture_core::Document,
     pixels: image::RgbaImage,
     texture: Option<egui::TextureHandle>,
     options: Options,
@@ -67,6 +68,7 @@ impl Editor {
         match self.session.document.render() {
             Ok(pixels) => {
                 self.export_dialog = Some(Dialog {
+                    document: self.session.document.clone(),
                     pixels,
                     texture: None,
                     options: Options {
@@ -301,7 +303,7 @@ impl Editor {
                     self.export_dialog = Some(d);
                     return;
                 }
-                let result = capture_core::export::encode(&d.pixels, &d.options)
+                let result = capture_core::export::encode_document(&d.document, &d.options)
                     .and_then(|bytes| capture_core::export::write(&path, &bytes));
                 match result {
                     Ok(()) => {

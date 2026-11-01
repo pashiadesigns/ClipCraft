@@ -8,7 +8,6 @@
 use crate::{Annotation, Error, Result};
 use serde::{Deserialize, Serialize};
 use vello_cpu::{
-    RenderContext,
     color::{AlphaColor, Srgb},
     kurbo::{Join, Rect, Shape, Stroke},
     peniko::{BlendMode, Compose, Mix},
@@ -42,7 +41,7 @@ impl Outline {
 /// interior is removed inside an isolated layer; existing destination paint is
 /// never knocked out. Fill and outline remain independently editable.
 pub fn paint_coverage(
-    context: &mut RenderContext,
+    context: &mut impl crate::display::vector::Painter,
     annotation: &Annotation,
     width: f64,
     tolerance: f64,
@@ -97,7 +96,7 @@ pub fn paint_coverage(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use vello_cpu::{Pixmap, Resources, kurbo::Affine};
+    use vello_cpu::{Pixmap, RenderContext, Resources, kurbo::Affine};
 
     fn fixture() -> Annotation {
         let d: crate::Document =

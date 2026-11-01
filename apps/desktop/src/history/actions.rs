@@ -202,6 +202,10 @@ impl Editor {
         let mut action = None;
         response.context_menu(|ui| {
             action = menu(ui, available, busy);
+            if ui.button("Previous versions…").clicked() {
+                self.start_library_scan(ui.ctx(), Some(entry.id.clone()));
+                ui.close();
+            }
         });
         if let Some(action) = action {
             self.history_action(entry, action, &response.ctx);

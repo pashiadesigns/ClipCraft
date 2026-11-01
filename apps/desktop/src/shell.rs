@@ -625,30 +625,6 @@ impl Editor {
         }
     }
 
-    pub(super) fn capture_delay_menu(&mut self, ui: &mut egui::Ui) {
-        crate::property_layout::section_help(
-            ui,
-            "Capture delay",
-            "Saved capture setting. Applies to Capture and capture keybinds. Arrange your screen during the countdown, then drag a region. Escape or Cancel capture keeps the current document.",
-        );
-        let mut capture_settings = self.quick_controls.capture_settings();
-        for (seconds, label) in [
-            (0, "No delay"),
-            (3, "3 seconds"),
-            (5, "5 seconds"),
-            (10, "10 seconds"),
-        ] {
-            if ui
-                .selectable_value(&mut capture_settings.delay_seconds, seconds, label)
-                .clicked()
-            {
-                self.quick_controls
-                    .remember_capture(capture_settings.clone());
-                ui.close();
-            }
-        }
-        badge(ui, self.shell.badges, "CAP-006");
-    }
     fn effects_list(ui: &mut egui::Ui, badges: bool) {
         for (name, id) in [
             ("Border", "FX-001"),

@@ -151,6 +151,7 @@ impl Editor {
             ui.scope_id().with("canvas"),
             egui::Sense::click_and_drag(),
         );
+        self.frame_context(ui, &response, transform);
         let gesture_idle = self.guide_drag.is_none()
             && self.rotation_drag.is_none()
             && self.group_drag.is_none()

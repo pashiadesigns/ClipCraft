@@ -1,6 +1,7 @@
 //! Shared flattened output and page geometry. Export never edits the document.
 use crate::{Document, Error, Result};
 use image::{RgbImage, RgbaImage};
+mod vector_pdf;
 use std::{
     io::{Cursor, Write},
     path::Path,
@@ -162,8 +163,15 @@ pub fn encode(pixels: &RgbaImage, options: &Options) -> Result<Vec<u8>> {
     Ok(bytes.into_inner())
 }
 pub fn save(document: &Document, path: &Path, options: &Options) -> Result<()> {
-    let bytes = encode(&document.render()?, options)?;
+    let bytes = encode_document(document, options)?;
     crate::atomic_write(path, &bytes)
+}
+pub fn encode_document(document: &Document, options: &Options) -> Result<Vec<u8>> {
+    if options.format == Format::Pdf {
+        vector_pdf::encode(document, options)
+    } else {
+        encode(&document.render()?, options)
+    }
 }
 pub fn write(path: &Path, bytes: &[u8]) -> Result<()> {
     crate::atomic_write(path, bytes)
@@ -208,6 +216,9 @@ fn pdf(pixels: &RgbaImage, options: &Options) -> Result<Vec<u8>> {
         kids.join(" ")
     )
     .into_bytes();
+    finish_pdf(objects)
+}
+fn finish_pdf(objects: Vec<Vec<u8>>) -> Result<Vec<u8>> {
     let mut bytes = b"%PDF-1.4\n%\xE2\xE3\xCF\xD3\n".to_vec();
     let mut offsets = vec![0];
     for (index, object) in objects.iter().enumerate() {

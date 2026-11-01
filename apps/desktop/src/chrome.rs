@@ -7,6 +7,33 @@ pub fn install_native(cc: &eframe::CreationContext<'_>) {
     #[cfg(not(windows))]
     let _ = cc;
 }
+pub fn record_ui_geometry(ui: &egui::Ui) {
+    let key = egui::Id::unique("frame-focus-diagnostic");
+    let focused = ui.input(|i| i.focused);
+    if ui.ctx().data(|d| d.get_temp::<bool>(key)) == Some(focused) {
+        return;
+    }
+    ui.ctx().data_mut(|d| d.insert_temp(key, focused));
+    let Some(path) = std::env::var_os("CLIPCRAFT_FRAME_DIAGNOSTICS") else {
+        return;
+    };
+    if std::fs::metadata(&path).is_ok_and(|m| m.len() > 131072) {
+        return;
+    }
+    if let Ok(mut f) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)
+    {
+        use std::io::Write;
+        let rect = |r: egui::Rect| [r.left(), r.top(), r.right(), r.bottom()];
+        let _ = writeln!(
+            f,
+            "{}",
+            serde_json::json!({"ui_focus":focused,"viewport":rect(ui.ctx().viewport_rect()),"root":rect(ui.max_rect()),"clip":rect(ui.clip_rect()),"pixels_per_point":ui.ctx().pixels_per_point()})
+        );
+    }
+}
 use crate::egui::{
     self, Color32, CursorIcon, Pos2, Rect, ResizeDirection, Sense, Stroke, ViewportCommand,
 };

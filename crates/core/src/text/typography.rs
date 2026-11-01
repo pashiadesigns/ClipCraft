@@ -108,7 +108,7 @@ impl Case {
 }
 /// Highlight only nonempty text rows, leaving whitespace around the label clear.
 pub(crate) fn highlight(
-    context: &mut vello_cpu::RenderContext,
+    context: &mut impl crate::display::vector::Painter,
     a: &crate::Annotation,
 ) -> Option<[u8; 4]> {
     let style = a.text.as_ref()?;

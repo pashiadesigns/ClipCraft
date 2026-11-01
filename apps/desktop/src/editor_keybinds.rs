@@ -103,6 +103,7 @@ impl Editor {
         let idle = self.editor_shortcuts_idle();
         self.crop = crop;
         if !idle
+            || ctx.memory(|m| m.top_modal_layer().is_some())
             || self.text_draft.is_some()
             || ctx.egui_wants_keyboard_input()
             || self.shell.help

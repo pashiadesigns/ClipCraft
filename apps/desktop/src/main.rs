@@ -609,6 +609,7 @@ impl Editor {
 
     fn accepts_global_capture(&self, ctx: &egui::Context) -> bool {
         self.options.recording.is_none()
+            && ctx.memory(|m| m.top_modal_layer().is_none())
             && self.export_dialog.is_none()
             && !self.history_dialog_open()
             && !self.ocr.is_open()
@@ -817,6 +818,7 @@ impl eframe::App for Editor {
     }
 
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        chrome::record_ui_geometry(ui);
         let ctx = ui.ctx().clone();
         self.finish_text_on_outside_click(&ctx);
         self.prepare_property_input(&ctx);
@@ -858,7 +860,10 @@ impl eframe::App for Editor {
                 .show(ui, |ui| self.show_workspace(ui));
         }
         self.show_template_picker(&ctx);
+        self.show_template_management(&ctx);
+        self.show_library_recovery(&ctx);
         self.replace_frame_image_request(&ctx);
+        self.show_frame_library_picker(&ctx);
         self.show_new_image(&ctx);
         self.show_resize(&ctx);
         self.show_resize_canvas(&ctx);
@@ -870,7 +875,7 @@ impl eframe::App for Editor {
         self.clipboard_shortcuts(&ctx);
         self.pixel_grid_shortcut(&ctx);
         self.flatten_shortcut(&ctx);
-        if self.editor_shortcuts_idle() {
+        if self.editor_shortcuts_idle() && ctx.memory(|m| m.top_modal_layer().is_none()) {
             if ctx.input_mut(|i| {
                 i.consume_key(
                     egui::Modifiers::COMMAND | egui::Modifiers::SHIFT,

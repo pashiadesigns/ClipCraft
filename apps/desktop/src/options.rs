@@ -207,6 +207,7 @@ impl Editor {
         });
         ui.add_space(18.0);
         if self.options.tab == Tab::General {
+            egui::ScrollArea::vertical().id_salt("general-options").auto_shrink([false,false]).show(ui,|ui| {
             ui.strong("Startup & closing");
             ui.add_space(6.);
             let mut close = self.quick_controls.close_to_tray();
@@ -258,6 +259,8 @@ impl Editor {
                 self.quick_controls.set_snapping(snap);
             }
             crate::controls::toggle(ui, &mut self.shell.badges, "Show development badges");
+            self.library_storage_settings(ui);
+            });
             return;
         }
         let saved = self.quick_controls.keybinds();

@@ -379,11 +379,11 @@ fn body_path(a: &Annotation) -> BezPath {
     path
 }
 
-fn paint_annotation(
-    context: &mut RenderContext,
+pub(super) fn paint_annotation<P: super::vector::Painter>(
+    context: &mut P,
     a: &Annotation,
     scale: f64,
-    finish: &mut impl FnMut(&mut RenderContext, [u8; 4]),
+    finish: &mut impl FnMut(&mut P, [u8; 4]),
 ) {
     let (min, max) = a.body_bounds();
     let tolerance = 0.1 / scale;

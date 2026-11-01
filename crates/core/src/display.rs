@@ -5,6 +5,7 @@ use crate::{Annotation, Document, Error, Kind, MAX_PIXELS, Result};
 use image::RgbaImage;
 
 pub mod effect_patch;
+pub mod vector;
 mod viewport;
 pub use viewport::Viewport;
 pub use viewport::render_annotation_preview;

@@ -5,7 +5,6 @@ pub(super) enum Action {
     RemoveTags,
     Delete,
     Export,
-    Storage,
     Rename,
     Duplicate,
     RenameTag,
@@ -17,7 +16,6 @@ pub(super) struct Dialog {
     tags: String,
     name: String,
     editable: bool,
-    limits: capture_core::history::Limits,
     format: capture_core::export::Format,
     error: String,
     focus_pending: bool,
@@ -52,32 +50,21 @@ impl Editor {
         });
         let mut action = None;
         ui.horizontal_wrapped(|ui| {
-            {
-                if ui.button("Select visible").clicked() {
-                    self.history
-                        .library
-                        .selected
-                        .extend(visible.iter().map(|e| e.id.clone()));
-                }
-                if ui.button("Clear").clicked() {
-                    self.history.library.selected.clear();
-                }
-                ui.label(format!("{} selected", self.history.library.selected.len()));
-                ui.add_enabled_ui(!self.history.library.selected.is_empty(), |ui| {
-                    for (label, a) in [
-                        ("Edit tags…", Action::AddTags),
-                        ("Save All As…", Action::Export),
-                        ("Delete…", Action::Delete),
-                    ] {
-                        if ui.button(label).clicked() {
-                            action = Some(a);
-                        }
-                    }
-                });
+            if ui.button("Select visible").clicked() {
+                self.history
+                    .library
+                    .selected
+                    .extend(visible.iter().map(|e| e.id.clone()));
             }
-            if ui.button("Storage…").clicked() {
-                action = Some(Action::Storage);
+            if ui.button("Clear").clicked() {
+                self.history.library.selected.clear();
             }
+            ui.label(format!("{} selected", self.history.library.selected.len()));
+            ui.add_enabled_ui(!self.history.library.selected.is_empty(), |ui| {
+                if ui.button("Delete…").clicked() {
+                    action = Some(Action::Delete);
+                }
+            });
         });
         if let Some(action) = action {
             let entries = visible
@@ -153,7 +140,7 @@ impl Editor {
             .ok_or("Library is unavailable".into())
             .and_then(|s| s.limits().map_err(|e| e.to_string()))
         {
-            Ok(limits) => {
+            Ok(_) => {
                 let dialog = Dialog {
                     action,
                     tags: String::new(),
@@ -164,7 +151,6 @@ impl Editor {
                     },
                     entries,
                     editable: self.export_preferences.library_format.is_none(),
-                    limits,
                     format: self.export_preferences.library_format.unwrap_or_default(),
                     error: String::new(),
                     focus_pending: true,
@@ -214,7 +200,6 @@ impl Editor {
             Action::Rename => {
                 store.batch(&d.entries, capture_core::history::Batch::Rename(&d.name))
             }
-            Action::Storage => store.set_limits(d.limits),
             Action::AddTags => {
                 if tags.is_empty() {
                     return Err("Enter at least one tag.".into());
@@ -261,11 +246,7 @@ impl Editor {
         if d.action == Action::Delete {
             self.history.library.selected.clear();
         }
-        Ok(if d.action == Action::Storage {
-            "Library capacity saved.".into()
-        } else {
-            format!("Updated {} Library item(s).", d.entries.len())
-        })
+        Ok(format!("Updated {} Library item(s).", d.entries.len()))
     }
     pub(super) fn show_library_management(&mut self, ctx: &egui::Context) {
         let Some(mut d) = self.history.manage.take() else {
@@ -274,7 +255,7 @@ impl Editor {
         let mut submit = false;
         let mut cancel = false;
         let modal=egui::Modal::new(egui::Id::unique("library-management")).show(ctx,|ui|{
-            ui.set_width(420.);let title=match d.action{Action::AddTags=>"Add tags",Action::RemoveTags=>"Remove tags",Action::Delete=>"Delete selected captures",Action::Export=>"Save As",Action::Rename=>"Rename All",Action::Duplicate=>"Duplicate All",Action::Storage=>"Library storage",Action::RenameTag=>"Rename tag everywhere",Action::DeleteTag=>"Delete tag everywhere"};ui.heading(title);ui.add_space(8.);
+            ui.set_width(420.);let title=match d.action{Action::AddTags=>"Add tags",Action::RemoveTags=>"Remove tags",Action::Delete=>"Delete selected captures",Action::Export=>"Save As",Action::Rename=>"Rename All",Action::Duplicate=>"Duplicate All",Action::RenameTag=>"Rename tag everywhere",Action::DeleteTag=>"Delete tag everywhere"};ui.heading(title);ui.add_space(8.);
             match d.action {
                 Action::RenameTag|Action::DeleteTag=>{
                     ui.label(format!("Tag: {} · {} captures",d.tags,d.entries.len()));
@@ -282,14 +263,6 @@ impl Editor {
                         ui.label("New name");let input=ui.add(egui::TextEdit::singleline(&mut d.name).char_limit(48).desired_width(f32::INFINITY));crate::controls::focus_once(&input,&mut d.focus_pending);
                         ui.small("An existing tag with this name will be merged.");
                     } else {ui.label("Remove this tag from every Library item? Images and projects are kept.");}
-                },
-                Action::Storage=>{
-                    let entries=self.history.entries();let used=entries.iter().map(|e|e.bytes).sum::<u64>();
-                    ui.label(format!("{} items · {:.1} MB used",entries.len(),used as f64/1_000_000.));
-                    crate::property_layout::section_help(ui,"Capacity","Limits apply to future saves. Reducing a limit never deletes work. Export or explicitly delete selected items to free space. The folder below contains editable Library projects; stamp storage is separate.");
-                    crate::property_layout::slider(ui,"Items",egui::Slider::new(&mut d.limits.entries,1..=1000));let mut mb=d.limits.bytes/1_000_000;
-                    if crate::property_layout::slider(ui,"Megabytes",egui::Slider::new(&mut mb,1..=16000)).changed(){d.limits.bytes=mb*1_000_000;}
-                    if let Some(root)=self.history.root(){ui.label("Folder");ui.add(egui::Label::new(root.display().to_string()).wrap());}
                 },
                 Action::AddTags|Action::RemoveTags=>{ui.horizontal(|ui|{ui.label("Operation");ui.selectable_value(&mut d.action,Action::AddTags,"Add tags");ui.selectable_value(&mut d.action,Action::RemoveTags,"Remove tags");});ui.label(format!("{} selected captures",d.entries.len()));ui.label("Tags (comma separated)");let input=ui.text_edit_singleline(&mut d.tags);crate::controls::focus_once(&input,&mut d.focus_pending);},
                 Action::Delete=>{ui.label(format!("Delete {} selected capture(s) from Library?",d.entries.len()));ui.label("Stored projects are removed permanently. Exported files and the open canvas are kept.");},
@@ -550,7 +523,6 @@ mod tests {
             tags: "approved, beta".into(),
             name: "Capture".into(),
             editable: true,
-            limits: Default::default(),
             format: Default::default(),
             error: String::new(),
             focus_pending: true,
@@ -607,8 +579,7 @@ mod tests {
                 .count(),
             1
         );
-        d.action = Action::Storage;
-        e.history.manage = Some(d);
+
         let frame = |e: &mut Editor| {
             PaintedOutput(ctx.run_ui(
                 egui::RawInput {
@@ -618,7 +589,7 @@ mod tests {
                     )),
                     ..Default::default()
                 },
-                |ui| e.show_library_management(ui.ctx()),
+                |ui| e.library_storage_settings(ui),
             ))
         };
         let first = frame(&mut e);
@@ -626,7 +597,6 @@ mod tests {
         if let Ok(dir) = std::env::var("CLIPCRAFT_HEADLESS_BETA_DIR") {
             dump_meshes(&ctx, &dir, "Storage", first, output);
         }
-        let mut d = e.history.manage.take().unwrap();
         d.action = Action::Delete;
         d.entries = entries;
         e.apply_library_management(&d).unwrap();

@@ -1,5 +1,6 @@
 use crate::{Annotation, Command, Editor, Kind, egui, property_layout};
 use capture_core::image_frame::ImageView;
+mod context;
 
 #[cfg(test)]
 mod tests;

@@ -3,6 +3,7 @@
 //! external user files. A process lock serializes index updates.
 pub mod import;
 mod manage;
+pub mod recovery;
 use crate::{Document, Error, Result, atomic_write};
 use image::{ImageFormat, RgbaImage};
 pub use manage::{Batch, Limits, unique_names};
@@ -474,6 +475,11 @@ impl History {
                 ));
             }
         }
+        if let Err(e) = self.delete_revisions(&expected.id) {
+            self.cleanup_warning = Some(format!(
+                "Item removed; previous-version cleanup needs attention: {e}"
+            ));
+        }
         Ok(())
     }
     fn record_limited(
@@ -628,6 +634,7 @@ impl History {
         let paths = self.paths(&storage_id)?;
         let mut removed = Vec::new();
         if let Some(old) = replaced {
+            self.archive_revision(&old)?;
             next.version = 3;
             next.entries.retain(|e| e.id != old.id);
             removed.push(old);
@@ -654,6 +661,11 @@ impl History {
         }
         self.index = next;
         self.cleanup_warning = None;
+        if let Err(e) = self.prune_revisions() {
+            self.cleanup_warning = Some(format!(
+                "Saved; previous-version cleanup needs attention: {e}"
+            ));
+        }
         for old in removed {
             for path in self.paths(old.storage_id())? {
                 match fs::remove_file(path) {

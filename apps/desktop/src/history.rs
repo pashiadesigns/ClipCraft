@@ -3,6 +3,7 @@ pub(crate) mod autosave;
 mod import;
 mod library;
 mod manage;
+mod recovery;
 use crate::{Editor, FileAction, egui};
 use capture_core::{
     Session,

@@ -5,8 +5,10 @@ use capture_core::{
     templates::{self, Scale},
 };
 use std::sync::Arc;
+mod manage;
 #[derive(Clone)]
 struct Choice {
+    entry: Option<capture_core::history::Entry>,
     label: String,
     category: String,
     slots: usize,
@@ -117,6 +119,7 @@ impl Editor {
         for t in templates::ALL {
             match templates::build(t.id, "Your guide", &[], Scale::Fit) {
                 Ok(doc) => c.choices.push(Choice {
+                    entry: None,
                     label: t.label.into(),
                     category: t.category.into(),
                     slots: t.slots,
@@ -131,6 +134,7 @@ impl Editor {
                     for entry in store.0.entries() {
                         match store.0.load(&entry.id) {
                             Ok(doc) => c.choices.push(Choice {
+                                entry: Some(entry.clone()),
                                 label: entry.label.clone(),
                                 category: "My templates".into(),
                                 slots: templates::library::slots(&doc),
@@ -169,7 +173,7 @@ impl Editor {
     pub(super) fn file_template_cards(&mut self, ui: &mut egui::Ui) {
         let catalog = self.template_catalog(ui.ctx());
         let key = egui::Id::unique("file-template-limit");
-        let limit = ui.ctx().data(|d| d.get_temp::<usize>(key)).unwrap_or(5);
+        let limit = ui.ctx().data(|d| d.get_temp::<usize>(key)).unwrap_or(6);
         ui.horizontal_wrapped(|ui| {
             ui.spacing_mut().item_spacing = egui::vec2(22., 14.);
             for (i, t) in catalog.choices.iter().take(limit).enumerate() {
@@ -188,14 +192,25 @@ impl Editor {
                     );
                 }
                 if response.clicked() {
-                    self.open_template_picker(vec![]);
-                    self.template_picker.as_mut().unwrap().selected = i;
+                    match templates::library::instantiate(&t.document, &t.label, &[], Scale::Fit)
+                        .and_then(Session::unsaved)
+                    {
+                        Ok(session) => self.request_action(
+                            FileAction::Template {
+                                session,
+                                title: t.label.clone(),
+                            },
+                            ui.ctx(),
+                        ),
+                        Err(e) => self.status = e.to_string(),
+                    }
                 }
+                self.template_context(&response, t);
             }
         });
         ui.horizontal(|ui| {
             if limit < catalog.choices.len() && ui.button("Show more templates").clicked() {
-                ui.ctx().data_mut(|d| d.insert_temp(key, limit + 5));
+                ui.ctx().data_mut(|d| d.insert_temp(key, limit + 6));
             }
             if ui.button("Save current layout as template…").clicked() && self.commit_text() {
                 self.commit_property_preview();
@@ -255,44 +270,6 @@ impl Editor {
     pub(super) fn open_template_picker(&mut self, images: Vec<Arc<Bitmap>>) {
         self.template_picker = Some(Picker::new(images));
     }
-    pub(super) fn templates_from_library(&mut self, entries: &[capture_core::history::Entry]) {
-        if entries.len() > 5 {
-            self.status = "Select up to five images for a starter template.".into();
-            return;
-        }
-        let result = (|| -> Result<Vec<_>, String> {
-            let store = self.history.root().ok_or("Library is unavailable")?;
-            let h = capture_core::history::History::open(&store).map_err(|e| e.to_string())?;
-            entries
-                .iter()
-                .map(|e| {
-                    let pixels = h
-                        .load(&e.id)
-                        .and_then(|d| d.render())
-                        .map_err(|e| e.to_string())?;
-                    Bitmap::new(
-                        capture_core::clipboard_payload::ImagePayload::from_rgba(
-                            pixels.width(),
-                            pixels.height(),
-                            pixels.into_raw(),
-                        )
-                        .map_err(|e| e.to_string())?
-                        .image,
-                    )
-                    .map(Arc::new)
-                    .map_err(|e| e.to_string())
-                })
-                .collect()
-        })();
-        match result {
-            Ok(images) => {
-                self.open_template_picker(images);
-                self.template_picker.as_mut().unwrap().names =
-                    entries.iter().map(|e| e.label.clone()).collect();
-            }
-            Err(e) => self.status = e,
-        }
-    }
     pub(super) fn show_template_picker(&mut self, ctx: &egui::Context) {
         let Some(mut d) = self.template_picker.take() else {
             return;
@@ -338,6 +315,7 @@ impl Editor {
                             if let Some(texture) = catalog.thumbs.get(i) {
                                 let response = ui.add(egui::Button::image(egui::Image::new(texture).fit_to_exact_size(egui::vec2(180., 210.))).selected(d.selected == i));
                                 if response.clicked() { d.selected = i; }
+                                self.template_context(&response,t);
                             }
                             ui.label(&t.label);
                         });
@@ -471,30 +449,8 @@ impl Editor {
         id: u64,
         path: &std::path::Path,
     ) -> Result<(), String> {
-        let old = self
-            .session
-            .document
-            .annotations
-            .iter()
-            .find(|a| a.id == id && a.kind == crate::Kind::Image)
-            .ok_or("Image frame no longer exists")?;
-        let mut a = old.clone();
         let b = bitmap(path)?;
-        let fitted = templates::image_in_frame(
-            b,
-            id,
-            [
-                a.start[0],
-                a.start[1],
-                a.end[0] - a.start[0],
-                a.end[1] - a.start[1],
-            ],
-            Scale::Fill,
-        )
-        .map_err(|e| e.to_string())?;
-        a.image = fitted.image;
-        self.execute(crate::Command::Update { annotation: a });
-        Ok(())
+        self.replace_frame_bitmap(id, b)
     }
 }
 

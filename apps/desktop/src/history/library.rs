@@ -302,35 +302,13 @@ impl Editor {
         egui::CentralPanel::default()
             .frame(egui::Frame::new().inner_margin(egui::Margin::same(12)))
             .show(ui, |ui| {
-                ui.horizontal_wrapped(|ui| {
+                ui.horizontal(|ui| {
                     ui.heading("Library");
                     self.library_import_button(ui);
-                    if ui.button("Create from Template…").clicked() {
-                        let selected: Vec<_> = self
-                            .history
-                            .library
-                            .filtered(&entries, &self.history.query)
-                            .into_iter()
-                            .filter(|e| self.history.library.selected.contains(&e.id))
-                            .collect();
-                        self.templates_from_library(&selected);
-                    }
                     let mut details = self.quick_controls.thumbnail_details();
                     if crate::controls::toggle(ui, &mut details, "Show thumbnail details").changed()
                     {
                         self.quick_controls.set_thumbnail_details(details);
-                    }
-                    if crate::ribbon::icon(
-                        ui,
-                        "Refresh",
-                        "Refresh Library",
-                        true,
-                        false,
-                        egui::vec2(28., 26.),
-                    )
-                    .clicked()
-                    {
-                        self.history.refresh();
                     }
                     egui::ComboBox::from_id_salt("library_order")
                         .selected_text(self.history.library.order.label())
@@ -343,6 +321,20 @@ impl Editor {
                                 );
                             }
                         });
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if crate::ribbon::icon(
+                            ui,
+                            "Refresh",
+                            "Refresh Library",
+                            true,
+                            false,
+                            egui::vec2(28., 26.),
+                        )
+                        .clicked()
+                        {
+                            self.history.refresh();
+                        }
+                    });
                 });
                 self.library_import_progress(ui);
                 let visible = self.history.library.filtered(&entries, &self.history.query);

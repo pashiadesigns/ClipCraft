@@ -123,7 +123,6 @@ impl Editor {
                                     self.new_from_clipboard(&ctx);
                                 }
                             });
-                            ui.menu_button("Capture delay", |ui|self.capture_delay_menu(ui));
                             ui.add_space(24.0);
                             ui.heading("Templates");
                             self.file_template_cards(ui);
@@ -401,9 +400,11 @@ mod tests {
                 &out.shapes,
                 capture_core::templates::ALL[5].label
             )
-            .is_none()
+            .is_some()
         );
-        let more = text_rect(&out, "Show more templates");
+        assert!(
+            crate::color_widgets::tests::text_rect(&out.shapes, "Show more templates").is_none()
+        );
         let recent = text_rect(&out, "Recent");
         let search = text_rect(&out, "Search for an image");
         assert!(search.top() > recent.bottom());
@@ -414,17 +415,26 @@ mod tests {
         if let Ok(dir) = std::env::var("CLIPCRAFT_HEADLESS_FILE_DIR") {
             dump_meshes(&ctx, &dir, "home-templates", first, out);
         }
-        click(&ctx, &mut e, more);
-        let out = frame(&ctx, &mut e, 1280., vec![]);
-        assert!(
-            crate::color_widgets::tests::text_rect(
-                &out.shapes,
-                capture_core::templates::ALL[5].label
-            )
-            .is_some()
-        );
         click(&ctx, &mut e, from);
         assert!(e.template_picker.is_some());
+        e.template_picker = None;
+        let out = frame(&ctx, &mut e, 1280., vec![]);
+        let template = text_rect(&out, capture_core::templates::ALL[2].label);
+        click(&ctx, &mut e, template);
+        assert!(
+            e.template_picker.is_none(),
+            "A specific card must skip the chooser"
+        );
+        assert_eq!(
+            e.session
+                .document
+                .guide
+                .as_ref()
+                .unwrap()
+                .template
+                .as_deref(),
+            Some(capture_core::templates::ALL[2].id)
+        );
     }
     #[test]
     fn file_recent_shows_ten_small_thumbnails_and_expands_in_batches() {

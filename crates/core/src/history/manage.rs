@@ -370,6 +370,15 @@ impl History {
         )?;
         self.index = next;
         self.cleanup_warning = None;
+        if matches!(action, Batch::Delete) {
+            for e in expected {
+                if let Err(err) = self.delete_revisions(&e.id) {
+                    self.cleanup_warning = Some(format!(
+                        "Items removed; previous-version cleanup needs attention: {err}"
+                    ));
+                }
+            }
+        }
         for path in removed {
             if let Err(e) = fs::remove_file(path)
                 && e.kind() != std::io::ErrorKind::NotFound

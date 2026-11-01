@@ -79,6 +79,7 @@ impl Editor {
     }
     fn clipboard_owns_input(&self, ctx: &egui::Context) -> bool {
         self.editor_shortcuts_idle()
+            && ctx.memory(|m| m.top_modal_layer().is_none())
             && self.text_draft.is_none()
             && self.shell.canvas_enabled()
             && !self.shell.annotations_hidden

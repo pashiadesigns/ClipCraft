@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "updated": "2026-11-01",
-  "scope": "Local template/Library review qualified: 584 tests and 36 optimized comparisons. Reusable local templates, global tag management and review fixes implemented. T2 passed; T1 and T3 need native review. Public preview.1 and 49 downloads unchanged; automation paused.",
+  "scope": "Local Library/template/vector-PDF batch qualified: 594 Rust tests, 42 optimized comparisons and six PDF fixtures. T3 passed; only T1 remains native. Template management and independent previous-version recovery added. Public preview.1/49 downloads unchanged; automation paused.",
   "features": [
     {
       "id": "UX-002",
@@ -2615,7 +2615,8 @@
         "Identified during alpha.24 local-history verification; not implemented.",
         "Reference Ctrl+N/Create auto-retains a named .snagx without explicit Save. ClipCraft checkpoint snapshots are independent copies; per-edit/session recovery remains separate. docs/recent-tray-reference-observations.md.",
         "2026-10-30 planning refresh: alpha.29 prioritizes the observed arrow stroke defect; this unfinished provisional target is rescheduled by priority.",
-        "User priority override2026-10-30: complete Text/Line/Shape/Obfuscate/Step/Select/Simplify and shared interactions before lesser tools. docs/core-tool-priorities.md."
+        "User priority override2026-10-30: complete Text/Line/Shape/Obfuscate/Step/Select/Simplify and shared interactions before lesser tools. docs/core-tool-priorities.md.",
+        "2026-11-01 scoped LIB-016 adds General capacity, integrity scan and previous-version copies. Broader snapshot-disable/preferences scope remains planned."
       ],
       "updated": "2026-10-30",
       "depends_on": [
@@ -5698,7 +5699,8 @@
         "User-authorized bounded follow-up 2026-11-01. docs/review-polish-work.md. No native desktop or OS clipboard use.",
         "Local workflow-review-20261101-154526; SHA256 3b1193a37dff69c8e48158174897cd59447afeefa682e73124cd8f86def97907; 575 tests/fmt/Clippy, 34 optimized image comparisons and Windows imports pass. Native T1–T3 pending. docs/review-polish-work.md. No public binary release.",
         "T1 failed per user on inferred workflow-review-20261101-154526. Focus-loss edge cropping is not verified fixed. docs/template-followup-work.md.",
-        "template-library-review-20261101-164049; SHA256 89b521f81c08db08517fe52714389b4d2c9f43859f7bf2c15465f03254eff4ef; 584 tests/fmt/Clippy, 36 exact optimized comparisons, production UI/input and imports pass. Unreleased review candidate; native T1/T3 remain. docs/template-followup-work.md."
+        "template-library-review-20261101-164049; SHA256 89b521f81c08db08517fe52714389b4d2c9f43859f7bf2c15465f03254eff4ef; 584 tests/fmt/Clippy, 36 exact optimized comparisons, production UI/input and imports pass. Unreleased review candidate; native T1/T3 remain. docs/template-followup-work.md.",
+        "recovery-pdf-review-20261101-182023; SHA256 9f642d24c0e7bd025606092ef02effd1c762638e79358f74320548808882fe1b; 594 Rust tests/fmt/Clippy, 42 optimized export/viewport comparisons (36 unchanged), six PDF fixtures, production UI/input and imports pass. Local review only; native T1 unconfirmed. docs/recovery-pdf-work.md."
       ]
     },
     {
@@ -5812,7 +5814,8 @@
       "updated": "2026-11-01",
       "evidence": [
         "User approved this bounded batch. docs/template-followup-work.md. No native desktop or OS clipboard access.",
-        "template-library-review-20261101-164049; SHA256 89b521f81c08db08517fe52714389b4d2c9f43859f7bf2c15465f03254eff4ef; 584 tests/fmt/Clippy, 36 exact optimized comparisons, production UI/input and imports pass. Unreleased review candidate; native T1/T3 remain. docs/template-followup-work.md."
+        "template-library-review-20261101-164049; SHA256 89b521f81c08db08517fe52714389b4d2c9f43859f7bf2c15465f03254eff4ef; 584 tests/fmt/Clippy, 36 exact optimized comparisons, production UI/input and imports pass. Unreleased review candidate; native T1/T3 remain. docs/template-followup-work.md.",
+        "2026-11-01 user explicitly passed saving current layout as template and T3; public binary release remains pending."
       ]
     },
     {
@@ -5849,7 +5852,81 @@
       "updated": "2026-11-01",
       "evidence": [
         "User approved this bounded batch. docs/template-followup-work.md. No native desktop or OS clipboard access.",
-        "template-library-review-20261101-164049; SHA256 89b521f81c08db08517fe52714389b4d2c9f43859f7bf2c15465f03254eff4ef; 584 tests/fmt/Clippy, 36 exact optimized comparisons, production UI/input and imports pass. Unreleased review candidate; native T1/T3 remain. docs/template-followup-work.md."
+        "template-library-review-20261101-164049; SHA256 89b521f81c08db08517fe52714389b4d2c9f43859f7bf2c15465f03254eff4ef; 584 tests/fmt/Clippy, 36 exact optimized comparisons, production UI/input and imports pass. Unreleased review candidate; native T1/T3 remain. docs/template-followup-work.md.",
+        "recovery-pdf-review-20261101-182023; SHA256 9f642d24c0e7bd025606092ef02effd1c762638e79358f74320548808882fe1b; 594 Rust tests/fmt/Clippy, 42 optimized export/viewport comparisons (36 unchanged), six PDF fixtures, production UI/input and imports pass. Local review only; native T1 unconfirmed. docs/recovery-pdf-work.md."
+      ]
+    },
+    {
+      "id": "CREATE-004",
+      "title": "Manage saved templates",
+      "category": "Creation",
+      "description": "Rename, duplicate and delete local templates; six direct File cards.",
+      "completion": "Verify persistence, source independence, direct creation and deletion confirmation.",
+      "depends_on": [
+        "CREATE-003"
+      ],
+      "status": "needs_verification",
+      "priority": "next",
+      "schedule_status": "unscheduled",
+      "updated": "2026-11-01",
+      "evidence": [
+        "User-approved bounded batch. docs/recovery-pdf-work.md.",
+        "recovery-pdf-review-20261101-182023; SHA256 9f642d24c0e7bd025606092ef02effd1c762638e79358f74320548808882fe1b; 594 Rust tests/fmt/Clippy, 42 optimized export/viewport comparisons (36 unchanged), six PDF fixtures, production UI/input and imports pass. Local review only; native T1 unconfirmed. docs/recovery-pdf-work.md."
+      ]
+    },
+    {
+      "id": "LIB-016",
+      "title": "Integrity checks and previous-version recovery",
+      "category": "Library",
+      "description": "Read-only project/thumbnail scan; bounded previous revisions restored as independent copies; capacity in General.",
+      "completion": "Validate corrupt/missing entries, revision retention, safe recovery, stale input and deletion scope.",
+      "depends_on": [
+        "LIB-012"
+      ],
+      "status": "needs_verification",
+      "priority": "next",
+      "schedule_status": "unscheduled",
+      "updated": "2026-11-01",
+      "evidence": [
+        "User-approved bounded batch. docs/recovery-pdf-work.md.",
+        "recovery-pdf-review-20261101-182023; SHA256 9f642d24c0e7bd025606092ef02effd1c762638e79358f74320548808882fe1b; 594 Rust tests/fmt/Clippy, 42 optimized export/viewport comparisons (36 unchanged), six PDF fixtures, production UI/input and imports pass. Local review only; native T1 unconfirmed. docs/recovery-pdf-work.md."
+      ]
+    },
+    {
+      "id": "EDIT-086",
+      "title": "Image-frame replacement context menu",
+      "category": "Editing",
+      "description": "Replace from File, Clipboard or Library; Clear Image retains an empty frame; crop, reset, copy and delete.",
+      "completion": "Check geometry, grouping, styling, one Undo and save/reopen; clipboard through injected test adapter.",
+      "depends_on": [
+        "CREATE-002"
+      ],
+      "status": "needs_verification",
+      "priority": "next",
+      "schedule_status": "unscheduled",
+      "updated": "2026-11-01",
+      "evidence": [
+        "User-approved bounded batch. docs/recovery-pdf-work.md.",
+        "recovery-pdf-review-20261101-182023; SHA256 9f642d24c0e7bd025606092ef02effd1c762638e79358f74320548808882fe1b; 594 Rust tests/fmt/Clippy, 42 optimized export/viewport comparisons (36 unchanged), six PDF fixtures, production UI/input and imports pass. Local review only; native T1 unconfirmed. docs/recovery-pdf-work.md."
+      ]
+    },
+    {
+      "id": "FILE-012",
+      "title": "Vector-preserving PDF export",
+      "category": "Files",
+      "status": "needs_verification",
+      "priority": "next",
+      "description": "Shared paths, outlined glyphs and vector stamps in PDF; bounded raster screenshots/effects with sanitization beneath pixel replacements.",
+      "completion": "Inspect PDF structure, redaction safety, rendered fidelity, pagination and source immutability across shared export routes.",
+      "depends_on": [
+        "FILE-006",
+        "FILE-008"
+      ],
+      "schedule_status": "unscheduled",
+      "updated": "2026-11-01",
+      "evidence": [
+        "User-approved bounded batch. docs/recovery-pdf-work.md.",
+        "recovery-pdf-review-20261101-182023; SHA256 9f642d24c0e7bd025606092ef02effd1c762638e79358f74320548808882fe1b; 594 Rust tests/fmt/Clippy, 42 optimized export/viewport comparisons (36 unchanged), six PDF fixtures, production UI/input and imports pass. Local review only; native T1 unconfirmed. docs/recovery-pdf-work.md."
       ]
     }
   ]
