@@ -13,7 +13,7 @@ use std::{
 };
 
 pub const MAX_PIXELS: u64 = 25_000_000;
-pub const MAX_PROJECT_VERSION: u32 = 27;
+pub const MAX_PROJECT_VERSION: u32 = 28;
 mod arrow;
 pub mod bitmap;
 pub mod callout;
@@ -283,6 +283,14 @@ impl Document {
     /// Promote documents that use newer editable annotation properties.
     /// Old applications reject these projects instead of silently losing rules.
     pub fn promote_features(&mut self) {
+        if self
+            .guide
+            .as_ref()
+            .and_then(|g| g.pages.as_ref())
+            .is_some_and(|p| p.horizontal)
+        {
+            self.version = self.version.max(28);
+        }
         if self.guide.as_ref().is_some_and(|g| g.pages.is_some())
             || self
                 .annotations
@@ -780,6 +788,28 @@ impl Document {
             original.width = width;
             original.height = height;
             original.base_image()?;
+        }
+        // Earlier page previews stacked pages vertically. Upgrade their editor
+        // layout in memory, preserving object locks and the original file.
+        // If the horizontal extent exceeds the existing canvas limit, keep the
+        // valid original layout accessible instead of refusing to open it.
+        if doc
+            .guide
+            .as_ref()
+            .and_then(|g| g.pages.as_ref())
+            .is_some_and(|p| !p.horizontal)
+        {
+            let mut editable = doc.clone();
+            for state in editable.object_states.values_mut() {
+                state.locked = false;
+            }
+            if let Ok(mut horizontal) =
+                editable.edit_guide(&guide_sections::Action::MovePage { page: 0, index: 0 })
+            {
+                horizontal.object_states = doc.object_states.clone();
+                horizontal.validate()?;
+                return Ok(horizontal);
+            }
         }
         Ok(doc)
     }

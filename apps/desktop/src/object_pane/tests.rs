@@ -328,3 +328,88 @@ fn expanded_group_rows_select_children_and_header_restores_whole_group() {
     assert_eq!(e.selected_objects().len(), 2);
     assert!(e.editing_group.is_none());
 }
+
+#[test]
+fn guide_pages_start_collapsed_expand_sections_and_drag_reorders_without_grouping() {
+    let ctx = egui::Context::default();
+    crate::shell::configure(&ctx);
+    let mut e = editor(&ctx);
+    let d = capture_core::templates::build(
+        "two-steps",
+        "Guide",
+        &[],
+        capture_core::templates::Scale::Fill,
+    )
+    .unwrap()
+    .edit_guide(&capture_core::guide_sections::Action::AddPage {
+        page: 0,
+        copy: true,
+    })
+    .unwrap();
+    e.session = capture_core::Session::new(d).unwrap();
+    e.select_only(None);
+    let initial = frame(&ctx, &mut e, vec![]);
+    assert!(crate::color_widgets::tests::text_rect(&initial.shapes, "Page 1").is_some());
+    assert!(crate::color_widgets::tests::text_rect(&initial.shapes, "Section 1 · Image").is_none());
+    let key = egui::Id::unique(("objects-page-expanded", 0usize));
+    let r = ctx.data(|d| d.get_temp::<Rect>(key.with("rect"))).unwrap();
+    click(&ctx, &mut e, r.center());
+    let _expanded = frame(&ctx, &mut e, vec![]);
+    let id = e.session.document.guide.as_ref().unwrap().sections[0].objects[0];
+    let object_row = row(&ctx, id);
+    assert!(object_row.0.left() > r.left());
+    if let Ok(dir) = std::env::var("CLIPCRAFT_FRAME_PAGES_UI") {
+        let paint_ctx = egui::Context::default();
+        crate::shell::configure(&paint_ctx);
+        let mut preview = editor(&paint_ctx);
+        preview.session = capture_core::Session::new(e.session.document.clone()).unwrap();
+        paint_ctx.data_mut(|d| d.insert_temp(key, true));
+        let first = frame(&paint_ctx, &mut preview, vec![]);
+        let output = frame(&paint_ctx, &mut preview, vec![]);
+        dump_meshes(&paint_ctx, &dir, "page-object-tree", first, output);
+    }
+    click(&ctx, &mut e, r.center());
+    let first = ctx
+        .data(|d| d.get_temp::<Rect>(key.with("rect")))
+        .unwrap()
+        .center();
+    let second = ctx
+        .data(|d| {
+            d.get_temp::<Rect>(egui::Id::unique(("objects-page-expanded", 1usize)).with("rect"))
+        })
+        .unwrap()
+        .center();
+    let before = serde_json::to_vec(&e.session.document).unwrap();
+    frame(
+        &ctx,
+        &mut e,
+        vec![
+            Event::PointerMoved(first),
+            Event::PointerButton {
+                pos: first,
+                button: PointerButton::Primary,
+                pressed: true,
+                modifiers: Modifiers::NONE,
+            },
+        ],
+    );
+    frame(
+        &ctx,
+        &mut e,
+        vec![Event::PointerMoved(first + egui::vec2(0., 8.))],
+    );
+    frame(&ctx, &mut e, vec![Event::PointerMoved(second)]);
+    frame(
+        &ctx,
+        &mut e,
+        vec![Event::PointerButton {
+            pos: second,
+            button: PointerButton::Primary,
+            pressed: false,
+            modifiers: Modifiers::NONE,
+        }],
+    );
+    assert_ne!(serde_json::to_vec(&e.session.document).unwrap(), before);
+    e.execute(Command::Undo);
+    assert_eq!(serde_json::to_vec(&e.session.document).unwrap(), before);
+}

@@ -48,6 +48,10 @@ pub enum Action {
         page: usize,
         copy: bool,
     },
+    MovePage {
+        page: usize,
+        index: usize,
+    },
     DeletePage {
         page: usize,
     },
@@ -168,28 +172,44 @@ impl Document {
                 s.objects.retain(|id| ids.contains(id));
                 s.marker = s.marker.filter(|id| ids.contains(id));
             }
-            let owned: BTreeSet<_> = layout
+            let previous: BTreeMap<_, _> = layout
                 .sections
                 .iter()
-                .flat_map(|s| s.objects.iter().copied())
+                .flat_map(|s| s.objects.iter().map(move |id| (*id, s.id)))
                 .collect();
             let spans = layout.spans();
-            for a in self.annotations.iter().filter(|a| !owned.contains(&a.id)) {
+            for s in &mut layout.sections {
+                s.objects.clear();
+            }
+            for a in &self.annotations {
                 let (lo, hi) = a.bounds();
-                let center = (lo[1] + hi[1]) * 0.5;
-                if let Some((id, _, _)) = spans.iter().find(|(_, top, bottom)| {
-                    center >= *top
-                        && center < *bottom
-                        && (layout.pages.is_none() || (lo[1] >= *top - 1. && hi[1] <= *bottom + 1.))
-                }) {
+                let mut winner = None;
+                let mut area = 0.0_f32;
+                for ((id, top, bottom), section) in spans.iter().zip(&layout.sections) {
+                    let x = layout.page_offset(section.page)[0];
+                    let overlap = (hi[0].min(x + layout.page_width(self.width) as f32)
+                        - lo[0].max(x))
+                    .max(0.)
+                        * (hi[1].min(*bottom) - lo[1].max(*top)).max(0.);
+                    if overlap > area
+                        || (overlap > 0. && overlap == area && previous.get(&a.id) == Some(id))
+                    {
+                        area = overlap;
+                        winner = Some(*id);
+                    }
+                }
+                if let Some(id) = winner {
                     layout
                         .sections
                         .iter_mut()
-                        .find(|s| s.id == *id)
+                        .find(|s| s.id == id)
                         .unwrap()
                         .objects
                         .push(a.id);
                 }
+            }
+            for section in &mut layout.sections {
+                section.marker = section.marker.filter(|id| section.objects.contains(id));
             }
         }
     }
@@ -198,6 +218,7 @@ impl Document {
         if matches!(
             action,
             Action::AddPage { .. }
+                | Action::MovePage { .. }
                 | Action::DeletePage { .. }
                 | Action::SectionPage { .. }
                 | Action::PageSize { .. }
@@ -210,11 +231,7 @@ impl Document {
             .guide
             .take()
             .ok_or_else(|| Error::Invalid("This image has no guide sections".into()))?;
-        let mut old_tops: BTreeMap<_, _> = layout
-            .spans()
-            .into_iter()
-            .map(|(id, t, _)| (id, t))
-            .collect();
+        let mut old_origins = layout.section_origins();
         let index = |id| {
             layout
                 .sections
@@ -256,7 +273,7 @@ impl Document {
                     SectionKind::Text | SectionKind::Blank => 160.,
                     SectionKind::Image => 360.,
                 };
-                let width = next.width as f32;
+                let width = layout.page_width(next.width) as f32;
                 let mut objects = Vec::new();
                 let title = match kind {
                     SectionKind::Header => "Heading",
@@ -329,7 +346,7 @@ impl Document {
                         marker: None,
                     },
                 );
-                old_tops.insert(next_section, top);
+                old_origins.insert(next_section, [0., top]);
             }
             Action::Resize { id, height } => {
                 let at = index(id)?;
@@ -338,7 +355,7 @@ impl Document {
                         "Section height must be between 48 and 32768 pixels".into(),
                     ));
                 }
-                let top = old_tops[&id];
+                let top = old_origins[&id][1];
                 let content_bottom = next
                     .annotations
                     .iter()
@@ -380,7 +397,7 @@ impl Document {
                 crate::groups::freshen(&mut next.annotations[before_count..], self)?;
                 copy.objects = copy.objects.iter().map(|id| ids[id]).collect();
                 copy.marker = copy.marker.map(|id| ids[&id]);
-                old_tops.insert(next_section, old_tops[&id]);
+                old_origins.insert(next_section, old_origins[&id]);
                 layout.sections.insert(at + 1, copy);
             }
             Action::Move {
@@ -401,18 +418,18 @@ impl Document {
             }
             _ => unreachable!(),
         }
-        self.finish_guide(next, layout, old_tops)
+        self.finish_guide(next, layout, old_origins)
     }
     fn finish_guide(
         &self,
         mut next: Document,
         mut layout: Layout,
-        old_tops: BTreeMap<u64, f32>,
+        old_origins: BTreeMap<u64, [f32; 2]>,
     ) -> Result<Self> {
         layout.overflow_sections()?;
-        for (id, top, _) in layout.spans() {
-            let delta = top - old_tops[&id];
-            if delta == 0. {
+        for (id, origin) in layout.section_origins() {
+            let delta = [0, 1].map(|i| origin[i] - old_origins[&id][i]);
+            if delta == [0.; 2] {
                 continue;
             }
             let section = layout.sections.iter().find(|s| s.id == id).unwrap();
@@ -422,7 +439,7 @@ impl Document {
                 .filter(|a| section.objects.contains(&a.id))
                 .cloned()
                 .collect();
-            let moved = crate::canvas_expansion::translated(&moved, [0., delta])?;
+            let moved = crate::canvas_expansion::translated(&moved, delta)?;
             for a in moved {
                 let slot = next.annotations.iter_mut().find(|s| s.id == a.id).unwrap();
                 *slot = a;
@@ -456,8 +473,11 @@ impl Document {
             .fold(0., f32::max);
         next.height = layout.pages.as_ref().map_or_else(
             || bottom.max(objects_bottom + 12.).ceil() as u32,
-            |_| layout.canvas_height(),
+            |_| layout.canvas_size()[1],
         );
+        if layout.pages.is_some() {
+            next.width = layout.canvas_size()[0];
+        }
         crate::validate_dimensions(next.width, next.height)?;
         next.auto_canvas_base = None;
         next.guide = Some(layout);

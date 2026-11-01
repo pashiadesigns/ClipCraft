@@ -419,8 +419,9 @@ pub(super) fn encode(document: &Document, options: &Options) -> Result<Vec<u8>> 
     for page in options.page.document_pages(document)? {
         let [dx, dy, dw, dh] = page.destination;
         let scale = dw / page.source[2] as f64;
+        let tx = dx - page.source[0] as f64 * scale;
         let page_content = format!(
-            "q {} {} {} rg 0 0 {} {} re f\n{dx} {} {dw} {dh} re W n\n{scale} 0 0 -{scale} {dx} {} cm\n/{drawing} Do Q\n",
+            "q {} {} {} rg 0 0 {} {} re f\n{dx} {} {dw} {dh} re W n\n{scale} 0 0 -{scale} {tx} {} cm\n/{drawing} Do Q\n",
             options.background[0] as f64 / 255.,
             options.background[1] as f64 / 255.,
             options.background[2] as f64 / 255.,

@@ -201,9 +201,12 @@ impl Editor {
                             texture.id(),
                             image,
                             egui::Rect::from_min_max(
-                                egui::pos2(0., p.source[1] as f32 / d.pixels.height() as f32),
                                 egui::pos2(
-                                    1.,
+                                    p.source[0] as f32 / d.pixels.width() as f32,
+                                    p.source[1] as f32 / d.pixels.height() as f32,
+                                ),
+                                egui::pos2(
+                                    (p.source[0] + p.source[2]) as f32 / d.pixels.width() as f32,
                                     (p.source[1] + p.source[3]) as f32 / d.pixels.height() as f32,
                                 ),
                             ),

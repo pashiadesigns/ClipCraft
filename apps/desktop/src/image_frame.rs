@@ -282,10 +282,7 @@ impl Editor {
                 rect,
                 egui::Button::new("Choose Image").fill(crate::shell::ACCENT),
             );
-            if response.clicked() {
-                ui.ctx()
-                    .data_mut(|d| d.insert_temp(egui::Id::unique("replace-frame-image"), id));
-            }
+            self.choose_frame_source(ui, &response, id);
             #[cfg(test)]
             ui.ctx()
                 .data_mut(|d| d.insert_temp(egui::Id::unique(("choose-frame-image", id)), rect));

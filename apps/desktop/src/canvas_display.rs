@@ -173,7 +173,7 @@ impl Editor {
 /// Reuse image-coordinate pixels as the GPU translates them during a pan.
 /// Small images get one bounded texture; large zoomed images get a padded tile.
 /// Edits/zoom/DPI invalidate it, but fractional motion does not rerasterize.
-fn cached_viewport(
+pub(super) fn cached_viewport(
     transform: Transform,
     ppp: f32,
     max_texture_side: u32,

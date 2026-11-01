@@ -31,9 +31,9 @@ fn page_copy_delete_move_roundtrip_and_atomic_undo_preserve_objects() {
     let g = s.document.guide.as_ref().unwrap();
     assert_eq!(g.page_count(), 2);
     assert_eq!(s.document.annotations.len(), original.annotations.len() * 2);
-    assert_eq!(s.document.width, original.width);
-    assert_eq!(s.document.height, original.height * 2 + PAGE_GAP);
-    assert_eq!(s.document.version, 27);
+    assert_eq!(s.document.width, original.width * 2 + PAGE_GAP);
+    assert_eq!(s.document.height, original.height);
+    assert_eq!(s.document.version, 28);
     let ids: BTreeSet<_> = s.document.annotations.iter().map(|a| a.id).collect();
     assert_eq!(ids.len(), s.document.annotations.len());
     let dir = tempfile::tempdir().unwrap();
@@ -113,7 +113,7 @@ fn overflow_respects_whole_sections_dimensions_and_pdf_pages() {
         .document_pages(&s.document)
         .unwrap();
     assert_eq!(pages.len(), 2);
-    assert_eq!(pages[1].source, [0, 550 + PAGE_GAP, 900, 550]);
+    assert_eq!(pages[1].source, [900 + PAGE_GAP, 0, 900, 550]);
     let pdf = crate::export::encode_document(
         &s.document,
         &crate::export::Options {
@@ -155,7 +155,14 @@ fn overflow_respects_whole_sections_dimensions_and_pdf_pages() {
             auto_overflow: true,
         },
     );
-    assert_eq!(s.document.width, 450);
+    assert_eq!(
+        s.document
+            .guide
+            .as_ref()
+            .unwrap()
+            .page_width(s.document.width),
+        450
+    );
     s.document.validate().unwrap();
     s.execute(Command::Undo).unwrap();
     assert_eq!(bytes(&s.document), before);
@@ -194,9 +201,9 @@ fn legacy_photo_and_colored_templates_keep_page_backgrounds_without_stretching()
             })
             .unwrap();
         let output = next.render().unwrap();
-        for top in [0, 160 + PAGE_GAP] {
+        for left in [0, 160 + PAGE_GAP] {
             assert_eq!(
-                image::imageops::crop_imm(&output, 0, top, 160, 160).to_image(),
+                image::imageops::crop_imm(&output, left, 0, 160, 160).to_image(),
                 image
             );
         }
@@ -238,4 +245,155 @@ fn page_validation_rejects_missing_membership_and_locked_page_deletion() {
         .is_err()
     );
     assert_eq!(bytes(&s.document), before);
+}
+
+#[test]
+fn horizontal_page_reordering_and_overlap_ownership_keep_independent_objects() {
+    let mut s = Session::new(template()).unwrap();
+    execute(
+        &mut s,
+        Action::AddPage {
+            page: 0,
+            copy: true,
+        },
+    );
+    execute(
+        &mut s,
+        Action::AddPage {
+            page: 1,
+            copy: false,
+        },
+    );
+    let before = bytes(&s.document);
+    let g = s.document.guide.as_ref().unwrap().clone();
+    let object = s
+        .document
+        .annotations
+        .iter()
+        .find(|a| g.sections[0].objects.contains(&a.id))
+        .unwrap()
+        .clone();
+    execute(&mut s, Action::MovePage { page: 0, index: 2 });
+    let moved = s
+        .document
+        .annotations
+        .iter()
+        .find(|a| a.id == object.id)
+        .unwrap();
+    assert!((moved.start[0] - object.start[0] - g.page_offset(2)[0]).abs() < 0.01);
+    assert_eq!(moved.start[1], object.start[1]);
+    assert_eq!(moved.group, object.group);
+    s.execute(Command::Undo).unwrap();
+    assert_eq!(bytes(&s.document), before);
+    // Move a shape across a section boundary without grouping or explicit reassignment.
+    let spans = g.spans();
+    let boundary = spans[0].2;
+    let mut a = object
+        .converted_frame(false)
+        .unwrap_or_else(|_| object.clone());
+    a.id = 9999;
+    a.kind = Kind::Rectangle;
+    a.image = None;
+    a.text = None;
+    a.points.clear();
+    a.callout = None;
+    a.group = None;
+    a.corner_radius = 0.;
+    a.start = [40., boundary - 30.];
+    a.end = [100., boundary + 10.];
+    s.execute(Command::Add {
+        annotation: a.clone(),
+    })
+    .unwrap();
+    assert!(
+        s.document.guide.as_ref().unwrap().sections[0]
+            .objects
+            .contains(&a.id)
+    );
+    a.start[1] += 25.;
+    a.end[1] += 25.;
+    s.execute(Command::Update {
+        annotation: a.clone(),
+    })
+    .unwrap();
+    let g = s.document.guide.as_ref().unwrap();
+    assert!(!g.sections[0].objects.contains(&a.id));
+    assert!(g.sections[1].objects.contains(&a.id));
+    let id = g.sections[1].id;
+    let before = bytes(&s.document);
+    execute(
+        &mut s,
+        Action::SectionPage {
+            id,
+            page: 2,
+            copy: false,
+        },
+    );
+    let moved = s
+        .document
+        .annotations
+        .iter()
+        .find(|b| b.id == a.id)
+        .unwrap();
+    assert!(moved.start[0] > a.start[0]);
+    s.execute(Command::Undo).unwrap();
+    assert_eq!(bytes(&s.document), before);
+}
+
+#[test]
+fn legacy_vertical_pages_open_horizontally_without_changing_saved_file_or_locks() {
+    let horizontal = template()
+        .edit_guide(&Action::AddPage {
+            page: 0,
+            copy: true,
+        })
+        .unwrap();
+    let mut legacy = horizontal.clone();
+    let g = horizontal.guide.as_ref().unwrap();
+    let p = g.pages.as_ref().unwrap();
+    for a in &mut legacy.annotations {
+        let page = g.page_at(a.start);
+        let offset = [
+            -(page as f32) * (p.size[0] + PAGE_GAP) as f32,
+            page as f32 * (p.size[1] + PAGE_GAP) as f32,
+        ];
+        *a = crate::canvas_expansion::translated(std::slice::from_ref(a), offset)
+            .unwrap()
+            .remove(0);
+    }
+    legacy
+        .guide
+        .as_mut()
+        .unwrap()
+        .pages
+        .as_mut()
+        .unwrap()
+        .horizontal = false;
+    legacy.width = p.size[0];
+    legacy.height = p.size[1] * p.count as u32 + PAGE_GAP * (p.count as u32 - 1);
+    legacy.version = 27;
+    let id = legacy.annotations[0].id;
+    let mut state = legacy.object_state(id);
+    state.locked = true;
+    legacy.object_states.insert(id, state);
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("legacy.capture.json");
+    legacy.save(&path).unwrap();
+    let bytes = std::fs::read(&path).unwrap();
+    let loaded = Document::load(&path).unwrap();
+    assert!(
+        loaded
+            .guide
+            .as_ref()
+            .unwrap()
+            .pages
+            .as_ref()
+            .unwrap()
+            .horizontal
+    );
+    assert!(loaded.object_state(id).locked);
+    assert_eq!(loaded.width, horizontal.width);
+    assert_eq!(loaded.height, horizontal.height);
+    assert_eq!(loaded.annotations, horizontal.annotations);
+    assert_eq!(std::fs::read(path).unwrap(), bytes);
 }

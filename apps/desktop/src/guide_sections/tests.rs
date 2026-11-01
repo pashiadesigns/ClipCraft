@@ -112,9 +112,20 @@ fn page_settings_apply_presets_and_overflow_toggle_as_one_undo() {
     };
     let click = |e: &mut Editor, label: &str| {
         let output = render(e, vec![]);
-        let p = crate::color_widgets::tests::text_rect(&output.shapes, label)
-            .unwrap_or_else(|| panic!("missing {label}"))
-            .center();
+        let p = if matches!(label, "Add Page" | "Delete Page") {
+            ctx.data(|d| {
+                d.get_temp::<egui::Rect>(egui::Id::unique((
+                    "page-button",
+                    0usize,
+                    if label == "Add Page" { 1usize } else { 2usize },
+                )))
+            })
+            .unwrap()
+        } else {
+            crate::color_widgets::tests::text_rect(&output.shapes, label)
+                .unwrap_or_else(|| panic!("missing {label}"))
+        }
+        .center();
         for pressed in [true, false] {
             render(e, vec![egui::Event::PointerMoved(p), button(p, pressed)]);
         }
@@ -163,8 +174,14 @@ fn page_layout_and_section_destination_menus_are_visible() {
     e.needs_render = true;
     let first = frame(&ctx, &mut e, vec![]);
     let output = frame(&ctx, &mut e, vec![]);
-    assert!(crate::color_widgets::tests::text_rect(&output.shapes, "Add Page").is_some());
-    assert!(crate::color_widgets::tests::text_rect(&output.shapes, "Delete Page").is_some());
+    assert!(
+        ctx.data(|d| d.get_temp::<egui::Rect>(egui::Id::unique(("page-button", 0usize, 1usize))))
+            .is_some()
+    );
+    assert!(
+        ctx.data(|d| d.get_temp::<egui::Rect>(egui::Id::unique(("page-button", 0usize, 2usize))))
+            .is_some()
+    );
     if let Ok(dir) = std::env::var("CLIPCRAFT_FRAME_PAGES_UI") {
         dump_meshes(&ctx, &dir, "guide-pages", first, output);
     }
@@ -197,9 +214,20 @@ fn page_buttons_add_blank_confirm_delete_and_restore_with_undo() {
     frame(&ctx, &mut e, vec![]);
     let click = |e: &mut Editor, label: &str| {
         let output = frame(&ctx, e, vec![]);
-        let p = crate::color_widgets::tests::text_rect(&output.shapes, label)
-            .unwrap_or_else(|| panic!("missing {label}"))
-            .center();
+        let p = if matches!(label, "Add Page" | "Delete Page") {
+            ctx.data(|d| {
+                d.get_temp::<egui::Rect>(egui::Id::unique((
+                    "page-button",
+                    0usize,
+                    if label == "Add Page" { 1usize } else { 2usize },
+                )))
+            })
+            .unwrap()
+        } else {
+            crate::color_widgets::tests::text_rect(&output.shapes, label)
+                .unwrap_or_else(|| panic!("missing {label}"))
+        }
+        .center();
         for pressed in [true, false] {
             frame(
                 &ctx,

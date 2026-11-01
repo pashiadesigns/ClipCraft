@@ -213,3 +213,38 @@ fn pdf_cursor_inversion_and_rotated_edge_strokes_match_the_composite() {
     fixture("cursor-outline", &d, &options(&d));
     assert!(!encode(&d, &options(&d)).unwrap().is_empty());
 }
+
+#[test]
+fn horizontal_pages_translate_source_x_and_preserve_vector_content() {
+    let d = crate::templates::build(
+        "two-steps",
+        "Horizontal",
+        &[],
+        crate::templates::Scale::Fill,
+    )
+    .unwrap()
+    .edit_guide(&crate::guide_sections::Action::PageSize {
+        width: 900,
+        height: 550,
+        auto_overflow: true,
+    })
+    .unwrap();
+    let o = Options {
+        format: Format::Pdf,
+        page: PageSettings {
+            size: [900., 550.],
+            margin: 0.,
+            paginate: false,
+        },
+        ..Default::default()
+    };
+    let pdf = encode(&d, &o).unwrap();
+    let content = streams(&pdf)
+        .into_iter()
+        .filter_map(|v| String::from_utf8(v).ok())
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(content.contains("1 0 0 -1 0 550 cm"));
+    assert!(content.contains("1 0 0 -1 -948 550 cm"));
+    assert!(content.contains(" l\n"));
+}

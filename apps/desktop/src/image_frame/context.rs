@@ -90,6 +90,36 @@ impl Editor {
                 }
             }
         });
+        self.frame_action(ui, id, action);
+    }
+    pub(super) fn choose_frame_source(
+        &mut self,
+        ui: &mut egui::Ui,
+        response: &egui::Response,
+        id: u64,
+    ) {
+        let mut action = None;
+        egui::Popup::menu(response).show(|ui| {
+            for label in ["From File…", "From Clipboard", "From Library…"] {
+                if ui.button(label).clicked() {
+                    action = Some(label);
+                    ui.close();
+                }
+            }
+        });
+        self.frame_action(ui, id, action);
+    }
+    fn frame_action(&mut self, ui: &mut egui::Ui, id: u64, action: Option<&str>) {
+        let Some(a) = self
+            .session
+            .document
+            .annotations
+            .iter()
+            .find(|a| a.id == id)
+            .cloned()
+        else {
+            return;
+        };
         match action {
             Some("Convert to image frame") | Some("Convert to basic shape") => {
                 self.convert_selected_frame(action == Some("Convert to image frame"));

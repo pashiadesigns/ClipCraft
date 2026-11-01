@@ -749,6 +749,34 @@ mod tests {
                 .textures_delta
                 .append(output.0.textures_delta.clone());
         }
+        let menu = frame(&mut e, vec![]);
+        for label in ["From File…", "From Clipboard", "From Library…"] {
+            assert!(
+                crate::color_widgets::tests::text_rect(&menu.shapes, label).is_some(),
+                "missing {label}"
+            );
+        }
+        assert!(
+            ctx.data(|d| d.get_temp::<u64>(egui::Id::unique("replace-frame-image")))
+                .is_none()
+        );
+        let pos = crate::color_widgets::tests::text_rect(&menu.shapes, "From File…")
+            .unwrap()
+            .center();
+        for pressed in [true, false] {
+            frame(
+                &mut e,
+                vec![
+                    egui::Event::PointerMoved(pos),
+                    egui::Event::PointerButton {
+                        pos,
+                        button: egui::PointerButton::Primary,
+                        pressed,
+                        modifiers: egui::Modifiers::NONE,
+                    },
+                ],
+            );
+        }
         assert_eq!(
             ctx.data_mut(|d| d.remove_temp::<u64>(egui::Id::unique("replace-frame-image"))),
             Some(frame_id)

@@ -1,5 +1,6 @@
 use crate::{Annotation, Command, Editor, Kind, egui};
 use egui::{Color32, Rect, Stroke};
+mod guide_tree;
 #[cfg(test)]
 mod tests;
 
@@ -328,7 +329,22 @@ impl Editor {
             }
         }
         let mut seen = std::collections::BTreeSet::new();
-        for a in rows {
+        let rows = guide_tree::rows(ui, &self.session.document, rows);
+        for row in rows {
+            let a = match row {
+                guide_tree::Row::Object(a) => a,
+                guide_tree::Row::Header {
+                    key,
+                    label,
+                    depth,
+                    page,
+                } => {
+                    if let Some(action) = guide_tree::header(ui, key, &label, depth, page) {
+                        command = Some(Command::Guide { action });
+                    }
+                    continue;
+                }
+            };
             if let Some(group) = a.group {
                 let key = egui::Id::unique(("object-group-expanded", group));
                 let automatic = objects
@@ -456,10 +472,13 @@ impl Editor {
             }
             ui.push_id(("object-row", a.id), |ui| {
                 let state = self.session.document.object_state(a.id);
-                let (rect, response) = ui.allocate_exact_size(
+                let (mut rect, response) = ui.allocate_exact_size(
                     egui::vec2(ui.available_width(), 29.),
                     egui::Sense::click_and_drag(),
                 );
+                if self.session.document.guide.is_some() {
+                    rect.min.x += 24.;
+                }
                 let selected = self.is_selected(a.id);
                 if selected || response.hovered() {
                     ui.painter().rect_filled(

@@ -77,7 +77,9 @@ impl PageSettings {
                 })
                 .pages(size)?
                 {
-                    page.source[1] += layout.page_origin(index) as u32;
+                    for axis in 0..2 {
+                        page.source[axis] += layout.page_offset(index)[axis] as u32;
+                    }
                     result.push(page);
                 }
             }

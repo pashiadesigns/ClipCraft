@@ -20,6 +20,8 @@ pub(super) struct SectionDrag {
 struct Controls {
     id: u64,
     top: f32,
+    left: f32,
+    right: f32,
     bottom: f32,
     resize: egui::Rect,
     add: egui::Rect,
@@ -29,15 +31,19 @@ fn controls(document: &Document, transform: Transform) -> Vec<Controls> {
     let Some(layout) = &document.guide else {
         return vec![];
     };
-    let left = transform.image.left();
-    let right = transform.image.right();
-    let center = (left + right) * 0.5;
     layout
         .spans()
         .into_iter()
         .map(|(id, top, bottom)| {
+            let section = layout.sections.iter().find(|s| s.id == id).unwrap();
+            let origin = layout.page_offset(section.page);
+            let left = transform.screen_point(origin).x;
+            let right = left + layout.page_width(document.width) as f32 * transform.scale;
+            let center = (left + right) * 0.5;
             let y = transform.screen_point([0., bottom])[1];
             Controls {
+                left,
+                right,
                 id,
                 top,
                 bottom,
@@ -199,8 +205,8 @@ impl Editor {
                 let painter = ui.painter().with_clip_rect(viewport);
                 painter.line_segment(
                     [
-                        egui::pos2(transform.image.left().max(viewport.left()), line_y),
-                        egui::pos2(transform.image.right().min(viewport.right()), line_y),
+                        egui::pos2(c.left.max(viewport.left()), line_y),
+                        egui::pos2(c.right.min(viewport.right()), line_y),
                     ],
                     egui::Stroke::new(1., egui::Color32::from_gray(145)),
                 );

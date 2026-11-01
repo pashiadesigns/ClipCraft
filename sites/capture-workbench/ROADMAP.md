@@ -4186,6 +4186,8 @@ Completion: Shape masks, crop, file-drop targeting, lock handling, one-step Undo
 
 - Evidence: 2026-11-01 user-authorized bounded batch. Implementation on feature/shape-frames-guide-pages; not released. docs/shape-frames-guide-pages-work.md.
 - Evidence: Core and production egui tests pass for masks, frame conversion/Undo, synthetic file drops, click modes, retained textures, pages, page menus, overflow, PDF and snapping popup. Native Explorer file drop and final review remain pending; no release claim.
+- Evidence: 2026-11-01: U1 external Explorer drops passed by user. Follow-up requested for clipped outlines/high-zoom raster lag, horizontal page layout/reordering and Objects hierarchy, largest-overlap section ownership, shared Choose Image source menu. Qualification pending; not released.
+- Evidence: 2026-11-01 follow-up: 622 Rust tests/fmt/Clippy pass. Retained frame outlines no longer clip to image bodies; rotated/shadowed screenshots reuse source and shadow textures through 1600% zoom and fractional movement. Pages display horizontally with icon/reorder controls and a collapsed page/section/object hierarchy; largest-overlap membership, shared image source menu, migration, PDF pages, persistence and Undo covered. Production egui views inspected headlessly. User-reported native lag/edge correction awaits review; preview.2 remains unchanged.
 - Provisional target: 0.1.0-preview.3
 - Depends on: EDIT-086
 
@@ -4193,12 +4195,14 @@ Completion: Shape masks, crop, file-drop targeting, lock handling, one-step Undo
 
 **Needs verification** · Next · Updated 2026-11-01
 
-Add blank or copied pages, confirm deletion, move/copy sections between pages, set dimensions and automatically move overflow sections to additional pages. Export explicit guide pages in PDF.
+Horizontal guide pages with add/copy/delete and reorder controls; collapsed page/section/object hierarchy and page drag-reordering. Section membership follows largest object-bounds overlap. Move/copy sections between pages, set dimensions and automatically distribute overflow; PDF and printing honor page boundaries.
 
 Completion: Page and section ownership, resizing, overflow, save/reopen, atomic Undo, PDF page boundaries and production UI are qualified.
 
 - Evidence: 2026-11-01 user-authorized bounded batch. Implementation on feature/shape-frames-guide-pages; not released. docs/shape-frames-guide-pages-work.md.
 - Evidence: Core and production egui tests pass for masks, frame conversion/Undo, synthetic file drops, click modes, retained textures, pages, page menus, overflow, PDF and snapping popup. Native Explorer file drop and final review remain pending; no release claim.
+- Evidence: 2026-11-01: U1 external Explorer drops passed by user. Follow-up requested for clipped outlines/high-zoom raster lag, horizontal page layout/reordering and Objects hierarchy, largest-overlap section ownership, shared Choose Image source menu. Qualification pending; not released.
+- Evidence: 2026-11-01 follow-up: 622 Rust tests/fmt/Clippy pass. Retained frame outlines no longer clip to image bodies; rotated/shadowed screenshots reuse source and shadow textures through 1600% zoom and fractional movement. Pages display horizontally with icon/reorder controls and a collapsed page/section/object hierarchy; largest-overlap membership, shared image source menu, migration, PDF pages, persistence and Undo covered. Production egui views inspected headlessly. User-reported native lag/edge correction awaits review; preview.2 remains unchanged.
 - Provisional target: 0.1.0-preview.3
 - Depends on: EDIT-086
 

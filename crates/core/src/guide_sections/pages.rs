@@ -5,6 +5,8 @@ pub const PAGE_GAP: u32 = 48;
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct PageLayout {
+    #[serde(default)]
+    pub horizontal: bool,
     pub size: [u32; 2],
     pub count: usize,
     pub auto_overflow: bool,
@@ -14,26 +16,51 @@ impl Layout {
     pub fn page_count(&self) -> usize {
         self.pages.as_ref().map_or(1, |p| p.count.max(1))
     }
-    pub fn page_origin(&self, page: usize) -> f32 {
-        self.pages
-            .as_ref()
-            .map_or(0., |p| page as f32 * (p.size[1] as f32 + PAGE_GAP as f32))
-    }
-    pub fn canvas_height(&self) -> u32 {
-        self.pages.as_ref().map_or(0, |p| {
-            (p.size[1].saturating_add(PAGE_GAP))
-                .saturating_mul(p.count as u32)
-                .saturating_sub(PAGE_GAP)
+    pub fn page_offset(&self, page: usize) -> [f32; 2] {
+        self.pages.as_ref().map_or([0.; 2], |p| {
+            let axis = usize::from(!p.horizontal);
+            let mut offset = [0.; 2];
+            offset[axis] = page as f32 * (p.size[axis] + PAGE_GAP) as f32;
+            offset
         })
+    }
+    pub fn page_origin(&self, page: usize) -> f32 {
+        self.page_offset(page)[1]
+    }
+    pub fn page_width(&self, document_width: u32) -> u32 {
+        self.pages.as_ref().map_or(document_width, |p| p.size[0])
+    }
+    pub fn canvas_size(&self) -> [u32; 2] {
+        self.pages.as_ref().map_or([0; 2], |p| {
+            let mut size = p.size;
+            let axis = usize::from(!p.horizontal);
+            size[axis] = (size[axis].saturating_add(PAGE_GAP))
+                .saturating_mul(p.count as u32)
+                .saturating_sub(PAGE_GAP);
+            size
+        })
+    }
+    pub fn page_at(&self, point: [f32; 2]) -> usize {
+        self.pages.as_ref().map_or(0, |p| {
+            let axis = usize::from(!p.horizontal);
+            ((point[axis].max(0.) / (p.size[axis] + PAGE_GAP) as f32) as usize).min(p.count - 1)
+        })
+    }
+    pub fn section_origins(&self) -> BTreeMap<u64, [f32; 2]> {
+        self.spans()
+            .into_iter()
+            .zip(&self.sections)
+            .map(|((id, top, _), s)| (id, [self.page_offset(s.page)[0], top]))
+            .collect()
     }
     pub(super) fn validate_pages(&self, document: &Document) -> Result<()> {
         if let Some(p) = &self.pages
             && (document.version < 27
                 || !(1..=128).contains(&p.count)
-                || p.size[0] != document.width
+                || (p.horizontal && document.version < 28)
                 || p.size.iter().any(|n| !(128..=32768).contains(n))
                 || self.top + 48. > p.size[1] as f32
-                || document.height != self.canvas_height())
+                || [document.width, document.height] != self.canvas_size())
         {
             return Err(Error::Invalid(
                 "Invalid guide page dimensions or count".into(),
@@ -101,17 +128,15 @@ impl Document {
             .guide
             .take()
             .ok_or_else(|| Error::Invalid("This image has no guide sections".into()))?;
-        let mut old_tops: BTreeMap<_, _> = layout
-            .spans()
-            .into_iter()
-            .map(|(id, t, _)| (id, t))
-            .collect();
+        let mut old_origins = layout.section_origins();
         let old_layout = layout.clone();
         layout.pages.get_or_insert(PageLayout {
+            horizontal: true,
             size: [self.width, self.height],
             count: 1,
             auto_overflow: true,
         });
+        layout.pages.as_mut().unwrap().horizontal = true;
         let count = layout.page_count();
         let check_page = |page: usize| -> Result<()> {
             if page < count {
@@ -183,16 +208,7 @@ impl Document {
                         .annotations
                         .iter()
                         .filter(|a| !owned.contains(&a.id))
-                        .filter(|a| {
-                            old_layout
-                                .pages
-                                .as_ref()
-                                .map_or(0, |p| {
-                                    ((a.start[1].max(0.) as u32) / (p.size[1] + PAGE_GAP)) as usize
-                                })
-                                .min(count - 1)
-                                == page
-                        })
+                        .filter(|a| old_layout.page_at(a.start) == page)
                         .cloned()
                         .collect();
                     for mut a in free {
@@ -207,10 +223,10 @@ impl Document {
                         next.annotations.push(
                             crate::canvas_expansion::translated(
                                 &[a],
-                                [
-                                    0.,
-                                    layout.page_origin(page + 1) - old_layout.page_origin(page),
-                                ],
+                                [0, 1].map(|i| {
+                                    layout.page_offset(page + 1)[i]
+                                        - old_layout.page_offset(page)[i]
+                                }),
                             )?
                             .remove(0),
                         );
@@ -223,7 +239,7 @@ impl Document {
                             &mut next_section,
                         )?;
                         duplicate.page = page + 1;
-                        old_tops.insert(duplicate.id, old_tops[&section.id]);
+                        old_origins.insert(duplicate.id, old_origins[&section.id]);
                         layout.sections.push(duplicate);
                     }
                 } else {
@@ -237,7 +253,13 @@ impl Document {
                         objects: vec![],
                         marker: None,
                     });
-                    old_tops.insert(next_section, layout.page_origin(page + 1) + layout.top);
+                    old_origins.insert(
+                        next_section,
+                        [
+                            layout.page_offset(page + 1)[0],
+                            layout.page_origin(page + 1) + layout.top,
+                        ],
+                    );
                 }
             }
             Action::DeletePage { page } => {
@@ -260,6 +282,13 @@ impl Document {
                 }
                 layout.pages.as_mut().unwrap().count -= 1;
             }
+            Action::MovePage { page, index } => {
+                check_page(page)?;
+                check_page(index)?;
+                for section in &mut layout.sections {
+                    section.page = reordered_page(section.page, page, index);
+                }
+            }
             Action::SectionPage { id, page, copy } => {
                 check_page(page)?;
                 let at = layout
@@ -276,7 +305,7 @@ impl Document {
                         &mut next_section,
                     )?;
                     duplicate.page = page;
-                    old_tops.insert(duplicate.id, old_tops[&id]);
+                    old_origins.insert(duplicate.id, old_origins[&id]);
                     layout.sections.push(duplicate);
                 } else {
                     let mut section = layout.sections.remove(at);
@@ -294,7 +323,7 @@ impl Document {
                         "Page dimensions must be between 128 and 32768 pixels".into(),
                     ));
                 }
-                let scale = width as f32 / self.width as f32;
+                let scale = width as f32 / old_layout.page_width(self.width) as f32;
                 // Keep fonts within the editor's supported range when narrowing a page.
                 // Geometry and image crops still scale proportionally.
                 for a in &mut next.annotations {
@@ -307,8 +336,10 @@ impl Document {
                 for s in &mut layout.sections {
                     s.height = (s.height * scale).max(48.);
                 }
-                for top in old_tops.values_mut() {
-                    *top *= scale;
+                for origin in old_origins.values_mut() {
+                    for n in origin {
+                        *n *= scale;
+                    }
                 }
                 next.width = width;
                 let p = layout.pages.as_mut().unwrap();
@@ -340,13 +371,7 @@ impl Document {
             .cloned()
             .collect();
         for a in free {
-            let page = old_layout
-                .pages
-                .as_ref()
-                .map_or(0, |p| {
-                    ((a.start[1].max(0.) as u32) / (p.size[1] + PAGE_GAP)) as usize
-                })
-                .min(count - 1);
+            let page = old_layout.page_at(a.start);
             let destination = match *action {
                 Action::DeletePage { page: removed } if page == removed => None,
                 Action::DeletePage { page: removed } => {
@@ -355,23 +380,23 @@ impl Document {
                 Action::AddPage { page: after, .. } => {
                     Some(if page > after { page + 1 } else { page })
                 }
+                Action::MovePage { page: from, index } => Some(reordered_page(page, from, index)),
                 _ => Some(page),
             };
             if let Some(dest) = destination {
-                let scale = next.width as f32 / self.width as f32;
-                let delta = layout.page_origin(dest) - old_layout.page_origin(page) * scale;
+                let scale =
+                    layout.page_width(next.width) as f32 / old_layout.page_width(self.width) as f32;
+                let delta = [0, 1]
+                    .map(|i| layout.page_offset(dest)[i] - old_layout.page_offset(page)[i] * scale);
                 if let Some(slot) = next.annotations.iter_mut().find(|n| n.id == a.id) {
-                    *slot = crate::canvas_expansion::translated(
-                        std::slice::from_ref(slot),
-                        [0., delta],
-                    )?
-                    .remove(0);
+                    *slot = crate::canvas_expansion::translated(std::slice::from_ref(slot), delta)?
+                        .remove(0);
                 }
             } else {
                 next.annotations.retain(|n| n.id != a.id);
             }
         }
-        self.finish_guide(next, layout, old_tops)
+        self.finish_guide(next, layout, old_origins)
     }
 }
 
@@ -408,4 +433,16 @@ fn duplicate_section(
     section.objects = original.objects.iter().map(|id| ids[id]).collect();
     section.marker = original.marker.map(|id| ids[&id]);
     Ok(section)
+}
+
+fn reordered_page(value: usize, from: usize, to: usize) -> usize {
+    if value == from {
+        to
+    } else if from < to && value > from && value <= to {
+        value - 1
+    } else if to < from && value >= to && value < from {
+        value + 1
+    } else {
+        value
+    }
 }
