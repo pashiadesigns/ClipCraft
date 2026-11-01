@@ -20,12 +20,16 @@ and GitHub build attestations before deployment.
 - Steps recording and editable guides; local OCR through Windows APIs.
 - Text, arrows, lines, shapes, callouts, numbered/lettered steps, pen and highlighter.
 - Blur, pixelate, redact, eraser, simplification, groups and image-frame cropping.
-- Local Library, tags, bulk operations and imported image stamps.
+- Local Library, range/drag selection, bulk operations, file details and imported image stamps.
+- Original vector starter stamps with independently editable palette colors.
 - PNG/JPEG/PDF export and a Windows print-dialog workflow.
 
 Video and All-in-One capture are not implemented. PDF export is raster output,
 not searchable/vector text. Installed fonts are referenced, not embedded; missing
 families use a bundled fallback. Preview releases are not an enterprise certification.
+The source branch can include local review changes newer than the latest release;
+use the release notes for the exact download's capabilities. General SVG/EPS stamp
+import is not implemented yet.
 See the [feature inventory](sites/capture-workbench/ROADMAP.md) for scoped status;
 historical local evidence links in it are not distributed verification records.
 

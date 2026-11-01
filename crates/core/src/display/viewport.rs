@@ -131,7 +131,7 @@ pub(crate) fn render_vector(image: &mut RgbaImage, a: &Annotation, viewport: Vie
     if a.analysis.is_some() {
         return;
     }
-    if a.kind == Kind::Image {
+    if a.kind == Kind::Image && !a.image.as_ref().is_some_and(|b| b.vector().is_some()) {
         crate::bitmap::render(image, a, viewport);
         return;
     }
@@ -397,7 +397,32 @@ fn paint_annotation(
             context.fill_path(&body_path(a));
             finish(context, a.color);
         }
-        Kind::Image => {} // Composited separately, in the same ordered layer stream.
+        Kind::Image => {
+            if let Some(vector) = a.image.as_ref().and_then(|b| b.vector()) {
+                let sx = f64::from(max[0] - min[0]) / 128.;
+                let sy = f64::from(max[1] - min[1]) / 128.;
+                let transform = Affine::translate((f64::from(min[0]), f64::from(min[1])))
+                    * Affine::scale_non_uniform(sx, sy);
+                for layer in &vector.paths {
+                    if let Ok(path) = BezPath::from_svg(&layer.data) {
+                        let path = transform * path;
+                        if let Some(width) = layer.stroke {
+                            context.set_stroke(
+                                Stroke::new(width * sx.min(sy))
+                                    .with_caps(Cap::Round)
+                                    .with_join(Join::Round),
+                            );
+                            context.stroke_path(&path);
+                        } else {
+                            context.fill_path(&path);
+                        }
+                        let mut ink = vector.colors[layer.color];
+                        ink[3] = ((u16::from(ink[3]) * u16::from(a.color[3]) + 127) / 255) as u8;
+                        finish(context, ink);
+                    }
+                }
+            }
+        }
         Kind::Rectangle | Kind::Ellipse | Kind::Polygon | Kind::Callout | Kind::Step => {
             let path = match a.kind {
                 Kind::Rectangle | Kind::Callout => body_path(a),

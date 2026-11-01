@@ -200,7 +200,12 @@ impl Editor {
             }
         }
     }
-    fn history_card(&mut self, ui: &mut egui::Ui, entry: &Entry, card_size: egui::Vec2) -> bool {
+    fn history_card(
+        &mut self,
+        ui: &mut egui::Ui,
+        entry: &Entry,
+        card_size: egui::Vec2,
+    ) -> egui::Response {
         let ctx = ui.ctx().clone();
         let active = self.history.active.as_deref() == Some(&entry.id);
         let available = self.history.available(&entry.id);
@@ -218,7 +223,9 @@ impl Editor {
             age(entry.created_ms),
             entry.created_utc(),
             entry.bytes as f64 / 1000.0,
-            if active {
+            if self.shell.library {
+                "Click to select; double-click to open. Shift selects a range; Alt adds or removes items."
+            } else if active {
                 "Current image. Selecting it keeps your edits."
             } else {
                 "Open this editable Library image. Changes save automatically."
@@ -284,14 +291,18 @@ impl Editor {
                 egui::FontId::proportional(10.0),
                 egui::Color32::WHITE,
             );
-            if active {
+            if if self.shell.library {
+                self.history.library.selected.contains(&entry.id)
+            } else {
+                active
+            } {
                 painter.rect_stroke(
                     rect.shrink(1.0),
                     4,
                     egui::Stroke::new(3.0, egui::Color32::from_rgb(25, 156, 209)),
                     egui::StrokeKind::Inside,
                 );
-                if !self.library_saved() {
+                if active && !self.library_saved() {
                     painter.circle_filled(
                         rect.left_top() + egui::vec2(8.0, 8.0),
                         5.0,
@@ -300,8 +311,7 @@ impl Editor {
                 }
             }
         }
-        self.history_context(&response, entry, available);
-        response.on_hover_text(&detail).clicked() && available
+        response.on_hover_text(&detail)
     }
     pub(crate) fn show_history(&mut self, ui: &mut egui::Ui, compact: bool) {
         if !compact {
@@ -322,7 +332,10 @@ impl Editor {
             .show(ui, |ui| {
                 ui.horizontal(|ui| {
                     for entry in &entries {
-                        if self.history_card(ui, entry, egui::vec2(160.0, 96.0)) {
+                        let response = self.history_card(ui, entry, egui::vec2(160.0, 96.0));
+                        let available = self.history.available(&entry.id);
+                        self.history_context(&response, entry, available);
+                        if response.clicked() && self.history.available(&entry.id) {
                             open = Some(entry.id.clone());
                         }
                     }

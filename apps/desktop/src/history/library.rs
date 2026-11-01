@@ -47,7 +47,8 @@ impl Order {
 }
 pub(super) struct View {
     pub(super) selected: std::collections::BTreeSet<String>,
-    pub(super) selecting: bool,
+    anchor: Option<String>,
+    marquee: Option<(egui::Pos2, std::collections::BTreeSet<String>, bool)>,
     year: Option<u32>,
     kind: Option<MediaKind>,
     tag: Option<String>,
@@ -58,7 +59,8 @@ impl Default for View {
     fn default() -> Self {
         Self {
             selected: Default::default(),
-            selecting: false,
+            anchor: None,
+            marquee: None,
             year: None,
             kind: None,
             tag: None,
@@ -68,7 +70,28 @@ impl Default for View {
     }
 }
 impl View {
-    fn filtered(&self, entries: &[Entry], query: &str) -> Vec<Entry> {
+    fn select(&mut self, id: &str, visible: &[Entry], modifiers: egui::Modifiers) {
+        if modifiers.shift {
+            let index = |id: &str| visible.iter().position(|e| e.id == id);
+            if let Some((a, b)) = self.anchor.as_deref().and_then(index).zip(index(id)) {
+                if !modifiers.alt && !modifiers.ctrl {
+                    self.selected.clear();
+                }
+                self.selected
+                    .extend(visible[a.min(b)..=a.max(b)].iter().map(|e| e.id.clone()));
+                return;
+            }
+        }
+        if modifiers.alt || modifiers.ctrl {
+            if !self.selected.remove(id) {
+                self.selected.insert(id.into());
+            }
+        } else {
+            self.selected = [id.into()].into();
+        }
+        self.anchor = Some(id.into());
+    }
+    pub(super) fn filtered(&self, entries: &[Entry], query: &str) -> Vec<Entry> {
         let mut result: Vec<_> = entries
             .iter()
             .filter(|e| {
@@ -177,9 +200,6 @@ impl Editor {
                     if ui.button("Refresh").clicked() {
                         self.history.refresh();
                     }
-                    if ui.button("Return to Editor").clicked() {
-                        self.shell.return_to_editor();
-                    }
                     egui::ComboBox::from_id_salt("library_order")
                         .selected_text(self.history.library.order.label())
                         .show_ui(ui, |ui| {
@@ -208,64 +228,34 @@ impl Editor {
                     return;
                 }
                 let mut open = None;
+                self.history
+                    .library
+                    .selected
+                    .retain(|id| visible.iter().any(|e| &e.id == id));
                 egui::ScrollArea::vertical()
                     .id_salt("library_grid_scroll")
+                    .scroll_source(egui::scroll_area::ScrollSource {
+                        drag: egui::scroll_area::DragScroll::Never,
+                        ..Default::default()
+                    })
                     .show(ui, |ui| {
+                        let origin = ui.cursor().min;
+                        let area = ui.clip_rect();
+                        let mut cards = Vec::new();
                         let (columns, size) =
                             grid_geometry(ui.available_width(), self.history.library.zoom);
                         egui::Grid::new("library_grid")
                             .num_columns(columns)
-                            .spacing(egui::vec2(12.0, 16.0))
+                            .spacing(egui::vec2(12., 16.))
                             .show(ui, |ui| {
                                 for row in visible.chunks(columns) {
                                     for entry in row {
-                                        ui.vertical(|ui| {
+                                        let card = ui.vertical(|ui| {
                                             ui.set_width(size.x);
                                             ui.set_max_width(size.x);
-                                            if self.history.library.selecting {
-                                                let selected = self
-                                                    .history
-                                                    .library
-                                                    .selected
-                                                    .contains(&entry.id);
-                                                if ui
-                                                    .selectable_label(
-                                                        selected,
-                                                        if selected {
-                                                            "Selected"
-                                                        } else {
-                                                            "Select"
-                                                        },
-                                                    )
-                                                    .clicked()
-                                                {
-                                                    if selected {
-                                                        self.history
-                                                            .library
-                                                            .selected
-                                                            .remove(&entry.id);
-                                                    } else {
-                                                        self.history
-                                                            .library
-                                                            .selected
-                                                            .insert(entry.id.clone());
-                                                    }
-                                                }
-                                            }
-                                            if self.history_card(ui, entry, size) {
-                                                open = Some(entry.id.clone());
-                                            }
-                                            let response = ui
-                                                .add(
-                                                    egui::Label::new(&entry.label)
-                                                        .truncate()
-                                                        .sense(egui::Sense::click()),
-                                                )
+                                            self.history_card(ui, entry, size);
+                                            ui.add(egui::Label::new(&entry.label).truncate())
                                                 .on_hover_text(&entry.label);
-                                            self.history_context(&response, entry, true);
-                                            if response.clicked() {
-                                                open = Some(entry.id.clone());
-                                            }
                                             ui.add(
                                                 egui::Label::new(format!(
                                                     "{} × {} · {}",
@@ -277,22 +267,101 @@ impl Editor {
                                             );
                                             ui.add(
                                                 egui::Label::new(entry.created_utc()).truncate(),
-                                            )
-                                            .on_hover_text(entry.created_utc());
+                                            );
                                         });
+                                        let response = ui.interact(
+                                            card.response.rect,
+                                            ui.scope_id().with(("library-card", &entry.id)),
+                                            egui::Sense::click_and_drag(),
+                                        );
+                                        if response.secondary_clicked()
+                                            && !self.history.library.selected.contains(&entry.id)
+                                        {
+                                            self.history.library.select(
+                                                &entry.id,
+                                                &visible,
+                                                egui::Modifiers::NONE,
+                                            );
+                                        }
+                                        if response.double_clicked()
+                                            && self.history.available(&entry.id)
+                                        {
+                                            open = Some(entry.id.clone());
+                                        } else if response.clicked() {
+                                            self.history.library.select(
+                                                &entry.id,
+                                                &visible,
+                                                ui.input(|i| i.modifiers),
+                                            );
+                                        }
+                                        let available = self.history.available(&entry.id);
+                                        self.history_context(&response, entry, available);
+                                        cards.push((entry.id.clone(), card.response.rect));
                                     }
                                     ui.end_row();
                                 }
                             });
+                        let (pressed, released, down, pos, modifiers) = ui.input(|i| {
+                            (
+                                i.pointer.primary_pressed(),
+                                i.pointer.primary_released(),
+                                i.pointer.primary_down(),
+                                i.pointer.interact_pos(),
+                                i.modifiers,
+                            )
+                        });
+                        if pressed
+                            && ui.rect_contains_pointer(area)
+                            && let Some(pos) = pos
+                        {
+                            self.history.library.marquee = Some((
+                                pos - origin.to_vec2(),
+                                self.history.library.selected.clone(),
+                                modifiers.alt || modifiers.ctrl || modifiers.shift,
+                            ));
+                        }
+                        if let Some((start, initial, add)) = self.history.library.marquee.clone()
+                            && let Some(pos) = pos
+                        {
+                            let start = start + origin.to_vec2();
+                            if start.distance(pos) > 6. {
+                                let rect = egui::Rect::from_two_pos(start, pos);
+                                let mut selected = if add { initial } else { Default::default() };
+                                selected.extend(
+                                    cards
+                                        .iter()
+                                        .filter(|(_, r)| r.intersects(rect))
+                                        .map(|(id, _)| id.clone()),
+                                );
+                                self.history.library.selected = selected;
+                                ui.painter().rect_filled(
+                                    rect,
+                                    0.,
+                                    egui::Color32::from_rgba_unmultiplied(25, 156, 209, 28),
+                                );
+                                ui.painter().rect_stroke(
+                                    rect,
+                                    0.,
+                                    egui::Stroke::new(1., crate::shell::ACCENT),
+                                    egui::StrokeKind::Inside,
+                                );
+                            } else if released
+                                && !add
+                                && !cards.iter().any(|(_, r)| r.contains(pos))
+                            {
+                                self.history.library.selected.clear();
+                                self.history.library.anchor = None;
+                            }
+                        }
+                        if released || !down {
+                            self.history.library.marquee = None;
+                        }
+                        #[cfg(test)]
+                        ui.ctx()
+                            .data_mut(|d| d.insert_temp(egui::Id::unique("library-cards"), cards));
                     });
                 if let Some(id) = open {
-                    if self.history.library.selecting {
-                        if !self.history.library.selected.remove(&id) {
-                            self.history.library.selected.insert(id);
-                        }
-                    } else {
-                        self.open_history(&id, &ui.ctx().clone());
-                    }
+                    self.open_history(&id, &ui.ctx().clone());
                 }
             });
     }
@@ -361,3 +430,7 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "library_tests.rs"]
+mod gesture_tests;

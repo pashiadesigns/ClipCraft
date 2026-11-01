@@ -7,6 +7,7 @@ use crate::{
 };
 use std::path::Path;
 pub mod builtin;
+pub mod vector;
 pub struct Library(pub History);
 impl Library {
     pub fn open(root: &Path) -> Result<Self> {

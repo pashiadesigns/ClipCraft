@@ -13,7 +13,7 @@ use std::{
 };
 
 pub const MAX_PIXELS: u64 = 25_000_000;
-pub const MAX_PROJECT_VERSION: u32 = 21;
+pub const MAX_PROJECT_VERSION: u32 = 22;
 mod arrow;
 pub mod bitmap;
 pub mod callout;
@@ -282,6 +282,13 @@ impl Document {
     /// Promote documents that use newer editable annotation properties.
     /// Old applications reject these projects instead of silently losing rules.
     pub fn promote_features(&mut self) {
+        if self
+            .annotations
+            .iter()
+            .any(|a| a.image.as_ref().is_some_and(|b| b.vector().is_some()))
+        {
+            self.version = self.version.max(22);
+        }
         if self.annotations.iter().any(|a| {
             a.text
                 .as_ref()
@@ -370,6 +377,16 @@ impl Document {
             return Err(Error::Invalid("Unsupported project version".into()));
         }
         validate_dimensions(self.width, self.height)?;
+        if self.version < 22
+            && self
+                .annotations
+                .iter()
+                .any(|a| a.image.as_ref().is_some_and(|b| b.vector().is_some()))
+        {
+            return Err(Error::Invalid(
+                "Vector stamps require project version 22".into(),
+            ));
+        }
         if self.version < 21
             && self.annotations.iter().any(|a| {
                 a.text

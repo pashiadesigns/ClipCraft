@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "updated": "2026-10-31",
-  "scope": "Lean beta candidate ready for local review:538 Rust tests,25 optimized image comparisons and four PDF/JPEG fixtures pass. Export/printing, installed fonts, image stamps and bulk Library/storage implemented.76 user passes preserved. Native review pending; public alpha50 unchanged and automation paused.",
+  "updated": "2026-11-01",
+  "scope": "Local Library/stamps candidate qualified: 546 tests and 26 optimized image comparisons. Library selection, bulk actions, Details and editable vector starter stamps implemented. Native review pending; immutable preview.1 downloads unchanged. Automation paused.",
   "features": [
     {
       "id": "UX-002",
@@ -5237,6 +5237,77 @@
       "evidence": [
         "User requested during GitHub setup; local checks and review candidate preparation underway.",
         "Local review-corrections-20261031-222926; SHA256 5a18ed3df9d997b39997fff2088fecfef0d2b9d7bb00864dd800fba0bd6d4f5e; 540 tests/fmt/Clippy and 25 optimized export/viewport comparisons pass. Headless production UI and pointer workflows inspected; native confirmation remains. Not in published preview.1."
+      ]
+    },
+    {
+      "id": "LIB-013",
+      "title": "Library selection, bulk commands and Details",
+      "category": "Library",
+      "status": "needs_verification",
+      "priority": "next",
+      "description": "Click selects; double-click opens; Shift range, Alt toggle and drag marquee. Selection context commands save, duplicate, number names, edit tags and delete. Single-item Save As and Details shared with Recent.",
+      "completion": "Verify pointer gestures, selected-only operations, collision-free names, conflicts and capacity rollback, metadata and file properties, project/image output and reopen.",
+      "depends_on": [
+        "LIB-012"
+      ],
+      "schedule_status": "unscheduled",
+      "updated": "2026-11-01",
+      "evidence": [
+        "Local implementation and automated qualification underway; no published release or native observation yet. docs/library-stamps-work.md.",
+        "Local library-stamps-review-20261101-123859; SHA256 10ef2909755c01043906b4a745243e4114814e6ff77b9d03e8071da1bbdef1c8; 546 tests/fmt/Clippy, 26 optimized image comparisons and Windows imports pass. Headless production UI inspected; native review R1/R2 pending. docs/library-stamps-work.md."
+      ]
+    },
+    {
+      "id": "EDIT-083",
+      "title": "Editable limited-palette vector stamps",
+      "category": "Editing",
+      "status": "needs_verification",
+      "priority": "next",
+      "description": "Nine supplied business stamps use original vector paths and one to five editable palette slots. Keep a labeled raster test stamp.",
+      "completion": "Verify independent palette colors, transparency, scaling, shared export/preview, portable copy, save/reopen and one-step Undo.",
+      "depends_on": [
+        "EDIT-082"
+      ],
+      "schedule_status": "unscheduled",
+      "updated": "2026-11-01",
+      "evidence": [
+        "Local implementation and automated qualification underway; no published release or native observation yet. docs/library-stamps-work.md.",
+        "Local library-stamps-review-20261101-123859; SHA256 10ef2909755c01043906b4a745243e4114814e6ff77b9d03e8071da1bbdef1c8; 546 tests/fmt/Clippy, 26 optimized image comparisons and Windows imports pass. Headless production UI inspected; native review R1/R2 pending. docs/library-stamps-work.md."
+      ]
+    },
+    {
+      "id": "UX-074",
+      "title": "Smooth raster and vector stamp dragging",
+      "category": "Experience",
+      "status": "needs_verification",
+      "priority": "next",
+      "description": "Route image objects on blank canvases through retained rendering; reuse image textures while translating at low and high zoom.",
+      "completion": "Verify fractional dragging without pixel reuploads from 35% to 800%, and output agreement with the shared engine.",
+      "depends_on": [
+        "EDIT-081"
+      ],
+      "schedule_status": "unscheduled",
+      "updated": "2026-11-01",
+      "evidence": [
+        "Local implementation and automated qualification underway; no published release or native observation yet. docs/library-stamps-work.md.",
+        "Local library-stamps-review-20261101-123859; SHA256 10ef2909755c01043906b4a745243e4114814e6ff77b9d03e8071da1bbdef1c8; 546 tests/fmt/Clippy, 26 optimized image comparisons and Windows imports pass. Headless production UI inspected; native review R1/R2 pending. docs/library-stamps-work.md."
+      ]
+    },
+    {
+      "id": "EDIT-084",
+      "title": "General SVG and EPS stamp import",
+      "category": "Editing",
+      "status": "planned",
+      "priority": "later",
+      "description": "Expand stamp import beyond current raster formats to general SVG and EPS; supplied vector paths are a separate implementation.",
+      "completion": "Choose audited renderers; bound resources and external references; verify import, portable save, transparency and output.",
+      "depends_on": [
+        "EDIT-083"
+      ],
+      "schedule_status": "unscheduled",
+      "updated": "2026-11-01",
+      "evidence": [
+        "User-requested follow-up; docs/library-stamps-work.md. General SVG/EPS parsers are not included in this bounded implementation."
       ]
     }
   ]

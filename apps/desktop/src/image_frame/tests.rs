@@ -3,6 +3,41 @@ use crate::property_layout::tests::{PaintedOutput, dump_meshes};
 use capture_core::{Document, Session, bitmap::Bitmap};
 use std::sync::Arc;
 
+#[test]
+fn vector_stamp_colors_are_visible_and_passive_without_image_crop_controls() {
+    let ctx = egui::Context::default();
+    crate::shell::configure(&ctx);
+    let mut a = capture_core::stamps::builtin::find("builtin-check-circle")
+        .unwrap()
+        .payload()
+        .unwrap()
+        .objects
+        .remove(0);
+    let original = a.clone();
+    let frame = |a: &mut Annotation| {
+        PaintedOutput(ctx.run_ui(
+            egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    egui::vec2(300., 500.),
+                )),
+                ..Default::default()
+            },
+            |ui| properties(ui, a),
+        ))
+    };
+    let first = frame(&mut a);
+    let output = frame(&mut a);
+    for text in ["Vector stamp", "Color 1", "Color 2"] {
+        assert!(crate::color_widgets::tests::text_rect(&output.shapes, text).is_some());
+    }
+    assert!(crate::color_widgets::tests::text_rect(&output.shapes, "Crop image").is_none());
+    assert_eq!(a, original);
+    if let Ok(dir) = std::env::var("CLIPCRAFT_HEADLESS_LIBRARY_DIR") {
+        dump_meshes(&ctx, &dir, "vector-stamp-properties", first, output);
+    }
+}
+
 fn image() -> Annotation {
     let pixels =
         image::RgbaImage::from_fn(200, 140, |x, y| image::Rgba([x as u8, y as u8, 140, 255]));

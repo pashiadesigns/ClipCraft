@@ -4,7 +4,7 @@
 mod manage;
 use crate::{Document, Error, Result, atomic_write};
 use image::{ImageFormat, RgbaImage};
-pub use manage::{Batch, Limits};
+pub use manage::{Batch, Limits, unique_names};
 use serde::{Deserialize, Serialize};
 use std::{
     fs,

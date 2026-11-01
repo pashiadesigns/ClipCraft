@@ -1,16 +1,20 @@
 use super::*;
 #[derive(Clone, Copy, PartialEq, Eq)]
-enum Action {
+pub(super) enum Action {
     AddTags,
     RemoveTags,
     Delete,
     Export,
     Storage,
+    Rename,
+    Duplicate,
 }
 pub(super) struct Dialog {
     action: Action,
     entries: Vec<Entry>,
     tags: String,
+    name: String,
+    editable: bool,
     limits: capture_core::history::Limits,
     format: capture_core::export::Format,
     error: String,
@@ -25,8 +29,7 @@ impl Editor {
         });
         let mut action = None;
         ui.horizontal_wrapped(|ui| {
-            ui.toggle_value(&mut self.history.library.selecting, "Select items");
-            if self.history.library.selecting {
+            {
                 if ui.button("Select visible").clicked() {
                     self.history
                         .library
@@ -39,9 +42,8 @@ impl Editor {
                 ui.label(format!("{} selected", self.history.library.selected.len()));
                 ui.add_enabled_ui(!self.history.library.selected.is_empty(), |ui| {
                     for (label, a) in [
-                        ("Add tags", Action::AddTags),
-                        ("Remove tags", Action::RemoveTags),
-                        ("Export…", Action::Export),
+                        ("Edit tags…", Action::AddTags),
+                        ("Save All As…", Action::Export),
                         ("Delete…", Action::Delete),
                     ] {
                         if ui.button(label).clicked() {
@@ -55,31 +57,101 @@ impl Editor {
             }
         });
         if let Some(action) = action {
-            match self
-                .history
-                .store
-                .as_ref()
-                .ok_or("Library is unavailable".into())
-                .and_then(|s| s.limits().map_err(|e| e.to_string()))
-            {
-                Ok(limits) => {
-                    let entries = self
-                        .history
-                        .entries()
-                        .into_iter()
-                        .filter(|e| self.history.library.selected.contains(&e.id))
-                        .collect();
-                    self.history.manage = Some(Dialog {
-                        action,
-                        entries,
-                        tags: String::new(),
-                        limits,
-                        format: Default::default(),
-                        error: String::new(),
-                    });
+            let entries = visible
+                .iter()
+                .filter(|e| self.history.library.selected.contains(&e.id))
+                .cloned()
+                .collect();
+            self.begin_library_management(action, entries);
+        }
+    }
+    pub(super) fn library_selection_context(
+        &mut self,
+        response: &egui::Response,
+        entry: &Entry,
+    ) -> bool {
+        if !self.shell.library
+            || self.history.library.selected.len() < 2
+            || !self.history.library.selected.contains(&entry.id)
+        {
+            return false;
+        }
+        let mut action = None;
+        response.context_menu(|ui| {
+            ui.label(format!("{} selected", self.history.library.selected.len()));
+            for (label, a, icon) in [
+                ("Save All As…", Action::Export, "Save As"),
+                ("Duplicate All", Action::Duplicate, "Copy"),
+                ("Rename All…", Action::Rename, "Text"),
+                ("Edit tags…", Action::AddTags, "Tag"),
+                ("Delete from Library…", Action::Delete, "Delete"),
+            ] {
+                let response = ui.add(egui::Button::new("").min_size(egui::vec2(215., 26.)));
+                response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, label));
+                ui.painter().text(
+                    response.rect.left_center() + egui::vec2(32., 0.),
+                    egui::Align2::LEFT_CENTER,
+                    label,
+                    egui::FontId::proportional(13.),
+                    egui::Color32::from_gray(232),
+                );
+                super::actions::icon(
+                    ui,
+                    response.rect.left_center() + egui::vec2(15., 0.),
+                    icon,
+                    crate::shell::ACCENT,
+                );
+                if response.clicked() {
+                    action = Some(a);
+                    ui.close();
                 }
-                Err(e) => self.history.error = e,
             }
+        });
+        if let Some(action) = action {
+            let entries = self
+                .history
+                .library
+                .filtered(&self.history.entries(), &self.history.query)
+                .into_iter()
+                .filter(|e| self.history.library.selected.contains(&e.id))
+                .collect();
+            self.begin_library_management(action, entries);
+        }
+        true
+    }
+    pub(super) fn begin_library_management(&mut self, action: Action, entries: Vec<Entry>) {
+        if action == Action::Export && !self.commit_text() {
+            return;
+        }
+        match self
+            .history
+            .store
+            .as_ref()
+            .ok_or("Library is unavailable".into())
+            .and_then(|s| s.limits().map_err(|e| e.to_string()))
+        {
+            Ok(limits) => {
+                let dialog = Dialog {
+                    action,
+                    tags: String::new(),
+                    name: if entries.len() == 1 {
+                        entries[0].label.chars().take(100).collect()
+                    } else {
+                        "Capture".into()
+                    },
+                    entries,
+                    editable: true,
+                    limits,
+                    format: Default::default(),
+                    error: String::new(),
+                };
+                if action == Action::Duplicate {
+                    self.status = self.apply_library_management(&dialog).unwrap_or_else(|e| e);
+                } else {
+                    self.history.manage = Some(dialog);
+                }
+            }
+            Err(e) => self.history.error = e,
         }
     }
     fn apply_library_management(&mut self, d: &Dialog) -> Result<String, String> {
@@ -104,6 +176,10 @@ impl Editor {
             .map(str::to_owned)
             .collect::<Vec<_>>();
         match d.action {
+            Action::Duplicate => store.duplicate_many(&d.entries).map(|_| ()),
+            Action::Rename => {
+                store.batch(&d.entries, capture_core::history::Batch::Rename(&d.name))
+            }
             Action::Storage => store.set_limits(d.limits),
             Action::AddTags => {
                 if tags.is_empty() {
@@ -150,7 +226,7 @@ impl Editor {
         let mut submit = false;
         let mut cancel = false;
         let modal=egui::Modal::new(egui::Id::unique("library-management")).show(ctx,|ui|{
-            ui.set_width(420.);let title=match d.action{Action::AddTags=>"Add tags",Action::RemoveTags=>"Remove tags",Action::Delete=>"Delete selected captures",Action::Export=>"Export selected captures",Action::Storage=>"Library storage"};ui.heading(title);ui.add_space(8.);
+            ui.set_width(420.);let title=match d.action{Action::AddTags=>"Add tags",Action::RemoveTags=>"Remove tags",Action::Delete=>"Delete selected captures",Action::Export=>"Save As",Action::Rename=>"Rename All",Action::Duplicate=>"Duplicate All",Action::Storage=>"Library storage"};ui.heading(title);ui.add_space(8.);
             match d.action {
                 Action::Storage=>{
                     let entries=self.history.entries();let used=entries.iter().map(|e|e.bytes).sum::<u64>();
@@ -160,21 +236,63 @@ impl Editor {
                     if crate::property_layout::slider(ui,"Megabytes",egui::Slider::new(&mut mb,1..=16000)).changed(){d.limits.bytes=mb*1_000_000;}
                     if let Some(root)=self.history.root(){ui.label("Folder");ui.add(egui::Label::new(root.display().to_string()).wrap());}
                 },
-                Action::AddTags|Action::RemoveTags=>{ui.label(format!("{} selected captures",d.entries.len()));ui.label("Tags (comma separated)");ui.text_edit_singleline(&mut d.tags);},
+                Action::AddTags|Action::RemoveTags=>{ui.horizontal(|ui|{ui.label("Operation");ui.selectable_value(&mut d.action,Action::AddTags,"Add tags");ui.selectable_value(&mut d.action,Action::RemoveTags,"Remove tags");});ui.label(format!("{} selected captures",d.entries.len()));ui.label("Tags (comma separated)");ui.text_edit_singleline(&mut d.tags);},
                 Action::Delete=>{ui.label(format!("Delete {} selected capture(s) from Library?",d.entries.len()));ui.label("Stored projects are removed permanently. Exported files and the open canvas are kept.");},
-                Action::Export=>{ui.label(format!("{} selected captures",d.entries.len()));ui.horizontal(|ui|{ui.label("Format");for f in [capture_core::export::Format::Png,capture_core::export::Format::Jpeg,capture_core::export::Format::Pdf]{ui.selectable_value(&mut d.format,f,f.label());}});ui.label("A new subfolder is created in your chosen folder. PDF fits each capture to one page.");},
+                Action::Export|Action::Rename=>{
+                    ui.label(format!("{} selected captures",d.entries.len()));
+                    ui.label(if d.entries.len()>1 {"Base name"}else{"Name"});
+                    ui.add(egui::TextEdit::singleline(&mut d.name).char_limit(100).desired_width(f32::INFINITY));
+                    if d.entries.len()>1 { ui.small(format!("{} 1, {} 2, … · existing names are skipped",d.name,d.name)); }
+                    if d.action==Action::Export {
+                        ui.horizontal(|ui| {
+                            ui.label("Format");
+                            egui::ComboBox::from_id_salt("library-save-format").selected_text(if d.editable { "ClipCraft project" } else { d.format.label() }).show_ui(ui,|ui| {
+                                ui.selectable_value(&mut d.editable,true,"ClipCraft project");
+                                for format in [capture_core::export::Format::Png,capture_core::export::Format::Jpeg,capture_core::export::Format::Pdf] {
+                                    if ui.selectable_label(!d.editable && d.format==format,format.label()).clicked(){d.editable=false;d.format=format;}
+                                }
+                            });
+                        });
+                        if d.entries.len()>1 {ui.small("A new subfolder keeps existing files untouched.");}
+                    }
+                },
+                Action::Duplicate=>{},
             }
             if !d.error.is_empty(){ui.colored_label(egui::Color32::LIGHT_RED,&d.error);}
-            ui.horizontal(|ui|{cancel=ui.button("Cancel").clicked();let text=match d.action{Action::Delete=>"Delete",Action::Export=>"Choose folder…",_=>"Save"};let mut button=egui::Button::new(text);if d.action==Action::Delete{button=button.fill(egui::Color32::from_rgb(166,42,48));}submit=ui.add(button).clicked();});
+            ui.horizontal(|ui|{cancel=ui.button("Cancel").clicked();let text=match d.action{Action::Delete=>"Delete",Action::Export=>if d.entries.len()>1 {"Choose folder…"}else{"Choose file…"},_=>"Save"};let mut button=egui::Button::new(text);if d.action==Action::Delete{button=button.fill(egui::Color32::from_rgb(166,42,48));}submit=ui.add(button).clicked();});
         });
         if cancel || crate::text_edit::cancel_on_escape(&modal) {
             return;
         }
         if submit {
             if d.action == Action::Export {
+                if d.entries.is_empty() || d.name.trim().is_empty() {
+                    d.error = "Enter a name and select at least one capture.".into();
+                    self.history.manage = Some(d);
+                    return;
+                }
                 self.suspend_global_capture();
-                if let Some(folder) = rfd::FileDialog::new().pick_folder() {
-                    let result = self.export_library_batch(&d.entries, &folder, d.format);
+                let format = (!d.editable).then_some(d.format);
+                let result = if d.entries.len() == 1 {
+                    let extension = if d.editable {
+                        "capture.json"
+                    } else {
+                        d.format.extension()
+                    };
+                    rfd::FileDialog::new()
+                        .add_filter("Selected format", &[extension])
+                        .set_file_name(format!("{}.{}", safe_name(&d.name), extension))
+                        .save_file()
+                        .map(|path| {
+                            self.save_library_item(&d.entries[0], &path, format)
+                                .map(|()| format!("Saved {}", path.display()))
+                        })
+                } else {
+                    rfd::FileDialog::new().pick_folder().map(|folder| {
+                        self.export_library_batch(&d.entries, &folder, format, &d.name)
+                    })
+                };
+                if let Some(result) = result {
                     match result {
                         Ok(message) => {
                             self.status = message;
@@ -195,17 +313,46 @@ impl Editor {
         }
         self.history.manage = Some(d);
     }
-    fn export_library_batch(
+    fn save_library_item(
         &self,
-        entries: &[Entry],
-        folder: &std::path::Path,
-        format: capture_core::export::Format,
-    ) -> Result<String, String> {
+        entry: &Entry,
+        path: &std::path::Path,
+        format: Option<capture_core::export::Format>,
+    ) -> Result<(), String> {
         let store = self
             .history
             .store
             .as_ref()
             .ok_or("Library is unavailable")?;
+        let doc = if self.history.active.as_deref() == Some(&entry.id) {
+            self.session.document.clone()
+        } else {
+            store.load(&entry.id).map_err(|e| e.to_string())?
+        };
+        if let Some(format) = format {
+            capture_core::export::save(
+                &doc,
+                path,
+                &capture_core::export::Options {
+                    format,
+                    ..Default::default()
+                },
+            )
+        } else {
+            doc.save(path)
+        }
+        .map_err(|e| e.to_string())
+    }
+
+    fn export_library_batch(
+        &self,
+        entries: &[Entry],
+        folder: &std::path::Path,
+        format: Option<capture_core::export::Format>,
+        base: &str,
+    ) -> Result<String, String> {
+        let names = capture_core::history::unique_names(&safe_name(base), entries.len(), &[])
+            .map_err(|e| e.to_string())?;
         let directory = (1..=10000)
             .map(|n| folder.join(format!("ClipCraft export {n}")))
             .find_map(|p| match std::fs::create_dir(&p) {
@@ -214,27 +361,10 @@ impl Editor {
                 Err(e) => Some(Err(e.to_string())),
             })
             .ok_or("No export folder available")??;
-        let options = capture_core::export::Options {
-            format,
-            ..Default::default()
-        };
-        for (i, e) in entries.iter().enumerate() {
-            let name = e
-                .label
-                .chars()
-                .map(|c| {
-                    if c.is_alphanumeric() || matches!(c, ' ' | '-' | '_') {
-                        c
-                    } else {
-                        '_'
-                    }
-                })
-                .take(70)
-                .collect::<String>();
-            let path = directory.join(format!("{:03} {}.{}", i + 1, name, format.extension()));
-            let result = store
-                .load(&e.id)
-                .and_then(|doc| capture_core::export::save(&doc, &path, &options));
+        for (i, (e, name)) in entries.iter().zip(names).enumerate() {
+            let extension = format.map_or("capture.json", |f| f.extension());
+            let path = directory.join(format!("{name}.{extension}"));
+            let result = self.save_library_item(e, &path, format);
             if let Err(error) = result {
                 return Err(format!(
                     "Export stopped after {i} items in {}: {error}",
@@ -248,6 +378,20 @@ impl Editor {
             directory.display()
         ))
     }
+}
+
+fn safe_name(name: &str) -> String {
+    name.trim()
+        .chars()
+        .map(|c| {
+            if c.is_alphanumeric() || matches!(c, ' ' | '-' | '_') {
+                c
+            } else {
+                '_'
+            }
+        })
+        .take(100)
+        .collect()
 }
 
 #[cfg(test)]
@@ -289,6 +433,8 @@ mod tests {
             action: Action::AddTags,
             entries: vec![a, b],
             tags: "approved, beta".into(),
+            name: "Capture".into(),
+            editable: true,
             limits: Default::default(),
             format: Default::default(),
             error: String::new(),
@@ -302,8 +448,13 @@ mod tests {
         );
         let entries = e.history.entries();
         for _ in 0..2 {
-            e.export_library_batch(&entries, root.path(), capture_core::export::Format::Png)
-                .unwrap();
+            e.export_library_batch(
+                &entries,
+                root.path(),
+                Some(capture_core::export::Format::Png),
+                "Capture",
+            )
+            .unwrap();
         }
         assert_eq!(
             std::fs::read_dir(root.path().join("ClipCraft export 1"))
@@ -316,6 +467,29 @@ mod tests {
                 .unwrap()
                 .count(),
             2
+        );
+        e.export_library_batch(&entries[..1], root.path(), None, "Guide")
+            .unwrap();
+        let exported = capture_core::Document::load(
+            &root.path().join("ClipCraft export 3/Guide 1.capture.json"),
+        )
+        .unwrap();
+        assert_eq!(
+            exported.render().unwrap(),
+            e.history
+                .store
+                .as_ref()
+                .unwrap()
+                .load(&entries[0].id)
+                .unwrap()
+                .render()
+                .unwrap()
+        );
+        assert_eq!(
+            std::fs::read_dir(root.path().join("ClipCraft export 3"))
+                .unwrap()
+                .count(),
+            1
         );
         d.action = Action::Storage;
         e.history.manage = Some(d);

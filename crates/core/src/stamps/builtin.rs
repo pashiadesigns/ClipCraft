@@ -14,10 +14,24 @@ impl Stamp {
             .all(|word| text.contains(&word.to_lowercase()))
     }
     pub fn pixels(&self) -> Result<image::RgbaImage> {
-        Ok(image::load_from_memory(self.png)?.to_rgba8())
+        if self.id == "builtin-raster-sample" {
+            return Ok(image::load_from_memory(self.png)?.to_rgba8());
+        }
+        let bitmap = crate::bitmap::Bitmap::from_vector(super::vector::VectorStamp::builtin(
+            self.id.trim_start_matches("builtin-"),
+        ))?;
+        Ok((**bitmap.pixels()?).clone())
     }
     pub fn payload(&self) -> Result<ObjectPayload> {
-        super::from_pixels(self.pixels()?)
+        let mut payload = super::from_pixels(self.pixels()?)?;
+        if self.id != "builtin-raster-sample" {
+            payload.document_version = 22;
+            payload.objects[0].image =
+                Some(std::sync::Arc::new(crate::bitmap::Bitmap::from_vector(
+                    super::vector::VectorStamp::builtin(self.id.trim_start_matches("builtin-")),
+                )?));
+        }
+        Ok(payload)
     }
 }
 macro_rules! stamp {
@@ -64,6 +78,12 @@ pub const ALL: &[Stamp] = &[
     ),
     stamp!("question", "Question", "blue help unsure question mark"),
     stamp!("information", "Information", "blue info note tip"),
+    Stamp {
+        id: "builtin-raster-sample",
+        label: "Raster test check",
+        keywords: "png raster test sample",
+        png: include_bytes!("../../assets/stamps/check-green.png"),
+    },
 ];
 pub fn find(id: &str) -> Option<&'static Stamp> {
     ALL.iter().find(|s| s.id == id)
@@ -73,16 +93,30 @@ mod tests {
     use super::*;
     #[test]
     fn starter_art_is_transparent_searchable_and_persists_as_editable_stamps() {
+        let mut fixture =
+            crate::Session::new(crate::Document::canvas(640, 480, [245, 245, 245, 255]).unwrap())
+                .unwrap();
         for stamp in ALL {
             let pixels = stamp.pixels().unwrap();
             assert_eq!(pixels.dimensions(), (128, 128));
             assert_eq!(pixels.get_pixel(0, 0).0[3], 0);
             assert!(pixels.pixels().any(|p| p.0[3] > 0 && p.0[3] < 255));
             let payload = stamp.payload().unwrap();
+            payload.validate().unwrap();
             let copy: ObjectPayload =
                 serde_json::from_slice(&serde_json::to_vec(&payload).unwrap()).unwrap();
             assert!(copy.objects[0].image.as_ref().unwrap().is_stamp());
             assert_eq!(copy.objects, payload.objects);
+            let n = fixture.document.annotations.len();
+            fixture
+                .execute(crate::Command::PasteObjects {
+                    payload: copy,
+                    center: [90. + (n % 4) as f32 * 150., 90. + (n / 4) as f32 * 150.],
+                })
+                .unwrap();
+        }
+        if let Ok(path) = std::env::var("CLIPCRAFT_STAMP_FIXTURE") {
+            fixture.document.save(std::path::Path::new(&path)).unwrap();
         }
         assert_eq!(
             ALL.iter()

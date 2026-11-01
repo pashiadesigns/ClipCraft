@@ -10,6 +10,8 @@ pub struct Bitmap {
     raster: Arc<RasterImage>,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     stamp: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    vector: Option<Arc<crate::stamps::vector::VectorStamp>>,
     /// Presence identifies a captured cursor. Indices preserve Windows XOR
     /// pixels so an I-beam still inverts the background after it is moved.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -28,6 +30,7 @@ impl PartialEq for Bitmap {
     fn eq(&self, other: &Self) -> bool {
         (Arc::ptr_eq(&self.raster, &other.raster) || self.raster == other.raster)
             && self.stamp == other.stamp
+            && self.vector == other.vector
             && self.cursor_invert == other.cursor_invert
             && self.view == other.view
             && self.focus == other.focus
@@ -35,6 +38,30 @@ impl PartialEq for Bitmap {
 }
 
 impl Bitmap {
+    pub fn vector(&self) -> Option<&crate::stamps::vector::VectorStamp> {
+        self.vector.as_deref()
+    }
+    pub fn from_vector(vector: crate::stamps::vector::VectorStamp) -> Result<Self> {
+        vector.validate()?;
+        let mut value = Self::new(Arc::new(RasterImage::from_image(&RgbaImage::new(
+            128, 128,
+        ))?))?
+        .into_stamp();
+        value.vector = Some(Arc::new(vector));
+        let a = Arc::new(value.clone()).annotation(1);
+        let pixels = crate::display::render_annotation_preview(
+            &a,
+            Viewport {
+                size: [128, 128],
+                origin: [0.; 2],
+                scale: 1.,
+            },
+        )?;
+        value.raster = Arc::new(RasterImage::from_image(&pixels)?);
+        value.decoded = OnceLock::new();
+        value.opaque = OnceLock::new();
+        Ok(value)
+    }
     pub fn is_stamp(&self) -> bool {
         self.stamp
     }
@@ -63,6 +90,12 @@ impl Bitmap {
         self.view.is_some()
     }
     pub(crate) fn validate_view(&self) -> Result<()> {
+        if let Some(vector) = &self.vector {
+            vector.validate()?;
+            if !self.stamp || self.is_cursor() || self.view.is_some() || self.size() != [128, 128] {
+                return Err(Error::Invalid("Invalid vector stamp properties".into()));
+            }
+        }
         if self
             .focus
             .is_some_and(|p| !p.iter().all(|v| v.is_finite() && (0.0..=1.0).contains(v)))
@@ -91,11 +124,15 @@ impl Bitmap {
             .len()
             .saturating_add(w as usize * h as usize * 4)
             .saturating_add(self.cursor_invert.as_ref().map_or(0, |v| v.len() * 4))
+            .saturating_add(self.vector.as_ref().map_or(0, |v| {
+                v.paths.iter().map(|p| p.data.len()).sum::<usize>() + v.colors.len() * 4
+            }))
     }
     pub fn new(raster: Arc<RasterImage>) -> Result<Self> {
         let value = Self {
             raster,
             stamp: false,
+            vector: None,
             cursor_invert: None,
             view: None,
             focus: None,
@@ -192,6 +229,10 @@ mod tests;
 /// One sampler for export and zoomed display. Sample centers share the vector
 /// coordinate convention; premultiplied interpolation avoids dark alpha fringes.
 pub(crate) fn render(target: &mut RgbaImage, a: &Annotation, view: Viewport) {
+    if a.image.as_ref().is_some_and(|b| b.vector().is_some()) {
+        crate::display::render_vector(target, a, view);
+        return;
+    }
     render_impl(target, a, view, true);
 }
 fn render_impl(target: &mut RgbaImage, a: &Annotation, view: Viewport, fast: bool) {

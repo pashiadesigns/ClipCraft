@@ -9,10 +9,14 @@ enum Action {
     Rename,
     Tags,
     Delete,
+    SaveAs,
+    Details,
 }
 impl Action {
     fn label(self) -> &'static str {
         match self {
+            Self::SaveAs => "Save As…",
+            Self::Details => "Details",
             Self::Open => "Open in Editor",
             Self::Copy => "Copy to Clipboard",
             Self::Duplicate => "Duplicate",
@@ -29,22 +33,109 @@ pub(super) struct Dialog {
     tags: String,
     error: String,
 }
+fn details(store: &capture_core::history::History, e: &Entry) -> Vec<(&'static str, String)> {
+    let path = store
+        .root()
+        .join("images")
+        .join(format!("{}.capture.json", e.storage_id()));
+    let file = std::fs::metadata(&path).ok();
+    let mut updated = e.clone();
+    updated.created_ms = e.updated_ms.unwrap_or(e.created_ms);
+    vec![
+        ("Name", e.label.clone()),
+        ("Type", e.kind.label().into()),
+        ("Dimensions", format!("{} × {} pixels", e.width, e.height)),
+        ("Origin", e.origin.label().into()),
+        ("Captured (UTC)", e.created_utc()),
+        ("Updated (UTC)", updated.created_utc()),
+        (
+            "Tags",
+            if e.tags.is_empty() {
+                "None".into()
+            } else {
+                e.tags.join(", ")
+            },
+        ),
+        (
+            "Project size",
+            file.as_ref()
+                .map(|m| format!("{} bytes", m.len()))
+                .unwrap_or_else(|| "Missing".into()),
+        ),
+        (
+            "Stored size including thumbnail",
+            format!("{} bytes", e.bytes),
+        ),
+        (
+            "Read-only file",
+            file.as_ref()
+                .map(|m| m.permissions().readonly().to_string())
+                .unwrap_or_else(|| "Unavailable".into()),
+        ),
+        ("Project file", path.display().to_string()),
+    ]
+}
+pub(super) fn icon(ui: &egui::Ui, center: egui::Pos2, name: &str, color: egui::Color32) {
+    match name {
+        "Text" => {
+            ui.painter().text(
+                center,
+                egui::Align2::CENTER_CENTER,
+                "A",
+                egui::FontId::proportional(17.),
+                color,
+            );
+        }
+        "Delete" => {
+            let stroke = egui::Stroke::new(1.4, color);
+            ui.painter().rect_stroke(
+                egui::Rect::from_center_size(center + egui::vec2(0., 2.), egui::vec2(10., 12.)),
+                1.,
+                stroke,
+                egui::StrokeKind::Inside,
+            );
+            ui.painter().line_segment(
+                [center + egui::vec2(-7., -5.), center + egui::vec2(7., -5.)],
+                stroke,
+            );
+            ui.painter().line_segment(
+                [center + egui::vec2(-2., -7.), center + egui::vec2(2., -7.)],
+                stroke,
+            );
+        }
+        "Tag" => {
+            let r = egui::Rect::from_center_size(center, egui::vec2(14., 10.));
+            ui.painter().rect_stroke(
+                r,
+                2.,
+                egui::Stroke::new(1.4, color),
+                egui::StrokeKind::Inside,
+            );
+            ui.painter()
+                .circle_filled(center - egui::vec2(4., 0.), 1.4, color);
+        }
+        _ => crate::ribbon::draw_icon(ui.painter(), center, name, color),
+    }
+}
 fn menu(ui: &mut egui::Ui, available: bool, busy: bool) -> Option<Action> {
     ui.set_min_width(210.);
     let mut chosen = None;
     for action in [
         Action::Open,
         Action::Copy,
+        Action::SaveAs,
         Action::Duplicate,
         Action::Rename,
         Action::Tags,
+        Action::Details,
         Action::Delete,
     ] {
         if action == Action::Delete {
             ui.separator();
         }
         let enabled = match action {
-            Action::Open | Action::Copy => available,
+            Action::Open | Action::Copy | Action::SaveAs => available,
+            Action::Details => true,
             Action::Delete | Action::Rename | Action::Tags => !busy,
             Action::Duplicate => available && !busy,
         };
@@ -74,52 +165,15 @@ fn menu(ui: &mut egui::Ui, available: bool, busy: bool) -> Option<Action> {
             egui::Color32::from_rgb(130, 202, 237)
         };
         let name = match action {
+            Action::SaveAs => "Save As",
+            Action::Details => "File",
             Action::Open => "Editor",
             Action::Copy | Action::Duplicate => "Copy",
             Action::Rename => "Text",
             Action::Tags => "Tag",
             Action::Delete => "Delete",
         };
-        match action {
-            Action::Rename => {
-                ui.painter().text(
-                    center,
-                    egui::Align2::CENTER_CENTER,
-                    "A",
-                    egui::FontId::proportional(17.),
-                    color,
-                );
-            }
-            Action::Delete => {
-                let stroke = egui::Stroke::new(1.4, color);
-                ui.painter().rect_stroke(
-                    egui::Rect::from_center_size(center + egui::vec2(0., 2.), egui::vec2(10., 12.)),
-                    1.,
-                    stroke,
-                    egui::StrokeKind::Inside,
-                );
-                ui.painter().line_segment(
-                    [center + egui::vec2(-7., -5.), center + egui::vec2(7., -5.)],
-                    stroke,
-                );
-                ui.painter().line_segment(
-                    [center + egui::vec2(-2., -7.), center + egui::vec2(2., -7.)],
-                    stroke,
-                );
-            }
-            Action::Tags => {
-                let r = egui::Rect::from_center_size(center, egui::vec2(14., 10.));
-                ui.painter().rect_stroke(
-                    r,
-                    2.,
-                    egui::Stroke::new(1.4, color),
-                    egui::StrokeKind::Inside,
-                );
-                ui.painter()
-                    .circle_filled(center - egui::vec2(4., 0.), 1.4, color);
-            }
-            _ => crate::ribbon::draw_icon(ui.painter(), center, name, color),
-        }
+        icon(ui, center, name, color);
         if response.clicked() {
             chosen = Some(action);
             ui.close();
@@ -140,6 +194,9 @@ impl Editor {
         entry: &Entry,
         available: bool,
     ) {
+        if self.library_selection_context(response, entry) {
+            return;
+        }
         let busy = self.history.active.as_deref() == Some(&entry.id) && self.library_entry_busy();
         let mut action = None;
         response.context_menu(|ui| {
@@ -150,6 +207,10 @@ impl Editor {
         }
     }
     fn history_action(&mut self, entry: &Entry, action: Action, ctx: &egui::Context) {
+        if action == Action::SaveAs {
+            self.begin_library_management(super::manage::Action::Export, vec![entry.clone()]);
+            return;
+        }
         if action == Action::Open {
             self.open_history(&entry.id, ctx);
             return;
@@ -158,7 +219,10 @@ impl Editor {
             self.copy_history_with(entry, crate::clipboard::copy);
             return;
         }
-        if self.history.active.as_deref() == Some(&entry.id) && self.library_entry_busy() {
+        if action != Action::Details
+            && self.history.active.as_deref() == Some(&entry.id)
+            && self.library_entry_busy()
+        {
             self.status = "Finishing the current Library save; try again in a moment.".into();
             return;
         }
@@ -253,7 +317,18 @@ impl Editor {
             ui.set_width(380.);
             ui.heading(dialog.action.label());
             ui.add_space(8.);
-            if dialog.action == Action::Delete {
+            if dialog.action == Action::Details {
+                if let Some(store) = &self.history.store {
+                    egui::ScrollArea::vertical()
+                        .max_height(450.)
+                        .show(ui, |ui| {
+                            for (title, value) in details(store, &dialog.entry) {
+                                ui.label(egui::RichText::new(title).strong());
+                                ui.add(egui::Label::new(value).wrap().selectable(true));
+                            }
+                        });
+                }
+            } else if dialog.action == Action::Delete {
                 ui.label(format!("Delete “{}” from Library?", dialog.entry.label));
                 ui.label(
                     "This removes the stored capture. Exported files and the open canvas are kept.",
@@ -278,6 +353,10 @@ impl Editor {
             }
             ui.add_space(10.);
             ui.horizontal(|ui| {
+                if dialog.action == Action::Details {
+                    cancel = ui.button("Close").clicked();
+                    return;
+                }
                 cancel = ui.button("Cancel").clicked();
                 let button = if dialog.action == Action::Delete {
                     egui::Button::new("Delete").fill(egui::Color32::from_rgb(177, 43, 49))

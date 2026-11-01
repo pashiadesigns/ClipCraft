@@ -32,9 +32,126 @@ impl Limits {
 pub enum Batch<'a> {
     AddTags(&'a [String]),
     RemoveTags(&'a [String]),
+    Rename(&'a str),
     Delete,
 }
+/// Stable names for Library operations and files. Compare case-insensitively on Windows.
+pub fn unique_names(base: &str, count: usize, occupied: &[String]) -> Result<Vec<String>> {
+    let base = base.trim();
+    if base.is_empty() || base.chars().count() > 100 || base.chars().any(char::is_control) {
+        return Err(Error::Invalid(
+            "Enter a base name of 1–100 characters.".into(),
+        ));
+    }
+    let mut used: std::collections::HashSet<_> =
+        occupied.iter().map(|s| s.to_lowercase()).collect();
+    let mut result = Vec::new();
+    let mut suffix = 1;
+    for _ in 0..count {
+        loop {
+            let name = format!("{base} {suffix}");
+            suffix += 1;
+            if used.insert(name.to_lowercase()) {
+                result.push(name);
+                break;
+            }
+        }
+    }
+    Ok(result)
+}
 impl History {
+    /// Copies become visible together only after every source and capacity check succeeds.
+    pub fn duplicate_many(&mut self, expected: &[Entry]) -> Result<Vec<Entry>> {
+        if expected.is_empty() {
+            return Ok(vec![]);
+        }
+        let _lock = self.management_lock()?;
+        let mut next = index_at(&self.root)?;
+        let mut ids = std::collections::HashSet::new();
+        if expected
+            .iter()
+            .any(|e| !ids.insert(&e.id) || !next.entries.contains(e))
+        {
+            return Err(Error::Invalid(
+                "A selected item changed; refresh before duplicating.".into(),
+            ));
+        }
+        let limits = self.limits()?;
+        if next.entries.len() + expected.len() > limits.entries
+            || next
+                .entries
+                .iter()
+                .chain(expected)
+                .map(|e| e.bytes)
+                .sum::<u64>()
+                > limits.bytes
+        {
+            return Err(Error::Invalid(
+                "Library capacity is insufficient; nothing was duplicated.".into(),
+            ));
+        }
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_err(|_| Error::Invalid("Invalid system time".into()))?
+            .as_millis() as u64;
+        let mut names: Vec<_> = next.entries.iter().map(|e| e.label.clone()).collect();
+        let mut paths = Vec::new();
+        let mut copies = Vec::new();
+        let result = (|| {
+            for entry in expected {
+                self.load(&entry.id)?;
+                let source = self.paths(entry.storage_id())?;
+                let id = loop {
+                    let id = format!(
+                        "{:016x}{:08x}{:08x}",
+                        now,
+                        std::process::id(),
+                        SEQUENCE.fetch_add(1, Ordering::Relaxed)
+                    );
+                    if self.paths(&id)?.iter().all(|p| !p.exists()) {
+                        break id;
+                    }
+                };
+                let label = unique_names(
+                    &format!(
+                        "Copy of {}",
+                        entry.label.chars().take(92).collect::<String>()
+                    ),
+                    1,
+                    &names,
+                )?
+                .remove(0);
+                names.push(label.clone());
+                let target = self.paths(&id)?;
+                paths.extend(target.clone());
+                for (src, dst) in source.iter().zip(&target) {
+                    atomic_write(dst, &fs::read(src)?)?;
+                }
+                copies.push(Entry {
+                    id: id.clone(),
+                    revision: Some(id),
+                    label,
+                    created_ms: now,
+                    updated_ms: Some(now),
+                    ..entry.clone()
+                });
+            }
+            next.version = 3;
+            next.entries.splice(0..0, copies.iter().cloned());
+            atomic_write(
+                &self.root.join("index.json"),
+                &serde_json::to_vec_pretty(&next)?,
+            )
+        })();
+        if let Err(error) = result {
+            for path in paths {
+                let _ = fs::remove_file(path);
+            }
+            return Err(error);
+        }
+        self.index = next;
+        Ok(copies)
+    }
     pub fn limits(&self) -> Result<Limits> {
         let path = self.root.join("limits.json");
         match fs::metadata(&path) {
@@ -92,6 +209,22 @@ impl History {
         }
         let mut removed = vec![];
         match action {
+            Batch::Rename(base) => {
+                let occupied = next
+                    .entries
+                    .iter()
+                    .filter(|e| !ids.contains(&e.id))
+                    .map(|e| e.label.clone())
+                    .collect::<Vec<_>>();
+                let names = unique_names(base, expected.len(), &occupied)?;
+                for (e, name) in expected.iter().zip(names) {
+                    next.entries
+                        .iter_mut()
+                        .find(|current| current.id == e.id)
+                        .unwrap()
+                        .label = name;
+                }
+            }
             Batch::Delete => {
                 for e in expected {
                     removed.extend(self.paths(e.storage_id())?);
@@ -141,6 +274,52 @@ impl History {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn ordered_names_duplicates_and_conflicts_are_atomic() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut h = History::open(dir.path()).unwrap();
+        let d = Document::blank(20, 20).unwrap();
+        let a = h.create(&d, "A", Origin::Canvas).unwrap();
+        let b = h.create(&d, "B", Origin::Canvas).unwrap();
+        let busy = h.create(&d, "Existing", Origin::Canvas).unwrap();
+        h.edit_metadata(&busy, "GUIDE 1", &[]).unwrap();
+        h.batch(&[b.clone(), a.clone()], Batch::Rename("Guide"))
+            .unwrap();
+        assert_eq!(
+            h.entries().iter().find(|e| e.id == b.id).unwrap().label,
+            "Guide 2"
+        );
+        assert_eq!(
+            h.entries().iter().find(|e| e.id == a.id).unwrap().label,
+            "Guide 3"
+        );
+        assert!(h.batch(&[a, b], Batch::Rename("No changes")).is_err());
+        let expected = h.entries().to_vec();
+        let copies = h.duplicate_many(&expected).unwrap();
+        assert_eq!(copies.len(), 3);
+        assert_eq!(h.entries().len(), 6);
+        for (copy, source) in copies.iter().zip(&expected) {
+            assert_ne!(copy.id, source.id);
+            assert_eq!(
+                h.load(&copy.id).unwrap().render().unwrap(),
+                h.load(&source.id).unwrap().render().unwrap()
+            );
+        }
+        h.set_limits(Limits {
+            entries: 6,
+            bytes: 1_000_000,
+        })
+        .unwrap();
+        let before = h.entries().to_vec();
+        assert!(h.duplicate_many(&expected).is_err());
+        assert_eq!(h.entries(), before);
+        assert_eq!(History::open(dir.path()).unwrap().entries(), before);
+        assert!(unique_names("", 2, &[]).is_err());
+        assert_eq!(
+            unique_names("Guide", 3, &["guide 1".into(), "Guide 3".into()]).unwrap(),
+            ["Guide 2", "Guide 4", "Guide 5"]
+        );
+    }
     #[test]
     fn bulk_is_atomic_on_conflict_and_survives_reopen() {
         let dir = tempfile::tempdir().unwrap();

@@ -3,6 +3,81 @@ use crate::property_layout::tests::{PaintedOutput, dump_meshes};
 use capture_core::{Document, Kind};
 
 #[test]
+fn details_show_real_file_properties_without_changing_the_project() {
+    let root = tempfile::tempdir().unwrap();
+    let ctx = egui::Context::default();
+    crate::shell::configure(&ctx);
+    ctx.style_mut_of(egui::Theme::Dark, |s| s.animation_time = 0.);
+    let mut e = crate::canvas::tests::editor(&ctx);
+    e.history = HistoryPanel::isolated(root.path());
+    let entry = e
+        .history
+        .store
+        .as_mut()
+        .unwrap()
+        .create(
+            &Document::canvas(640, 400, [255; 4]).unwrap(),
+            "Install guide",
+            Origin::Capture,
+        )
+        .unwrap();
+    let entry = e
+        .history
+        .store
+        .as_mut()
+        .unwrap()
+        .edit_metadata(&entry, "Install guide", &["Onboarding".into()])
+        .unwrap();
+    let before = serde_json::to_vec(&e.session.document).unwrap();
+    let values = details(e.history.store.as_ref().unwrap(), &entry);
+    assert!(values.contains(&("Dimensions", "640 × 400 pixels".into())));
+    assert!(values.contains(&("Tags", "Onboarding".into())));
+    let path = values
+        .iter()
+        .find(|(k, _)| *k == "Project file")
+        .unwrap()
+        .1
+        .clone();
+    assert!(values.contains(&(
+        "Project size",
+        format!("{} bytes", std::fs::metadata(path).unwrap().len())
+    )));
+    e.history_action(&entry, Action::Details, &ctx);
+    let frame = |e: &mut Editor| {
+        PaintedOutput(ctx.run_ui(
+            egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    egui::vec2(900., 700.),
+                )),
+                ..Default::default()
+            },
+            |ui| e.show_history_dialog(ui.ctx()),
+        ))
+    };
+    let first = frame(&mut e);
+    let output = frame(&mut e);
+    for text in [
+        "Details",
+        "Dimensions",
+        "640 × 400 pixels",
+        "Project size",
+        "Close",
+    ] {
+        assert!(
+            crate::color_widgets::tests::text_rect(&output.shapes, text).is_some(),
+            "missing {text}"
+        );
+    }
+    if let Ok(dir) = std::env::var("CLIPCRAFT_HEADLESS_LIBRARY_DIR") {
+        dump_meshes(&ctx, &dir, "library-details", first, output);
+    }
+    assert_eq!(before, serde_json::to_vec(&e.session.document).unwrap());
+    e.history_action(&entry, Action::SaveAs, &ctx);
+    assert!(e.history.manage.is_some());
+}
+
+#[test]
 fn shared_library_and_recent_menu_actions_preserve_canvas_and_use_selected_entry() {
     let root = tempfile::tempdir().unwrap();
     let ctx = egui::Context::default();
@@ -141,6 +216,8 @@ fn shared_library_and_recent_menu_actions_preserve_canvas_and_use_selected_entry
         for label in [
             "Open in Editor",
             "Copy to Clipboard",
+            "Save As…",
+            "Details",
             "Duplicate",
             "Rename",
             "Edit Tags",

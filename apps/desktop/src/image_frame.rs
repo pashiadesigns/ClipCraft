@@ -15,6 +15,34 @@ pub(super) fn properties(ui: &mut egui::Ui, a: &mut Annotation) {
     let Some(bitmap) = a.image.as_ref().filter(|b| !b.is_cursor()).cloned() else {
         return;
     };
+    if let Some(before) = bitmap.vector() {
+        let mut vector = before.clone();
+        property_layout::section_help(
+            ui,
+            "Vector stamp",
+            "Edit up to five colors independently. Paths stay crisp at any size; color edits apply only to this stamp and support Undo.",
+        );
+        ui.horizontal_wrapped(|ui| {
+            for (i, color) in vector.colors.iter_mut().enumerate() {
+                ui.push_id(i, |ui| {
+                    ui.vertical(|ui| {
+                        ui.label(format!("Color {}", i + 1));
+                        crate::color_widgets::property_rgba(
+                            ui,
+                            color,
+                            crate::color_widgets::Preview::Fill,
+                        );
+                    });
+                });
+            }
+        });
+        if &vector != before
+            && let Ok(bitmap) = capture_core::bitmap::Bitmap::from_vector(vector)
+        {
+            a.image = Some(std::sync::Arc::new(bitmap));
+        }
+        return;
+    }
     property_layout::section_help(
         ui,
         "Image frame",
@@ -113,6 +141,7 @@ impl Editor {
         let a = self.selected_annotation()?;
         if a.kind != Kind::Image
             || a.image.as_ref()?.is_cursor()
+            || a.image.as_ref()?.vector().is_some()
             || self.session.document.object_state(a.id).locked
         {
             return None;
@@ -133,6 +162,7 @@ impl Editor {
         let a = self.selected_annotation()?;
         if a.kind != Kind::Image
             || a.image.as_ref()?.is_cursor()
+            || a.image.as_ref()?.vector().is_some()
             || self.session.document.object_state(a.id).locked
         {
             return None;

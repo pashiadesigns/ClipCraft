@@ -1,8 +1,8 @@
 # ClipCraft feature backlog
 
-Updated: 2026-10-31
+Updated: 2026-11-01
 
-Lean beta candidate ready for local review:538 Rust tests,25 optimized image comparisons and four PDF/JPEG fixtures pass. Export/printing, installed fonts, image stamps and bulk Library/storage implemented.76 user passes preserved. Native review pending; public alpha50 unchanged and automation paused.
+Local Library/stamps candidate qualified: 546 tests and 26 optimized image comparisons. Library selection, bulk actions, Details and editable vector starter stamps implemented. Native review pending; immutable preview.1 downloads unchanged. Automation paused.
 
 Generated from roadmap.json. Edit that source and run node scripts/build.mjs; do not edit this generated view.
 
@@ -214,6 +214,10 @@ Generated from roadmap.json. Edit that source and run node scripts/build.mjs; do
 | ENG-005: Public auditable source and portable GitHub releases | Engineering | Shipped | Delivered |
 | UX-073: Review corrections: Library surround, text overflow and export preview | Experience | Needs verification | Next |
 | EDIT-082: Essential business-guide starter stamps | Editing | Needs verification | Next |
+| LIB-013: Library selection, bulk commands and Details | Library | Needs verification | Next |
+| EDIT-083: Editable limited-palette vector stamps | Editing | Needs verification | Next |
+| UX-074: Smooth raster and vector stamp dragging | Experience | Needs verification | Next |
+| EDIT-084: General SVG and EPS stamp import | Editing | Planned | Later |
 
 ## Completion checks and evidence
 
@@ -3670,3 +3674,54 @@ Completion: Verify built-ins without imports; search keywords, live cursor/drag/
 - Evidence: User requested during GitHub setup; local checks and review candidate preparation underway.
 - Evidence: Local review-corrections-20261031-222926; SHA256 5a18ed3df9d997b39997fff2088fecfef0d2b9d7bb00864dd800fba0bd6d4f5e; 540 tests/fmt/Clippy and 25 optimized export/viewport comparisons pass. Headless production UI and pointer workflows inspected; native confirmation remains. Not in published preview.1.
 - Release not scheduled; priorities are not version promises.
+
+### LIB-013: Library selection, bulk commands and Details
+
+**Needs verification** · Next · Updated 2026-11-01
+
+Click selects; double-click opens; Shift range, Alt toggle and drag marquee. Selection context commands save, duplicate, number names, edit tags and delete. Single-item Save As and Details shared with Recent.
+
+Completion: Verify pointer gestures, selected-only operations, collision-free names, conflicts and capacity rollback, metadata and file properties, project/image output and reopen.
+
+- Evidence: Local implementation and automated qualification underway; no published release or native observation yet. docs/library-stamps-work.md.
+- Evidence: Local library-stamps-review-20261101-123859; SHA256 10ef2909755c01043906b4a745243e4114814e6ff77b9d03e8071da1bbdef1c8; 546 tests/fmt/Clippy, 26 optimized image comparisons and Windows imports pass. Headless production UI inspected; native review R1/R2 pending. docs/library-stamps-work.md.
+- Release not scheduled; priorities are not version promises.
+- Depends on: LIB-012
+
+### EDIT-083: Editable limited-palette vector stamps
+
+**Needs verification** · Next · Updated 2026-11-01
+
+Nine supplied business stamps use original vector paths and one to five editable palette slots. Keep a labeled raster test stamp.
+
+Completion: Verify independent palette colors, transparency, scaling, shared export/preview, portable copy, save/reopen and one-step Undo.
+
+- Evidence: Local implementation and automated qualification underway; no published release or native observation yet. docs/library-stamps-work.md.
+- Evidence: Local library-stamps-review-20261101-123859; SHA256 10ef2909755c01043906b4a745243e4114814e6ff77b9d03e8071da1bbdef1c8; 546 tests/fmt/Clippy, 26 optimized image comparisons and Windows imports pass. Headless production UI inspected; native review R1/R2 pending. docs/library-stamps-work.md.
+- Release not scheduled; priorities are not version promises.
+- Depends on: EDIT-082
+
+### UX-074: Smooth raster and vector stamp dragging
+
+**Needs verification** · Next · Updated 2026-11-01
+
+Route image objects on blank canvases through retained rendering; reuse image textures while translating at low and high zoom.
+
+Completion: Verify fractional dragging without pixel reuploads from 35% to 800%, and output agreement with the shared engine.
+
+- Evidence: Local implementation and automated qualification underway; no published release or native observation yet. docs/library-stamps-work.md.
+- Evidence: Local library-stamps-review-20261101-123859; SHA256 10ef2909755c01043906b4a745243e4114814e6ff77b9d03e8071da1bbdef1c8; 546 tests/fmt/Clippy, 26 optimized image comparisons and Windows imports pass. Headless production UI inspected; native review R1/R2 pending. docs/library-stamps-work.md.
+- Release not scheduled; priorities are not version promises.
+- Depends on: EDIT-081
+
+### EDIT-084: General SVG and EPS stamp import
+
+**Planned** · Later · Updated 2026-11-01
+
+Expand stamp import beyond current raster formats to general SVG and EPS; supplied vector paths are a separate implementation.
+
+Completion: Choose audited renderers; bound resources and external references; verify import, portable save, transparency and output.
+
+- Evidence: User-requested follow-up; docs/library-stamps-work.md. General SVG/EPS parsers are not included in this bounded implementation.
+- Release not scheduled; priorities are not version promises.
+- Depends on: EDIT-083

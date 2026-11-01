@@ -35,6 +35,7 @@ pub(super) fn supported(d: &Document) -> bool {
     d.guide.is_some()
         || d.raster.is_some()
         || !d.source_png.is_empty()
+        || d.annotations.iter().any(|a| a.kind == Kind::Image)
         || d.annotations.iter().any(effect_patch::needs_pixels)
 }
 // Replacement patches must remove earlier ink, including alpha. Clip the
@@ -265,6 +266,7 @@ impl Scene {
                 continue;
             }
             if a.kind == Kind::Image
+                && a.image.as_ref().is_some_and(|b| b.vector().is_none())
                 && a.rotation_degrees == 0.
                 && a.shadow.is_none()
                 && a.image
@@ -400,6 +402,70 @@ impl Scene {
 mod tests {
     use super::*;
     use crate::property_layout::tests::{PaintedOutput, dump_meshes};
+    #[test]
+    fn blank_canvas_raster_and_vector_stamps_reuse_pixels_during_fractional_movement() {
+        for id in ["builtin-raster-sample", "builtin-check-circle"] {
+            let mut session =
+                capture_core::Session::new(Document::blank(3000, 2000).unwrap()).unwrap();
+            session
+                .execute(capture_core::Command::PasteObjects {
+                    payload: capture_core::stamps::builtin::find(id)
+                        .unwrap()
+                        .payload()
+                        .unwrap(),
+                    center: [100., 100.],
+                })
+                .unwrap();
+            assert!(supported(&session.document));
+            let baseline = session.document.annotations.clone();
+            let ctx = egui::Context::default();
+            let mut scene = Scene::default();
+            let paint = |scene: &mut Scene, doc: &Document, scale: f32| {
+                PaintedOutput(ctx.run_ui(
+                    egui::RawInput {
+                        screen_rect: Some(egui::Rect::from_min_size(
+                            egui::Pos2::ZERO,
+                            egui::vec2(1000., 800.),
+                        )),
+                        ..Default::default()
+                    },
+                    |ui| {
+                        scene
+                            .paint(
+                                ui,
+                                doc,
+                                Transform {
+                                    viewport: ui.clip_rect(),
+                                    image: egui::Rect::from_min_size(
+                                        egui::Pos2::ZERO,
+                                        egui::vec2(doc.width as f32, doc.height as f32) * scale,
+                                    ),
+                                    scale,
+                                    zoom: scale,
+                                },
+                            )
+                            .unwrap()
+                    },
+                ))
+            };
+            for scale in [0.35, 0.79, 1., 1.5, 2., 4., 8.] {
+                let _ = paint(&mut scene, &session.document, scale);
+                let _ = paint(&mut scene, &session.document, scale);
+                for n in 1..8 {
+                    session.document.annotations = capture_core::canvas_expansion::translated(
+                        &baseline,
+                        [n as f32 * 0.37, n as f32 * 0.23],
+                    )
+                    .unwrap();
+                    let output = paint(&mut scene, &session.document, scale);
+                    assert!(
+                        output.0.textures_delta.set.is_empty(),
+                        "{id} movement at {scale} uploaded pixels again"
+                    );
+                }
+            }
+        }
+    }
     #[test]
     fn edited_expanded_guides_keep_cached_background_and_screenshots_during_movement() {
         use capture_core::{Command, Session, guide_sections::Action, guide_sections::SectionKind};
