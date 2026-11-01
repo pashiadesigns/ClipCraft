@@ -13,7 +13,7 @@ use std::{
 };
 
 pub const MAX_PIXELS: u64 = 25_000_000;
-pub const MAX_PROJECT_VERSION: u32 = 24;
+pub const MAX_PROJECT_VERSION: u32 = 25;
 mod arrow;
 pub mod bitmap;
 pub mod callout;
@@ -286,6 +286,13 @@ impl Document {
         if self
             .annotations
             .iter()
+            .any(|a| a.image.as_ref().is_some_and(|b| b.is_placeholder()))
+        {
+            self.version = self.version.max(25);
+        }
+        if self
+            .annotations
+            .iter()
             .any(|a| a.image.as_ref().is_some_and(|b| b.stamp_name().is_some()))
         {
             self.version = self.version.max(23);
@@ -536,6 +543,11 @@ impl Document {
                 (Kind::Image, Some(bitmap)) if self.version >= 8 => {
                     bitmap.validate_cursor()?;
                     bitmap.validate_view()?;
+                    if bitmap.is_placeholder() && self.version < 25 {
+                        return Err(Error::Invalid(
+                            "Image placeholders require project version 25".into(),
+                        ));
+                    }
                     if bitmap.focus().is_some() && self.version < 19 {
                         return Err(Error::Invalid(
                             "Image focus requires project version 19".into(),

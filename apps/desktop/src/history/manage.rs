@@ -8,6 +8,8 @@ pub(super) enum Action {
     Storage,
     Rename,
     Duplicate,
+    RenameTag,
+    DeleteTag,
 }
 pub(super) struct Dialog {
     action: Action,
@@ -18,8 +20,29 @@ pub(super) struct Dialog {
     limits: capture_core::history::Limits,
     format: capture_core::export::Format,
     error: String,
+    focus_pending: bool,
 }
 impl Editor {
+    pub(super) fn begin_global_tag(&mut self, tag: &str, delete: bool) {
+        let entries = self
+            .history
+            .entries()
+            .into_iter()
+            .filter(|e| e.tags.iter().any(|t| t.eq_ignore_ascii_case(tag)))
+            .collect();
+        self.begin_library_management(
+            if delete {
+                Action::DeleteTag
+            } else {
+                Action::RenameTag
+            },
+            entries,
+        );
+        if let Some(d) = &mut self.history.manage {
+            d.tags = tag.into();
+            d.name = tag.into();
+        }
+    }
     pub(super) fn library_bulk_bar(&mut self, ui: &mut egui::Ui, visible: &[Entry]) {
         self.history.library.selected.retain(|id| {
             self.history
@@ -144,6 +167,7 @@ impl Editor {
                     limits,
                     format: self.export_preferences.library_format.unwrap_or_default(),
                     error: String::new(),
+                    focus_pending: true,
                 };
                 if action == Action::Duplicate {
                     self.status = self.apply_library_management(&dialog).unwrap_or_else(|e| e);
@@ -176,6 +200,16 @@ impl Editor {
             .map(str::to_owned)
             .collect::<Vec<_>>();
         match d.action {
+            Action::RenameTag | Action::DeleteTag => store
+                .replace_tag(
+                    &d.tags,
+                    if d.action == Action::RenameTag {
+                        Some(&d.name)
+                    } else {
+                        None
+                    },
+                )
+                .map(|_| ()),
             Action::Duplicate => store.duplicate_many(&d.entries).map(|_| ()),
             Action::Rename => {
                 store.batch(&d.entries, capture_core::history::Batch::Rename(&d.name))
@@ -210,6 +244,20 @@ impl Editor {
             }
         }
         self.history.refresh();
+        if matches!(d.action, Action::RenameTag | Action::DeleteTag)
+            && self
+                .history
+                .library
+                .tag
+                .as_ref()
+                .is_some_and(|tag| tag.eq_ignore_ascii_case(&d.tags))
+        {
+            self.history.library.tag = if d.action == Action::RenameTag {
+                Some(d.name.trim().into())
+            } else {
+                None
+            };
+        }
         if d.action == Action::Delete {
             self.history.library.selected.clear();
         }
@@ -226,8 +274,15 @@ impl Editor {
         let mut submit = false;
         let mut cancel = false;
         let modal=egui::Modal::new(egui::Id::unique("library-management")).show(ctx,|ui|{
-            ui.set_width(420.);let title=match d.action{Action::AddTags=>"Add tags",Action::RemoveTags=>"Remove tags",Action::Delete=>"Delete selected captures",Action::Export=>"Save As",Action::Rename=>"Rename All",Action::Duplicate=>"Duplicate All",Action::Storage=>"Library storage"};ui.heading(title);ui.add_space(8.);
+            ui.set_width(420.);let title=match d.action{Action::AddTags=>"Add tags",Action::RemoveTags=>"Remove tags",Action::Delete=>"Delete selected captures",Action::Export=>"Save As",Action::Rename=>"Rename All",Action::Duplicate=>"Duplicate All",Action::Storage=>"Library storage",Action::RenameTag=>"Rename tag everywhere",Action::DeleteTag=>"Delete tag everywhere"};ui.heading(title);ui.add_space(8.);
             match d.action {
+                Action::RenameTag|Action::DeleteTag=>{
+                    ui.label(format!("Tag: {} · {} captures",d.tags,d.entries.len()));
+                    if d.action==Action::RenameTag {
+                        ui.label("New name");let input=ui.add(egui::TextEdit::singleline(&mut d.name).char_limit(48).desired_width(f32::INFINITY));crate::controls::focus_once(&input,&mut d.focus_pending);
+                        ui.small("An existing tag with this name will be merged.");
+                    } else {ui.label("Remove this tag from every Library item? Images and projects are kept.");}
+                },
                 Action::Storage=>{
                     let entries=self.history.entries();let used=entries.iter().map(|e|e.bytes).sum::<u64>();
                     ui.label(format!("{} items · {:.1} MB used",entries.len(),used as f64/1_000_000.));
@@ -236,12 +291,12 @@ impl Editor {
                     if crate::property_layout::slider(ui,"Megabytes",egui::Slider::new(&mut mb,1..=16000)).changed(){d.limits.bytes=mb*1_000_000;}
                     if let Some(root)=self.history.root(){ui.label("Folder");ui.add(egui::Label::new(root.display().to_string()).wrap());}
                 },
-                Action::AddTags|Action::RemoveTags=>{ui.horizontal(|ui|{ui.label("Operation");ui.selectable_value(&mut d.action,Action::AddTags,"Add tags");ui.selectable_value(&mut d.action,Action::RemoveTags,"Remove tags");});ui.label(format!("{} selected captures",d.entries.len()));ui.label("Tags (comma separated)");ui.text_edit_singleline(&mut d.tags);},
+                Action::AddTags|Action::RemoveTags=>{ui.horizontal(|ui|{ui.label("Operation");ui.selectable_value(&mut d.action,Action::AddTags,"Add tags");ui.selectable_value(&mut d.action,Action::RemoveTags,"Remove tags");});ui.label(format!("{} selected captures",d.entries.len()));ui.label("Tags (comma separated)");let input=ui.text_edit_singleline(&mut d.tags);crate::controls::focus_once(&input,&mut d.focus_pending);},
                 Action::Delete=>{ui.label(format!("Delete {} selected capture(s) from Library?",d.entries.len()));ui.label("Stored projects are removed permanently. Exported files and the open canvas are kept.");},
                 Action::Export|Action::Rename=>{
                     ui.label(format!("{} selected captures",d.entries.len()));
                     ui.label(if d.entries.len()>1 {"Base name"}else{"Name"});
-                    ui.add(egui::TextEdit::singleline(&mut d.name).char_limit(100).desired_width(f32::INFINITY));
+                    let input=ui.add(egui::TextEdit::singleline(&mut d.name).char_limit(100).desired_width(f32::INFINITY));crate::controls::focus_once(&input,&mut d.focus_pending);
                     if d.entries.len()>1 { ui.small(format!("{} 1, {} 2, … · existing names are skipped",d.name,d.name)); }
                     if d.action==Action::Export {
                         ui.horizontal(|ui| {
@@ -260,7 +315,7 @@ impl Editor {
                 Action::Duplicate=>{},
             }
             if !d.error.is_empty(){ui.colored_label(egui::Color32::LIGHT_RED,&d.error);}
-            (submit,cancel) = crate::controls::dialog_actions(ui,if d.action==Action::Delete {"Delete"} else {"Save"},"Cancel",true,d.action==Action::Delete);
+            (submit,cancel) = crate::controls::dialog_actions(ui,if matches!(d.action,Action::Delete|Action::DeleteTag) {"Delete"} else {"Save"},"Cancel",true,matches!(d.action,Action::Delete|Action::DeleteTag));
         });
         if d.action == Action::Export {
             self.export_preferences.library_format = (!d.editable).then_some(d.format);
@@ -498,6 +553,7 @@ mod tests {
             limits: Default::default(),
             format: Default::default(),
             error: String::new(),
+            focus_pending: true,
         };
         e.apply_library_management(&d).unwrap();
         assert!(

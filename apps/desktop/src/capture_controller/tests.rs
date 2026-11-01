@@ -211,6 +211,9 @@ fn real_controller_buttons_route_image_settings_and_block_future_modes() {
         d.get_temp::<egui::Rect>(egui::Id::unique(("capture-switch", "Copy to Clipboard")))
             .unwrap()
     });
+    assert!(settings.clipboard);
+    click(&ctx, &mut mode, &mut settings, rect);
+    assert!(!settings.clipboard);
     click(&ctx, &mut mode, &mut settings, rect);
     assert!(settings.clipboard);
     let (rect, enabled) = ctx.data(|d| {
@@ -293,7 +296,10 @@ fn opening_controller_preserves_edits_and_failed_retention_keeps_capture_availab
     assert!(e.session.is_modified());
     e.accept_capture(
         capture_core::Document::blank(15, 8).unwrap(),
-        Settings::default(),
+        Settings {
+            clipboard: false,
+            ..Default::default()
+        },
         |_| panic!("Clipboard disabled"),
     );
     assert_eq!(e.session.document.width, 15);
@@ -304,6 +310,7 @@ fn opening_controller_preserves_edits_and_failed_retention_keeps_capture_availab
         capture_core::Document::canvas(30, 20, [17, 80, 140, 255]).unwrap(),
         Settings {
             preview: false,
+            clipboard: false,
             ..Default::default()
         },
         |_| panic!("Clipboard disabled"),
@@ -338,14 +345,16 @@ fn retained_step_result_reuses_its_library_item_without_duplicating_or_replacing
         result(),
         Settings {
             preview: false,
-            ..Default::default()
+            ..Settings::for_selection(Selection::Steps)
         },
         |_| panic!("No clipboard"),
     );
     assert_eq!(serde_json::to_vec(&e.session.document).unwrap(), before);
     assert_eq!(e.history.entries().len(), 1);
     assert!(e.status.contains("Partial recording kept"));
-    e.accept_capture_result(result(), Settings::default(), |_| panic!("No clipboard"));
+    e.accept_capture_result(result(), Settings::for_selection(Selection::Steps), |_| {
+        panic!("No clipboard")
+    });
     assert_eq!(e.history.active.as_deref(), Some(entry.id.as_str()));
     assert!(!e.session.is_modified());
     assert_eq!(

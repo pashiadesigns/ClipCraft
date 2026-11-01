@@ -206,6 +206,7 @@ impl Editor {
         )
     }
     fn new(cc: &eframe::CreationContext<'_>) -> Self {
+        chrome::install_native(cc);
         shell::configure(&cc.egui_ctx);
         text_layout::configure(&cc.egui_ctx);
         let mut startup_path = None;

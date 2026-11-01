@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "updated": "2026-11-01",
-  "scope": "Local workflow review qualified: 575 tests; 27 unchanged and seven new optimized image comparisons. Library import/folder memory, business stamps, six editable templates, controller branding and fixes await native review. Public preview.1 and 49 downloads retained; automation paused.",
+  "scope": "Local template/Library review qualified: 584 tests and 36 optimized comparisons. Reusable local templates, global tag management and review fixes implemented. T2 passed; T1 and T3 need native review. Public preview.1 and 49 downloads unchanged; automation paused.",
   "features": [
     {
       "id": "UX-002",
@@ -352,7 +352,7 @@
         "2026-10-30 planning refresh: alpha.29 prioritizes the observed arrow stroke defect; this unfinished provisional target is rescheduled by priority.",
         "Pinned DesignCraft source candidate mapped in docs/designcraft-reuse-audit.md; no automatic completion or version promise.",
         "2026-10-30 user batch: User identifies missing quick object rotation as core priority: near-corner rotate cursor/drag or dedicated node. Begin rotation model/handle audit; no implementation or delivery claim.",
-        "2026-10-30 after ribbon/palette candidate: crates/core/src/rotation.rs adapts audited MIT DesignCraft angle-drag/Shift snapping and corner-zone geometry. Four tests cover every fixture object, inverse mapping, bounds, fixed24px node at10\u20131600percent zoom, corner/resize priority, branch-cut continuity and invalid input.259workspace tests/fmt/Clippy pass. Object model/export/handle integration is still pending; no rotation UI or shipped claim.",
+        "2026-10-30 after ribbon/palette candidate: crates/core/src/rotation.rs adapts audited MIT DesignCraft angle-drag/Shift snapping and corner-zone geometry. Four tests cover every fixture object, inverse mapping, bounds, fixed24px node at10–1600percent zoom, corner/resize priority, branch-cut continuity and invalid input.259workspace tests/fmt/Clippy pass. Object model/export/handle integration is still pending; no rotation UI or shipped claim.",
         "2026-10-30 source milestone: persistent version3 vector orientation, shared viewport/export transforms, inverse hit/resize geometry, dedicated fixed-distance rotation node, live preview, release commit and one Undo. Seven core rotation tests and21 synthetic desktop drag cases (seven tools at three zooms) pass; Shift45-degree snapping, focus loss, save/reopen, source retention and rotated text checkpoint tested. Native/user verification pending. Group rotation and Blur/Pixelate/Eraser regions remain follow-ups; inline text temporarily uses an upright frame then restores orientation. docs/object-rotation-work.md.",
         "Qualified unpublished candidate rotation-step-preview-20261030-212628; desktop SHA256 dd600d506cb88f47f872c8842fc884dcd6f7d3f8c91f5632578058eac87a9810.266 automated tests/fmt/Clippy pass. Exact optimized CLI preserves baseline export/viewport and verifies six rotated vector types with matching export/viewport, source geometry retention and exact Undo. Launcher and batch manifest updated together. Native/user E5/H remain pending.",
         "2026-10-31 user verified H1, H2. User reports all checks through I5 passed except G3 font color. Tested build inferred as step-outline-controls-preview-20261031-014235 (SHA256 3b81acc603d91079d9f591fdc45622cf248c38b122b237785a43f558d92e6238); exact binary not directly confirmed. Scope is the listed checks, not all options or full reference parity. docs/manual-verification.json preserves prior evidence. No new desktop publication."
@@ -567,7 +567,7 @@
         "2026-10-30 planning refresh: alpha.29 prioritizes the observed arrow stroke defect; this unfinished provisional target is rescheduled by priority.",
         "capture-controller-preview-20261031-041154, SHA256 35934b584622ed7deabf6773fa05a6b2f347eeefc21bf7fdd97c11ec46c95286:377 tests/fmt/Clippy, five unchanged optimized output comparisons. Independent controller, persisted switches, Region/Window/Fullscreen routing, injected result retention/failure tests and three inspected headless layouts. Native L2 remains pending; mixed-DPI/HDR, later modes and presets remain unfinished. docs/capture-controller-work.md.",
         "2026-10-31 user reports window selection works but flashes as the pointer moves. Source fixes use region-change invalidation, anchored label and offscreen double buffering; native regression check pending in L2.",
-        "capture-update-preview-20261031-045849, desktop SHA256 3b7268d95db8c876c75b2cda1ed8223f003214d8e94286ae2a7fd883fbef8dda:400 tests/fmt/Clippy; seven exact optimized export/viewport fixtures, six old outputs unchanged. Real synthetic Windows OCR and offscreen cursor/countdown/recorder/confirmations qualified. Native L1\u2013L4 pending; no full capture parity or published-release claim. docs/capture-update-work.md.",
+        "capture-update-preview-20261031-045849, desktop SHA256 3b7268d95db8c876c75b2cda1ed8223f003214d8e94286ae2a7fd883fbef8dda:400 tests/fmt/Clippy; seven exact optimized export/viewport fixtures, six old outputs unchanged. Real synthetic Windows OCR and offscreen cursor/countdown/recorder/confirmations qualified. Native L1–L4 pending; no full capture parity or published-release claim. docs/capture-update-work.md.",
         "2026-10-31 user: L1/L2/L3 passed, inferred capture-update-preview-20261031-045849. Native boundary evidence is user verification, not agent desktop inspection. Release pending; new Steps launch/controller refinements tracked in docs/steps-guide-work.md."
       ],
       "updated": "2026-10-31",
@@ -606,7 +606,7 @@
         "2026-10-30 planning refresh: alpha.29 prioritizes the observed arrow stroke defect; this unfinished provisional target is rescheduled by priority.",
         "capture-controller-preview-20261031-041154, SHA256 35934b584622ed7deabf6773fa05a6b2f347eeefc21bf7fdd97c11ec46c95286:377 tests/fmt/Clippy, five unchanged optimized output comparisons. Independent controller, persisted switches, Region/Window/Fullscreen routing, injected result retention/failure tests and three inspected headless layouts. Native L2 remains pending; mixed-DPI/HDR, later modes and presets remain unfinished. docs/capture-controller-work.md.",
         "2026-10-31: Fullscreen cog adds All monitors, monitor under cursor, and a persisted specific display. Signed virtual-desktop geometry and missing-display errors tested. Native multiple-display output remains pending; no mixed-DPI/HDR completeness claim.",
-        "capture-update-preview-20261031-045849, desktop SHA256 3b7268d95db8c876c75b2cda1ed8223f003214d8e94286ae2a7fd883fbef8dda:400 tests/fmt/Clippy; seven exact optimized export/viewport fixtures, six old outputs unchanged. Real synthetic Windows OCR and offscreen cursor/countdown/recorder/confirmations qualified. Native L1\u2013L4 pending; no full capture parity or published-release claim. docs/capture-update-work.md.",
+        "capture-update-preview-20261031-045849, desktop SHA256 3b7268d95db8c876c75b2cda1ed8223f003214d8e94286ae2a7fd883fbef8dda:400 tests/fmt/Clippy; seven exact optimized export/viewport fixtures, six old outputs unchanged. Real synthetic Windows OCR and offscreen cursor/countdown/recorder/confirmations qualified. Native L1–L4 pending; no full capture parity or published-release claim. docs/capture-update-work.md.",
         "2026-10-31 user: L1/L2/L3 passed, inferred capture-update-preview-20261031-045849. Native boundary evidence is user verification, not agent desktop inspection. Release pending; new Steps launch/controller refinements tracked in docs/steps-guide-work.md."
       ],
       "updated": "2026-10-31",
@@ -643,7 +643,7 @@
         "2026-10-30 planning refresh: alpha.29 prioritizes the observed arrow stroke defect; this unfinished provisional target is rescheduled by priority.",
         "2026-10-30: original alpha.9 target missed. Delayed capture is active work for the next milestone; no completion claim. Countdown, cancel and control-free capture will be qualified on synthetic content.",
         "Native behavior, editable persistence and exact clipboard output verified for the scoped implementation. docs/alpha29-tools-verification.md",
-        "capture-update-preview-20261031-045849, desktop SHA256 3b7268d95db8c876c75b2cda1ed8223f003214d8e94286ae2a7fd883fbef8dda:400 tests/fmt/Clippy; seven exact optimized export/viewport fixtures, six old outputs unchanged. Real synthetic Windows OCR and offscreen cursor/countdown/recorder/confirmations qualified. Native L1\u2013L4 pending; no full capture parity or published-release claim. docs/capture-update-work.md."
+        "capture-update-preview-20261031-045849, desktop SHA256 3b7268d95db8c876c75b2cda1ed8223f003214d8e94286ae2a7fd883fbef8dda:400 tests/fmt/Clippy; seven exact optimized export/viewport fixtures, six old outputs unchanged. Real synthetic Windows OCR and offscreen cursor/countdown/recorder/confirmations qualified. Native L1–L4 pending; no full capture parity or published-release claim. docs/capture-update-work.md."
       ],
       "updated": "2026-10-31",
       "depends_on": [
@@ -745,7 +745,7 @@
         "2026-10-30 planning refresh: unfinished scope remains pending after alpha.27 Library browsing; provisional target moved to alpha.29.",
         "2026-10-30 planning refresh: alpha.29 prioritizes the observed arrow stroke defect; this unfinished provisional target is rescheduled by priority.",
         "Post-alpha.32/33 candidate: shared Blur/Pixelate kinds and bounded alpha-aware renderer plus native tool/default/type/live-intensity controls implemented.134 regular tests/fmt/Clippy pass: hidden-color isolation, independent pixel-block averages, unchanged outside pixels, stacking, pointer creation, intermediate intensity preview, one Undo and real persistence. Native desktop verification is pending. crates/core/src/obscure.rs; apps/desktop/src/obscure_properties.rs.",
-        "2026-10-30 native development build: intensity8\u219228, one Undo/Redo, switch Type, move, resize, save and fresh reopen pass.256000 saved pixels independently match block averages;256000 clipboard pixels match. Blur preserves222634 outside pixels. docs/effects-verification.md. Not published.",
+        "2026-10-30 native development build: intensity8→28, one Undo/Redo, switch Type, move, resize, save and fresh reopen pass.256000 saved pixels independently match block averages;256000 clipboard pixels match. Blur preserves222634 outside pixels. docs/effects-verification.md. Not published.",
         "2026-10-30 optimized local build reopens the four-object project and matches256000 actual clipboard pixels.134 regular checks pass. Alpha34 release notes are drafted; immutable packaging and exact-package inspection remain pending. docs/effects-verification.md.",
         "2026-10-30: exact alpha.34 package reopens Pixelate intensity 28 and copies all 256000 expected pixels. docs/effects-verification.md; artifacts/native-alpha34/packaged/clipboard.log. Broader reference options remain incomplete.",
         "User priority override2026-10-30: complete Text/Line/Shape/Obfuscate/Step/Select/Simplify and shared interactions before lesser tools. docs/core-tool-priorities.md.",
@@ -815,13 +815,14 @@
       "id": "LIB-002",
       "title": "Library tags and organization",
       "category": "Library",
-      "status": "planned",
+      "status": "in_progress",
       "priority": "later",
       "description": "Persistent tags, tag search/filtering, shared Library/Recent menus and bulk tag editing are implemented under LIB-011/LIB-012. Folder organization, quick-add bottom-bar tags and automatic application/website grouping remain outside the lean beta.",
       "completion": "Verify filtering, tag persistence, and organization across restarts.",
       "evidence": [
         "2026-10-30 planning refresh: alpha.29 prioritizes the observed arrow stroke defect; this unfinished provisional target is rescheduled by priority.",
-        "2026-10-31 LIB-011 implements scoped tags, capture classification and shared right-click actions. Broader organization/recent-tray parity remains incomplete. docs/tray-groups-followup.md."
+        "2026-10-31 LIB-011 implements scoped tags, capture classification and shared right-click actions. Broader organization/recent-tray parity remains incomplete. docs/tray-groups-followup.md.",
+        "Basic tag editing and bulk commands implemented; global rename/delete in LIB-015. Broader organization remains unfinished."
       ],
       "updated": "2026-10-30",
       "depends_on": [
@@ -853,7 +854,7 @@
         "2026-10-30 planning refresh: unfinished scope remains pending after alpha.27 Library browsing; provisional target moved to alpha.29.",
         "2026-10-30 planning refresh: alpha.29 prioritizes the observed arrow stroke defect; this unfinished provisional target is rescheduled by priority.",
         "2026-10-31 source implemented; combined qualification underway. docs/capture-update-work.md.",
-        "capture-update-preview-20261031-045849, desktop SHA256 3b7268d95db8c876c75b2cda1ed8223f003214d8e94286ae2a7fd883fbef8dda:400 tests/fmt/Clippy; seven exact optimized export/viewport fixtures, six old outputs unchanged. Real synthetic Windows OCR and offscreen cursor/countdown/recorder/confirmations qualified. Native L1\u2013L4 pending; no full capture parity or published-release claim. docs/capture-update-work.md.",
+        "capture-update-preview-20261031-045849, desktop SHA256 3b7268d95db8c876c75b2cda1ed8223f003214d8e94286ae2a7fd883fbef8dda:400 tests/fmt/Clippy; seven exact optimized export/viewport fixtures, six old outputs unchanged. Real synthetic Windows OCR and offscreen cursor/countdown/recorder/confirmations qualified. Native L1–L4 pending; no full capture parity or published-release claim. docs/capture-update-work.md.",
         "2026-10-31 user L4 semi pass: recognizer missed/misread some text. Native result flow works partially; accuracy remains unresolved. Exact failed sample not supplied; add small/light/dark synthetic OCR comparisons before claiming improvement.",
         "2026-10-31 bounded batch checkpoint:416 tests/fmt/Clippy,9 optimized fixtures;8 prior exports unchanged. Steps first-click monitor/bottom-left controller/intro/hover/tooltips and nondestructive screenshot crop/zoom/pan/rounded frames implemented. Two local Windows OCR synthetic tests pass after2x small-image input preparation. Native comparison blocked by unresponsive Snagit Save As and Computer Use returning an8px ClipCraft strip after recovery. No desktop release; stable409-test candidate retained. docs/steps-framing-work.md; artifacts/overnight/steps-framing/qualification.json.",
         "2026-10-31 user reports L4 passed on inferred overnight-review-20261031-080551. The earlier native recognition/result-flow failure is resolved for the user sample; general OCR accuracy remains best effort.",
@@ -1193,7 +1194,7 @@
         "2026-10-30 planning refresh: unfinished scope remains pending after alpha.27 Library browsing; provisional target moved to alpha.29.",
         "2026-10-30 planning refresh: alpha.29 prioritizes the observed arrow stroke defect; this unfinished provisional target is rescheduled by priority.",
         "2026-11-01 user authorized bounded review batch. Implementation and automated checks in docs/review-polish-work.md; no native inspection or public binary release claimed.",
-        "Local workflow-review-20261101-154526; SHA256 3b1193a37dff69c8e48158174897cd59447afeefa682e73124cd8f86def97907; 575 tests/fmt/Clippy, 34 optimized image comparisons and Windows imports pass. Native T1\u2013T3 pending. docs/review-polish-work.md. No public binary release."
+        "Local workflow-review-20261101-154526; SHA256 3b1193a37dff69c8e48158174897cd59447afeefa682e73124cd8f86def97907; 575 tests/fmt/Clippy, 34 optimized image comparisons and Windows imports pass. Native T1–T3 pending. docs/review-polish-work.md. No public binary release."
       ],
       "updated": "2026-11-01",
       "released_in": "0.1.0-alpha.7",
@@ -1504,7 +1505,7 @@
         "2026-10-30 planning refresh: unfinished scope remains pending after alpha.27 Library browsing; provisional target moved to alpha.29.",
         "2026-10-30 planning refresh: alpha.29 prioritizes the observed arrow stroke defect; this unfinished provisional target is rescheduled by priority.",
         "2026-10-30: selected next after alpha.34 effects. Reuse audit: DesignCraft geometry/transform helpers do not provide the raster destination-out operation; reuse ClipCraft freehand sampling and shared rendering instead.",
-        "2026-10-30: native click/drag, one Undo/Redo, opacity255\u2192130 and movement/save/clipboard verified. Independent256000-pixel alpha-mask match;138 regular checks pass. docs/eraser-verification.md. Not released yet.",
+        "2026-10-30: native click/drag, one Undo/Redo, opacity255→130 and movement/save/clipboard verified. Independent256000-pixel alpha-mask match;138 regular checks pass. docs/eraser-verification.md. Not released yet.",
         "Scoped EDIT-041 shipped alpha.35 after exact-package checks. Original alpha.8 broader target remains visible; unimplemented presets/toggle are not marked complete."
       ],
       "updated": "2026-10-30",
@@ -2385,14 +2386,14 @@
       "status": "needs_verification",
       "priority": "next",
       "description": "File > Options > Keybinds beside General: press-and-save global shortcuts for saved capture settings and each available image capture mode, persistent enable/disable, Clear/defaults, duplicate/native conflict reporting and transactional registration rollback.",
-      "completion": "Verify conflict detection before applying, cancellation, disabling/persistence/restart, invalid chords, alternate layouts and cleanup without taking another application\u2019s shortcut.",
+      "completion": "Verify conflict detection before applying, cancellation, disabling/persistence/restart, invalid chords, alternate layouts and cleanup without taking another application’s shortcut.",
       "evidence": [
         "Alpha.13 uses a fixed Ctrl+Alt+C registration and a session-only toggle. No startup entry, tray service or persistent settings are installed.",
         "2026-10-30 planning refresh: alpha.22 prioritized verified resize confirmation; this unfinished scope is rescheduled, not marked complete.",
         "2026-10-30 planning refresh: unfinished scope remains pending after alpha.27 Library browsing; provisional target moved to alpha.29.",
         "2026-10-30 planning refresh: alpha.29 prioritizes the observed arrow stroke defect; this unfinished provisional target is rescheduled by priority.",
         "2026-10-31 user explicitly requests press-to-record keybinds for multiple capture modes and Print Screen. Source implemented, synthetic qualification underway. F12 reservation from Microsoft documented in docs/keybinds-work.md; native registration deferred while gaming.",
-        "keybind-guide-preview-20261031-051901, desktop SHA256 aa1e93b9549198252d43decf710d199ee598d98343ec0b5b85ab8908ab6e4375:409 tests/fmt/Clippy PASS;8 optimized fixtures;7 prior exports unchanged plus large-guide export and85/100/120% viewports exact. Synthetic5-image zoom/drag profile324\u2013345ms ->22\u201329ms at85\u2013100%. Native L5/L6 pending; no OS shortcut registration while gaming.",
+        "keybind-guide-preview-20261031-051901, desktop SHA256 aa1e93b9549198252d43decf710d199ee598d98343ec0b5b85ab8908ab6e4375:409 tests/fmt/Clippy PASS;8 optimized fixtures;7 prior exports unchanged plus large-guide export and85/100/120% viewports exact. Synthetic5-image zoom/drag profile324–345ms ->22–29ms at85–100%. Native L5/L6 pending; no OS shortcut registration while gaming.",
         "2026-10-31 user L5 failed: saved Alt+F11 and Ctrl+Alt+C did not capture. Both bindings were found enabled in candidate preferences. Reproduced passive File > Options/retained entry-focus suppression; removed those gates. HWND-independent registration and root viewport restoration added. Isolated Windows register/WM_HOTKEY dispatch test and editor dispatch tests pass; physical-key capture still needs user retest.",
         "Fix prepared in ocr-hotkeys-review-20261031-135301, SHA256 a5694a1c549292aab81cc8a8c14e240a87182433e9e1b8a81e778a4cd24dab1e;471 tests/fmt/Clippy and19 unchanged optimized comparisons. Prior shortcut preferences preserved. docs/ocr-dialog-hotkey-followup.md.",
         "2026-10-31 follow-up: docs/editor-interactions-work.md. User passed L5/L7/L8; L6 partial identifies remaining guide zoom-in/object-drag lag. Retained screenshot textures and translation caches implemented; optimized/headless qualification pending final candidate. Automatic Simplify scoped under EDIT-077; grouping/tool keys under UX-069; image crop/focus under EDIT-078. Broader parent parity is not claimed.",
@@ -2640,7 +2641,7 @@
         "Identified during alpha.24 local-history verification; not implemented.",
         "2026-10-30 planning refresh: alpha.29 prioritizes the observed arrow stroke defect; this unfinished provisional target is rescheduled by priority.",
         "2026-11-01 user authorized bounded review batch. Implementation and automated checks in docs/review-polish-work.md; no native inspection or public binary release claimed.",
-        "Local workflow-review-20261101-154526; SHA256 3b1193a37dff69c8e48158174897cd59447afeefa682e73124cd8f86def97907; 575 tests/fmt/Clippy, 34 optimized image comparisons and Windows imports pass. Native T1\u2013T3 pending. docs/review-polish-work.md. No public binary release."
+        "Local workflow-review-20261101-154526; SHA256 3b1193a37dff69c8e48158174897cd59447afeefa682e73124cd8f86def97907; 575 tests/fmt/Clippy, 34 optimized image comparisons and Windows imports pass. Native T1–T3 pending. docs/review-polish-work.md. No public binary release."
       ],
       "updated": "2026-11-01",
       "depends_on": [
@@ -2977,7 +2978,7 @@
       "category": "Editing",
       "status": "shipped",
       "priority": "done",
-      "description": "Rectangle, rounded rectangle, ellipse and polygon fills with exact RGBA, No Fill and live opacity. Draw polygons, change 3\u201364 sides, move or resize, undo and save editable geometry.",
+      "description": "Rectangle, rounded rectangle, ellipse and polygon fills with exact RGBA, No Fill and live opacity. Draw polygons, change 3–64 sides, move or resize, undo and save editable geometry.",
       "completion": "Native creation, Fill/No Fill, live RGBA preview, one-Undo opacity/sides, hit/resize, saved reopening and exact flattened pixels; preserve old no-fill projects.",
       "evidence": [
         "Native synthetic three-object fixture, live-fill screenshot, one-Undo opacity/sides and 256000 exact clipboard pixels. Core alpha/invalid-input/resize/history/file roundtrip plus canvas gesture regressions. docs/alpha31-shapes-verification.md"
@@ -3118,7 +3119,7 @@
       "completion": "Verify dots, drag paths, native width/opacity, one Undo/Redo, live drawing, Move, alpha-safe save/reopen/clipboard and exact optimized package. Keep presets and hard-edge mode tracked under EDIT-019.",
       "evidence": [
         "docs/eraser-verification.md; artifacts/native-alpha35/checks.json; artifacts/native-alpha35/clipboard.log. Independent256000-pixel alpha match.",
-        "2026-10-30 exact alpha.35 package: six-object reopen, native width24\u219232 and one Undo to clean saved state pass. All256000 actual clipboard pixels match. artifacts/native-alpha35/packaged/clipboard.log; artifacts/releases/0.1.0-alpha.35/published.json."
+        "2026-10-30 exact alpha.35 package: six-object reopen, native width24→32 and one Undo to clean saved state pass. All256000 actual clipboard pixels match. artifacts/native-alpha35/packaged/clipboard.log; artifacts/releases/0.1.0-alpha.35/published.json."
       ],
       "updated": "2026-11-01",
       "depends_on": [
@@ -4062,7 +4063,7 @@
       "category": "Usability",
       "status": "shipped",
       "priority": "next",
-      "description": "User reports severe panning lag at79\u201397%. Replace per-pan CPU rerasterization/upload with image-coordinate cached textures: one bounded full-image texture for modest images, padded viewport tiles for larger zoomed images. Edits/zoom invalidate.",
+      "description": "User reports severe panning lag at79–97%. Replace per-pan CPU rerasterization/upload with image-coordinate cached textures: one bounded full-image texture for modest images, padded viewport tiles for larger zoomed images. Edits/zoom invalidate.",
       "completion": "Verify79/87/97% middle-drag and wheel pan on representative image sizes with annotations/effects; no stalls, missing regions, stale edits or export changes. Large-image tile coverage and memory budgets; native timing remains required.",
       "depends_on": [
         "UX-019",
@@ -4177,7 +4178,7 @@
       "category": "Experience",
       "status": "shipped",
       "priority": "next",
-      "description": "Home is Clipboard plus expanded Tools. Tool Settings begins with Font, 3\u00d73 text Justification and object Alignment, four center/gap Distribution icons, Arrange, Objects, Image and Canvas. Combined positioning is one shared-engine command. Help moves into File; top Image/View/Help removed; bottom Shrink/Actual Size icons and planned Tags. Unimplemented grouping, selected flatten and other commands remain disabled. More appears only when tools overflow and lists only hidden tools; resize retires its popup safely. Reset is also in tool context menus. Bottom Fit to Screen both enlarges and reduces the full image to the available canvas viewport.",
+      "description": "Home is Clipboard plus expanded Tools. Tool Settings begins with Font, 3×3 text Justification and object Alignment, four center/gap Distribution icons, Arrange, Objects, Image and Canvas. Combined positioning is one shared-engine command. Help moves into File; top Image/View/Help removed; bottom Shrink/Actual Size icons and planned Tags. Unimplemented grouping, selected flatten and other commands remain disabled. More appears only when tools overflow and lists only hidden tools; resize retires its popup safely. Reset is also in tool context menus. Bottom Fit to Screen both enlarges and reduces the full image to the available canvas viewport.",
       "completion": "Verify all grid positions on selection and inline text, center/middle and corners, horizontal/vertical centers and gaps, one Undo, remembered state, stacking/resize/flatten, snapping, bottom zoom, Help, narrow-window scrolling and no missing command access.",
       "depends_on": [
         "UX-038",
@@ -4617,7 +4618,7 @@
       "category": "Editing",
       "status": "shipped",
       "priority": "next",
-      "description": "Independent Step outline color and0\u201332px thickness alongside fill and text colors. Live inset stroke keeps marker diameter fixed; saved styles/defaults/shared painter, batch editing, rotation, resize and version6 project persistence.",
+      "description": "Independent Step outline color and0–32px thickness alongside fill and text colors. Live inset stroke keeps marker diameter fixed; saved styles/defaults/shared painter, batch editing, rotation, resize and version6 project persistence.",
       "completion": "Antialiased outline geometry in display/export/preview, size and rotation, alpha, property/preset/default/painter transfer, selection bounds, batch Undo and backward-compatible project persistence.",
       "depends_on": [
         "EDIT-017",
@@ -4971,8 +4972,8 @@
         "Explicit user request and four supplied reference screenshots; docs/capture-controller-work.md. No new native observation or implementation claim.",
         "capture-controller-preview-20261031-041154, SHA256 35934b584622ed7deabf6773fa05a6b2f347eeefc21bf7fdd97c11ec46c95286:377 tests/fmt/Clippy, five unchanged optimized output comparisons. Independent controller, persisted switches, Region/Window/Fullscreen routing, injected result retention/failure tests and three inspected headless layouts. Native L2 remains pending; mixed-DPI/HDR, later modes and presets remain unfinished. docs/capture-controller-work.md.",
         "Steps now enabled in qualified working candidate; native L3 pending. Four headless controller modes inspected. Scrolling/automatic scrolling/Grab Text and presets remain incomplete.",
-        "2026-10-31 compact714\u00d7190 controller, visible field backgrounds, connected blue active rail, bottom Open Editor icon, persistent viewport hide/restore and themed countdown prepared. Native position/focus restoration remains L2.",
-        "capture-update-preview-20261031-045849, desktop SHA256 3b7268d95db8c876c75b2cda1ed8223f003214d8e94286ae2a7fd883fbef8dda:400 tests/fmt/Clippy; seven exact optimized export/viewport fixtures, six old outputs unchanged. Real synthetic Windows OCR and offscreen cursor/countdown/recorder/confirmations qualified. Native L1\u2013L4 pending; no full capture parity or published-release claim. docs/capture-update-work.md.",
+        "2026-10-31 compact714×190 controller, visible field backgrounds, connected blue active rail, bottom Open Editor icon, persistent viewport hide/restore and themed countdown prepared. Native position/focus restoration remains L2.",
+        "capture-update-preview-20261031-045849, desktop SHA256 3b7268d95db8c876c75b2cda1ed8223f003214d8e94286ae2a7fd883fbef8dda:400 tests/fmt/Clippy; seven exact optimized export/viewport fixtures, six old outputs unchanged. Real synthetic Windows OCR and offscreen cursor/countdown/recorder/confirmations qualified. Native L1–L4 pending; no full capture parity or published-release claim. docs/capture-update-work.md.",
         "2026-10-31 user: L1/L2/L3 passed, inferred capture-update-preview-20261031-045849. Native boundary evidence is user verification, not agent desktop inspection. Release pending; new Steps launch/controller refinements tracked in docs/steps-guide-work.md."
       ]
     },
@@ -5004,7 +5005,7 @@
       "completion": "Pass L3 against the exact candidate, preserving recorded steps on error and across reopen. This scoped child does not complete parent CAP-007 or prove Snagit parity.",
       "evidence": [
         "step-capture-preview-20261031-042246; SHA256 26e2eb3635395e87c41d0d488cd9e58525f0f0f4812a4662f2cb052f39d26bab.384 Rust tests and six optimized fixture comparisons pass; native input/capture has not been exercised. docs/capture-controller-work.md.",
-        "capture-update-preview-20261031-045849, desktop SHA256 3b7268d95db8c876c75b2cda1ed8223f003214d8e94286ae2a7fd883fbef8dda:400 tests/fmt/Clippy; seven exact optimized export/viewport fixtures, six old outputs unchanged. Real synthetic Windows OCR and offscreen cursor/countdown/recorder/confirmations qualified. Native L1\u2013L4 pending; no full capture parity or published-release claim. docs/capture-update-work.md.",
+        "capture-update-preview-20261031-045849, desktop SHA256 3b7268d95db8c876c75b2cda1ed8223f003214d8e94286ae2a7fd883fbef8dda:400 tests/fmt/Clippy; seven exact optimized export/viewport fixtures, six old outputs unchanged. Real synthetic Windows OCR and offscreen cursor/countdown/recorder/confirmations qualified. Native L1–L4 pending; no full capture parity or published-release claim. docs/capture-update-work.md.",
         "2026-10-31 user: L1/L2/L3 passed, inferred capture-update-preview-20261031-045849. Native boundary evidence is user verification, not agent desktop inspection. Release pending; new Steps launch/controller refinements tracked in docs/steps-guide-work.md.",
         "2026-10-31 bounded batch checkpoint:416 tests/fmt/Clippy,9 optimized fixtures;8 prior exports unchanged. Steps first-click monitor/bottom-left controller/intro/hover/tooltips and nondestructive screenshot crop/zoom/pan/rounded frames implemented. Two local Windows OCR synthetic tests pass after2x small-image input preparation. Native comparison blocked by unresponsive Snagit Save As and Computer Use returning an8px ClipCraft strip after recovery. No desktop release; stable409-test candidate retained. docs/steps-framing-work.md; artifacts/overnight/steps-framing/qualification.json.",
         "Consolidated overnight-review-20261031-080551, SHA256 55cdf7f7404b9c41c4f675f5f64294cd73198187e48e4b2fc2c324bb37ac4bfa:466 tests,19 exact optimized fixtures,67 prior user passes retained. Unpublished morning review candidate; native Windows boundary remains. No scheduled development beyond the agreed batch.",
@@ -5032,7 +5033,7 @@
       ],
       "evidence": [
         "2026-10-31 source implemented; combined qualification underway. docs/capture-update-work.md.",
-        "capture-update-preview-20261031-045849, desktop SHA256 3b7268d95db8c876c75b2cda1ed8223f003214d8e94286ae2a7fd883fbef8dda:400 tests/fmt/Clippy; seven exact optimized export/viewport fixtures, six old outputs unchanged. Real synthetic Windows OCR and offscreen cursor/countdown/recorder/confirmations qualified. Native L1\u2013L4 pending; no full capture parity or published-release claim. docs/capture-update-work.md.",
+        "capture-update-preview-20261031-045849, desktop SHA256 3b7268d95db8c876c75b2cda1ed8223f003214d8e94286ae2a7fd883fbef8dda:400 tests/fmt/Clippy; seven exact optimized export/viewport fixtures, six old outputs unchanged. Real synthetic Windows OCR and offscreen cursor/countdown/recorder/confirmations qualified. Native L1–L4 pending; no full capture parity or published-release claim. docs/capture-update-work.md.",
         "2026-10-31 user: L1/L2/L3 passed, inferred capture-update-preview-20261031-045849. Native boundary evidence is user verification, not agent desktop inspection. Release pending; new Steps launch/controller refinements tracked in docs/steps-guide-work.md."
       ],
       "updated": "2026-10-31",
@@ -5048,11 +5049,11 @@
       "completion": "Profile optimized1/5-image guides for zoom and image movement; bound work to the viewport, verify original-image/alpha/rotation/export agreement, then native interaction when desktop is available.",
       "evidence": [
         "2026-10-31 user reports smooth panning, severe zoom/image-drag lag; deleting4/5 screenshots improves lag roughly70%. Build attribution uncertain. docs/guide-performance-work.md.",
-        "keybind-guide-preview-20261031-051901, desktop SHA256 aa1e93b9549198252d43decf710d199ee598d98343ec0b5b85ab8908ab6e4375:409 tests/fmt/Clippy PASS;8 optimized fixtures;7 prior exports unchanged plus large-guide export and85/100/120% viewports exact. Synthetic5-image zoom/drag profile324\u2013345ms ->22\u201329ms at85\u2013100%. Native L5/L6 pending; no OS shortcut registration while gaming.",
+        "keybind-guide-preview-20261031-051901, desktop SHA256 aa1e93b9549198252d43decf710d199ee598d98343ec0b5b85ab8908ab6e4375:409 tests/fmt/Clippy PASS;8 optimized fixtures;7 prior exports unchanged plus large-guide export and85/100/120% viewports exact. Synthetic5-image zoom/drag profile324–345ms ->22–29ms at85–100%. Native L5/L6 pending; no OS shortcut registration while gaming.",
         "Consolidated overnight-review-20261031-080551, SHA256 55cdf7f7404b9c41c4f675f5f64294cd73198187e48e4b2fc2c324bb37ac4bfa:466 tests,19 exact optimized fixtures,67 prior user passes retained. Unpublished morning review candidate; native Windows boundary remains. No scheduled development beyond the agreed batch.",
         "2026-10-31 follow-up: docs/editor-interactions-work.md. User passed L5/L7/L8; L6 partial identifies remaining guide zoom-in/object-drag lag. Retained screenshot textures and translation caches implemented; optimized/headless qualification pending final candidate. Automatic Simplify scoped under EDIT-077; grouping/tool keys under UX-069; image crop/focus under EDIT-078. Broader parent parity is not claimed.",
         "2026-10-31T17:16:13.323745+00:00: editor-interactions-review-20261031-171522, SHA256 540c42927c052897cc84b883ed16a812d634307eee01814c5bf826695a4e008b.498 tests/fmt/Clippy and19 unchanged optimized export/viewport comparisons pass;73 user passes preserved. Headless production Options/Objects/Simplify/guide meshes and Simplify before/after output inspected. Native L6/O1/O2 pending; no new public desktop release. docs/editor-interactions-work.md.",
-        "2026-10-31T17:17:16.859743+00:00: Optimized synthetic1/5-screenshot guides: CPU zoom frame preparation22\u201334ms ->0.19\u20130.35ms; movement22\u201338ms ->0.006\u20130.012ms after cache warmup. These timings exclude GPU upload/presentation and native event latency. Screenshots reuse source textures; fractional text/marker translation cache test passes. artifacts/editor-interactions/performance.json.",
+        "2026-10-31T17:17:16.859743+00:00: Optimized synthetic1/5-screenshot guides: CPU zoom frame preparation22–34ms ->0.19–0.35ms; movement22–38ms ->0.006–0.012ms after cache warmup. These timings exclude GPU upload/presentation and native event latency. Screenshots reuse source textures; fractional text/marker translation cache test passes. artifacts/editor-interactions/performance.json.",
         "2026-10-31T18:59:09.313125+00:00: capture-guide-fix-20261031-185742, SHA256 6bfafb0132c84e79c74fcfd921d1a74861f6c0d2ec871d5855a0ce48389be0a6; 522 tests/fmt/Clippy, 19 unchanged plus two new optimized export/viewport comparisons. Pointer tracking at 35/79/97/100/125% zoom and 100/150% DPI; post-edit guide cache/persistence, independent child state, editable capture image and image-file insertion tested. Library headless UI inspected. Native L6/O1/O2/O3 pending; public desktop alpha50 unchanged. docs/guide-library-fix.md.",
         "2026-10-31T19:46:35.146108+00:00: pixel-effects-fix-20261031-194607, SHA256 0c7ed4fdfbe53dbe3b031e6d91bcb54850b37f9c55174f70ee4fef77012ed17a; 527 tests/fmt/Clippy, 21 unchanged plus three new optimized fixture comparisons. Bounded patch equality/cache invalidation, four-edge crop/source pan/Undo and window placement commands tested. Headless Library/property/erased-alpha output inspected. Native L6/P1 pending; 76 current user passes preserved. Public desktop alpha50 unchanged. docs/pixel-effects-fix.md."
       ],
@@ -5695,7 +5696,9 @@
       "updated": "2026-11-01",
       "evidence": [
         "User-authorized bounded follow-up 2026-11-01. docs/review-polish-work.md. No native desktop or OS clipboard use.",
-        "Local workflow-review-20261101-154526; SHA256 3b1193a37dff69c8e48158174897cd59447afeefa682e73124cd8f86def97907; 575 tests/fmt/Clippy, 34 optimized image comparisons and Windows imports pass. Native T1\u2013T3 pending. docs/review-polish-work.md. No public binary release."
+        "Local workflow-review-20261101-154526; SHA256 3b1193a37dff69c8e48158174897cd59447afeefa682e73124cd8f86def97907; 575 tests/fmt/Clippy, 34 optimized image comparisons and Windows imports pass. Native T1–T3 pending. docs/review-polish-work.md. No public binary release.",
+        "T1 failed per user on inferred workflow-review-20261101-154526. Focus-loss edge cropping is not verified fixed. docs/template-followup-work.md.",
+        "template-library-review-20261101-164049; SHA256 89b521f81c08db08517fe52714389b4d2c9f43859f7bf2c15465f03254eff4ef; 584 tests/fmt/Clippy, 36 exact optimized comparisons, production UI/input and imports pass. Unreleased review candidate; native T1/T3 remain. docs/template-followup-work.md."
       ]
     },
     {
@@ -5714,7 +5717,8 @@
       "updated": "2026-11-01",
       "evidence": [
         "User-authorized bounded follow-up 2026-11-01. docs/review-polish-work.md. No native desktop or OS clipboard use.",
-        "Local workflow-review-20261101-154526; SHA256 3b1193a37dff69c8e48158174897cd59447afeefa682e73124cd8f86def97907; 575 tests/fmt/Clippy, 34 optimized image comparisons and Windows imports pass. Native T1\u2013T3 pending. docs/review-polish-work.md. No public binary release."
+        "Local workflow-review-20261101-154526; SHA256 3b1193a37dff69c8e48158174897cd59447afeefa682e73124cd8f86def97907; 575 tests/fmt/Clippy, 34 optimized image comparisons and Windows imports pass. Native T1–T3 pending. docs/review-polish-work.md. No public binary release.",
+        "T2 passed per user on inferred workflow-review-20261101-154526; no new public binary release."
       ]
     },
     {
@@ -5732,7 +5736,7 @@
       "updated": "2026-11-01",
       "evidence": [
         "User-authorized batch; public documentation and supplied template screenshots, original assets and implementation. docs/review-polish-work.md. Native review and release pending.",
-        "Local workflow-review-20261101-154526; SHA256 3b1193a37dff69c8e48158174897cd59447afeefa682e73124cd8f86def97907; 575 tests/fmt/Clippy, 34 optimized image comparisons and Windows imports pass. Native T1\u2013T3 pending. docs/review-polish-work.md. No public binary release."
+        "Local workflow-review-20261101-154526; SHA256 3b1193a37dff69c8e48158174897cd59447afeefa682e73124cd8f86def97907; 575 tests/fmt/Clippy, 34 optimized image comparisons and Windows imports pass. Native T1–T3 pending. docs/review-polish-work.md. No public binary release."
       ]
     },
     {
@@ -5751,7 +5755,7 @@
       "updated": "2026-11-01",
       "evidence": [
         "User-authorized batch; public documentation and supplied template screenshots, original assets and implementation. docs/review-polish-work.md. Native review and release pending.",
-        "Local workflow-review-20261101-154526; SHA256 3b1193a37dff69c8e48158174897cd59447afeefa682e73124cd8f86def97907; 575 tests/fmt/Clippy, 34 optimized image comparisons and Windows imports pass. Native T1\u2013T3 pending. docs/review-polish-work.md. No public binary release."
+        "Local workflow-review-20261101-154526; SHA256 3b1193a37dff69c8e48158174897cd59447afeefa682e73124cd8f86def97907; 575 tests/fmt/Clippy, 34 optimized image comparisons and Windows imports pass. Native T1–T3 pending. docs/review-polish-work.md. No public binary release."
       ]
     },
     {
@@ -5770,7 +5774,7 @@
       "updated": "2026-11-01",
       "evidence": [
         "User-authorized batch; public documentation and supplied template screenshots, original assets and implementation. docs/review-polish-work.md. Native review and release pending.",
-        "Local workflow-review-20261101-154526; SHA256 3b1193a37dff69c8e48158174897cd59447afeefa682e73124cd8f86def97907; 575 tests/fmt/Clippy, 34 optimized image comparisons and Windows imports pass. Native T1\u2013T3 pending. docs/review-polish-work.md. No public binary release."
+        "Local workflow-review-20261101-154526; SHA256 3b1193a37dff69c8e48158174897cd59447afeefa682e73124cd8f86def97907; 575 tests/fmt/Clippy, 34 optimized image comparisons and Windows imports pass. Native T1–T3 pending. docs/review-polish-work.md. No public binary release."
       ]
     },
     {
@@ -5789,7 +5793,63 @@
       "updated": "2026-11-01",
       "evidence": [
         "User supplied capturecontrollericon.svg on 2026-11-01; original source retained. docs/review-polish-work.md. Native menu/Start appearance pending.",
-        "Local workflow-review-20261101-154526; SHA256 3b1193a37dff69c8e48158174897cd59447afeefa682e73124cd8f86def97907; 575 tests/fmt/Clippy, 34 optimized image comparisons and Windows imports pass. Native T1\u2013T3 pending. docs/review-polish-work.md. No public binary release."
+        "Local workflow-review-20261101-154526; SHA256 3b1193a37dff69c8e48158174897cd59447afeefa682e73124cd8f86def97907; 575 tests/fmt/Clippy, 34 optimized image comparisons and Windows imports pass. Native T1–T3 pending. docs/review-polish-work.md. No public binary release.",
+        "T2 passed per user on inferred workflow-review-20261101-154526; no new public binary release."
+      ]
+    },
+    {
+      "id": "CREATE-003",
+      "title": "Reusable local templates",
+      "category": "Creation",
+      "status": "needs_verification",
+      "priority": "next",
+      "description": "Save an independent editable layout locally, optionally replacing photos with empty frames; create new projects from My templates.",
+      "completion": "Verify source independence, saved/reopened layout, image replacement, project format and output.",
+      "depends_on": [
+        "CREATE-002"
+      ],
+      "schedule_status": "unscheduled",
+      "updated": "2026-11-01",
+      "evidence": [
+        "User approved this bounded batch. docs/template-followup-work.md. No native desktop or OS clipboard access.",
+        "template-library-review-20261101-164049; SHA256 89b521f81c08db08517fe52714389b4d2c9f43859f7bf2c15465f03254eff4ef; 584 tests/fmt/Clippy, 36 exact optimized comparisons, production UI/input and imports pass. Unreleased review candidate; native T1/T3 remain. docs/template-followup-work.md."
+      ]
+    },
+    {
+      "id": "LIB-015",
+      "title": "Library-wide tag rename and deletion",
+      "category": "Library",
+      "status": "needs_verification",
+      "priority": "next",
+      "description": "Right-click a tag to rename/merge it or remove it everywhere without deleting images.",
+      "completion": "Verify atomic index writes, case-insensitive merging, validation, project bytes, active filters and autosave metadata.",
+      "depends_on": [
+        "LIB-012"
+      ],
+      "schedule_status": "unscheduled",
+      "updated": "2026-11-01",
+      "evidence": [
+        "User approved this bounded batch. docs/template-followup-work.md. No native desktop or OS clipboard access.",
+        "template-library-review-20261101-164049; SHA256 89b521f81c08db08517fe52714389b4d2c9f43859f7bf2c15465f03254eff4ef; 584 tests/fmt/Clippy, 36 exact optimized comparisons, production UI/input and imports pass. Unreleased review candidate; native T1/T3 remain. docs/template-followup-work.md."
+      ]
+    },
+    {
+      "id": "UX-085",
+      "title": "Focused dialogs and template workflow refinements",
+      "category": "Experience",
+      "status": "needs_verification",
+      "priority": "next",
+      "description": "Focus primary dialog inputs once, align File template cards and Recent search, use painted ordering buttons and centered Choose Image controls.",
+      "completion": "Exercise actual egui focus/input and button paths; inspect layout and verify replacement Undo and export.",
+      "depends_on": [
+        "CREATE-002",
+        "UX-083"
+      ],
+      "schedule_status": "unscheduled",
+      "updated": "2026-11-01",
+      "evidence": [
+        "User approved this bounded batch. docs/template-followup-work.md. No native desktop or OS clipboard access.",
+        "template-library-review-20261101-164049; SHA256 89b521f81c08db08517fe52714389b4d2c9f43859f7bf2c15465f03254eff4ef; 584 tests/fmt/Clippy, 36 exact optimized comparisons, production UI/input and imports pass. Unreleased review candidate; native T1/T3 remain. docs/template-followup-work.md."
       ]
     }
   ]

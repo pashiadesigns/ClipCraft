@@ -51,7 +51,7 @@ pub(super) struct View {
     marquee: Option<(egui::Pos2, std::collections::BTreeSet<String>, bool)>,
     year: Option<u32>,
     kind: Option<MediaKind>,
-    tag: Option<String>,
+    pub(super) tag: Option<String>,
     order: Order,
     zoom: f32,
 }
@@ -270,15 +270,23 @@ impl Editor {
                                     self.history.library.tag = None;
                                 }
                                 for tag in tags {
-                                    if ui
-                                        .selectable_label(
-                                            self.history.library.tag.as_ref() == Some(&tag),
-                                            &tag,
-                                        )
-                                        .clicked()
-                                    {
-                                        self.history.library.tag = Some(tag);
+                                    let response = ui.selectable_label(
+                                        self.history.library.tag.as_ref() == Some(&tag),
+                                        &tag,
+                                    );
+                                    if response.clicked() {
+                                        self.history.library.tag = Some(tag.clone());
                                     }
+                                    response.context_menu(|ui| {
+                                        if ui.button("Rename tag everywhere…").clicked() {
+                                            self.begin_global_tag(&tag, false);
+                                            ui.close();
+                                        }
+                                        if ui.button("Delete tag everywhere…").clicked() {
+                                            self.begin_global_tag(&tag, true);
+                                            ui.close();
+                                        }
+                                    });
                                 }
                             });
                         for label in ["Applications", "Websites"] {

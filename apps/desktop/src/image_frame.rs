@@ -139,6 +139,33 @@ pub(super) fn properties(ui: &mut egui::Ui, a: &mut Annotation) {
 }
 
 impl Editor {
+    fn placeholder_buttons(
+        &self,
+        transform: crate::canvas_view::Transform,
+    ) -> Vec<(u64, egui::Rect)> {
+        self.session
+            .document
+            .annotations
+            .iter()
+            .filter(|a| {
+                a.image.as_ref().is_some_and(|b| b.is_placeholder())
+                    && !self.session.document.object_state(a.id).locked
+                    && !self.session.document.object_state(a.id).hidden
+            })
+            .filter_map(|a| {
+                let (min, max) = a.body_bounds();
+                let rect = egui::Rect::from_two_pos(
+                    transform.screen_point(min),
+                    transform.screen_point(max),
+                );
+                let button = egui::Rect::from_center_size(rect.center(), egui::vec2(110., 28.));
+                (rect.width() >= 110.
+                    && rect.height() >= 28.
+                    && transform.viewport.contains_rect(button))
+                .then_some((a.id, button))
+            })
+            .collect()
+    }
     pub(super) fn image_pan_handle(
         &self,
         transform: crate::canvas_view::Transform,
@@ -148,6 +175,7 @@ impl Editor {
         }
         let a = self.selected_annotation()?;
         if a.kind != Kind::Image
+            || a.image.as_ref()?.is_placeholder()
             || a.image.as_ref()?.is_cursor()
             || a.image.as_ref()?.vector().is_some()
             || self.session.document.object_state(a.id).locked
@@ -169,6 +197,7 @@ impl Editor {
         }
         let a = self.selected_annotation()?;
         if a.kind != Kind::Image
+            || a.image.as_ref()?.is_placeholder()
             || a.image.as_ref()?.is_cursor()
             || a.image.as_ref()?.vector().is_some()
             || self.session.document.object_state(a.id).locked
@@ -213,8 +242,12 @@ impl Editor {
             }
         })
         .is_some_and(|p| {
-            self.image_frame_buttons(transform)
-                .is_some_and(|buttons| buttons.iter().any(|r| r.contains(p)))
+            self.placeholder_buttons(transform)
+                .iter()
+                .any(|(_, r)| r.contains(p))
+                || self
+                    .image_frame_buttons(transform)
+                    .is_some_and(|buttons| buttons.iter().any(|r| r.contains(p)))
         })
     }
     pub(super) fn show_image_frame_buttons(
@@ -238,6 +271,19 @@ impl Editor {
             || ui.input(|i| i.modifiers.alt || i.modifiers.ctrl)
         {
             return;
+        }
+        for (id, rect) in self.placeholder_buttons(transform) {
+            let response = ui.put(
+                rect,
+                egui::Button::new("Choose Image").fill(crate::shell::ACCENT),
+            );
+            if response.clicked() {
+                ui.ctx()
+                    .data_mut(|d| d.insert_temp(egui::Id::unique("replace-frame-image"), id));
+            }
+            #[cfg(test)]
+            ui.ctx()
+                .data_mut(|d| d.insert_temp(egui::Id::unique(("choose-frame-image", id)), rect));
         }
         if let Some(rect) = self.image_pan_handle(transform) {
             let response = ui

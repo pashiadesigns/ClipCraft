@@ -127,11 +127,7 @@ impl Preferences {
             .find(|p| p.selection == selection)
             .cloned()
             .or_else(|| (self.capture.selection == selection).then(|| self.capture.clone()))
-            .unwrap_or_else(|| crate::capture_options::Settings {
-                selection,
-                cursor: selection == crate::capture_options::Selection::Steps,
-                ..Default::default()
-            })
+            .unwrap_or_else(|| crate::capture_options::Settings::for_selection(selection))
     }
 
     pub fn choose(&mut self, choice: Choice) -> Result<()> {
@@ -419,6 +415,28 @@ impl Store {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn new_profiles_copy_images_by_default_but_preserve_explicit_opt_out() {
+        use crate::capture_options::{Selection, Settings};
+        let mut p = super::Preferences::default();
+        for selection in Selection::ALL {
+            let s = p.capture_for(selection);
+            assert_eq!(
+                s.clipboard,
+                !matches!(selection, Selection::Steps | Selection::GrabText)
+            );
+            assert_eq!(s.cursor, selection == Selection::Steps);
+        }
+        p.choose(super::Choice::Capture(Settings {
+            clipboard: false,
+            ..Settings::default()
+        }))
+        .unwrap();
+        let decoded: super::Preferences =
+            serde_json::from_slice(&serde_json::to_vec(&p).unwrap()).unwrap();
+        assert!(!decoded.capture_for(Selection::Region).clipboard);
+        assert!(decoded.capture_for(Selection::Window).clipboard);
+    }
     use super::*;
     #[test]
     fn local_shortcuts_persist_without_changing_capture_or_existing_favorites() {

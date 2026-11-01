@@ -2,6 +2,68 @@
 use super::*;
 pub const HARD_ENTRIES: usize = 1000;
 pub const HARD_BYTES: u64 = 16_000_000_000;
+#[cfg(test)]
+mod global_tag_tests {
+    use super::*;
+    #[test]
+    fn global_tag_rename_merges_case_variants_atomically_and_keeps_projects() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut h = History::open(dir.path()).unwrap();
+        let doc = Document::blank(20, 20).unwrap();
+        let a = h.create(&doc, "One", Origin::Canvas).unwrap();
+        let b = h.create(&doc, "Two", Origin::Canvas).unwrap();
+        let a = h
+            .edit_metadata(&a, "One", &["Draft".into(), "Ready".into()])
+            .unwrap();
+        let b = h
+            .edit_metadata(&b, "Two", &["draft".into(), "Keep".into()])
+            .unwrap();
+        let files: Vec<_> = [&a, &b]
+            .into_iter()
+            .map(|e| {
+                let p = dir
+                    .path()
+                    .join("images")
+                    .join(format!("{}.capture.json", e.storage_id()));
+                (p.clone(), fs::read(p).unwrap())
+            })
+            .collect();
+        let index_before = fs::read(dir.path().join("index.json")).unwrap();
+        assert!(h.replace_tag("Draft", Some("  ")).is_err());
+        assert_eq!(
+            fs::read(dir.path().join("index.json")).unwrap(),
+            index_before
+        );
+        assert_eq!(h.replace_tag("DRAFT", Some("Ready")).unwrap(), 2);
+        assert_eq!(
+            h.entries().iter().find(|e| e.id == a.id).unwrap().tags,
+            vec!["Ready"]
+        );
+        assert_eq!(h.replace_tag("ready", None).unwrap(), 2);
+        let reopened = History::open(dir.path()).unwrap();
+        assert!(
+            reopened
+                .entries()
+                .iter()
+                .find(|e| e.id == a.id)
+                .unwrap()
+                .tags
+                .is_empty()
+        );
+        assert_eq!(
+            reopened
+                .entries()
+                .iter()
+                .find(|e| e.id == b.id)
+                .unwrap()
+                .tags,
+            vec!["Keep"]
+        );
+        for (path, bytes) in files {
+            assert_eq!(fs::read(path).unwrap(), bytes);
+        }
+    }
+}
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Limits {
     pub entries: usize,
@@ -60,6 +122,55 @@ pub fn unique_names(base: &str, count: usize, occupied: &[String]) -> Result<Vec
     Ok(result)
 }
 impl History {
+    /// Rename/merge or remove a tag everywhere in one atomic index transaction.
+    /// Project files, pixels and their revisions are unchanged.
+    pub fn replace_tag(&mut self, old: &str, new: Option<&str>) -> Result<usize> {
+        let old = old.trim();
+        if old.is_empty() {
+            return Err(Error::Invalid("Choose an existing tag.".into()));
+        }
+        let replacement = match new {
+            Some(name) => Some(
+                normalize_tags(&[name.into()])?
+                    .into_iter()
+                    .next()
+                    .ok_or_else(|| Error::Invalid("Enter a tag name.".into()))?,
+            ),
+            None => None,
+        };
+        let _lock = self.management_lock()?;
+        let mut next = index_at(&self.root)?;
+        let mut count = 0;
+        for entry in &mut next.entries {
+            if entry.tags.iter().any(|t| t.eq_ignore_ascii_case(old)) {
+                let tags: Vec<_> = entry
+                    .tags
+                    .iter()
+                    .filter_map(|t| {
+                        if t.eq_ignore_ascii_case(old) {
+                            replacement.clone()
+                        } else {
+                            Some(t.clone())
+                        }
+                    })
+                    .collect();
+                entry.tags = normalize_tags(&tags)?;
+                count += 1;
+            }
+        }
+        if count == 0 {
+            return Err(Error::Invalid(
+                "This tag no longer exists. Refresh the Library.".into(),
+            ));
+        }
+        next.version = 3;
+        atomic_write(
+            &self.root.join("index.json"),
+            &serde_json::to_vec_pretty(&next)?,
+        )?;
+        self.index = next;
+        Ok(count)
+    }
     /// Copies become visible together only after every source and capacity check succeeds.
     pub fn duplicate_many(&mut self, expected: &[Entry]) -> Result<Vec<Entry>> {
         if expected.is_empty() {

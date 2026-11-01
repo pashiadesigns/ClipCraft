@@ -19,6 +19,7 @@ pub(super) struct State {
     copy_pending: bool,
     plain: bool,
     copy_status: Option<String>,
+    focus_pending: bool,
 }
 impl State {
     pub(super) fn busy(&self) -> bool {
@@ -33,6 +34,7 @@ impl State {
         self.copy_pending = copy;
         self.plain = false;
         self.copy_status = None;
+        self.focus_pending = true;
     }
 }
 impl Editor {

@@ -48,6 +48,7 @@ impl State {
                                 egui::ScrollArea::vertical().auto_shrink([false,false]).max_height(page_height).show(ui,|ui| {
                                     let response=ui.add(egui::TextEdit::multiline(&mut result.text).id(egui::Id::unique("ocr-editor")).frame(egui::Frame::NONE)
                                         .desired_width(f32::INFINITY).desired_rows(1).hint_text("No text was found in this image.").layouter(&mut layouter));
+                                    crate::controls::focus_once(&response,&mut self.focus_pending);
                                     if response.changed() {result.spans=snapshot.edited_spans(&result.text);self.copy_status=None;}
                                 });
                             }

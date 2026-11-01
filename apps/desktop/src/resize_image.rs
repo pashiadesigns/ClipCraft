@@ -20,6 +20,7 @@ pub struct ResizeImage {
     height: String,
     units: Units,
     locked: bool,
+    focus_pending: bool,
     advanced: bool,
     confirmation: Option<[u32; 2]>,
 }
@@ -31,6 +32,7 @@ impl ResizeImage {
             height: height.to_string(),
             units: Units::Pixels,
             locked: true,
+            focus_pending: true,
             advanced: false,
             confirmation: None,
         }
@@ -169,7 +171,7 @@ impl Editor {
                 egui::Grid::new("resize_dimensions").show(ui,|ui| {
                     let suffix=if draft.units==Units::Pixels {"px"} else {"%"};
                     let label=ui.label("Width:");
-                    if ui.add(egui::TextEdit::singleline(&mut draft.width).desired_width(86.0).min_size(egui::vec2(86.0,20.0)).align(egui::Align2::RIGHT_CENTER)).labelled_by(label.id).changed() {draft.link(true);}
+                    let input=ui.add(egui::TextEdit::singleline(&mut draft.width).desired_width(86.0).min_size(egui::vec2(86.0,20.0)).align(egui::Align2::RIGHT_CENTER)).labelled_by(label.id);crate::controls::focus_once(&input,&mut draft.focus_pending);if input.changed(){draft.link(true);}
                     ui.label(suffix);
                     ui.end_row();
                     let label=ui.label("Height:");

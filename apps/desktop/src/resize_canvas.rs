@@ -6,6 +6,7 @@ pub struct ResizeCanvas {
     width: String,
     height: String,
     relative: bool,
+    focus_pending: bool,
     placement: Placement,
     checked: Option<([u32; 2], Placement, Result<(), String>)>,
 }
@@ -24,6 +25,8 @@ impl ResizeCanvas {
                 original[1].to_string()
             },
             relative,
+
+            focus_pending: true,
             placement: Placement::Center,
             checked: None,
         }
@@ -106,13 +109,15 @@ impl Editor {
                             [("Width:", &mut draft.width), ("Height:", &mut draft.height)]
                         {
                             let label = ui.label(label);
-                            ui.add(
-                                egui::TextEdit::singleline(value)
-                                    .desired_width(75.0)
-                                    .min_size(egui::vec2(75.0, 20.0))
-                                    .align(egui::Align2::RIGHT_CENTER),
-                            )
-                            .labelled_by(label.id);
+                            let input = ui
+                                .add(
+                                    egui::TextEdit::singleline(value)
+                                        .desired_width(75.0)
+                                        .min_size(egui::vec2(75.0, 20.0))
+                                        .align(egui::Align2::RIGHT_CENTER),
+                                )
+                                .labelled_by(label.id);
+                            crate::controls::focus_once(&input, &mut draft.focus_pending);
                             ui.label("px");
                             ui.end_row();
                         }

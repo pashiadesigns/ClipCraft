@@ -32,6 +32,7 @@ pub(super) struct Dialog {
     name: String,
     tags: String,
     error: String,
+    focus_pending: bool,
 }
 fn details(store: &capture_core::history::History, e: &Entry) -> Vec<(&'static str, String)> {
     let path = store
@@ -245,6 +246,7 @@ impl Editor {
                 name: entry.label.clone(),
                 tags: entry.tags.join(", "),
                 error: String::new(),
+                focus_pending: true,
             });
         }
     }
@@ -355,18 +357,20 @@ impl Editor {
                 );
             } else if dialog.action == Action::Rename {
                 ui.label("Name");
-                ui.add(
+                let input = ui.add(
                     egui::TextEdit::singleline(&mut dialog.name)
                         .desired_width(f32::INFINITY)
                         .char_limit(120),
                 );
+                crate::controls::focus_once(&input, &mut dialog.focus_pending);
             } else {
                 ui.label("Tags (separate with commas)");
-                ui.add(
+                let input = ui.add(
                     egui::TextEdit::singleline(&mut dialog.tags)
                         .desired_width(f32::INFINITY)
                         .char_limit(1200),
                 );
+                crate::controls::focus_once(&input, &mut dialog.focus_pending);
             }
             if !dialog.error.is_empty() {
                 ui.colored_label(egui::Color32::LIGHT_RED, &dialog.error);

@@ -2,7 +2,7 @@
 
 Updated: 2026-11-01
 
-Local workflow review qualified: 575 tests; 27 unchanged and seven new optimized image comparisons. Library import/folder memory, business stamps, six editable templates, controller branding and fixes await native review. Public preview.1 and 49 downloads retained; automation paused.
+Local template/Library review qualified: 584 tests and 36 optimized comparisons. Reusable local templates, global tag management and review fixes implemented. T2 passed; T1 and T3 need native review. Public preview.1 and 49 downloads unchanged; automation paused.
 
 Generated from roadmap.json. Edit that source and run node scripts/build.mjs; do not edit this generated view.
 
@@ -29,7 +29,7 @@ Generated from roadmap.json. Edit that source and run node scripts/build.mjs; do
 | EDIT-007: Interactive crop and off-canvas object editing | Editing | In progress | Later |
 | EDIT-008: Blur and pixelation | Editing | In progress | Next |
 | LIB-001: Local capture history | Library | Shipped | Delivered |
-| LIB-002: Library tags and organization | Library | Planned | Later |
+| LIB-002: Library tags and organization | Library | In progress | Later |
 | OCR-001: Local text extraction | Advanced | Needs verification | Next |
 | VIDEO-001: Screen recording | Advanced | Planned | Later |
 | VIDEO-002: Audio recording | Advanced | Planned | Later |
@@ -232,6 +232,9 @@ Generated from roadmap.json. Edit that source and run node scripts/build.mjs; do
 | CREATE-002: Create Image from Template starter gallery | Creation | Needs verification | Next |
 | UX-083: Compact Library thumbnails and template classification | Library | Needs verification | Next |
 | UX-084: Distinct Capture Controller icon and launch shortcuts | Experience | Needs verification | Next |
+| CREATE-003: Reusable local templates | Creation | Needs verification | Next |
+| LIB-015: Library-wide tag rename and deletion | Library | Needs verification | Next |
+| UX-085: Focused dialogs and template workflow refinements | Experience | Needs verification | Next |
 
 ## Completion checks and evidence
 
@@ -687,7 +690,7 @@ Completion: Verify persistence, thumbnails, reopening, and missing-file handling
 
 ### LIB-002: Library tags and organization
 
-**Planned** · Later · Updated 2026-10-30
+**In progress** · Later · Updated 2026-10-30
 
 Persistent tags, tag search/filtering, shared Library/Recent menus and bulk tag editing are implemented under LIB-011/LIB-012. Folder organization, quick-add bottom-bar tags and automatic application/website grouping remain outside the lean beta.
 
@@ -695,6 +698,7 @@ Completion: Verify filtering, tag persistence, and organization across restarts.
 
 - Evidence: 2026-10-30 planning refresh: alpha.29 prioritizes the observed arrow stroke defect; this unfinished provisional target is rescheduled by priority.
 - Evidence: 2026-10-31 LIB-011 implements scoped tags, capture classification and shared right-click actions. Broader organization/recent-tray parity remains incomplete. docs/tray-groups-followup.md.
+- Evidence: Basic tag editing and bulk commands implemented; global rename/delete in LIB-015. Broader organization remains unfinished.
 - Original target: 0.1.0-alpha.10 — OVERDUE; scope still unfinished
 - Recorded target history: 0.1.0-alpha.10 → 0.1.0-alpha.12 → 0.1.0-alpha.13 → 0.1.0-alpha.14 → 0.1.0-alpha.24 → 0.1.0-alpha.28
 - Release not scheduled; priorities are not version promises.
@@ -3878,6 +3882,8 @@ Completion: Actual popup/input/layout regressions, unchanged output fixtures and
 
 - Evidence: User-authorized bounded follow-up 2026-11-01. docs/review-polish-work.md. No native desktop or OS clipboard use.
 - Evidence: Local workflow-review-20261101-154526; SHA256 3b1193a37dff69c8e48158174897cd59447afeefa682e73124cd8f86def97907; 575 tests/fmt/Clippy, 34 optimized image comparisons and Windows imports pass. Native T1–T3 pending. docs/review-polish-work.md. No public binary release.
+- Evidence: T1 failed per user on inferred workflow-review-20261101-154526. Focus-loss edge cropping is not verified fixed. docs/template-followup-work.md.
+- Evidence: template-library-review-20261101-164049; SHA256 89b521f81c08db08517fe52714389b4d2c9f43859f7bf2c15465f03254eff4ef; 584 tests/fmt/Clippy, 36 exact optimized comparisons, production UI/input and imports pass. Unreleased review candidate; native T1/T3 remain. docs/template-followup-work.md.
 - Release not scheduled; priorities are not version promises.
 - Depends on: UX-075, UX-077, UX-081
 
@@ -3891,6 +3897,7 @@ Completion: Save/reopen profiles, hotkey dispatch/clipboard adapter, controller 
 
 - Evidence: User-authorized bounded follow-up 2026-11-01. docs/review-polish-work.md. No native desktop or OS clipboard use.
 - Evidence: Local workflow-review-20261101-154526; SHA256 3b1193a37dff69c8e48158174897cd59447afeefa682e73124cd8f86def97907; 575 tests/fmt/Clippy, 34 optimized image comparisons and Windows imports pass. Native T1–T3 pending. docs/review-polish-work.md. No public binary release.
+- Evidence: T2 passed per user on inferred workflow-review-20261101-154526; no new public binary release.
 - Release not scheduled; priorities are not version promises.
 - Depends on: CAP-009, CAP-004
 
@@ -3943,5 +3950,45 @@ Completion: Validate all icon sizes and Windows resources, shortcut targets/argu
 
 - Evidence: User supplied capturecontrollericon.svg on 2026-11-01; original source retained. docs/review-polish-work.md. Native menu/Start appearance pending.
 - Evidence: Local workflow-review-20261101-154526; SHA256 3b1193a37dff69c8e48158174897cd59447afeefa682e73124cd8f86def97907; 575 tests/fmt/Clippy, 34 optimized image comparisons and Windows imports pass. Native T1–T3 pending. docs/review-polish-work.md. No public binary release.
+- Evidence: T2 passed per user on inferred workflow-review-20261101-154526; no new public binary release.
 - Release not scheduled; priorities are not version promises.
 - Depends on: CAP-009, UX-065
+
+### CREATE-003: Reusable local templates
+
+**Needs verification** · Next · Updated 2026-11-01
+
+Save an independent editable layout locally, optionally replacing photos with empty frames; create new projects from My templates.
+
+Completion: Verify source independence, saved/reopened layout, image replacement, project format and output.
+
+- Evidence: User approved this bounded batch. docs/template-followup-work.md. No native desktop or OS clipboard access.
+- Evidence: template-library-review-20261101-164049; SHA256 89b521f81c08db08517fe52714389b4d2c9f43859f7bf2c15465f03254eff4ef; 584 tests/fmt/Clippy, 36 exact optimized comparisons, production UI/input and imports pass. Unreleased review candidate; native T1/T3 remain. docs/template-followup-work.md.
+- Release not scheduled; priorities are not version promises.
+- Depends on: CREATE-002
+
+### LIB-015: Library-wide tag rename and deletion
+
+**Needs verification** · Next · Updated 2026-11-01
+
+Right-click a tag to rename/merge it or remove it everywhere without deleting images.
+
+Completion: Verify atomic index writes, case-insensitive merging, validation, project bytes, active filters and autosave metadata.
+
+- Evidence: User approved this bounded batch. docs/template-followup-work.md. No native desktop or OS clipboard access.
+- Evidence: template-library-review-20261101-164049; SHA256 89b521f81c08db08517fe52714389b4d2c9f43859f7bf2c15465f03254eff4ef; 584 tests/fmt/Clippy, 36 exact optimized comparisons, production UI/input and imports pass. Unreleased review candidate; native T1/T3 remain. docs/template-followup-work.md.
+- Release not scheduled; priorities are not version promises.
+- Depends on: LIB-012
+
+### UX-085: Focused dialogs and template workflow refinements
+
+**Needs verification** · Next · Updated 2026-11-01
+
+Focus primary dialog inputs once, align File template cards and Recent search, use painted ordering buttons and centered Choose Image controls.
+
+Completion: Exercise actual egui focus/input and button paths; inspect layout and verify replacement Undo and export.
+
+- Evidence: User approved this bounded batch. docs/template-followup-work.md. No native desktop or OS clipboard access.
+- Evidence: template-library-review-20261101-164049; SHA256 89b521f81c08db08517fe52714389b4d2c9f43859f7bf2c15465f03254eff4ef; 584 tests/fmt/Clippy, 36 exact optimized comparisons, production UI/input and imports pass. Unreleased review candidate; native T1/T3 remain. docs/template-followup-work.md.
+- Release not scheduled; priorities are not version promises.
+- Depends on: CREATE-002, UX-083

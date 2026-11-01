@@ -123,11 +123,16 @@ pub fn fullscreen_bounds(
 }
 impl Default for Settings {
     fn default() -> Self {
+        Self::for_selection(Selection::Region)
+    }
+}
+impl Settings {
+    pub fn for_selection(selection: Selection) -> Self {
         Self {
-            selection: Selection::Region,
+            selection,
             preview: true,
-            clipboard: false,
-            cursor: false,
+            clipboard: !matches!(selection, Selection::Steps | Selection::GrabText),
+            cursor: selection == Selection::Steps,
             delay_seconds: 0,
             fullscreen: Fullscreen::Pointer,
         }

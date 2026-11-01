@@ -13,6 +13,7 @@ struct ColorDraft {
     hex: String,
     palette: egui::ecolor::Hsva,
     advanced: bool,
+    focus_pending: bool,
 }
 
 #[derive(Clone)]
@@ -72,14 +73,17 @@ impl ColorDraft {
             hex: hex(color),
             palette: palette_color(color),
             advanced: false,
+            focus_pending: true,
         }
     }
     fn set_color(&mut self, color: [u8; 4]) {
         let original = self.original;
         let advanced = self.advanced;
+        let focus_pending = self.focus_pending;
         *self = Self::new(color);
         self.original = original;
         self.advanced = advanced;
+        self.focus_pending = focus_pending;
     }
 }
 
@@ -287,14 +291,15 @@ fn advanced(ui: &mut egui::Ui, draft: &mut ColorDraft, opaque: bool) {
 fn hex_input(ui: &mut egui::Ui, draft: &mut ColorDraft, opaque: bool) {
     ui.horizontal(|ui| {
         let label = ui.label("Hex");
-        if ui
+        let input = ui
             .add(
                 egui::TextEdit::singleline(&mut draft.hex)
                     .desired_width(110.0)
                     .char_limit(9),
             )
-            .labelled_by(label.id)
-            .changed()
+            .labelled_by(label.id);
+        crate::controls::focus_once(&input, &mut draft.focus_pending);
+        if input.changed()
             && let Some(parsed) = parse_hex(&draft.hex).filter(|c| !opaque || c[3] == 255)
         {
             draft.color = parsed;

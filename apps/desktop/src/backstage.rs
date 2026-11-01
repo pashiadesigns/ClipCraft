@@ -106,6 +106,7 @@ impl Editor {
                             ui.heading("New"); ui.add_space(14.0);
                             ui.horizontal_wrapped(|ui| {
                                 ui.spacing_mut().item_spacing=egui::vec2(22.0,14.0);
+                                if card(ui,"From template","Create an editable layout",Some([34,48,59,255])).clicked() { self.open_template_picker(vec![]); }
                                 for (label,description,spec) in [
                                     ("Blank image","White canvas",Some([255;4])),
                                     ("Transparent image","Transparent canvas",Some([0;4])),
@@ -125,7 +126,7 @@ impl Editor {
                             ui.menu_button("Capture delay", |ui|self.capture_delay_menu(ui));
                             ui.add_space(24.0);
                             ui.heading("Templates");
-                            if ui.button("Create Image from Template…").clicked() { self.open_template_picker(vec![]); }
+                            self.file_template_cards(ui);
                             if page==Page::Home {ui.add_space(32.0);self.backstage_recent(ui);}
                         }
                         Page::Open => {
@@ -156,27 +157,22 @@ impl Editor {
                         Page::Options => self.show_options(ui),
                         Page::Help => self.file_help(ui),
                     }
-                    ui.add_space(18.0);
-                    ui.label(RichText::new(&self.status).size(12.0).color(Color32::from_gray(180)));
+
                 });
             });
     }
     fn backstage_recent(&mut self, ui: &mut egui::Ui) {
-        ui.horizontal(|ui| {
-            ui.heading("Recent");
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui
-                    .add(
-                        egui::TextEdit::singleline(&mut self.shell.recent_query)
-                            .hint_text("Search for an image")
-                            .desired_width(240.0),
-                    )
-                    .changed()
-                {
-                    self.shell.recent_limit = 10;
-                }
-            });
-        });
+        ui.heading("Recent");
+        if ui
+            .add(
+                egui::TextEdit::singleline(&mut self.shell.recent_query)
+                    .hint_text("Search for an image")
+                    .desired_width(240.),
+            )
+            .changed()
+        {
+            self.shell.recent_limit = 10;
+        }
         ui.add_space(10.0);
         let mut entries = self.history.entries();
         entries.retain(|e| e.matches_query(&self.shell.recent_query));
@@ -299,7 +295,7 @@ fn nav(ui: &mut egui::Ui, label: &str, selected: bool) -> egui::Response {
         label
     })
 }
-fn card(
+pub(super) fn card(
     ui: &mut egui::Ui,
     label: &str,
     description: &str,
@@ -328,12 +324,14 @@ fn card(
             Color32::from_rgba_unmultiplied(rgba[0], rgba[1], rgba[2], rgba[3]),
         );
     }
-    if matches!(label, "Capture" | "From clipboard") {
+    if matches!(label, "Capture" | "From clipboard" | "From template") {
         crate::ribbon::draw_icon(
             ui.painter(),
             preview.center(),
             if label == "Capture" {
                 "Capture"
+            } else if label == "From template" {
+                "Library"
             } else {
                 "Paste"
             },
@@ -380,6 +378,54 @@ fn card(
 mod tests {
     use super::*;
     use crate::property_layout::tests::{PaintedOutput, dump_meshes};
+    #[test]
+    fn file_template_cards_align_with_new_options_and_recent_search_stays_under_heading() {
+        let ctx = egui::Context::default();
+        crate::shell::configure(&ctx);
+        ctx.style_mut_of(egui::Theme::Dark, |s| s.animation_time = 0.);
+        let mut e = crate::canvas::tests::editor(&ctx);
+        let dir = tempfile::tempdir().unwrap();
+        e.history = crate::history::HistoryPanel::isolated(dir.path());
+        e.open_file_workspace();
+        e.status = "This status must not appear in File".into();
+        let mut first = frame(&ctx, &mut e, 1280., vec![]);
+        let out = frame(&ctx, &mut e, 1280., vec![]);
+        let from = text_rect(&out, "From template");
+        let blank = text_rect(&out, "Blank image");
+        assert!(from.left() < blank.left());
+        assert!((from.center().y - blank.center().y).abs() < 1.);
+        let first_template = text_rect(&out, capture_core::templates::ALL[0].label);
+        assert!((from.center().x - first_template.center().x).abs() < 1.);
+        assert!(
+            crate::color_widgets::tests::text_rect(
+                &out.shapes,
+                capture_core::templates::ALL[5].label
+            )
+            .is_none()
+        );
+        let more = text_rect(&out, "Show more templates");
+        let recent = text_rect(&out, "Recent");
+        let search = text_rect(&out, "Search for an image");
+        assert!(search.top() > recent.bottom());
+        // Eight pixels are the shared filled-input padding.
+        assert!((search.left() - recent.left()).abs() <= 8.1);
+        assert!(crate::color_widgets::tests::text_rect(&out.shapes, &e.status).is_none());
+        first.0.textures_delta.append(out.0.textures_delta.clone());
+        if let Ok(dir) = std::env::var("CLIPCRAFT_HEADLESS_FILE_DIR") {
+            dump_meshes(&ctx, &dir, "home-templates", first, out);
+        }
+        click(&ctx, &mut e, more);
+        let out = frame(&ctx, &mut e, 1280., vec![]);
+        assert!(
+            crate::color_widgets::tests::text_rect(
+                &out.shapes,
+                capture_core::templates::ALL[5].label
+            )
+            .is_some()
+        );
+        click(&ctx, &mut e, from);
+        assert!(e.template_picker.is_some());
+    }
     #[test]
     fn file_recent_shows_ten_small_thumbnails_and_expands_in_batches() {
         let root = tempfile::tempdir().unwrap();

@@ -1,4 +1,12 @@
 //! Original window chrome. Document close requests still go through Editor.
+#[cfg(windows)]
+mod windows;
+pub fn install_native(cc: &eframe::CreationContext<'_>) {
+    #[cfg(windows)]
+    windows::install(crate::hotkey::owner(cc));
+    #[cfg(not(windows))]
+    let _ = cc;
+}
 use crate::egui::{
     self, Color32, CursorIcon, Pos2, Rect, ResizeDirection, Sense, Stroke, ViewportCommand,
 };

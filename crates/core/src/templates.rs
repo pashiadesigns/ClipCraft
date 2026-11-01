@@ -1,4 +1,5 @@
 //! Original editable guide layouts; all images retain their complete source.
+pub mod library;
 use crate::{
     Annotation, Document, Error, Kind, Result,
     bitmap::Bitmap,
@@ -105,9 +106,9 @@ pub fn placeholder() -> Result<Arc<Bitmap>> {
             [232, 238, 241, 255]
         })
     });
-    Ok(Arc::new(Bitmap::new(Arc::new(
-        crate::RasterImage::from_image(&image)?,
-    ))?))
+    Ok(Arc::new(
+        Bitmap::new(Arc::new(crate::RasterImage::from_image(&image)?))?.into_placeholder(),
+    ))
 }
 /// Reusable for creation and replacing an existing frame; crop stays nondestructive.
 pub fn image_in_frame(
@@ -386,7 +387,7 @@ mod tests {
                     scale,
                 )
                 .unwrap();
-                assert_eq!(d.version, 24);
+                assert_eq!(d.version, if 1 < t.slots { 25 } else { 24 });
                 assert_eq!(
                     d.annotations
                         .iter()

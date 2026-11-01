@@ -10,6 +10,7 @@ pub struct NewImage {
     width: String,
     height: String,
     color: [u8; 4],
+    focus_pending: bool,
 }
 impl Default for NewImage {
     fn default() -> Self {
@@ -17,6 +18,7 @@ impl Default for NewImage {
             width: "300".into(),
             height: "200".into(),
             color: [255; 4],
+            focus_pending: true,
         }
     }
 }
@@ -73,8 +75,9 @@ impl Editor {
                 .spacing([6.0, 8.0])
                 .show(ui, |ui| {
                     let width_label = ui.label("Width:");
-                    ui.add(egui::TextEdit::singleline(&mut draft.width).desired_width(48.0).min_size(egui::vec2(48.0,20.0)).align(egui::Align2::RIGHT_CENTER))
+                    let input = ui.add(egui::TextEdit::singleline(&mut draft.width).desired_width(48.0).min_size(egui::vec2(48.0,20.0)).align(egui::Align2::RIGHT_CENTER))
                         .labelled_by(width_label.id);
+                    crate::controls::focus_once(&input, &mut draft.focus_pending);
                     ui.label("px");
                     ui.end_row();
                     let height_label = ui.label("Height:");

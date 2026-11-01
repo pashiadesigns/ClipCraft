@@ -1,4 +1,65 @@
 use super::*;
+#[test]
+fn tag_and_rename_dialogs_focus_once_for_immediate_typing_and_preserve_tab_navigation() {
+    let root = tempfile::tempdir().unwrap();
+    let ctx = egui::Context::default();
+    crate::shell::configure(&ctx);
+    let mut e = crate::canvas::tests::editor(&ctx);
+    e.history = HistoryPanel::isolated(root.path());
+    let entry = e
+        .history
+        .store
+        .as_mut()
+        .unwrap()
+        .create(
+            &Document::blank(40, 30).unwrap(),
+            "Example",
+            Origin::Capture,
+        )
+        .unwrap();
+    let frame = |e: &mut Editor, events| {
+        crate::property_layout::tests::PaintedOutput(ctx.run_ui(
+            egui::RawInput {
+                focused: true,
+                events,
+                ..Default::default()
+            },
+            |ui| e.show_history_dialog(ui.ctx()),
+        ))
+    };
+    for action in [Action::Tags, Action::Rename] {
+        e.history_action(&entry, action, &ctx);
+        frame(&mut e, vec![]);
+        frame(&mut e, vec![]);
+        let focused = ctx
+            .memory(|m| m.focused())
+            .expect("primary text field is focused");
+        frame(&mut e, vec![egui::Event::Text("Typed".into())]);
+        let d = e.history.dialog.as_ref().unwrap();
+        assert!(
+            if action == Action::Tags {
+                &d.tags
+            } else {
+                &d.name
+            }
+            .contains("Typed")
+        );
+        let other = egui::Id::unique("focus-elsewhere");
+        ctx.memory_mut(|m| {
+            m.surrender_focus(focused);
+            m.request_focus(other);
+        });
+        frame(&mut e, vec![]);
+        assert_ne!(ctx.memory(|m| m.focused()), Some(focused));
+        e.history.dialog = None;
+    }
+    e.begin_library_management(super::super::manage::Action::AddTags, vec![entry]);
+    frame(&mut e, vec![]);
+    frame(&mut e, vec![egui::Event::Text("Business".into())]);
+    // The bulk modal is separately covered by its visible typed text.
+    let out = frame(&mut e, vec![]);
+    assert!(crate::color_widgets::tests::text_rect(&out.shapes, "Business").is_some());
+}
 use crate::property_layout::tests::{PaintedOutput, dump_meshes};
 use capture_core::{Document, Kind};
 

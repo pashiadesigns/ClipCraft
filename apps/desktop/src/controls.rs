@@ -1,6 +1,12 @@
 //! Shared editable controls. Keep slider interactions native to egui, including
 //! keyboard stepping, accessible values, typed input, and drag transactions.
 use crate::egui;
+/// Focus only when a dialog opens; subsequent frames must preserve Tab/click navigation.
+pub(super) fn focus_once(response: &egui::Response, pending: &mut bool) {
+    if std::mem::take(pending) {
+        response.request_focus();
+    }
+}
 use egui::{
     class::HasClasses as _,
     theme::{DefaultStyle, StyleProvider},

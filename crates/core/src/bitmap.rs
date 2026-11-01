@@ -9,6 +9,8 @@ use std::sync::{Arc, OnceLock};
 pub struct Bitmap {
     raster: Arc<RasterImage>,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    placeholder: bool,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     stamp: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     stamp_name: Option<String>,
@@ -32,6 +34,7 @@ impl PartialEq for Bitmap {
     fn eq(&self, other: &Self) -> bool {
         (Arc::ptr_eq(&self.raster, &other.raster) || self.raster == other.raster)
             && self.stamp == other.stamp
+            && self.placeholder == other.placeholder
             && self.stamp_name == other.stamp_name
             && self.vector == other.vector
             && self.cursor_invert == other.cursor_invert
@@ -41,6 +44,13 @@ impl PartialEq for Bitmap {
 }
 
 impl Bitmap {
+    pub fn is_placeholder(&self) -> bool {
+        self.placeholder
+    }
+    pub(crate) fn into_placeholder(mut self) -> Self {
+        self.placeholder = true;
+        self
+    }
     pub fn vector(&self) -> Option<&crate::stamps::vector::VectorStamp> {
         self.vector.as_deref()
     }
@@ -101,6 +111,9 @@ impl Bitmap {
         self.view.is_some()
     }
     pub(crate) fn validate_view(&self) -> Result<()> {
+        if self.placeholder && (self.stamp || self.is_cursor()) {
+            return Err(Error::Invalid("Invalid image placeholder".into()));
+        }
         if self.stamp_name.as_ref().is_some_and(|n| {
             !self.stamp || n.chars().count() > 120 || n.chars().any(char::is_control)
         }) {
@@ -148,6 +161,7 @@ impl Bitmap {
     pub fn new(raster: Arc<RasterImage>) -> Result<Self> {
         let value = Self {
             raster,
+            placeholder: false,
             stamp: false,
             stamp_name: None,
             vector: None,
