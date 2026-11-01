@@ -2,7 +2,7 @@
 
 Updated: 2026-11-01
 
-Local template/Library review qualified: 584 tests and 36 optimized comparisons. Reusable local templates, global tag management and review fixes implemented. T2 passed; T1 and T3 need native review. Public preview.1 and 49 downloads unchanged; automation paused.
+Local Library/template/vector-PDF batch qualified: 594 Rust tests, 42 optimized comparisons and six PDF fixtures. T3 passed; only T1 remains native. Template management and independent previous-version recovery added. Public preview.1/49 downloads unchanged; automation paused.
 
 Generated from roadmap.json. Edit that source and run node scripts/build.mjs; do not edit this generated view.
 
@@ -235,6 +235,10 @@ Generated from roadmap.json. Edit that source and run node scripts/build.mjs; do
 | CREATE-003: Reusable local templates | Creation | Needs verification | Next |
 | LIB-015: Library-wide tag rename and deletion | Library | Needs verification | Next |
 | UX-085: Focused dialogs and template workflow refinements | Experience | Needs verification | Next |
+| CREATE-004: Manage saved templates | Creation | Needs verification | Next |
+| LIB-016: Integrity checks and previous-version recovery | Library | Needs verification | Next |
+| EDIT-086: Image-frame replacement context menu | Editing | Needs verification | Next |
+| FILE-012: Vector-preserving PDF export | Files | Needs verification | Next |
 
 ## Completion checks and evidence
 
@@ -1735,6 +1739,7 @@ Completion: Verify explicit deletion touches only selected owned snapshots, sett
 - Evidence: Reference Ctrl+N/Create auto-retains a named .snagx without explicit Save. ClipCraft checkpoint snapshots are independent copies; per-edit/session recovery remains separate. docs/recent-tray-reference-observations.md.
 - Evidence: 2026-10-30 planning refresh: alpha.29 prioritizes the observed arrow stroke defect; this unfinished provisional target is rescheduled by priority.
 - Evidence: User priority override2026-10-30: complete Text/Line/Shape/Obfuscate/Step/Select/Simplify and shared interactions before lesser tools. docs/core-tool-priorities.md.
+- Evidence: 2026-11-01 scoped LIB-016 adds General capacity, integrity scan and previous-version copies. Broader snapshot-disable/preferences scope remains planned.
 - Original target: 0.1.0-alpha.28 — OVERDUE; scope still unfinished
 - Recorded target history: 0.1.0-alpha.28
 - Release not scheduled; priorities are not version promises.
@@ -3884,6 +3889,7 @@ Completion: Actual popup/input/layout regressions, unchanged output fixtures and
 - Evidence: Local workflow-review-20261101-154526; SHA256 3b1193a37dff69c8e48158174897cd59447afeefa682e73124cd8f86def97907; 575 tests/fmt/Clippy, 34 optimized image comparisons and Windows imports pass. Native T1–T3 pending. docs/review-polish-work.md. No public binary release.
 - Evidence: T1 failed per user on inferred workflow-review-20261101-154526. Focus-loss edge cropping is not verified fixed. docs/template-followup-work.md.
 - Evidence: template-library-review-20261101-164049; SHA256 89b521f81c08db08517fe52714389b4d2c9f43859f7bf2c15465f03254eff4ef; 584 tests/fmt/Clippy, 36 exact optimized comparisons, production UI/input and imports pass. Unreleased review candidate; native T1/T3 remain. docs/template-followup-work.md.
+- Evidence: recovery-pdf-review-20261101-182023; SHA256 9f642d24c0e7bd025606092ef02effd1c762638e79358f74320548808882fe1b; 594 Rust tests/fmt/Clippy, 42 optimized export/viewport comparisons (36 unchanged), six PDF fixtures, production UI/input and imports pass. Local review only; native T1 unconfirmed. docs/recovery-pdf-work.md.
 - Release not scheduled; priorities are not version promises.
 - Depends on: UX-075, UX-077, UX-081
 
@@ -3964,6 +3970,7 @@ Completion: Verify source independence, saved/reopened layout, image replacement
 
 - Evidence: User approved this bounded batch. docs/template-followup-work.md. No native desktop or OS clipboard access.
 - Evidence: template-library-review-20261101-164049; SHA256 89b521f81c08db08517fe52714389b4d2c9f43859f7bf2c15465f03254eff4ef; 584 tests/fmt/Clippy, 36 exact optimized comparisons, production UI/input and imports pass. Unreleased review candidate; native T1/T3 remain. docs/template-followup-work.md.
+- Evidence: 2026-11-01 user explicitly passed saving current layout as template and T3; public binary release remains pending.
 - Release not scheduled; priorities are not version promises.
 - Depends on: CREATE-002
 
@@ -3990,5 +3997,58 @@ Completion: Exercise actual egui focus/input and button paths; inspect layout an
 
 - Evidence: User approved this bounded batch. docs/template-followup-work.md. No native desktop or OS clipboard access.
 - Evidence: template-library-review-20261101-164049; SHA256 89b521f81c08db08517fe52714389b4d2c9f43859f7bf2c15465f03254eff4ef; 584 tests/fmt/Clippy, 36 exact optimized comparisons, production UI/input and imports pass. Unreleased review candidate; native T1/T3 remain. docs/template-followup-work.md.
+- Evidence: recovery-pdf-review-20261101-182023; SHA256 9f642d24c0e7bd025606092ef02effd1c762638e79358f74320548808882fe1b; 594 Rust tests/fmt/Clippy, 42 optimized export/viewport comparisons (36 unchanged), six PDF fixtures, production UI/input and imports pass. Local review only; native T1 unconfirmed. docs/recovery-pdf-work.md.
 - Release not scheduled; priorities are not version promises.
 - Depends on: CREATE-002, UX-083
+
+### CREATE-004: Manage saved templates
+
+**Needs verification** · Next · Updated 2026-11-01
+
+Rename, duplicate and delete local templates; six direct File cards.
+
+Completion: Verify persistence, source independence, direct creation and deletion confirmation.
+
+- Evidence: User-approved bounded batch. docs/recovery-pdf-work.md.
+- Evidence: recovery-pdf-review-20261101-182023; SHA256 9f642d24c0e7bd025606092ef02effd1c762638e79358f74320548808882fe1b; 594 Rust tests/fmt/Clippy, 42 optimized export/viewport comparisons (36 unchanged), six PDF fixtures, production UI/input and imports pass. Local review only; native T1 unconfirmed. docs/recovery-pdf-work.md.
+- Release not scheduled; priorities are not version promises.
+- Depends on: CREATE-003
+
+### LIB-016: Integrity checks and previous-version recovery
+
+**Needs verification** · Next · Updated 2026-11-01
+
+Read-only project/thumbnail scan; bounded previous revisions restored as independent copies; capacity in General.
+
+Completion: Validate corrupt/missing entries, revision retention, safe recovery, stale input and deletion scope.
+
+- Evidence: User-approved bounded batch. docs/recovery-pdf-work.md.
+- Evidence: recovery-pdf-review-20261101-182023; SHA256 9f642d24c0e7bd025606092ef02effd1c762638e79358f74320548808882fe1b; 594 Rust tests/fmt/Clippy, 42 optimized export/viewport comparisons (36 unchanged), six PDF fixtures, production UI/input and imports pass. Local review only; native T1 unconfirmed. docs/recovery-pdf-work.md.
+- Release not scheduled; priorities are not version promises.
+- Depends on: LIB-012
+
+### EDIT-086: Image-frame replacement context menu
+
+**Needs verification** · Next · Updated 2026-11-01
+
+Replace from File, Clipboard or Library; Clear Image retains an empty frame; crop, reset, copy and delete.
+
+Completion: Check geometry, grouping, styling, one Undo and save/reopen; clipboard through injected test adapter.
+
+- Evidence: User-approved bounded batch. docs/recovery-pdf-work.md.
+- Evidence: recovery-pdf-review-20261101-182023; SHA256 9f642d24c0e7bd025606092ef02effd1c762638e79358f74320548808882fe1b; 594 Rust tests/fmt/Clippy, 42 optimized export/viewport comparisons (36 unchanged), six PDF fixtures, production UI/input and imports pass. Local review only; native T1 unconfirmed. docs/recovery-pdf-work.md.
+- Release not scheduled; priorities are not version promises.
+- Depends on: CREATE-002
+
+### FILE-012: Vector-preserving PDF export
+
+**Needs verification** · Next · Updated 2026-11-01
+
+Shared paths, outlined glyphs and vector stamps in PDF; bounded raster screenshots/effects with sanitization beneath pixel replacements.
+
+Completion: Inspect PDF structure, redaction safety, rendered fidelity, pagination and source immutability across shared export routes.
+
+- Evidence: User-approved bounded batch. docs/recovery-pdf-work.md.
+- Evidence: recovery-pdf-review-20261101-182023; SHA256 9f642d24c0e7bd025606092ef02effd1c762638e79358f74320548808882fe1b; 594 Rust tests/fmt/Clippy, 42 optimized export/viewport comparisons (36 unchanged), six PDF fixtures, production UI/input and imports pass. Local review only; native T1 unconfirmed. docs/recovery-pdf-work.md.
+- Release not scheduled; priorities are not version promises.
+- Depends on: FILE-006, FILE-008
