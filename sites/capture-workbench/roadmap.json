@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "updated": "2026-11-01",
-  "scope": "User approved release of the reviewed build after thumbnail image replacement, Blank guide sections and compact Library toolbar. T1 remains a known defect, accepted for release and explicitly deferred. Preview.2 qualification/publication underway; automation remains paused.",
+  "scope": "Approved portable preview.2 published on GitHub: current editor/capture refinements, templates, vector PDF, Library operations/recovery, thumbnail replacement and Blank sections. All release review gates closed; T1 remains a known defect deferred under UX-086. Broader engineering/reference work remains separately tracked; automation paused.",
   "features": [
     {
       "id": "UX-002",
@@ -1182,8 +1182,8 @@
       "id": "FILE-005",
       "title": "Remember image and export folders",
       "category": "Files",
-      "status": "needs_verification",
-      "priority": "next",
+      "status": "shipped",
+      "priority": "done",
       "description": "Separate Open, Project Save and Export folders persist across restarts, with a safe fallback when a remembered folder no longer exists.",
       "completion": "Verify preferences migration/reopen and real native dialogs after restarting.",
       "evidence": [
@@ -1194,10 +1194,12 @@
         "2026-10-30 planning refresh: unfinished scope remains pending after alpha.27 Library browsing; provisional target moved to alpha.29.",
         "2026-10-30 planning refresh: alpha.29 prioritizes the observed arrow stroke defect; this unfinished provisional target is rescheduled by priority.",
         "2026-11-01 user authorized bounded review batch. Implementation and automated checks in docs/review-polish-work.md; no native inspection or public binary release claimed.",
-        "Local workflow-review-20261101-154526; SHA256 3b1193a37dff69c8e48158174897cd59447afeefa682e73124cd8f86def97907; 575 tests/fmt/Clippy, 34 optimized image comparisons and Windows imports pass. Native T1–T3 pending. docs/review-polish-work.md. No public binary release."
+        "Local workflow-review-20261101-154526; SHA256 3b1193a37dff69c8e48158174897cd59447afeefa682e73124cd8f86def97907; 575 tests/fmt/Clippy, 34 optimized image comparisons and Windows imports pass. Native T1–T3 pending. docs/review-polish-work.md. No public binary release.",
+        "Original missed target 0.1.0-alpha.5 retained in planning history; this scoped implementation now released in 0.1.0-preview.2.",
+        "Released https://github.com/pashiadesigns/ClipCraft/releases/tag/v0.1.0-preview.2 from c25acbb2093a569c8da0035bd96d0048090bcbda. 596 Rust tests/fmt/Clippy, 13 script checks, 43 exact optimized comparisons (42 unchanged), six PDF fixtures and production UI/input checks; user release acceptance with T1 explicitly deferred. Hosted ZIP SHA256 4a53c410e06edaa0d42955f6cbf3ceb635e9513b837db2eeef010a7528dd7dd1."
       ],
       "updated": "2026-11-01",
-      "released_in": "0.1.0-alpha.7",
+      "released_in": "0.1.0-preview.2",
       "original_target_version": "0.1.0-alpha.5",
       "original_target_commit": "a3edd56e49aac63622bdf6abaca8aacc3f73488b",
       "target_history": [
@@ -1213,9 +1215,7 @@
         "0.1.0-alpha.22",
         "0.1.0-alpha.25",
         "0.1.0-alpha.29"
-      ],
-      "missed_target_version": "0.1.0-alpha.5",
-      "schedule_status": "unscheduled"
+      ]
     },
     {
       "id": "REF-001",
@@ -1922,8 +1922,8 @@
       "id": "FILE-006",
       "title": "Additional export formats and batch export",
       "category": "Files",
-      "status": "needs_verification",
-      "priority": "next",
+      "status": "shipped",
+      "priority": "done",
       "description": "Choose supported export formats and export several captures in one local workflow.",
       "completion": "Inspect format options and verify output dimensions, alpha conversion, filenames, and partial failures.",
       "evidence": [
@@ -1934,9 +1934,11 @@
         "2026-10-30 planning refresh: alpha.29 prioritizes the observed arrow stroke defect; this unfinished provisional target is rescheduled by priority.",
         "2026-10-31 lean beta batch approved. PNG/JPEG/PDF and print preview, local installed fonts, image stamp import/search/place, Library bulk tags/export/delete and adjustable non-evicting storage implemented; qualification underway. docs/lean-beta-work.md. No native or published completion claimed.",
         "Shared engine and headless production checks pass for the lean scope. Native file-picker/printer review and consolidated candidate qualification remain. docs/lean-beta-work.md.",
-        "LEAN BETA REVIEW READY 2026-10-31T20:15:09.037768+00:00: lean-beta-review-20261031-201403; SHA256 4c4fb4b6524ae307941d7cce05d276fc078cf33fb7668362ccded019690a85b2. 538 Rust tests/fmt/Clippy,24 unchanged plus one installed-font optimized export/viewport comparison, and four PDF/JPEG output fixtures pass. PNG/JPEG/PDF/page preview and Windows print path, installed font families, import/search/place image stamps, Library bulk tags/export/delete and non-evicting storage controls implemented. Headless production panels inspected.76 user passes/history preserved; L6/P1/Q1/Q2 native review pending. Public desktop alpha50 unchanged; automation PAUSED. docs/lean-beta-work.md."
+        "LEAN BETA REVIEW READY 2026-10-31T20:15:09.037768+00:00: lean-beta-review-20261031-201403; SHA256 4c4fb4b6524ae307941d7cce05d276fc078cf33fb7668362ccded019690a85b2. 538 Rust tests/fmt/Clippy,24 unchanged plus one installed-font optimized export/viewport comparison, and four PDF/JPEG output fixtures pass. PNG/JPEG/PDF/page preview and Windows print path, installed font families, import/search/place image stamps, Library bulk tags/export/delete and non-evicting storage controls implemented. Headless production panels inspected.76 user passes/history preserved; L6/P1/Q1/Q2 native review pending. Public desktop alpha50 unchanged; automation PAUSED. docs/lean-beta-work.md.",
+        "Original missed target 0.1.0-alpha.12 retained in planning history; this scoped implementation now released in 0.1.0-preview.2.",
+        "Released https://github.com/pashiadesigns/ClipCraft/releases/tag/v0.1.0-preview.2 from c25acbb2093a569c8da0035bd96d0048090bcbda. 596 Rust tests/fmt/Clippy, 13 script checks, 43 exact optimized comparisons (42 unchanged), six PDF fixtures and production UI/input checks; user release acceptance with T1 explicitly deferred. Hosted ZIP SHA256 4a53c410e06edaa0d42955f6cbf3ceb635e9513b837db2eeef010a7528dd7dd1."
       ],
-      "updated": "2026-10-31",
+      "updated": "2026-11-01",
       "depends_on": [
         "FILE-001",
         "LIB-001"
@@ -1951,8 +1953,7 @@
         "0.1.0-alpha.27",
         "0.1.0-alpha.29"
       ],
-      "missed_target_version": "0.1.0-alpha.12",
-      "schedule_status": "unscheduled"
+      "released_in": "0.1.0-preview.2"
     },
     {
       "id": "FILE-007",
@@ -2634,15 +2635,17 @@
       "id": "LIB-004",
       "title": "Bulk import to Library",
       "category": "Library",
-      "status": "needs_verification",
-      "priority": "next",
+      "status": "shipped",
+      "priority": "done",
       "description": "Background multi-image import with progress, cancellation between files, per-file errors and retained successful items. Current canvas and source files remain intact.",
       "completion": "Verify mixed successes/failures, capacity limits, cancellation, active-canvas preservation and native multi-file picker.",
       "evidence": [
         "Identified during alpha.24 local-history verification; not implemented.",
         "2026-10-30 planning refresh: alpha.29 prioritizes the observed arrow stroke defect; this unfinished provisional target is rescheduled by priority.",
         "2026-11-01 user authorized bounded review batch. Implementation and automated checks in docs/review-polish-work.md; no native inspection or public binary release claimed.",
-        "Local workflow-review-20261101-154526; SHA256 3b1193a37dff69c8e48158174897cd59447afeefa682e73124cd8f86def97907; 575 tests/fmt/Clippy, 34 optimized image comparisons and Windows imports pass. Native T1–T3 pending. docs/review-polish-work.md. No public binary release."
+        "Local workflow-review-20261101-154526; SHA256 3b1193a37dff69c8e48158174897cd59447afeefa682e73124cd8f86def97907; 575 tests/fmt/Clippy, 34 optimized image comparisons and Windows imports pass. Native T1–T3 pending. docs/review-polish-work.md. No public binary release.",
+        "Original missed target 0.1.0-alpha.28 retained in planning history; this scoped implementation now released in 0.1.0-preview.2.",
+        "Released https://github.com/pashiadesigns/ClipCraft/releases/tag/v0.1.0-preview.2 from c25acbb2093a569c8da0035bd96d0048090bcbda. 596 Rust tests/fmt/Clippy, 13 script checks, 43 exact optimized comparisons (42 unchanged), six PDF fixtures and production UI/input checks; user release acceptance with T1 explicitly deferred. Hosted ZIP SHA256 4a53c410e06edaa0d42955f6cbf3ceb635e9513b837db2eeef010a7528dd7dd1."
       ],
       "updated": "2026-11-01",
       "depends_on": [
@@ -2653,8 +2656,7 @@
       "target_history": [
         "0.1.0-alpha.28"
       ],
-      "missed_target_version": "0.1.0-alpha.28",
-      "schedule_status": "unscheduled"
+      "released_in": "0.1.0-preview.2"
     },
     {
       "id": "LIB-005",
@@ -5345,60 +5347,63 @@
       "id": "EDIT-080",
       "title": "Installed local font families",
       "category": "Editing",
-      "status": "needs_verification",
-      "priority": "next",
+      "status": "shipped",
+      "priority": "done",
       "description": "Search installed Windows and per-user fonts from the shared Text controls. Stable family IDs, native faces and bundled fallback; whole-object formatting only.",
       "completion": "Verify shared editing/render metrics, bold/italic face resolution, Undo and save/reopen; missing family fallback; no font file redistribution.",
       "depends_on": [
         "EDIT-055"
       ],
-      "schedule_status": "unscheduled",
-      "updated": "2026-10-31",
+      "updated": "2026-11-01",
       "evidence": [
         "Approved lean beta batch; qualification underway. docs/lean-beta-work.md.",
         "Shared engine and headless production checks pass for the lean scope. Native file-picker/printer review and consolidated candidate qualification remain. docs/lean-beta-work.md.",
-        "LEAN BETA REVIEW READY 2026-10-31T20:15:09.037768+00:00: lean-beta-review-20261031-201403; SHA256 4c4fb4b6524ae307941d7cce05d276fc078cf33fb7668362ccded019690a85b2. 538 Rust tests/fmt/Clippy,24 unchanged plus one installed-font optimized export/viewport comparison, and four PDF/JPEG output fixtures pass. PNG/JPEG/PDF/page preview and Windows print path, installed font families, import/search/place image stamps, Library bulk tags/export/delete and non-evicting storage controls implemented. Headless production panels inspected.76 user passes/history preserved; L6/P1/Q1/Q2 native review pending. Public desktop alpha50 unchanged; automation PAUSED. docs/lean-beta-work.md."
-      ]
+        "LEAN BETA REVIEW READY 2026-10-31T20:15:09.037768+00:00: lean-beta-review-20261031-201403; SHA256 4c4fb4b6524ae307941d7cce05d276fc078cf33fb7668362ccded019690a85b2. 538 Rust tests/fmt/Clippy,24 unchanged plus one installed-font optimized export/viewport comparison, and four PDF/JPEG output fixtures pass. PNG/JPEG/PDF/page preview and Windows print path, installed font families, import/search/place image stamps, Library bulk tags/export/delete and non-evicting storage controls implemented. Headless production panels inspected.76 user passes/history preserved; L6/P1/Q1/Q2 native review pending. Public desktop alpha50 unchanged; automation PAUSED. docs/lean-beta-work.md.",
+        "Released https://github.com/pashiadesigns/ClipCraft/releases/tag/v0.1.0-preview.2 from c25acbb2093a569c8da0035bd96d0048090bcbda. 596 Rust tests/fmt/Clippy, 13 script checks, 43 exact optimized comparisons (42 unchanged), six PDF fixtures and production UI/input checks; user release acceptance with T1 explicitly deferred. Hosted ZIP SHA256 4a53c410e06edaa0d42955f6cbf3ceb635e9513b837db2eeef010a7528dd7dd1."
+      ],
+      "released_in": "0.1.0-preview.2"
     },
     {
       "id": "EDIT-081",
       "title": "Import and search custom image stamps",
       "category": "Editing",
-      "status": "needs_verification",
-      "priority": "next",
+      "status": "shipped",
+      "priority": "done",
       "description": "Import and search local image stamps, then use repeated cursor placement and edit placed images. Starter business symbols tracked separately in EDIT-082.",
       "completion": "Verify import persists after original file removal, search, placement, original pixel retention, opacity, Undo and project reopen.",
       "depends_on": [
         "EDIT-018"
       ],
-      "schedule_status": "unscheduled",
-      "updated": "2026-10-31",
+      "updated": "2026-11-01",
       "evidence": [
         "Approved lean beta batch; qualification underway. docs/lean-beta-work.md.",
         "Shared engine and headless production checks pass for the lean scope. Native file-picker/printer review and consolidated candidate qualification remain. docs/lean-beta-work.md.",
         "LEAN BETA REVIEW READY 2026-10-31T20:15:09.037768+00:00: lean-beta-review-20261031-201403; SHA256 4c4fb4b6524ae307941d7cce05d276fc078cf33fb7668362ccded019690a85b2. 538 Rust tests/fmt/Clippy,24 unchanged plus one installed-font optimized export/viewport comparison, and four PDF/JPEG output fixtures pass. PNG/JPEG/PDF/page preview and Windows print path, installed font families, import/search/place image stamps, Library bulk tags/export/delete and non-evicting storage controls implemented. Headless production panels inspected.76 user passes/history preserved; L6/P1/Q1/Q2 native review pending. Public desktop alpha50 unchanged; automation PAUSED. docs/lean-beta-work.md.",
-        "User passed import/search/Undo; initial immediate placement rejected. Step-like repeated placement and persistent stamp identity prepared for review."
-      ]
+        "User passed import/search/Undo; initial immediate placement rejected. Step-like repeated placement and persistent stamp identity prepared for review.",
+        "Released https://github.com/pashiadesigns/ClipCraft/releases/tag/v0.1.0-preview.2 from c25acbb2093a569c8da0035bd96d0048090bcbda. 596 Rust tests/fmt/Clippy, 13 script checks, 43 exact optimized comparisons (42 unchanged), six PDF fixtures and production UI/input checks; user release acceptance with T1 explicitly deferred. Hosted ZIP SHA256 4a53c410e06edaa0d42955f6cbf3ceb635e9513b837db2eeef010a7528dd7dd1."
+      ],
+      "released_in": "0.1.0-preview.2"
     },
     {
       "id": "LIB-012",
       "title": "Bulk tags export deletion and storage limits",
       "category": "Library",
-      "status": "needs_verification",
-      "priority": "next",
+      "status": "shipped",
+      "priority": "done",
       "description": "Select multiple Library captures; add/remove tags, export PNG/JPEG/PDF, confirm deletion and set capacity without evicting work.",
       "completion": "Verify atomic conflicts, tag persistence, selected export and unique output folders, deletion isolation and non-evicting capacity across restarts.",
       "depends_on": [
         "LIB-011",
         "FILE-006"
       ],
-      "schedule_status": "unscheduled",
-      "updated": "2026-10-31",
+      "updated": "2026-11-01",
       "evidence": [
         "Approved lean beta batch; qualification underway. docs/lean-beta-work.md.",
         "Shared engine and headless production checks pass for the lean scope. Native file-picker/printer review and consolidated candidate qualification remain. docs/lean-beta-work.md.",
-        "LEAN BETA REVIEW READY 2026-10-31T20:15:09.037768+00:00: lean-beta-review-20261031-201403; SHA256 4c4fb4b6524ae307941d7cce05d276fc078cf33fb7668362ccded019690a85b2. 538 Rust tests/fmt/Clippy,24 unchanged plus one installed-font optimized export/viewport comparison, and four PDF/JPEG output fixtures pass. PNG/JPEG/PDF/page preview and Windows print path, installed font families, import/search/place image stamps, Library bulk tags/export/delete and non-evicting storage controls implemented. Headless production panels inspected.76 user passes/history preserved; L6/P1/Q1/Q2 native review pending. Public desktop alpha50 unchanged; automation PAUSED. docs/lean-beta-work.md."
-      ]
+        "LEAN BETA REVIEW READY 2026-10-31T20:15:09.037768+00:00: lean-beta-review-20261031-201403; SHA256 4c4fb4b6524ae307941d7cce05d276fc078cf33fb7668362ccded019690a85b2. 538 Rust tests/fmt/Clippy,24 unchanged plus one installed-font optimized export/viewport comparison, and four PDF/JPEG output fixtures pass. PNG/JPEG/PDF/page preview and Windows print path, installed font families, import/search/place image stamps, Library bulk tags/export/delete and non-evicting storage controls implemented. Headless production panels inspected.76 user passes/history preserved; L6/P1/Q1/Q2 native review pending. Public desktop alpha50 unchanged; automation PAUSED. docs/lean-beta-work.md.",
+        "Released https://github.com/pashiadesigns/ClipCraft/releases/tag/v0.1.0-preview.2 from c25acbb2093a569c8da0035bd96d0048090bcbda. 596 Rust tests/fmt/Clippy, 13 script checks, 43 exact optimized comparisons (42 unchanged), six PDF fixtures and production UI/input checks; user release acceptance with T1 explicitly deferred. Hosted ZIP SHA256 4a53c410e06edaa0d42955f6cbf3ceb635e9513b837db2eeef010a7528dd7dd1."
+      ],
+      "released_in": "0.1.0-preview.2"
     },
     {
       "id": "ENG-005",
@@ -5420,89 +5425,94 @@
       "id": "UX-073",
       "title": "Review corrections: Library surround, text overflow and export preview",
       "category": "Experience",
-      "status": "needs_verification",
-      "priority": "next",
+      "status": "shipped",
+      "priority": "done",
       "description": "Use #252729 around Library with no footer separator; Shrink preserves text-frame bounds; optional Preview export after opens the completed file.",
       "completion": "Confirm P1 color correction, Q2 overflow fix, and Q3 export-preview launch after automated qualification.",
-      "schedule_status": "unscheduled",
-      "updated": "2026-10-31",
+      "updated": "2026-11-01",
       "evidence": [
         "User requested during GitHub setup; local checks and review candidate preparation underway.",
-        "Local review-corrections-20261031-222926; SHA256 5a18ed3df9d997b39997fff2088fecfef0d2b9d7bb00864dd800fba0bd6d4f5e; 540 tests/fmt/Clippy and 25 optimized export/viewport comparisons pass. Headless production UI and pointer workflows inspected; native confirmation remains. Not in published preview.1."
-      ]
+        "Local review-corrections-20261031-222926; SHA256 5a18ed3df9d997b39997fff2088fecfef0d2b9d7bb00864dd800fba0bd6d4f5e; 540 tests/fmt/Clippy and 25 optimized export/viewport comparisons pass. Headless production UI and pointer workflows inspected; native confirmation remains. Not in published preview.1.",
+        "Released https://github.com/pashiadesigns/ClipCraft/releases/tag/v0.1.0-preview.2 from c25acbb2093a569c8da0035bd96d0048090bcbda. 596 Rust tests/fmt/Clippy, 13 script checks, 43 exact optimized comparisons (42 unchanged), six PDF fixtures and production UI/input checks; user release acceptance with T1 explicitly deferred. Hosted ZIP SHA256 4a53c410e06edaa0d42955f6cbf3ceb635e9513b837db2eeef010a7528dd7dd1."
+      ],
+      "released_in": "0.1.0-preview.2"
     },
     {
       "id": "EDIT-082",
       "title": "Essential business-guide starter stamps",
       "category": "Editing",
-      "status": "needs_verification",
-      "priority": "next",
+      "status": "shipped",
+      "priority": "done",
       "description": "Nine original transparent starter symbols: green check and check circle, red X and X circle, caution, exclamation and red exclamation circle, question and information. Shared Step press-origin flow; cursor preview, release commit, repeat placement, Undo and manual stamp reselection.",
       "completion": "Verify built-ins without imports; search keywords, live cursor/drag/release, one-step Undo, saved identity and existing-stamp selection without premature Move switching.",
-      "schedule_status": "unscheduled",
-      "updated": "2026-10-31",
+      "updated": "2026-11-01",
       "evidence": [
         "User requested during GitHub setup; local checks and review candidate preparation underway.",
-        "Local review-corrections-20261031-222926; SHA256 5a18ed3df9d997b39997fff2088fecfef0d2b9d7bb00864dd800fba0bd6d4f5e; 540 tests/fmt/Clippy and 25 optimized export/viewport comparisons pass. Headless production UI and pointer workflows inspected; native confirmation remains. Not in published preview.1."
-      ]
+        "Local review-corrections-20261031-222926; SHA256 5a18ed3df9d997b39997fff2088fecfef0d2b9d7bb00864dd800fba0bd6d4f5e; 540 tests/fmt/Clippy and 25 optimized export/viewport comparisons pass. Headless production UI and pointer workflows inspected; native confirmation remains. Not in published preview.1.",
+        "Released https://github.com/pashiadesigns/ClipCraft/releases/tag/v0.1.0-preview.2 from c25acbb2093a569c8da0035bd96d0048090bcbda. 596 Rust tests/fmt/Clippy, 13 script checks, 43 exact optimized comparisons (42 unchanged), six PDF fixtures and production UI/input checks; user release acceptance with T1 explicitly deferred. Hosted ZIP SHA256 4a53c410e06edaa0d42955f6cbf3ceb635e9513b837db2eeef010a7528dd7dd1."
+      ],
+      "released_in": "0.1.0-preview.2"
     },
     {
       "id": "LIB-013",
       "title": "Library selection, bulk commands and Details",
       "category": "Library",
-      "status": "needs_verification",
-      "priority": "next",
+      "status": "shipped",
+      "priority": "done",
       "description": "Click selects; double-click opens; Shift range, Alt toggle and drag marquee. Selection context commands save, duplicate, number names, edit tags and delete. Single-item Save As and Details shared with Recent.",
       "completion": "Verify pointer gestures, selected-only operations, collision-free names, conflicts and capacity rollback, metadata and file properties, project/image output and reopen.",
       "depends_on": [
         "LIB-012"
       ],
-      "schedule_status": "unscheduled",
       "updated": "2026-11-01",
       "evidence": [
         "Local implementation and automated qualification underway; no published release or native observation yet. docs/library-stamps-work.md.",
         "Local library-stamps-review-20261101-123859; SHA256 10ef2909755c01043906b4a745243e4114814e6ff77b9d03e8071da1bbdef1c8; 546 tests/fmt/Clippy, 26 optimized image comparisons and Windows imports pass. Headless production UI inspected; native review R1/R2 pending. docs/library-stamps-work.md.",
         "2026-11-01 user passed R1 native Library Save As and R2 stamp colors/movement on the previous Library/stamps candidate; release still pending.",
-        "2026-11-01 release follow-up: Recent-sized image replacement thumbnails and redundant Library toolbar removal. Qualification underway."
-      ]
+        "2026-11-01 release follow-up: Recent-sized image replacement thumbnails and redundant Library toolbar removal. Qualification underway.",
+        "Released https://github.com/pashiadesigns/ClipCraft/releases/tag/v0.1.0-preview.2 from c25acbb2093a569c8da0035bd96d0048090bcbda. 596 Rust tests/fmt/Clippy, 13 script checks, 43 exact optimized comparisons (42 unchanged), six PDF fixtures and production UI/input checks; user release acceptance with T1 explicitly deferred. Hosted ZIP SHA256 4a53c410e06edaa0d42955f6cbf3ceb635e9513b837db2eeef010a7528dd7dd1."
+      ],
+      "released_in": "0.1.0-preview.2"
     },
     {
       "id": "EDIT-083",
       "title": "Editable limited-palette vector stamps",
       "category": "Editing",
-      "status": "needs_verification",
-      "priority": "next",
+      "status": "shipped",
+      "priority": "done",
       "description": "Nine supplied business stamps use original vector paths and one to five editable palette slots. Keep a labeled raster test stamp.",
       "completion": "Verify independent palette colors, transparency, scaling, shared export/preview, portable copy, save/reopen and one-step Undo.",
       "depends_on": [
         "EDIT-082"
       ],
-      "schedule_status": "unscheduled",
       "updated": "2026-11-01",
       "evidence": [
         "Local implementation and automated qualification underway; no published release or native observation yet. docs/library-stamps-work.md.",
         "Local library-stamps-review-20261101-123859; SHA256 10ef2909755c01043906b4a745243e4114814e6ff77b9d03e8071da1bbdef1c8; 546 tests/fmt/Clippy, 26 optimized image comparisons and Windows imports pass. Headless production UI inspected; native review R1/R2 pending. docs/library-stamps-work.md.",
-        "2026-11-01 user passed R1 native Library Save As and R2 stamp colors/movement on the previous Library/stamps candidate; release still pending."
-      ]
+        "2026-11-01 user passed R1 native Library Save As and R2 stamp colors/movement on the previous Library/stamps candidate; release still pending.",
+        "Released https://github.com/pashiadesigns/ClipCraft/releases/tag/v0.1.0-preview.2 from c25acbb2093a569c8da0035bd96d0048090bcbda. 596 Rust tests/fmt/Clippy, 13 script checks, 43 exact optimized comparisons (42 unchanged), six PDF fixtures and production UI/input checks; user release acceptance with T1 explicitly deferred. Hosted ZIP SHA256 4a53c410e06edaa0d42955f6cbf3ceb635e9513b837db2eeef010a7528dd7dd1."
+      ],
+      "released_in": "0.1.0-preview.2"
     },
     {
       "id": "UX-074",
       "title": "Smooth raster and vector stamp dragging",
       "category": "Experience",
-      "status": "needs_verification",
-      "priority": "next",
+      "status": "shipped",
+      "priority": "done",
       "description": "Route image objects on blank canvases through retained rendering; reuse image textures while translating at low and high zoom.",
       "completion": "Verify fractional dragging without pixel reuploads from 35% to 800%, and output agreement with the shared engine.",
       "depends_on": [
         "EDIT-081"
       ],
-      "schedule_status": "unscheduled",
       "updated": "2026-11-01",
       "evidence": [
         "Local implementation and automated qualification underway; no published release or native observation yet. docs/library-stamps-work.md.",
         "Local library-stamps-review-20261101-123859; SHA256 10ef2909755c01043906b4a745243e4114814e6ff77b9d03e8071da1bbdef1c8; 546 tests/fmt/Clippy, 26 optimized image comparisons and Windows imports pass. Headless production UI inspected; native review R1/R2 pending. docs/library-stamps-work.md.",
-        "2026-11-01 user passed R1 native Library Save As and R2 stamp colors/movement on the previous Library/stamps candidate; release still pending."
-      ]
+        "2026-11-01 user passed R1 native Library Save As and R2 stamp colors/movement on the previous Library/stamps candidate; release still pending.",
+        "Released https://github.com/pashiadesigns/ClipCraft/releases/tag/v0.1.0-preview.2 from c25acbb2093a569c8da0035bd96d0048090bcbda. 596 Rust tests/fmt/Clippy, 13 script checks, 43 exact optimized comparisons (42 unchanged), six PDF fixtures and production UI/input checks; user release acceptance with T1 explicitly deferred. Hosted ZIP SHA256 4a53c410e06edaa0d42955f6cbf3ceb635e9513b837db2eeef010a7528dd7dd1."
+      ],
+      "released_in": "0.1.0-preview.2"
     },
     {
       "id": "EDIT-084",
@@ -5525,168 +5535,176 @@
       "id": "UX-075",
       "title": "Repeat placement with current object formatting",
       "category": "Experience",
-      "status": "needs_verification",
-      "priority": "next",
+      "status": "shipped",
+      "priority": "done",
       "description": "Crisp cached vector stamp previews; current stamp/step formatting and size; Shift alignment, repeat-placement bounds, and Redact click-repeat or drag-to-size. Escape returns to Move.",
       "completion": "Verify placement, re-selection, editing, one-step Undo, current sequence, preview reuse and portable stamp names.",
       "depends_on": [
         "EDIT-083"
       ],
-      "schedule_status": "unscheduled",
       "updated": "2026-11-01",
       "evidence": [
         "User-approved 2026-11-01 follow-up. Local qualification in progress; no new desktop publication. docs/placement-export-work.md.",
         "Local placement-export-review-20261101-140249; SHA256 195862e34addcebf9e5f86ba44e9a880dfde632f3c665b40a5ad83d6541f5973; 557 tests/fmt/Clippy, 27 optimized image comparisons and Windows imports pass. Production egui UI and injected input verified; new native checks S1/S2. docs/placement-export-work.md.",
         "Local placement-export-review-20261101-141051; SHA256 b72bcf849d2184b58da2d9202a5acd75f52f1546d8a90bfff9fc1074d3aa202d; 559 tests/fmt/Clippy, 27 optimized image comparisons and Windows imports pass. Production egui UI and injected input verified; new native checks S1/S2. docs/placement-export-work.md.",
-        "2026-11-01 user passed P1, Q2, S1 and S2 against inferred placement-export-review-20261101-141051. New refinements tracked separately; not a public desktop release."
-      ]
+        "2026-11-01 user passed P1, Q2, S1 and S2 against inferred placement-export-review-20261101-141051. New refinements tracked separately; not a public desktop release.",
+        "Released https://github.com/pashiadesigns/ClipCraft/releases/tag/v0.1.0-preview.2 from c25acbb2093a569c8da0035bd96d0048090bcbda. 596 Rust tests/fmt/Clippy, 13 script checks, 43 exact optimized comparisons (42 unchanged), six PDF fixtures and production UI/input checks; user release acceptance with T1 explicitly deferred. Hosted ZIP SHA256 4a53c410e06edaa0d42955f6cbf3ceb635e9513b837db2eeef010a7528dd7dd1."
+      ],
+      "released_in": "0.1.0-preview.2"
     },
     {
       "id": "UX-076",
       "title": "Recent-object snapping candidate limit",
       "category": "Experience",
-      "status": "needs_verification",
-      "priority": "next",
+      "status": "shipped",
+      "priority": "done",
       "description": "Canvas snapping dropdown with an enable toggle and persistent finite maximum or Infinite. Candidates use recent selection and editing, excluding the object being moved.",
       "completion": "Verify recency replacement, hidden/deleted/moving exclusion, persistence and defaults.",
       "depends_on": [
         "UX-075"
       ],
-      "schedule_status": "unscheduled",
       "updated": "2026-11-01",
       "evidence": [
         "User-approved 2026-11-01 follow-up. Local qualification in progress; no new desktop publication. docs/placement-export-work.md.",
         "Local placement-export-review-20261101-140249; SHA256 195862e34addcebf9e5f86ba44e9a880dfde632f3c665b40a5ad83d6541f5973; 557 tests/fmt/Clippy, 27 optimized image comparisons and Windows imports pass. Production egui UI and injected input verified; new native checks S1/S2. docs/placement-export-work.md.",
         "Local placement-export-review-20261101-141051; SHA256 b72bcf849d2184b58da2d9202a5acd75f52f1546d8a90bfff9fc1074d3aa202d; 559 tests/fmt/Clippy, 27 optimized image comparisons and Windows imports pass. Production egui UI and injected input verified; new native checks S1/S2. docs/placement-export-work.md.",
-        "2026-11-01 user passed P1, Q2, S1 and S2 against inferred placement-export-review-20261101-141051. New refinements tracked separately; not a public desktop release."
-      ]
+        "2026-11-01 user passed P1, Q2, S1 and S2 against inferred placement-export-review-20261101-141051. New refinements tracked separately; not a public desktop release.",
+        "Released https://github.com/pashiadesigns/ClipCraft/releases/tag/v0.1.0-preview.2 from c25acbb2093a569c8da0035bd96d0048090bcbda. 596 Rust tests/fmt/Clippy, 13 script checks, 43 exact optimized comparisons (42 unchanged), six PDF fixtures and production UI/input checks; user release acceptance with T1 explicitly deferred. Hosted ZIP SHA256 4a53c410e06edaa0d42955f6cbf3ceb635e9513b837db2eeef010a7528dd7dd1."
+      ],
+      "released_in": "0.1.0-preview.2"
     },
     {
       "id": "UX-077",
       "title": "Consistent export and dialog actions",
       "category": "Experience",
-      "status": "needs_verification",
-      "priority": "next",
+      "status": "shipped",
+      "priority": "done",
       "description": "Right-aligned primary/secondary actions, top-anchored export format controls, session settings, and Open export folder / Open image after export options for single and bulk image outputs.",
       "completion": "Verify format controls stay stationary, settings survive reopening, correct file/folder targets, failed opens preserve successful exports, and native dialog review.",
       "depends_on": [
         "LIB-013"
       ],
-      "schedule_status": "unscheduled",
       "updated": "2026-11-01",
       "evidence": [
         "User-approved 2026-11-01 follow-up. Local qualification in progress; no new desktop publication. docs/placement-export-work.md.",
         "Local placement-export-review-20261101-140249; SHA256 195862e34addcebf9e5f86ba44e9a880dfde632f3c665b40a5ad83d6541f5973; 557 tests/fmt/Clippy, 27 optimized image comparisons and Windows imports pass. Production egui UI and injected input verified; new native checks S1/S2. docs/placement-export-work.md.",
         "Local placement-export-review-20261101-141051; SHA256 b72bcf849d2184b58da2d9202a5acd75f52f1546d8a90bfff9fc1074d3aa202d; 559 tests/fmt/Clippy, 27 optimized image comparisons and Windows imports pass. Production egui UI and injected input verified; new native checks S1/S2. docs/placement-export-work.md.",
-        "2026-11-01 user passed P1, Q2, S1 and S2 against inferred placement-export-review-20261101-141051. New refinements tracked separately; not a public desktop release."
-      ]
+        "2026-11-01 user passed P1, Q2, S1 and S2 against inferred placement-export-review-20261101-141051. New refinements tracked separately; not a public desktop release.",
+        "Released https://github.com/pashiadesigns/ClipCraft/releases/tag/v0.1.0-preview.2 from c25acbb2093a569c8da0035bd96d0048090bcbda. 596 Rust tests/fmt/Clippy, 13 script checks, 43 exact optimized comparisons (42 unchanged), six PDF fixtures and production UI/input checks; user release acceptance with T1 explicitly deferred. Hosted ZIP SHA256 4a53c410e06edaa0d42955f6cbf3ceb635e9513b837db2eeef010a7528dd7dd1."
+      ],
+      "released_in": "0.1.0-preview.2"
     },
     {
       "id": "LIB-014",
       "title": "Library filter and metadata presentation",
       "category": "Library",
-      "status": "needs_verification",
-      "priority": "next",
+      "status": "shipped",
+      "priority": "done",
       "description": "Automatic Tags expansion when tags first appear, icon Refresh and Details, aligned metadata rows and separators, less footer prose, centered ribbon tabs and removal of the Library-only ribbon separator.",
       "completion": "Inspect production panels, actual metadata, tag availability and seamless Library tab outline.",
       "depends_on": [
         "LIB-013"
       ],
-      "schedule_status": "unscheduled",
       "updated": "2026-11-01",
       "evidence": [
         "User-approved 2026-11-01 follow-up. Local qualification in progress; no new desktop publication. docs/placement-export-work.md.",
         "Local placement-export-review-20261101-140249; SHA256 195862e34addcebf9e5f86ba44e9a880dfde632f3c665b40a5ad83d6541f5973; 557 tests/fmt/Clippy, 27 optimized image comparisons and Windows imports pass. Production egui UI and injected input verified; new native checks S1/S2. docs/placement-export-work.md.",
         "Local placement-export-review-20261101-141051; SHA256 b72bcf849d2184b58da2d9202a5acd75f52f1546d8a90bfff9fc1074d3aa202d; 559 tests/fmt/Clippy, 27 optimized image comparisons and Windows imports pass. Production egui UI and injected input verified; new native checks S1/S2. docs/placement-export-work.md.",
-        "2026-11-01 user passed P1, Q2, S1 and S2 against inferred placement-export-review-20261101-141051. New refinements tracked separately; not a public desktop release."
-      ]
+        "2026-11-01 user passed P1, Q2, S1 and S2 against inferred placement-export-review-20261101-141051. New refinements tracked separately; not a public desktop release.",
+        "Released https://github.com/pashiadesigns/ClipCraft/releases/tag/v0.1.0-preview.2 from c25acbb2093a569c8da0035bd96d0048090bcbda. 596 Rust tests/fmt/Clippy, 13 script checks, 43 exact optimized comparisons (42 unchanged), six PDF fixtures and production UI/input checks; user release acceptance with T1 explicitly deferred. Hosted ZIP SHA256 4a53c410e06edaa0d42955f6cbf3ceb635e9513b837db2eeef010a7528dd7dd1."
+      ],
+      "released_in": "0.1.0-preview.2"
     },
     {
       "id": "UX-078",
       "title": "Precise brush cursors and opt-in tool switching",
       "category": "Experience",
-      "status": "needs_verification",
-      "priority": "next",
+      "status": "shipped",
+      "priority": "done",
       "description": "Automatic tool switching defaults off while explicit saved choices remain. Pen and freehand Highlighter cursors show their true stroke diameter at the current zoom.",
       "completion": "Verify new defaults, persisted opt-in, zoom-aware brush circles and normal object interaction.",
       "depends_on": [
         "UX-075"
       ],
-      "schedule_status": "unscheduled",
       "updated": "2026-11-01",
       "evidence": [
         "User-approved 2026-11-01 follow-up. Local qualification in progress; no new desktop publication. docs/placement-export-work.md.",
         "Local placement-export-review-20261101-140249; SHA256 195862e34addcebf9e5f86ba44e9a880dfde632f3c665b40a5ad83d6541f5973; 557 tests/fmt/Clippy, 27 optimized image comparisons and Windows imports pass. Production egui UI and injected input verified; new native checks S1/S2. docs/placement-export-work.md.",
         "Local placement-export-review-20261101-141051; SHA256 b72bcf849d2184b58da2d9202a5acd75f52f1546d8a90bfff9fc1074d3aa202d; 559 tests/fmt/Clippy, 27 optimized image comparisons and Windows imports pass. Production egui UI and injected input verified; new native checks S1/S2. docs/placement-export-work.md.",
-        "2026-11-01 user passed P1, Q2, S1 and S2 against inferred placement-export-review-20261101-141051. New refinements tracked separately; not a public desktop release."
-      ]
+        "2026-11-01 user passed P1, Q2, S1 and S2 against inferred placement-export-review-20261101-141051. New refinements tracked separately; not a public desktop release.",
+        "Released https://github.com/pashiadesigns/ClipCraft/releases/tag/v0.1.0-preview.2 from c25acbb2093a569c8da0035bd96d0048090bcbda. 596 Rust tests/fmt/Clippy, 13 script checks, 43 exact optimized comparisons (42 unchanged), six PDF fixtures and production UI/input checks; user release acceptance with T1 explicitly deferred. Hosted ZIP SHA256 4a53c410e06edaa0d42955f6cbf3ceb635e9513b837db2eeef010a7528dd7dd1."
+      ],
+      "released_in": "0.1.0-preview.2"
     },
     {
       "id": "UX-079",
       "title": "Regular text fitting regression verification",
       "category": "Experience",
-      "status": "needs_verification",
-      "priority": "next",
+      "status": "shipped",
+      "priority": "done",
       "description": "User confirms the standalone-text Resize shape to fit text option works. Actual properties-popup selection, resize and Undo regression passes without a speculative code change; prior Shrink bounds follow-up stays tracked separately.",
       "completion": "Reproduce the reported workflow and confirm Resize shape fitting together with Shrink, installed fonts and Undo.",
       "depends_on": [
         "EDIT-012"
       ],
-      "schedule_status": "unscheduled",
       "updated": "2026-11-01",
       "evidence": [
         "User-approved 2026-11-01 follow-up. Local qualification in progress; no new desktop publication. docs/placement-export-work.md.",
         "2026-11-01 user: seems to be working now. Native build inferred from current launcher; actual automated properties-popup test also passes.",
         "Local placement-export-review-20261101-140249; SHA256 195862e34addcebf9e5f86ba44e9a880dfde632f3c665b40a5ad83d6541f5973; 557 tests/fmt/Clippy, 27 optimized image comparisons and Windows imports pass. Production egui UI and injected input verified; new native checks S1/S2. docs/placement-export-work.md.",
         "Local placement-export-review-20261101-141051; SHA256 b72bcf849d2184b58da2d9202a5acd75f52f1546d8a90bfff9fc1074d3aa202d; 559 tests/fmt/Clippy, 27 optimized image comparisons and Windows imports pass. Production egui UI and injected input verified; new native checks S1/S2. docs/placement-export-work.md.",
-        "2026-11-01 user passed P1, Q2, S1 and S2 against inferred placement-export-review-20261101-141051. New refinements tracked separately; not a public desktop release."
-      ]
+        "2026-11-01 user passed P1, Q2, S1 and S2 against inferred placement-export-review-20261101-141051. New refinements tracked separately; not a public desktop release.",
+        "Released https://github.com/pashiadesigns/ClipCraft/releases/tag/v0.1.0-preview.2 from c25acbb2093a569c8da0035bd96d0048090bcbda. 596 Rust tests/fmt/Clippy, 13 script checks, 43 exact optimized comparisons (42 unchanged), six PDF fixtures and production UI/input checks; user release acceptance with T1 explicitly deferred. Hosted ZIP SHA256 4a53c410e06edaa0d42955f6cbf3ceb635e9513b837db2eeef010a7528dd7dd1."
+      ],
+      "released_in": "0.1.0-preview.2"
     },
     {
       "id": "UX-080",
       "title": "Alt-wheel stroke sizing",
       "category": "Experience",
-      "status": "needs_verification",
-      "priority": "next",
+      "status": "shipped",
+      "priority": "done",
       "description": "Alt + mouse wheel changes active Pen, Highlighter pen, Eraser, Line and Arrow widths with immediate canvas cursor feedback, without pan or zoom leakage.",
       "completion": "Verify width clamping, raw event handling without smoothing repeats, scaled cursor feedback, live drawing and one-step Undo; preserve ordinary pan and Ctrl-wheel zoom.",
       "depends_on": [
         "UX-078"
       ],
-      "schedule_status": "unscheduled",
       "updated": "2026-11-01",
       "evidence": [
         "User addition to bounded 2026-11-01 batch. Synthetic canvas wheel/draw input tests pass. docs/placement-export-work.md.",
         "Local placement-export-review-20261101-140249; SHA256 195862e34addcebf9e5f86ba44e9a880dfde632f3c665b40a5ad83d6541f5973; 557 tests/fmt/Clippy, 27 optimized image comparisons and Windows imports pass. Production egui UI and injected input verified; new native checks S1/S2. docs/placement-export-work.md.",
         "Local placement-export-review-20261101-141051; SHA256 b72bcf849d2184b58da2d9202a5acd75f52f1546d8a90bfff9fc1074d3aa202d; 559 tests/fmt/Clippy, 27 optimized image comparisons and Windows imports pass. Production egui UI and injected input verified; new native checks S1/S2. docs/placement-export-work.md.",
-        "2026-11-01 user passed P1, Q2, S1 and S2 against inferred placement-export-review-20261101-141051. New refinements tracked separately; not a public desktop release."
-      ]
+        "2026-11-01 user passed P1, Q2, S1 and S2 against inferred placement-export-review-20261101-141051. New refinements tracked separately; not a public desktop release.",
+        "Released https://github.com/pashiadesigns/ClipCraft/releases/tag/v0.1.0-preview.2 from c25acbb2093a569c8da0035bd96d0048090bcbda. 596 Rust tests/fmt/Clippy, 13 script checks, 43 exact optimized comparisons (42 unchanged), six PDF fixtures and production UI/input checks; user release acceptance with T1 explicitly deferred. Hosted ZIP SHA256 4a53c410e06edaa0d42955f6cbf3ceb635e9513b837db2eeef010a7528dd7dd1."
+      ],
+      "released_in": "0.1.0-preview.2"
     },
     {
       "id": "UX-081",
       "title": "Tab preview interface toggle",
       "category": "Experience",
-      "status": "needs_verification",
-      "priority": "next",
+      "status": "shipped",
+      "priority": "done",
       "description": "Tab temporarily hides ribbon content, Recent and tool properties while retaining tab titles and a blue Show UI recovery button beneath Close. Previous pane choices return on restoration.",
       "completion": "Verify both Tab and Show UI restore previous pane states, text/dialog navigation retains Tab, key repeat does not flicker and documents stay unchanged.",
       "depends_on": [
         "UX-073"
       ],
-      "schedule_status": "unscheduled",
       "updated": "2026-11-01",
       "evidence": [
         "User addition to bounded 2026-11-01 batch. Actual shell input/layout tests cover all four prior Recent/Properties combinations, recovery button, repeat, modifier chords and text/dialog guards. docs/placement-export-work.md.",
         "Local placement-export-review-20261101-141051; SHA256 b72bcf849d2184b58da2d9202a5acd75f52f1546d8a90bfff9fc1074d3aa202d; 559 tests/fmt/Clippy, 27 optimized image comparisons and Windows imports pass. Production egui UI and injected input verified; new native checks S1/S2. docs/placement-export-work.md.",
-        "2026-11-01 user passed P1, Q2, S1 and S2 against inferred placement-export-review-20261101-141051. New refinements tracked separately; not a public desktop release."
-      ]
+        "2026-11-01 user passed P1, Q2, S1 and S2 against inferred placement-export-review-20261101-141051. New refinements tracked separately; not a public desktop release.",
+        "Released https://github.com/pashiadesigns/ClipCraft/releases/tag/v0.1.0-preview.2 from c25acbb2093a569c8da0035bd96d0048090bcbda. 596 Rust tests/fmt/Clippy, 13 script checks, 43 exact optimized comparisons (42 unchanged), six PDF fixtures and production UI/input checks; user release acceptance with T1 explicitly deferred. Hosted ZIP SHA256 4a53c410e06edaa0d42955f6cbf3ceb635e9513b837db2eeef010a7528dd7dd1."
+      ],
+      "released_in": "0.1.0-preview.2"
     },
     {
       "id": "UX-082",
       "title": "Review interaction and layout corrections",
       "category": "Experience",
-      "status": "needs_verification",
-      "priority": "next",
+      "status": "shipped",
+      "priority": "done",
       "description": "Nested shadow color picking, stamp preview after editing, selected-only radius nodes, compact Rename footer, centered Show UI.",
       "completion": "Actual popup/input/layout regressions and unchanged output fixtures; unresolved cross-monitor focus is separately deferred under UX-086.",
       "depends_on": [
@@ -5694,7 +5712,6 @@
         "UX-077",
         "UX-081"
       ],
-      "schedule_status": "unscheduled",
       "updated": "2026-11-01",
       "evidence": [
         "User-authorized bounded follow-up 2026-11-01. docs/review-polish-work.md. No native desktop or OS clipboard use.",
@@ -5702,161 +5719,171 @@
         "T1 failed per user on inferred workflow-review-20261101-154526. Focus-loss edge cropping is not verified fixed. docs/template-followup-work.md.",
         "template-library-review-20261101-164049; SHA256 89b521f81c08db08517fe52714389b4d2c9f43859f7bf2c15465f03254eff4ef; 584 tests/fmt/Clippy, 36 exact optimized comparisons, production UI/input and imports pass. Unreleased review candidate; native T1/T3 remain. docs/template-followup-work.md.",
         "recovery-pdf-review-20261101-182023; SHA256 9f642d24c0e7bd025606092ef02effd1c762638e79358f74320548808882fe1b; 594 Rust tests/fmt/Clippy, 42 optimized export/viewport comparisons (36 unchanged), six PDF fixtures, production UI/input and imports pass. Local review only; native T1 unconfirmed. docs/recovery-pdf-work.md.",
-        "2026-11-01: T1 accepted as a release waiver, not fixed. See deferred UX-086; preserve all previous failure evidence."
-      ]
+        "2026-11-01: T1 accepted as a release waiver, not fixed. See deferred UX-086; preserve all previous failure evidence.",
+        "Released https://github.com/pashiadesigns/ClipCraft/releases/tag/v0.1.0-preview.2 from c25acbb2093a569c8da0035bd96d0048090bcbda. 596 Rust tests/fmt/Clippy, 13 script checks, 43 exact optimized comparisons (42 unchanged), six PDF fixtures and production UI/input checks; user release acceptance with T1 explicitly deferred. Hosted ZIP SHA256 4a53c410e06edaa0d42955f6cbf3ceb635e9513b837db2eeef010a7528dd7dd1."
+      ],
+      "released_in": "0.1.0-preview.2"
     },
     {
       "id": "CAP-017",
       "title": "Per-mode capture settings and controller polish",
       "category": "Capture",
-      "status": "needs_verification",
-      "priority": "next",
+      "status": "shipped",
+      "priority": "done",
       "description": "Remember image-mode settings independently, apply them to matching capture shortcuts, default Steps cursor on, draw a real fullscreen gear and connect the full active tab height.",
       "completion": "Save/reopen profiles, hotkey dispatch/clipboard adapter, controller meshes and native capture confirmation.",
       "depends_on": [
         "CAP-009",
         "CAP-004"
       ],
-      "schedule_status": "unscheduled",
       "updated": "2026-11-01",
       "evidence": [
         "User-authorized bounded follow-up 2026-11-01. docs/review-polish-work.md. No native desktop or OS clipboard use.",
         "Local workflow-review-20261101-154526; SHA256 3b1193a37dff69c8e48158174897cd59447afeefa682e73124cd8f86def97907; 575 tests/fmt/Clippy, 34 optimized image comparisons and Windows imports pass. Native T1–T3 pending. docs/review-polish-work.md. No public binary release.",
-        "T2 passed per user on inferred workflow-review-20261101-154526; no new public binary release."
-      ]
+        "T2 passed per user on inferred workflow-review-20261101-154526; no new public binary release.",
+        "Released https://github.com/pashiadesigns/ClipCraft/releases/tag/v0.1.0-preview.2 from c25acbb2093a569c8da0035bd96d0048090bcbda. 596 Rust tests/fmt/Clippy, 13 script checks, 43 exact optimized comparisons (42 unchanged), six PDF fixtures and production UI/input checks; user release acceptance with T1 explicitly deferred. Hosted ZIP SHA256 4a53c410e06edaa0d42955f6cbf3ceb635e9513b837db2eeef010a7528dd7dd1."
+      ],
+      "released_in": "0.1.0-preview.2"
     },
     {
       "id": "EDIT-085",
       "title": "Business stamp categories",
       "category": "Editing",
-      "status": "needs_verification",
-      "priority": "next",
+      "status": "shipped",
+      "priority": "done",
       "description": "Eight original editable vector workflow stamps: time, lock, document, download, upload, idea, keyboard and target. Search intersects category filters; existing raster sample remains.",
       "completion": "Verify palette bounds, portable paths, render/export and category/search behavior.",
       "depends_on": [
         "EDIT-083"
       ],
-      "schedule_status": "unscheduled",
       "updated": "2026-11-01",
       "evidence": [
         "User-authorized batch; public documentation and supplied template screenshots, original assets and implementation. docs/review-polish-work.md. Native review and release pending.",
-        "Local workflow-review-20261101-154526; SHA256 3b1193a37dff69c8e48158174897cd59447afeefa682e73124cd8f86def97907; 575 tests/fmt/Clippy, 34 optimized image comparisons and Windows imports pass. Native T1–T3 pending. docs/review-polish-work.md. No public binary release."
-      ]
+        "Local workflow-review-20261101-154526; SHA256 3b1193a37dff69c8e48158174897cd59447afeefa682e73124cd8f86def97907; 575 tests/fmt/Clippy, 34 optimized image comparisons and Windows imports pass. Native T1–T3 pending. docs/review-polish-work.md. No public binary release.",
+        "Released https://github.com/pashiadesigns/ClipCraft/releases/tag/v0.1.0-preview.2 from c25acbb2093a569c8da0035bd96d0048090bcbda. 596 Rust tests/fmt/Clippy, 13 script checks, 43 exact optimized comparisons (42 unchanged), six PDF fixtures and production UI/input checks; user release acceptance with T1 explicitly deferred. Hosted ZIP SHA256 4a53c410e06edaa0d42955f6cbf3ceb635e9513b837db2eeef010a7528dd7dd1."
+      ],
+      "released_in": "0.1.0-preview.2"
     },
     {
       "id": "CREATE-002",
       "title": "Create Image from Template starter gallery",
       "category": "Creation",
-      "status": "needs_verification",
-      "priority": "next",
+      "status": "shipped",
+      "priority": "done",
       "description": "Six original editable layouts: two steps, three steps, four-step grid, before/after, overview and timeline. Choose files or Library images, reorder them, use Fit/Fill, edit guide sections and replace images nondestructively.",
       "completion": "Verify gallery creation, all six layouts, image replacement Undo, portable save/reopen, Library Template classification and exact output.",
       "depends_on": [
         "CREATE-001",
         "CAP-014"
       ],
-      "schedule_status": "unscheduled",
       "updated": "2026-11-01",
       "evidence": [
         "User-authorized batch; public documentation and supplied template screenshots, original assets and implementation. docs/review-polish-work.md. Native review and release pending.",
-        "Local workflow-review-20261101-154526; SHA256 3b1193a37dff69c8e48158174897cd59447afeefa682e73124cd8f86def97907; 575 tests/fmt/Clippy, 34 optimized image comparisons and Windows imports pass. Native T1–T3 pending. docs/review-polish-work.md. No public binary release."
-      ]
+        "Local workflow-review-20261101-154526; SHA256 3b1193a37dff69c8e48158174897cd59447afeefa682e73124cd8f86def97907; 575 tests/fmt/Clippy, 34 optimized image comparisons and Windows imports pass. Native T1–T3 pending. docs/review-polish-work.md. No public binary release.",
+        "Released https://github.com/pashiadesigns/ClipCraft/releases/tag/v0.1.0-preview.2 from c25acbb2093a569c8da0035bd96d0048090bcbda. 596 Rust tests/fmt/Clippy, 13 script checks, 43 exact optimized comparisons (42 unchanged), six PDF fixtures and production UI/input checks; user release acceptance with T1 explicitly deferred. Hosted ZIP SHA256 4a53c410e06edaa0d42955f6cbf3ceb635e9513b837db2eeef010a7528dd7dd1."
+      ],
+      "released_in": "0.1.0-preview.2"
     },
     {
       "id": "UX-083",
       "title": "Compact Library thumbnails and template classification",
       "category": "Library",
-      "status": "needs_verification",
-      "priority": "next",
+      "status": "shipped",
+      "priority": "done",
       "description": "Thumbnail type overlays always remain visible. Default secondary text is name-only; Show thumbnail details reveals dimensions, type and date. Template documents use the From Template filter and Template overlay. File > Recent uses half-size thumbnails in rows of ten; Show more reveals ten more, retaining shared context actions.",
       "completion": "Verify default/toggle persistence, overlays in both states and template filtering after reopen. Verify pagination, reopen reset and compact thumbnail geometry.",
       "depends_on": [
         "LIB-014",
         "CREATE-002"
       ],
-      "schedule_status": "unscheduled",
       "updated": "2026-11-01",
       "evidence": [
         "User-authorized batch; public documentation and supplied template screenshots, original assets and implementation. docs/review-polish-work.md. Native review and release pending.",
-        "Local workflow-review-20261101-154526; SHA256 3b1193a37dff69c8e48158174897cd59447afeefa682e73124cd8f86def97907; 575 tests/fmt/Clippy, 34 optimized image comparisons and Windows imports pass. Native T1–T3 pending. docs/review-polish-work.md. No public binary release."
-      ]
+        "Local workflow-review-20261101-154526; SHA256 3b1193a37dff69c8e48158174897cd59447afeefa682e73124cd8f86def97907; 575 tests/fmt/Clippy, 34 optimized image comparisons and Windows imports pass. Native T1–T3 pending. docs/review-polish-work.md. No public binary release.",
+        "Released https://github.com/pashiadesigns/ClipCraft/releases/tag/v0.1.0-preview.2 from c25acbb2093a569c8da0035bd96d0048090bcbda. 596 Rust tests/fmt/Clippy, 13 script checks, 43 exact optimized comparisons (42 unchanged), six PDF fixtures and production UI/input checks; user release acceptance with T1 explicitly deferred. Hosted ZIP SHA256 4a53c410e06edaa0d42955f6cbf3ceb635e9513b837db2eeef010a7528dd7dd1."
+      ],
+      "released_in": "0.1.0-preview.2"
     },
     {
       "id": "UX-084",
       "title": "Distinct Capture Controller icon and launch shortcuts",
       "category": "Experience",
-      "status": "needs_verification",
-      "priority": "next",
+      "status": "shipped",
+      "priority": "done",
       "description": "User-supplied Capture Controller SVG in its window and tray menu, a separate embedded Windows resource, and per-user Start menu entries for Editor and Capture Controller. Explicit launch flags reuse a compatible running app.",
       "completion": "Validate all icon sizes and Windows resources, shortcut targets/arguments/icons, startup override and native tray/Start menu appearance.",
       "depends_on": [
         "CAP-009",
         "UX-065"
       ],
-      "schedule_status": "unscheduled",
       "updated": "2026-11-01",
       "evidence": [
         "User supplied capturecontrollericon.svg on 2026-11-01; original source retained. docs/review-polish-work.md. Native menu/Start appearance pending.",
         "Local workflow-review-20261101-154526; SHA256 3b1193a37dff69c8e48158174897cd59447afeefa682e73124cd8f86def97907; 575 tests/fmt/Clippy, 34 optimized image comparisons and Windows imports pass. Native T1–T3 pending. docs/review-polish-work.md. No public binary release.",
-        "T2 passed per user on inferred workflow-review-20261101-154526; no new public binary release."
-      ]
+        "T2 passed per user on inferred workflow-review-20261101-154526; no new public binary release.",
+        "Released https://github.com/pashiadesigns/ClipCraft/releases/tag/v0.1.0-preview.2 from c25acbb2093a569c8da0035bd96d0048090bcbda. 596 Rust tests/fmt/Clippy, 13 script checks, 43 exact optimized comparisons (42 unchanged), six PDF fixtures and production UI/input checks; user release acceptance with T1 explicitly deferred. Hosted ZIP SHA256 4a53c410e06edaa0d42955f6cbf3ceb635e9513b837db2eeef010a7528dd7dd1."
+      ],
+      "released_in": "0.1.0-preview.2"
     },
     {
       "id": "CREATE-003",
       "title": "Reusable local templates",
       "category": "Creation",
-      "status": "needs_verification",
-      "priority": "next",
+      "status": "shipped",
+      "priority": "done",
       "description": "Save an independent editable layout locally, optionally replacing photos with empty frames; create new projects from My templates.",
       "completion": "Verify source independence, saved/reopened layout, image replacement, project format and output.",
       "depends_on": [
         "CREATE-002"
       ],
-      "schedule_status": "unscheduled",
       "updated": "2026-11-01",
       "evidence": [
         "User approved this bounded batch. docs/template-followup-work.md. No native desktop or OS clipboard access.",
         "template-library-review-20261101-164049; SHA256 89b521f81c08db08517fe52714389b4d2c9f43859f7bf2c15465f03254eff4ef; 584 tests/fmt/Clippy, 36 exact optimized comparisons, production UI/input and imports pass. Unreleased review candidate; native T1/T3 remain. docs/template-followup-work.md.",
-        "2026-11-01 user explicitly passed saving current layout as template and T3; public binary release remains pending."
-      ]
+        "2026-11-01 user explicitly passed saving current layout as template and T3; public binary release remains pending.",
+        "Released https://github.com/pashiadesigns/ClipCraft/releases/tag/v0.1.0-preview.2 from c25acbb2093a569c8da0035bd96d0048090bcbda. 596 Rust tests/fmt/Clippy, 13 script checks, 43 exact optimized comparisons (42 unchanged), six PDF fixtures and production UI/input checks; user release acceptance with T1 explicitly deferred. Hosted ZIP SHA256 4a53c410e06edaa0d42955f6cbf3ceb635e9513b837db2eeef010a7528dd7dd1."
+      ],
+      "released_in": "0.1.0-preview.2"
     },
     {
       "id": "LIB-015",
       "title": "Library-wide tag rename and deletion",
       "category": "Library",
-      "status": "needs_verification",
-      "priority": "next",
+      "status": "shipped",
+      "priority": "done",
       "description": "Right-click a tag to rename/merge it or remove it everywhere without deleting images.",
       "completion": "Verify atomic index writes, case-insensitive merging, validation, project bytes, active filters and autosave metadata.",
       "depends_on": [
         "LIB-012"
       ],
-      "schedule_status": "unscheduled",
       "updated": "2026-11-01",
       "evidence": [
         "User approved this bounded batch. docs/template-followup-work.md. No native desktop or OS clipboard access.",
-        "template-library-review-20261101-164049; SHA256 89b521f81c08db08517fe52714389b4d2c9f43859f7bf2c15465f03254eff4ef; 584 tests/fmt/Clippy, 36 exact optimized comparisons, production UI/input and imports pass. Unreleased review candidate; native T1/T3 remain. docs/template-followup-work.md."
-      ]
+        "template-library-review-20261101-164049; SHA256 89b521f81c08db08517fe52714389b4d2c9f43859f7bf2c15465f03254eff4ef; 584 tests/fmt/Clippy, 36 exact optimized comparisons, production UI/input and imports pass. Unreleased review candidate; native T1/T3 remain. docs/template-followup-work.md.",
+        "Released https://github.com/pashiadesigns/ClipCraft/releases/tag/v0.1.0-preview.2 from c25acbb2093a569c8da0035bd96d0048090bcbda. 596 Rust tests/fmt/Clippy, 13 script checks, 43 exact optimized comparisons (42 unchanged), six PDF fixtures and production UI/input checks; user release acceptance with T1 explicitly deferred. Hosted ZIP SHA256 4a53c410e06edaa0d42955f6cbf3ceb635e9513b837db2eeef010a7528dd7dd1."
+      ],
+      "released_in": "0.1.0-preview.2"
     },
     {
       "id": "UX-085",
       "title": "Focused dialogs and template workflow refinements",
       "category": "Experience",
-      "status": "needs_verification",
-      "priority": "next",
+      "status": "shipped",
+      "priority": "done",
       "description": "Focus primary dialog inputs once, align File template cards and Recent search, use painted ordering buttons and centered Choose Image controls.",
       "completion": "Exercise actual egui focus/input and button paths; inspect layout and verify replacement Undo and export.",
       "depends_on": [
         "CREATE-002",
         "UX-083"
       ],
-      "schedule_status": "unscheduled",
       "updated": "2026-11-01",
       "evidence": [
         "User approved this bounded batch. docs/template-followup-work.md. No native desktop or OS clipboard access.",
         "template-library-review-20261101-164049; SHA256 89b521f81c08db08517fe52714389b4d2c9f43859f7bf2c15465f03254eff4ef; 584 tests/fmt/Clippy, 36 exact optimized comparisons, production UI/input and imports pass. Unreleased review candidate; native T1/T3 remain. docs/template-followup-work.md.",
-        "recovery-pdf-review-20261101-182023; SHA256 9f642d24c0e7bd025606092ef02effd1c762638e79358f74320548808882fe1b; 594 Rust tests/fmt/Clippy, 42 optimized export/viewport comparisons (36 unchanged), six PDF fixtures, production UI/input and imports pass. Local review only; native T1 unconfirmed. docs/recovery-pdf-work.md."
-      ]
+        "recovery-pdf-review-20261101-182023; SHA256 9f642d24c0e7bd025606092ef02effd1c762638e79358f74320548808882fe1b; 594 Rust tests/fmt/Clippy, 42 optimized export/viewport comparisons (36 unchanged), six PDF fixtures, production UI/input and imports pass. Local review only; native T1 unconfirmed. docs/recovery-pdf-work.md.",
+        "Released https://github.com/pashiadesigns/ClipCraft/releases/tag/v0.1.0-preview.2 from c25acbb2093a569c8da0035bd96d0048090bcbda. 596 Rust tests/fmt/Clippy, 13 script checks, 43 exact optimized comparisons (42 unchanged), six PDF fixtures and production UI/input checks; user release acceptance with T1 explicitly deferred. Hosted ZIP SHA256 4a53c410e06edaa0d42955f6cbf3ceb635e9513b837db2eeef010a7528dd7dd1."
+      ],
+      "released_in": "0.1.0-preview.2"
     },
     {
       "id": "CREATE-004",
@@ -5867,14 +5894,15 @@
       "depends_on": [
         "CREATE-003"
       ],
-      "status": "needs_verification",
-      "priority": "next",
-      "schedule_status": "unscheduled",
+      "status": "shipped",
+      "priority": "done",
       "updated": "2026-11-01",
       "evidence": [
         "User-approved bounded batch. docs/recovery-pdf-work.md.",
-        "recovery-pdf-review-20261101-182023; SHA256 9f642d24c0e7bd025606092ef02effd1c762638e79358f74320548808882fe1b; 594 Rust tests/fmt/Clippy, 42 optimized export/viewport comparisons (36 unchanged), six PDF fixtures, production UI/input and imports pass. Local review only; native T1 unconfirmed. docs/recovery-pdf-work.md."
-      ]
+        "recovery-pdf-review-20261101-182023; SHA256 9f642d24c0e7bd025606092ef02effd1c762638e79358f74320548808882fe1b; 594 Rust tests/fmt/Clippy, 42 optimized export/viewport comparisons (36 unchanged), six PDF fixtures, production UI/input and imports pass. Local review only; native T1 unconfirmed. docs/recovery-pdf-work.md.",
+        "Released https://github.com/pashiadesigns/ClipCraft/releases/tag/v0.1.0-preview.2 from c25acbb2093a569c8da0035bd96d0048090bcbda. 596 Rust tests/fmt/Clippy, 13 script checks, 43 exact optimized comparisons (42 unchanged), six PDF fixtures and production UI/input checks; user release acceptance with T1 explicitly deferred. Hosted ZIP SHA256 4a53c410e06edaa0d42955f6cbf3ceb635e9513b837db2eeef010a7528dd7dd1."
+      ],
+      "released_in": "0.1.0-preview.2"
     },
     {
       "id": "LIB-016",
@@ -5885,14 +5913,15 @@
       "depends_on": [
         "LIB-012"
       ],
-      "status": "needs_verification",
-      "priority": "next",
-      "schedule_status": "unscheduled",
+      "status": "shipped",
+      "priority": "done",
       "updated": "2026-11-01",
       "evidence": [
         "User-approved bounded batch. docs/recovery-pdf-work.md.",
-        "recovery-pdf-review-20261101-182023; SHA256 9f642d24c0e7bd025606092ef02effd1c762638e79358f74320548808882fe1b; 594 Rust tests/fmt/Clippy, 42 optimized export/viewport comparisons (36 unchanged), six PDF fixtures, production UI/input and imports pass. Local review only; native T1 unconfirmed. docs/recovery-pdf-work.md."
-      ]
+        "recovery-pdf-review-20261101-182023; SHA256 9f642d24c0e7bd025606092ef02effd1c762638e79358f74320548808882fe1b; 594 Rust tests/fmt/Clippy, 42 optimized export/viewport comparisons (36 unchanged), six PDF fixtures, production UI/input and imports pass. Local review only; native T1 unconfirmed. docs/recovery-pdf-work.md.",
+        "Released https://github.com/pashiadesigns/ClipCraft/releases/tag/v0.1.0-preview.2 from c25acbb2093a569c8da0035bd96d0048090bcbda. 596 Rust tests/fmt/Clippy, 13 script checks, 43 exact optimized comparisons (42 unchanged), six PDF fixtures and production UI/input checks; user release acceptance with T1 explicitly deferred. Hosted ZIP SHA256 4a53c410e06edaa0d42955f6cbf3ceb635e9513b837db2eeef010a7528dd7dd1."
+      ],
+      "released_in": "0.1.0-preview.2"
     },
     {
       "id": "EDIT-086",
@@ -5903,34 +5932,36 @@
       "depends_on": [
         "CREATE-002"
       ],
-      "status": "needs_verification",
-      "priority": "next",
-      "schedule_status": "unscheduled",
+      "status": "shipped",
+      "priority": "done",
       "updated": "2026-11-01",
       "evidence": [
         "User-approved bounded batch. docs/recovery-pdf-work.md.",
         "recovery-pdf-review-20261101-182023; SHA256 9f642d24c0e7bd025606092ef02effd1c762638e79358f74320548808882fe1b; 594 Rust tests/fmt/Clippy, 42 optimized export/viewport comparisons (36 unchanged), six PDF fixtures, production UI/input and imports pass. Local review only; native T1 unconfirmed. docs/recovery-pdf-work.md.",
-        "2026-11-01 release follow-up: Recent-sized image replacement thumbnails and redundant Library toolbar removal. Qualification underway."
-      ]
+        "2026-11-01 release follow-up: Recent-sized image replacement thumbnails and redundant Library toolbar removal. Qualification underway.",
+        "Released https://github.com/pashiadesigns/ClipCraft/releases/tag/v0.1.0-preview.2 from c25acbb2093a569c8da0035bd96d0048090bcbda. 596 Rust tests/fmt/Clippy, 13 script checks, 43 exact optimized comparisons (42 unchanged), six PDF fixtures and production UI/input checks; user release acceptance with T1 explicitly deferred. Hosted ZIP SHA256 4a53c410e06edaa0d42955f6cbf3ceb635e9513b837db2eeef010a7528dd7dd1."
+      ],
+      "released_in": "0.1.0-preview.2"
     },
     {
       "id": "FILE-012",
       "title": "Vector-preserving PDF export",
       "category": "Files",
-      "status": "needs_verification",
-      "priority": "next",
+      "status": "shipped",
+      "priority": "done",
       "description": "Shared paths, outlined glyphs and vector stamps in PDF; bounded raster screenshots/effects with sanitization beneath pixel replacements.",
       "completion": "Inspect PDF structure, redaction safety, rendered fidelity, pagination and source immutability across shared export routes.",
       "depends_on": [
         "FILE-006",
         "FILE-008"
       ],
-      "schedule_status": "unscheduled",
       "updated": "2026-11-01",
       "evidence": [
         "User-approved bounded batch. docs/recovery-pdf-work.md.",
-        "recovery-pdf-review-20261101-182023; SHA256 9f642d24c0e7bd025606092ef02effd1c762638e79358f74320548808882fe1b; 594 Rust tests/fmt/Clippy, 42 optimized export/viewport comparisons (36 unchanged), six PDF fixtures, production UI/input and imports pass. Local review only; native T1 unconfirmed. docs/recovery-pdf-work.md."
-      ]
+        "recovery-pdf-review-20261101-182023; SHA256 9f642d24c0e7bd025606092ef02effd1c762638e79358f74320548808882fe1b; 594 Rust tests/fmt/Clippy, 42 optimized export/viewport comparisons (36 unchanged), six PDF fixtures, production UI/input and imports pass. Local review only; native T1 unconfirmed. docs/recovery-pdf-work.md.",
+        "Released https://github.com/pashiadesigns/ClipCraft/releases/tag/v0.1.0-preview.2 from c25acbb2093a569c8da0035bd96d0048090bcbda. 596 Rust tests/fmt/Clippy, 13 script checks, 43 exact optimized comparisons (42 unchanged), six PDF fixtures and production UI/input checks; user release acceptance with T1 explicitly deferred. Hosted ZIP SHA256 4a53c410e06edaa0d42955f6cbf3ceb635e9513b837db2eeef010a7528dd7dd1."
+      ],
+      "released_in": "0.1.0-preview.2"
     },
     {
       "id": "UX-086",
@@ -5954,9 +5985,8 @@
       "id": "CREATE-005",
       "title": "Empty editable guide sections",
       "category": "Creation",
-      "status": "in_progress",
-      "priority": "next",
-      "target_version": "0.1.0-preview.2",
+      "status": "shipped",
+      "priority": "done",
       "updated": "2026-11-01",
       "description": "Blank section in both guide insertion menus; no text or image placeholder; uses existing bottom resize and section actions.",
       "completion": "Verify insert, resize, reorder, duplicate/delete, one-step Undo, format guard and save/reopen.",
@@ -5964,9 +5994,10 @@
         "CREATE-002"
       ],
       "evidence": [
-        "User-requested final release addition; original implementation. docs/preview2-release-work.md."
+        "User-requested final release addition; original implementation. docs/preview2-release-work.md.",
+        "Released https://github.com/pashiadesigns/ClipCraft/releases/tag/v0.1.0-preview.2 from c25acbb2093a569c8da0035bd96d0048090bcbda. 596 Rust tests/fmt/Clippy, 13 script checks, 43 exact optimized comparisons (42 unchanged), six PDF fixtures and production UI/input checks; user release acceptance with T1 explicitly deferred. Hosted ZIP SHA256 4a53c410e06edaa0d42955f6cbf3ceb635e9513b837db2eeef010a7528dd7dd1."
       ],
-      "target_provisional": true
+      "released_in": "0.1.0-preview.2"
     }
   ]
 }

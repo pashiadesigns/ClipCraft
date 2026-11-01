@@ -34,7 +34,7 @@ const waived = passed.filter(c => c.verification?.acceptance).length;
 const lines = [
   '# ClipCraft manual verification batches', '',
   `Updated ${queue.updated}. **${ready('current')} ready current checks in ${currentBatches} batches, plus ${ready('optional')} optional checks.** Passed checks are collected at the bottom.`, '',
-  `Current build: **${queue.current_build.label}**. This is an unpublished test candidate; ${latestPublic} remains the public download.`, '',
+  `Current build: **${queue.current_build.label}**. ${queue.current_build.published ? `This build is published; ${latestPublic} is the current public download.` : `This is an unpublished test candidate; ${latestPublic} remains the public download.`}`, '',
   'Stable shortcut target:', '', `\`${path.join(root, queue.current_build.launcher)}\``, '',
   ...queue.instructions.map((s, i) => `${i + 1}. ${s}`), '',
   '## Still to verify', '',

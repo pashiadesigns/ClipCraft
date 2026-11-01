@@ -37,3 +37,60 @@ installed fonts may vary.
 RustSec dependency checks run on changes, manually and weekly. Dependabot proposes
 Cargo/GitHub Actions updates. These are ordinary scripts with no Codex, model API,
 or AI review calls.
+
+## Planned major-release installers
+
+The intended distribution policy is signed Windows installers for designated major
+releases, with source archives and portable ZIPs continuing for incremental releases.
+This is a future packaging workflow: published preview.1 and preview.2 remain
+unsigned, immutable portable releases. Creating an installer does not itself sign it.
+
+The recommended enterprise package is an MSI with silent installation, upgrade and
+uninstall support, separate Editor/Capture Controller shortcuts, and preservation of
+user settings and Library data. Qualify fresh installation, upgrade, repair and
+uninstall on clean Windows environments before release. Select and pin the installer
+toolchain after reviewing its current distribution and maintenance terms.
+
+Signing requires a validated publisher identity or an approved open-source signing
+provider. Microsoft Artifact Signing currently offers a Basic plan at USD9.99/month
+for 5,000 signatures. It requires a supported paid Azure subscription and identity
+validation; individual developers must be in the US or Canada. The verified legal
+publisher identity appears on certificates. SignPath Foundation is a possible free
+option for qualifying open-source projects, subject to approval and its policies;
+its certificate publisher is SignPath Foundation. No provider has been selected,
+account created, identity submitted, or payment authorized for this work.
+
+Once configured, a protected release workflow should sign and timestamp application
+binaries, build and sign the MSI, verify both signatures, then generate the final
+checksums and attestations. Prefer federated GitHub identity over stored signing
+credentials. Signing the executables inside incremental ZIPs is recommended as well;
+installers need only be produced for designated major releases. Preserve the current
+source manifests, SPDX inventories and provenance checks alongside signing.
+
+Signing identifies the publisher and detects tampering; it is not a security audit
+and does not guarantee immediate SmartScreen reputation for new releases.
+
+For the current payload, signing both executables and the optional Start menu
+PowerShell script would require three signing operations per new portable build.
+An MSI using those same signed files adds one more, for four total across both
+downloads. Extra setup wrappers, architectures, signing retries or new binaries
+can increase that count. Downloading or installing an existing signed artifact
+does not require another signing operation.
+
+Microsoft states that deleting an Artifact Signing account does not affect
+certificates already used to sign files. Timestamp every signature so verification
+continues after certificate expiration, subject to revocation and platform trust.
+An active service is needed to sign subsequent builds; it is not a recurring
+validity fee for existing downloads. The Basic monthly fee is not prorated.
+
+References checked 2026-11-01:
+
+- [Artifact Signing pricing](https://azure.microsoft.com/en-us/products/artifact-signing)
+- [Identity and setup requirements](https://learn.microsoft.com/en-us/azure/artifact-signing/quickstart)
+- [Subscription requirements](https://learn.microsoft.com/en-us/azure/artifact-signing/faq)
+- [Microsoft GitHub signing action](https://github.com/Azure/artifact-signing-action)
+- [SignPath Foundation conditions](https://signpath.org/terms.html)
+- [MSI deployment options](https://learn.microsoft.com/en-us/windows/win32/msi/standard-installer-command-line-options)
+- [WiX maintenance terms](https://docs.firegiant.com/wix/osmf/)
+- [Signing and SmartScreen](https://learn.microsoft.com/en-us/windows/apps/package-and-deploy/code-signing-options)
+- [Certificate lifetime and timestamping](https://learn.microsoft.com/en-us/azure/artifact-signing/concept-certificate-management)
