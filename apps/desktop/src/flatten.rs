@@ -14,6 +14,7 @@ impl Editor {
     }
     pub fn flatten_shortcut(&mut self, ctx: &egui::Context) {
         let available = self.pending.is_none()
+            && self.template_picker.is_none()
             && self.new_image.is_none()
             && self.resize_image.is_none()
             && self.resize_canvas.is_none()

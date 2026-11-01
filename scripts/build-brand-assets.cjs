@@ -4,8 +4,10 @@ const path = require('node:path');
 const sharp = require('sharp');
 const root = path.resolve(__dirname, '..');
 const dir = path.join(root, 'apps/desktop/assets/brand');
+const name = process.argv[2] || 'clipcraft';
+if (!['clipcraft', 'capture-controller'].includes(name)) throw new Error('Unknown brand asset');
 async function main() {
-  const source = fs.readFileSync(path.join(dir, 'clipcraft.svg'), 'utf8');
+  const source = fs.readFileSync(path.join(dir, `${name}.svg`), 'utf8');
   // Give percentage-sized SVG exports a bounded raster viewport without changing
   // the master, viewBox, artwork, colors or aspect ratio.
   const svg = Buffer.from(source.replace(/<svg\b[^>]*>/, root => root
@@ -15,7 +17,7 @@ async function main() {
   const pngs = [];
   for (const size of sizes) {
     const png = await sharp(svg, { density: 144 }).resize(size, size).png().toBuffer();
-    fs.writeFileSync(path.join(dir, `clipcraft-${size}.png`), png);
+    fs.writeFileSync(path.join(dir, `${name}-${size}.png`), png);
     if (size <= 256) pngs.push({size, png});
   }
   const directory = Buffer.alloc(6 + pngs.length * 16);
@@ -31,7 +33,7 @@ async function main() {
     directory.writeUInt32LE(offset, at + 12);
     offset += png.length;
   });
-  fs.writeFileSync(path.join(dir, 'clipcraft.ico'), Buffer.concat([directory, ...pngs.map(x => x.png)]));
+  fs.writeFileSync(path.join(dir, `${name}.ico`), Buffer.concat([directory, ...pngs.map(x => x.png)]));
   console.log(`Exported ${sizes.length} PNG sizes and a ${pngs.length}-size Windows icon.`);
 }
 main().catch(error => { console.error(error); process.exitCode = 1; });

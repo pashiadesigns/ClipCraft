@@ -2,7 +2,7 @@
 
 Updated: 2026-11-01
 
-Local placement/export/Library follow-up qualified: 559 tests and 27 optimized image comparisons. Native review pending; immutable preview.1 and 49 downloads unchanged. Automation remains paused.
+Local workflow review qualified: 575 tests; 27 unchanged and seven new optimized image comparisons. Library import/folder memory, business stamps, six editable templates, controller branding and fixes await native review. Public preview.1 and 49 downloads retained; automation paused.
 
 Generated from roadmap.json. Edit that source and run node scripts/build.mjs; do not edit this generated view.
 
@@ -43,7 +43,7 @@ Generated from roadmap.json. Edit that source and run node scripts/build.mjs; do
 | EDIT-002: Undo and redo | Editing | Shipped | Delivered |
 | FILE-001: Flattened PNG export | Files | Shipped | Delivered |
 | SHIP-001: Portable Windows alpha download | Distribution | Shipped | Delivered |
-| FILE-005: Remember image and export folders | Files | In progress | After the essentials |
+| FILE-005: Remember image and export folders | Files | Needs verification | Next |
 | REF-001: Direct Snagit workflow comparison | Reference | In progress | After the essentials |
 | EDIT-013: Pen, line, and highlighter | Editing | Shipped | Delivered |
 | EDIT-014: Additional shapes and annotation styles | Editing | In progress | Next |
@@ -67,7 +67,7 @@ Generated from roadmap.json. Edit that source and run node scripts/build.mjs; do
 | FILE-007: Rename, duplicate, and recycle projects | Files | Planned | Later |
 | FILE-008: Print preview and printing | Files | Needs verification | Next |
 | FILE-009: Mobile image transfer | Files | Planned | Later |
-| CREATE-001: Image templates and visual guides | Creation | Planned | Later |
+| CREATE-001: Image templates and visual guides | Creation | In progress | Next |
 | VIDEO-003: Video from images | Advanced | Planned | Later |
 | SHARE-001: Sharing destinations and history | Sharing | Planned | Later |
 | HELP-001: ClipCraft help and about | Experience | In progress | Later |
@@ -87,7 +87,7 @@ Generated from roadmap.json. Edit that source and run node scripts/build.mjs; do
 | EDIT-030: Resize Canvas with placement and relative dimensions | Editing | Shipped | Delivered |
 | EDIT-031: Flatten All with reversible object history | Editing | Shipped | Delivered |
 | LIB-003: History storage and recovery preferences | Library | Planned | Next |
-| LIB-004: Bulk import to Library | Library | Planned | Later |
+| LIB-004: Bulk import to Library | Library | Needs verification | Next |
 | LIB-005: Instant Library search | Library | Shipped | Delivered |
 | LIB-006: Complete Library layout and browsing | Library | Needs verification | Next |
 | LIB-007: Complete recent-tray interactions | Library | Planned | Later |
@@ -226,6 +226,12 @@ Generated from roadmap.json. Edit that source and run node scripts/build.mjs; do
 | UX-079: Regular text fitting regression verification | Experience | Needs verification | Next |
 | UX-080: Alt-wheel stroke sizing | Experience | Needs verification | Next |
 | UX-081: Tab preview interface toggle | Experience | Needs verification | Next |
+| UX-082: Review interaction and layout corrections | Experience | Needs verification | Next |
+| CAP-017: Per-mode capture settings and controller polish | Capture | Needs verification | Next |
+| EDIT-085: Business stamp categories | Editing | Needs verification | Next |
+| CREATE-002: Create Image from Template starter gallery | Creation | Needs verification | Next |
+| UX-083: Compact Library thumbnails and template classification | Library | Needs verification | Next |
+| UX-084: Distinct Capture Controller icon and launch shortcuts | Experience | Needs verification | Next |
 
 ## Completion checks and evidence
 
@@ -362,7 +368,7 @@ Completion: Verify forward/reverse selection, cancellation, zero-area input, uns
 
 ### CAP-004: Global capture shortcut
 
-**Shipped** · Delivered · Updated 2026-10-30
+**Shipped** · Delivered · Updated 2026-11-01
 
 Start region capture from another application with Ctrl+Alt+C, even when ClipCraft is minimized. View conflicts and enable/disable registration for the current session in Help > ClipCraft controls / About.
 
@@ -379,7 +385,7 @@ Completion: Verify Windows registration, conflict reporting, native activation, 
 
 ### EDIT-005: Select, move, and resize annotations
 
-**Shipped** · Delivered · Updated 2026-10-29
+**Shipped** · Delivered · Updated 2026-11-01
 
 Edit existing objects directly on the canvas with visible selection handles.
 
@@ -444,7 +450,7 @@ Completion: Verify dedicated node on single vector objects, live body/label rota
 
 ### EDIT-004: Text annotations
 
-**Shipped** · Delivered · Updated 2026-10-29
+**Shipped** · Delivered · Updated 2026-11-01
 
 Create editable multiline text with two bundled fonts, point size, color, opacity, wrapping, and resizable boxes.
 
@@ -487,7 +493,7 @@ Completion: Verify formatting changes, mixed-style selections, wrapping, undo/re
 
 ### EDIT-006: Callouts
 
-**Needs verification** · Next · Updated 2026-10-31
+**Needs verification** · Next · Updated 2026-11-01
 
 Alpha.7 includes rectangular callouts with editable text, fill/outline RGBA, padding, pointer/body movement and resizing. Native styles, history, save/restart and exact clipboard render checks pass. Remaining handle-edge paths, native PNG dialog checks and reference creation/style comparison remain pending.
 
@@ -664,7 +670,7 @@ Completion: Verify flattened output and clearly distinguish visual effects from 
 
 ### LIB-001: Local capture history
 
-**Shipped** · Delivered · Updated 2026-10-30
+**Shipped** · Delivered · Updated 2026-11-01
 
 Local immutable image/project snapshots and thumbnails with bounded retention, Library/recent tray and reopen through unsaved protection. Open/create/paste/capture and explicit save record snapshots; edits since the last snapshot still require saving.
 
@@ -759,7 +765,7 @@ Completion: Open representative PNG and JPEG images through the desktop dialog a
 
 ### EDIT-009: Rectangle annotations
 
-**Shipped** · Delivered · Updated 2026-10-30
+**Shipped** · Delivered · Updated 2026-11-01
 
 Editable outlined rectangles with movement, resizing, Undo, saved output and direct uniform corner rounding. Native readiness mapping completed in alpha.30; general fills and other styles remain EDIT-014.
 
@@ -846,7 +852,7 @@ Completion: Save and reopen a project with its image and annotations intact.
 
 ### EDIT-001: Arrow annotations
 
-**Shipped** · Delivered · Updated 2026-10-29
+**Shipped** · Delivered · Updated 2026-11-01
 
 Draw arrows and adjust their color, width, and coordinates.
 
@@ -868,7 +874,7 @@ Completion: Verify history, divergent edits, failed mutations, and returning to 
 
 ### FILE-001: Flattened PNG export
 
-**Shipped** · Delivered · Updated 2026-10-29
+**Shipped** · Delivered · Updated 2026-11-01
 
 Export the edited image as a shareable PNG.
 
@@ -892,11 +898,11 @@ Completion: Verify the packaged files, checksum, and successful website deployme
 
 ### FILE-005: Remember image and export folders
 
-**In progress** · After the essentials · Updated 2026-10-30
+**Needs verification** · Next · Updated 2026-11-01
 
-Alpha.7 retains successful file-operation directories during the session. Native Save As still fails inspection after explicit user focus, so folder verification and persistence across restarts remain unfinished.
+Separate Open, Project Save and Export folders persist across restarts, with a safe fallback when a remembered folder no longer exists.
 
-Completion: Verify that importing an image retains its directory for Save As and export, including launches from outside the project folder.
+Completion: Verify preferences migration/reopen and real native dialogs after restarting.
 
 - Evidence: Native testing found that an imported image's first Save As still starts from the application's launch directory.
 - Evidence: The local editor stores the last successful file location independently of its editable-project path, fixing the code path that discarded imported-image directories. Native verification blocked; no released behavior claimed.
@@ -904,6 +910,8 @@ Completion: Verify that importing an image retains its directory for Save As and
 - Evidence: 2026-10-30 planning refresh: alpha.22 prioritized verified resize confirmation; this unfinished scope is rescheduled, not marked complete.
 - Evidence: 2026-10-30 planning refresh: unfinished scope remains pending after alpha.27 Library browsing; provisional target moved to alpha.29.
 - Evidence: 2026-10-30 planning refresh: alpha.29 prioritizes the observed arrow stroke defect; this unfinished provisional target is rescheduled by priority.
+- Evidence: 2026-11-01 user authorized bounded review batch. Implementation and automated checks in docs/review-polish-work.md; no native inspection or public binary release claimed.
+- Evidence: Local workflow-review-20261101-154526; SHA256 3b1193a37dff69c8e48158174897cd59447afeefa682e73124cd8f86def97907; 575 tests/fmt/Clippy, 34 optimized image comparisons and Windows imports pass. Native T1–T3 pending. docs/review-polish-work.md. No public binary release.
 - Original target: 0.1.0-alpha.5 — OVERDUE; scope still unfinished
 - Recorded target history: 0.1.0-alpha.5 → 0.1.0-alpha.6 → 0.1.0-alpha.7 → 0.1.0-alpha.8 → 0.1.0-alpha.9 → 0.1.0-alpha.10 → 0.1.0-alpha.12 → 0.1.0-alpha.13 → 0.1.0-alpha.14 → 0.1.0-alpha.22 → 0.1.0-alpha.25 → 0.1.0-alpha.29
 - Release not scheduled; priorities are not version promises.
@@ -927,7 +935,7 @@ Completion: Record direct comparisons and add newly discovered gaps to this back
 
 ### EDIT-013: Pen, line, and highlighter
 
-**Shipped** · Delivered · Updated 2026-10-30
+**Shipped** · Delivered · Updated 2026-11-01
 
 Editable freehand Pen and Highlighter strokes and straight Lines, with RGBA color, width, selection, movement, resizing and output.
 
@@ -1043,7 +1051,7 @@ Completion: Verify sequence advancement/reset, editing, persistence, undo, and e
 
 ### EDIT-018: Original stamps and custom image stamps
 
-**In progress** · Next · Updated 2026-10-31
+**In progress** · Next · Updated 2026-11-01
 
 Custom image stamp import/search/place is implemented under EDIT-081. Curated original packs and categories remain outside the lean beta scope; parent parity is partial.
 
@@ -1098,7 +1106,7 @@ Completion: Verify sampled region, magnification, movement, undo, save/reopen, a
 
 ### EDIT-021: Simplify, Smart Move, and automatic fill
 
-**In progress** · Next · Updated 2026-10-31
+**In progress** · Next · Updated 2026-11-01
 
 Automatic visual simplification is implemented for review under EDIT-077, alongside manual blocks and sampled palettes. Semantic object recognition, Smart Move and background repair remain unfinished.
 
@@ -1372,17 +1380,18 @@ Completion: Define a local transfer design and verify synthetic transfer, cancel
 
 ### CREATE-001: Image templates and visual guides
 
-**Planned** · Later · Updated 2026-10-30
+**In progress** · Next · Updated 2026-11-01
 
-Arrange images and editable text into original reusable guide layouts.
+Original editable starter templates now build on the Step guide engine under CREATE-002. Full template packs, reusable user templates and reference parity remain unfinished.
 
-Completion: Inspect template workflows and verify editing, layout, persistence, and export.
+Completion: Complete scoped gallery review before extending template families; verify editing, layout, persistence and export.
 
 - Evidence: Observed reference UI: artifacts/reference/ui/create-menu.png. Control presence only; behavior remains unverified.
 - Evidence: Observed reference UI: artifacts/reference/ui/file-menu.png. Control presence only; behavior remains unverified.
 - Evidence: 2026-10-30: alpha.24 delivered local history; this unfinished provisional target is revised, not marked complete.
 - Evidence: 2026-10-30 planning refresh: unfinished scope remains pending after alpha.27 Library browsing; provisional target moved to alpha.29.
 - Evidence: 2026-10-30 planning refresh: alpha.29 prioritizes the observed arrow stroke defect; this unfinished provisional target is rescheduled by priority.
+- Evidence: 2026-11-01 user authorized bounded review batch. Implementation and automated checks in docs/review-polish-work.md; no native inspection or public binary release claimed.
 - Original target: 0.1.0-alpha.13 — OVERDUE; scope still unfinished
 - Recorded target history: 0.1.0-alpha.13 → 0.1.0-alpha.14 → 0.1.0-alpha.24 → 0.1.0-alpha.27 → 0.1.0-alpha.29
 - Release not scheduled; priorities are not version promises.
@@ -1590,7 +1599,7 @@ Completion: Verify conflict detection before applying, cancellation, disabling/p
 
 ### UX-011: Canvas zoom and panning
 
-**Shipped** · Delivered · Updated 2026-10-30
+**Shipped** · Delivered · Updated 2026-11-01
 
 Actual size in physical pixels, zoom in/out, shrink-to-fit, zoom-to-fit, percentage choices, pointer-centered zoom and bounded panning. View state does not alter document geometry or export pixels.
 
@@ -1729,14 +1738,16 @@ Completion: Verify explicit deletion touches only selected owned snapshots, sett
 
 ### LIB-004: Bulk import to Library
 
-**Planned** · Later · Updated 2026-10-30
+**Needs verification** · Next · Updated 2026-11-01
 
-Import multiple images into Library with per-file validation, progress and errors. Single-image Open already records a snapshot.
+Background multi-image import with progress, cancellation between files, per-file errors and retained successful items. Current canvas and source files remain intact.
 
-Completion: Verify multi-file success, partial failures, cancellation and no replacement of the active document.
+Completion: Verify mixed successes/failures, capacity limits, cancellation, active-canvas preservation and native multi-file picker.
 
 - Evidence: Identified during alpha.24 local-history verification; not implemented.
 - Evidence: 2026-10-30 planning refresh: alpha.29 prioritizes the observed arrow stroke defect; this unfinished provisional target is rescheduled by priority.
+- Evidence: 2026-11-01 user authorized bounded review batch. Implementation and automated checks in docs/review-polish-work.md; no native inspection or public binary release claimed.
+- Evidence: Local workflow-review-20261101-154526; SHA256 3b1193a37dff69c8e48158174897cd59447afeefa682e73124cd8f86def97907; 575 tests/fmt/Clippy, 34 optimized image comparisons and Windows imports pass. Native T1–T3 pending. docs/review-polish-work.md. No public binary release.
 - Original target: 0.1.0-alpha.28 — OVERDUE; scope still unfinished
 - Recorded target history: 0.1.0-alpha.28
 - Release not scheduled; priorities are not version promises.
@@ -1744,7 +1755,7 @@ Completion: Verify multi-file success, partial failures, cancellation and no rep
 
 ### LIB-005: Instant Library search
 
-**Shipped** · Delivered · Updated 2026-10-30
+**Shipped** · Delivered · Updated 2026-11-01
 
 Filter local history by image label, origin and dimensions without modifying snapshots.
 
@@ -1801,7 +1812,7 @@ Completion: Observe close versus delete semantics; verify selection, close/reope
 
 ### LIB-008: Recent tray layout and active snapshot
 
-**Shipped** · Delivered · Updated 2026-10-30
+**Shipped** · Delivered · Updated 2026-11-01
 
 Place compact thumbnails below the status row, identify the active snapshot and unsaved edits, show image/project labels and protect edits when the active thumbnail is clicked again.
 
@@ -1815,7 +1826,7 @@ Completion: Verify layout, correct selection after record/reopen, Cancel preserv
 
 ### LIB-009: Library filters, sorting and thumbnail sizing
 
-**Shipped** · Delivered · Updated 2026-10-30
+**Shipped** · Delivered · Updated 2026-11-01
 
 Browse local image snapshots in a sidebar/grid with accurate counts, combined year/search filters, deterministic sorting and independent thumbnail sizing.
 
@@ -1872,7 +1883,7 @@ Completion: Verify direct radius dragging for rectangle and callout, unchanged b
 
 ### EDIT-034: Basic numbered and lettered markers
 
-**Shipped** · Delivered · Updated 2026-10-30
+**Shipped** · Delivered · Updated 2026-11-01
 
 Click to place circular sequence markers, choose numbers or letters, reset the next value, change size/fill and edit labels. Text contrast is automatic.
 
@@ -1926,7 +1937,7 @@ Completion: Draw/select/resize an ellipse; verify hit area, reversed bounds, alp
 
 ### UX-016: Live selected-property previews
 
-**Shipped** · Delivered · Updated 2026-10-30
+**Shipped** · Delivered · Updated 2026-11-01
 
 Existing selected-object stroke, corner and color/fill controls redraw the actual object. Release or Apply commits one edit; Escape, focus loss and Cancel restore the original.
 
@@ -2017,7 +2028,7 @@ Completion: Verify public page, roadmap and latest/oldest downloads; pin all rel
 
 ### EDIT-040: Editable rectangular Blur and Pixelation
 
-**Shipped** · Delivered · Updated 2026-10-30
+**Shipped** · Delivered · Updated 2026-11-01
 
 Draw a rectangular Blur or Pixelate region, preview intensity live, move or resize it, and change the effect type. Release commits once; Undo restores the previous state. Visual effects do not guarantee secure redaction.
 
@@ -2030,7 +2041,7 @@ Completion: Verify creation, type change, live intensity, one Undo/Redo, movemen
 
 ### EDIT-041: Editable smooth pixel eraser
 
-**Shipped** · Delivered · Updated 2026-10-30
+**Shipped** · Delivered · Updated 2026-11-01
 
 Draw editable round eraser strokes with live transparent output. Adjust width/opacity, Move or resize, and Undo the complete gesture. Save editable projects or copy/export transparent output. Presets and hard-edge mode remain EDIT-019.
 
@@ -2056,7 +2067,7 @@ Completion: Verify region barriers, tolerance, transparent pixels, no-op history
 
 ### EDIT-043: Rectangular pixel selection, copy and clear
 
-**Shipped** · Delivered · Updated 2026-10-30
+**Shipped** · Delivered · Updated 2026-11-01
 
 Rectangular pixel selection with reverse drag, bounded movement/eight handles, Copy/Cut/Clear, Select entire image, flatten review and one Undo. Exact native clipboard, transparency, save/reopen and optimized package output verified.
 
@@ -2243,7 +2254,7 @@ Completion: Verify fit and zoomed images, all active tool modes, press/move/rele
 
 ### UX-022: Contextual remembered split buttons
 
-**Shipped** · Delivered · Updated 2026-10-30
+**Shipped** · Delivered · Updated 2026-11-01
 
 Upper-right tool-aware quick controls for text justification, object alignment and distribution. Dropdown applies and remembers an action; main icon/label repeats it for subsequent selections. Remember choices independently across restarts.
 
@@ -2260,7 +2271,7 @@ Completion: Verify centered horizontal/vertical text, all alignment/distribution
 
 ### UX-023: Templates for existing editable objects
 
-**Shipped** · Delivered · Updated 2026-10-30
+**Shipped** · Delivered · Updated 2026-11-01
 
 Save selected-object formatting locally and apply presets/templates to same-type selections with active borders. Covers current Text, Line, Step, Shape, Callout, Blur and Pixelate objects; arrow styles remain available.
 
@@ -2273,7 +2284,7 @@ Completion: Verify native repeated presets and custom save/restart/application, 
 
 ### UX-024: Tool-aware canvas pointers
 
-**Shipped** · Delivered · Updated 2026-10-30
+**Shipped** · Delivered · Updated 2026-11-01
 
 Show the active tool at the canvas pointer, with text, move, resize and pan cursors taking priority for the current interaction. Keep tool indicators out of saved/exported images.
 
@@ -2368,7 +2379,7 @@ Completion: Verify edge/center candidates, threshold at different zooms, group m
 
 ### UX-029: Compatible-object hover highlights and retained focus
 
-**Shipped** · Delivered · Updated 2026-10-30
+**Shipped** · Delivered · Updated 2026-11-01
 
 Highlight nodes or borders on hover for objects compatible with the active tool. Newly drawn objects stay selected for immediate sidebar formatting.
 
@@ -3748,6 +3759,7 @@ Completion: Verify placement, re-selection, editing, one-step Undo, current sequ
 - Evidence: User-approved 2026-11-01 follow-up. Local qualification in progress; no new desktop publication. docs/placement-export-work.md.
 - Evidence: Local placement-export-review-20261101-140249; SHA256 195862e34addcebf9e5f86ba44e9a880dfde632f3c665b40a5ad83d6541f5973; 557 tests/fmt/Clippy, 27 optimized image comparisons and Windows imports pass. Production egui UI and injected input verified; new native checks S1/S2. docs/placement-export-work.md.
 - Evidence: Local placement-export-review-20261101-141051; SHA256 b72bcf849d2184b58da2d9202a5acd75f52f1546d8a90bfff9fc1074d3aa202d; 559 tests/fmt/Clippy, 27 optimized image comparisons and Windows imports pass. Production egui UI and injected input verified; new native checks S1/S2. docs/placement-export-work.md.
+- Evidence: 2026-11-01 user passed P1, Q2, S1 and S2 against inferred placement-export-review-20261101-141051. New refinements tracked separately; not a public desktop release.
 - Release not scheduled; priorities are not version promises.
 - Depends on: EDIT-083
 
@@ -3762,6 +3774,7 @@ Completion: Verify recency replacement, hidden/deleted/moving exclusion, persist
 - Evidence: User-approved 2026-11-01 follow-up. Local qualification in progress; no new desktop publication. docs/placement-export-work.md.
 - Evidence: Local placement-export-review-20261101-140249; SHA256 195862e34addcebf9e5f86ba44e9a880dfde632f3c665b40a5ad83d6541f5973; 557 tests/fmt/Clippy, 27 optimized image comparisons and Windows imports pass. Production egui UI and injected input verified; new native checks S1/S2. docs/placement-export-work.md.
 - Evidence: Local placement-export-review-20261101-141051; SHA256 b72bcf849d2184b58da2d9202a5acd75f52f1546d8a90bfff9fc1074d3aa202d; 559 tests/fmt/Clippy, 27 optimized image comparisons and Windows imports pass. Production egui UI and injected input verified; new native checks S1/S2. docs/placement-export-work.md.
+- Evidence: 2026-11-01 user passed P1, Q2, S1 and S2 against inferred placement-export-review-20261101-141051. New refinements tracked separately; not a public desktop release.
 - Release not scheduled; priorities are not version promises.
 - Depends on: UX-075
 
@@ -3776,6 +3789,7 @@ Completion: Verify format controls stay stationary, settings survive reopening, 
 - Evidence: User-approved 2026-11-01 follow-up. Local qualification in progress; no new desktop publication. docs/placement-export-work.md.
 - Evidence: Local placement-export-review-20261101-140249; SHA256 195862e34addcebf9e5f86ba44e9a880dfde632f3c665b40a5ad83d6541f5973; 557 tests/fmt/Clippy, 27 optimized image comparisons and Windows imports pass. Production egui UI and injected input verified; new native checks S1/S2. docs/placement-export-work.md.
 - Evidence: Local placement-export-review-20261101-141051; SHA256 b72bcf849d2184b58da2d9202a5acd75f52f1546d8a90bfff9fc1074d3aa202d; 559 tests/fmt/Clippy, 27 optimized image comparisons and Windows imports pass. Production egui UI and injected input verified; new native checks S1/S2. docs/placement-export-work.md.
+- Evidence: 2026-11-01 user passed P1, Q2, S1 and S2 against inferred placement-export-review-20261101-141051. New refinements tracked separately; not a public desktop release.
 - Release not scheduled; priorities are not version promises.
 - Depends on: LIB-013
 
@@ -3790,6 +3804,7 @@ Completion: Inspect production panels, actual metadata, tag availability and sea
 - Evidence: User-approved 2026-11-01 follow-up. Local qualification in progress; no new desktop publication. docs/placement-export-work.md.
 - Evidence: Local placement-export-review-20261101-140249; SHA256 195862e34addcebf9e5f86ba44e9a880dfde632f3c665b40a5ad83d6541f5973; 557 tests/fmt/Clippy, 27 optimized image comparisons and Windows imports pass. Production egui UI and injected input verified; new native checks S1/S2. docs/placement-export-work.md.
 - Evidence: Local placement-export-review-20261101-141051; SHA256 b72bcf849d2184b58da2d9202a5acd75f52f1546d8a90bfff9fc1074d3aa202d; 559 tests/fmt/Clippy, 27 optimized image comparisons and Windows imports pass. Production egui UI and injected input verified; new native checks S1/S2. docs/placement-export-work.md.
+- Evidence: 2026-11-01 user passed P1, Q2, S1 and S2 against inferred placement-export-review-20261101-141051. New refinements tracked separately; not a public desktop release.
 - Release not scheduled; priorities are not version promises.
 - Depends on: LIB-013
 
@@ -3804,6 +3819,7 @@ Completion: Verify new defaults, persisted opt-in, zoom-aware brush circles and 
 - Evidence: User-approved 2026-11-01 follow-up. Local qualification in progress; no new desktop publication. docs/placement-export-work.md.
 - Evidence: Local placement-export-review-20261101-140249; SHA256 195862e34addcebf9e5f86ba44e9a880dfde632f3c665b40a5ad83d6541f5973; 557 tests/fmt/Clippy, 27 optimized image comparisons and Windows imports pass. Production egui UI and injected input verified; new native checks S1/S2. docs/placement-export-work.md.
 - Evidence: Local placement-export-review-20261101-141051; SHA256 b72bcf849d2184b58da2d9202a5acd75f52f1546d8a90bfff9fc1074d3aa202d; 559 tests/fmt/Clippy, 27 optimized image comparisons and Windows imports pass. Production egui UI and injected input verified; new native checks S1/S2. docs/placement-export-work.md.
+- Evidence: 2026-11-01 user passed P1, Q2, S1 and S2 against inferred placement-export-review-20261101-141051. New refinements tracked separately; not a public desktop release.
 - Release not scheduled; priorities are not version promises.
 - Depends on: UX-075
 
@@ -3819,6 +3835,7 @@ Completion: Reproduce the reported workflow and confirm Resize shape fitting tog
 - Evidence: 2026-11-01 user: seems to be working now. Native build inferred from current launcher; actual automated properties-popup test also passes.
 - Evidence: Local placement-export-review-20261101-140249; SHA256 195862e34addcebf9e5f86ba44e9a880dfde632f3c665b40a5ad83d6541f5973; 557 tests/fmt/Clippy, 27 optimized image comparisons and Windows imports pass. Production egui UI and injected input verified; new native checks S1/S2. docs/placement-export-work.md.
 - Evidence: Local placement-export-review-20261101-141051; SHA256 b72bcf849d2184b58da2d9202a5acd75f52f1546d8a90bfff9fc1074d3aa202d; 559 tests/fmt/Clippy, 27 optimized image comparisons and Windows imports pass. Production egui UI and injected input verified; new native checks S1/S2. docs/placement-export-work.md.
+- Evidence: 2026-11-01 user passed P1, Q2, S1 and S2 against inferred placement-export-review-20261101-141051. New refinements tracked separately; not a public desktop release.
 - Release not scheduled; priorities are not version promises.
 - Depends on: EDIT-012
 
@@ -3833,6 +3850,7 @@ Completion: Verify width clamping, raw event handling without smoothing repeats,
 - Evidence: User addition to bounded 2026-11-01 batch. Synthetic canvas wheel/draw input tests pass. docs/placement-export-work.md.
 - Evidence: Local placement-export-review-20261101-140249; SHA256 195862e34addcebf9e5f86ba44e9a880dfde632f3c665b40a5ad83d6541f5973; 557 tests/fmt/Clippy, 27 optimized image comparisons and Windows imports pass. Production egui UI and injected input verified; new native checks S1/S2. docs/placement-export-work.md.
 - Evidence: Local placement-export-review-20261101-141051; SHA256 b72bcf849d2184b58da2d9202a5acd75f52f1546d8a90bfff9fc1074d3aa202d; 559 tests/fmt/Clippy, 27 optimized image comparisons and Windows imports pass. Production egui UI and injected input verified; new native checks S1/S2. docs/placement-export-work.md.
+- Evidence: 2026-11-01 user passed P1, Q2, S1 and S2 against inferred placement-export-review-20261101-141051. New refinements tracked separately; not a public desktop release.
 - Release not scheduled; priorities are not version promises.
 - Depends on: UX-078
 
@@ -3846,5 +3864,84 @@ Completion: Verify both Tab and Show UI restore previous pane states, text/dialo
 
 - Evidence: User addition to bounded 2026-11-01 batch. Actual shell input/layout tests cover all four prior Recent/Properties combinations, recovery button, repeat, modifier chords and text/dialog guards. docs/placement-export-work.md.
 - Evidence: Local placement-export-review-20261101-141051; SHA256 b72bcf849d2184b58da2d9202a5acd75f52f1546d8a90bfff9fc1074d3aa202d; 559 tests/fmt/Clippy, 27 optimized image comparisons and Windows imports pass. Production egui UI and injected input verified; new native checks S1/S2. docs/placement-export-work.md.
+- Evidence: 2026-11-01 user passed P1, Q2, S1 and S2 against inferred placement-export-review-20261101-141051. New refinements tracked separately; not a public desktop release.
 - Release not scheduled; priorities are not version promises.
 - Depends on: UX-073
+
+### UX-082: Review interaction and layout corrections
+
+**Needs verification** · Next · Updated 2026-11-01
+
+Nested shadow color picking, stamp preview after editing, selected-only radius nodes, compact Rename footer, centered Show UI and focus-safe window sizing.
+
+Completion: Actual popup/input/layout regressions, unchanged output fixtures and native cross-monitor focus review.
+
+- Evidence: User-authorized bounded follow-up 2026-11-01. docs/review-polish-work.md. No native desktop or OS clipboard use.
+- Evidence: Local workflow-review-20261101-154526; SHA256 3b1193a37dff69c8e48158174897cd59447afeefa682e73124cd8f86def97907; 575 tests/fmt/Clippy, 34 optimized image comparisons and Windows imports pass. Native T1–T3 pending. docs/review-polish-work.md. No public binary release.
+- Release not scheduled; priorities are not version promises.
+- Depends on: UX-075, UX-077, UX-081
+
+### CAP-017: Per-mode capture settings and controller polish
+
+**Needs verification** · Next · Updated 2026-11-01
+
+Remember image-mode settings independently, apply them to matching capture shortcuts, default Steps cursor on, draw a real fullscreen gear and connect the full active tab height.
+
+Completion: Save/reopen profiles, hotkey dispatch/clipboard adapter, controller meshes and native capture confirmation.
+
+- Evidence: User-authorized bounded follow-up 2026-11-01. docs/review-polish-work.md. No native desktop or OS clipboard use.
+- Evidence: Local workflow-review-20261101-154526; SHA256 3b1193a37dff69c8e48158174897cd59447afeefa682e73124cd8f86def97907; 575 tests/fmt/Clippy, 34 optimized image comparisons and Windows imports pass. Native T1–T3 pending. docs/review-polish-work.md. No public binary release.
+- Release not scheduled; priorities are not version promises.
+- Depends on: CAP-009, CAP-004
+
+### EDIT-085: Business stamp categories
+
+**Needs verification** · Next · Updated 2026-11-01
+
+Eight original editable vector workflow stamps: time, lock, document, download, upload, idea, keyboard and target. Search intersects category filters; existing raster sample remains.
+
+Completion: Verify palette bounds, portable paths, render/export and category/search behavior.
+
+- Evidence: User-authorized batch; public documentation and supplied template screenshots, original assets and implementation. docs/review-polish-work.md. Native review and release pending.
+- Evidence: Local workflow-review-20261101-154526; SHA256 3b1193a37dff69c8e48158174897cd59447afeefa682e73124cd8f86def97907; 575 tests/fmt/Clippy, 34 optimized image comparisons and Windows imports pass. Native T1–T3 pending. docs/review-polish-work.md. No public binary release.
+- Release not scheduled; priorities are not version promises.
+- Depends on: EDIT-083
+
+### CREATE-002: Create Image from Template starter gallery
+
+**Needs verification** · Next · Updated 2026-11-01
+
+Six original editable layouts: two steps, three steps, four-step grid, before/after, overview and timeline. Choose files or Library images, reorder them, use Fit/Fill, edit guide sections and replace images nondestructively.
+
+Completion: Verify gallery creation, all six layouts, image replacement Undo, portable save/reopen, Library Template classification and exact output.
+
+- Evidence: User-authorized batch; public documentation and supplied template screenshots, original assets and implementation. docs/review-polish-work.md. Native review and release pending.
+- Evidence: Local workflow-review-20261101-154526; SHA256 3b1193a37dff69c8e48158174897cd59447afeefa682e73124cd8f86def97907; 575 tests/fmt/Clippy, 34 optimized image comparisons and Windows imports pass. Native T1–T3 pending. docs/review-polish-work.md. No public binary release.
+- Release not scheduled; priorities are not version promises.
+- Depends on: CREATE-001, CAP-014
+
+### UX-083: Compact Library thumbnails and template classification
+
+**Needs verification** · Next · Updated 2026-11-01
+
+Thumbnail type overlays always remain visible. Default secondary text is name-only; Show thumbnail details reveals dimensions, type and date. Template documents use the From Template filter and Template overlay. File > Recent uses half-size thumbnails in rows of ten; Show more reveals ten more, retaining shared context actions.
+
+Completion: Verify default/toggle persistence, overlays in both states and template filtering after reopen. Verify pagination, reopen reset and compact thumbnail geometry.
+
+- Evidence: User-authorized batch; public documentation and supplied template screenshots, original assets and implementation. docs/review-polish-work.md. Native review and release pending.
+- Evidence: Local workflow-review-20261101-154526; SHA256 3b1193a37dff69c8e48158174897cd59447afeefa682e73124cd8f86def97907; 575 tests/fmt/Clippy, 34 optimized image comparisons and Windows imports pass. Native T1–T3 pending. docs/review-polish-work.md. No public binary release.
+- Release not scheduled; priorities are not version promises.
+- Depends on: LIB-014, CREATE-002
+
+### UX-084: Distinct Capture Controller icon and launch shortcuts
+
+**Needs verification** · Next · Updated 2026-11-01
+
+User-supplied Capture Controller SVG in its window and tray menu, a separate embedded Windows resource, and per-user Start menu entries for Editor and Capture Controller. Explicit launch flags reuse a compatible running app.
+
+Completion: Validate all icon sizes and Windows resources, shortcut targets/arguments/icons, startup override and native tray/Start menu appearance.
+
+- Evidence: User supplied capturecontrollericon.svg on 2026-11-01; original source retained. docs/review-polish-work.md. Native menu/Start appearance pending.
+- Evidence: Local workflow-review-20261101-154526; SHA256 3b1193a37dff69c8e48158174897cd59447afeefa682e73124cd8f86def97907; 575 tests/fmt/Clippy, 34 optimized image comparisons and Windows imports pass. Native T1–T3 pending. docs/review-polish-work.md. No public binary release.
+- Release not scheduled; priorities are not version promises.
+- Depends on: CAP-009, UX-065

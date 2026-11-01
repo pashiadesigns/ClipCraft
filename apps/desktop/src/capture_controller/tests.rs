@@ -2,6 +2,39 @@ use super::*;
 use crate::property_layout::tests::{PaintedOutput, dump_meshes};
 
 #[test]
+fn capture_hotkey_uses_its_saved_mode_profile_and_clipboard_adapter() {
+    let ctx = egui::Context::default();
+    let mut e = crate::canvas::tests::editor(&ctx);
+    let root = tempfile::tempdir().unwrap();
+    e.history = crate::history::HistoryPanel::isolated(root.path());
+    let region = Settings {
+        clipboard: true,
+        delay_seconds: 5,
+        ..Default::default()
+    };
+    e.quick_controls.remember_capture(region.clone());
+    e.quick_controls.remember_capture(Settings {
+        selection: Selection::Window,
+        preview: false,
+        ..Default::default()
+    });
+    e.request_keybind_capture(capture_core::keybinds::Action::Region, &ctx);
+    assert_eq!(e.capture_controller.active, Some(region.clone()));
+    let mut copied = false;
+    e.accept_capture(
+        capture_core::Document::blank(50, 30).unwrap(),
+        region,
+        |_| {
+            copied = true;
+            Ok(())
+        },
+    );
+    assert!(copied);
+    assert_eq!(e.session.document.width, 50);
+    assert!(e.status.contains("Copied to clipboard"));
+}
+
+#[test]
 fn controller_survives_success_cancel_and_error_without_reopening_or_losing_settings() {
     for (preview, success) in [(true, true), (false, true), (true, false), (false, false)] {
         let ctx = egui::Context::default();

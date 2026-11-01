@@ -107,7 +107,10 @@ impl Editor {
             egui::Stroke::new(1.0, color),
             egui::StrokeKind::Outside,
         );
-        for (_, point) in annotation.handles() {
+        for (handle, point) in annotation.handles() {
+            if handle.is_radius() {
+                continue;
+            }
             painter.circle_filled(transform.screen_point(point), 2.5, color);
         }
     }

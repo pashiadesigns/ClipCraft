@@ -156,8 +156,12 @@ impl Editor {
         action: capture_core::keybinds::Action,
         ctx: &egui::Context,
     ) {
-        match action
+        let selection = action
             .settings(self.quick_controls.capture_settings())
+            .selection;
+        match self
+            .quick_controls
+            .capture_for(selection)
             .request(Mode::Image)
         {
             Ok(settings) => self.request_action(FileAction::StartCapture(settings), ctx),
@@ -178,7 +182,7 @@ impl Editor {
         ctx.show_viewport_immediate(
             id,
             egui::ViewportBuilder::default()
-                .with_icon(crate::brand::icon())
+                .with_icon(crate::brand::controller_icon())
                 .with_title("ClipCraft Capture")
                 .with_inner_size([714., 190.])
                 .with_min_inner_size([714., 190.])
@@ -198,6 +202,12 @@ impl Editor {
                 action = inner.or(action);
             },
         );
+        if before.selection != self.capture_controller.settings.selection {
+            self.capture_controller.settings = self
+                .quick_controls
+                .capture_for(self.capture_controller.settings.selection);
+            ctx.request_repaint();
+        }
         if before != self.capture_controller.settings {
             self.quick_controls
                 .remember_capture(self.capture_controller.settings.clone());
@@ -349,7 +359,7 @@ fn panel(
                     });
                 }
             });
-            if let Some(tab)=active_tab {ui.painter().rect_filled(egui::Rect::from_min_max(egui::pos2(tab.right()-7.,tab.top()+3.),egui::pos2(content.response.rect.left()+2.,tab.bottom()-3.)),0,blue);}
+            if let Some(tab)=active_tab {ui.painter().rect_filled(egui::Rect::from_min_max(egui::pos2(tab.right()-7.,tab.top()),egui::pos2(content.response.rect.left()+2.,tab.bottom())),0,blue);}
         });
         ui.add_space(4.);
         ui.horizontal(|ui| {
@@ -374,7 +384,7 @@ fn fullscreen_options(ui: &mut egui::Ui, target: &mut capture_core::capture_opti
     use capture_core::capture_options::{Display, Fullscreen};
     let id = egui::Id::unique("capture-display-list");
     let response = ui
-        .menu_button("⚙", |ui| {
+        .menu_button("   ", |ui| {
             ui.set_min_width(220.);
             ui.heading("Fullscreen displays");
             ui.selectable_value(target, Fullscreen::Pointer, "Monitor under cursor");
@@ -421,6 +431,18 @@ fn fullscreen_options(ui: &mut egui::Ui, target: &mut capture_core::capture_opti
         })
         .response
         .on_hover_text("Fullscreen settings");
+    let center = response.rect.center();
+    let painter = ui.painter();
+    painter.circle_stroke(center, 4.5, Stroke::new(1.5, Color32::WHITE));
+    painter.circle_stroke(center, 1.5, Stroke::new(1.2, Color32::WHITE));
+    for i in 0..8 {
+        let angle = i as f32 * std::f32::consts::FRAC_PI_4;
+        let v = egui::vec2(angle.cos(), angle.sin());
+        painter.line_segment(
+            [center + v * 4.5, center + v * 7.],
+            Stroke::new(2., Color32::WHITE),
+        );
+    }
     #[cfg(test)]
     ui.ctx()
         .data_mut(|d| d.insert_temp(egui::Id::unique("fullscreen-settings"), response.rect));

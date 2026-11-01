@@ -1,6 +1,7 @@
 //! Bounded local snapshots shared by desktop workflows and CLI tooling.
 //! The index is atomic; immutable documents and thumbnails never reference
 //! external user files. A process lock serializes index updates.
+pub mod import;
 mod manage;
 use crate::{Document, Error, Result, atomic_write};
 use image::{ImageFormat, RgbaImage};
@@ -25,22 +26,24 @@ pub enum MediaKind {
     #[default]
     Image,
     Steps,
+    Template,
 }
 impl MediaKind {
     pub fn label(self) -> &'static str {
         match self {
             Self::Image => "Image",
             Self::Steps => "Step capture",
+            Self::Template => "From Template",
         }
     }
     fn is_image(&self) -> bool {
         *self == Self::Image
     }
     fn of(document: &Document) -> Self {
-        if document.guide.is_some() {
-            Self::Steps
-        } else {
-            Self::Image
+        match document.guide.as_ref() {
+            Some(guide) if guide.template.is_some() => Self::Template,
+            Some(_) => Self::Steps,
+            None => Self::Image,
         }
     }
 }
@@ -417,7 +420,7 @@ impl History {
         for entry in &mut next.entries {
             if let Ok(doc) = Document::load(&self.paths(entry.storage_id())?[0]) {
                 entry.kind = MediaKind::of(&doc);
-                found |= entry.kind == MediaKind::Steps;
+                found |= entry.kind != MediaKind::Image;
             }
         }
         // Empty legacy recent stores retain their bounded snapshot semantics.
@@ -619,7 +622,7 @@ impl History {
                 entry.created_utc()
             );
         }
-        if !matches!(mode, WriteMode::Snapshot) || entry.kind == MediaKind::Steps {
+        if !matches!(mode, WriteMode::Snapshot) || entry.kind != MediaKind::Image {
             next.version = 3;
         }
         let paths = self.paths(&storage_id)?;

@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "updated": "2026-11-01",
-  "scope": "Local placement/export/Library follow-up qualified: 559 tests and 27 optimized image comparisons. Native review pending; immutable preview.1 and 49 downloads unchanged. Automation remains paused.",
+  "scope": "Local workflow review qualified: 575 tests; 27 unchanged and seven new optimized image comparisons. Library import/folder memory, business stamps, six editable templates, controller branding and fixes await native review. Public preview.1 and 49 downloads retained; automation paused.",
   "features": [
     {
       "id": "UX-002",
@@ -240,7 +240,7 @@
         "Windows Ctrl+Alt+F24 registration test verifies exclusive ownership and cleanup; regular tests verify event bursts are consumed once.",
         "Exact optimized alpha.13 registers after the previous instance exits, displays the Ready/status controls, wakes from minimized and captures all 256000 expected pixels via native clipboard/import/save/reopen. artifacts/native-alpha13/optimized/ and packaged-controls.png."
       ],
-      "updated": "2026-10-30",
+      "updated": "2026-11-01",
       "depends_on": [
         "CAP-001"
       ],
@@ -256,7 +256,15 @@
         "0.1.0-alpha.10",
         "0.1.0-alpha.12",
         "0.1.0-alpha.13"
-      ]
+      ],
+      "review_verification": {
+        "build": "placement-export-review-20261101-141051",
+        "scope": "Configurable capture shortcuts and conflict reporting; native L5 passed. Per-mode settings follow-up is qualified separately.",
+        "evidence": [
+          "docs/manual-verification.json: recorded user passes; scope limited to described current behavior",
+          "docs/placement-export-work.md: automated rendering/input qualification"
+        ]
+      }
     },
     {
       "id": "EDIT-005",
@@ -272,8 +280,16 @@
         "Saved edits reopened; native PNG export matched the CLI-rendered project exactly across all 576,000 pixels.",
         "Four geometry/history tests cover topmost hit testing, bounds, crossing handles, invalid input, redaction movement, and persistence."
       ],
-      "updated": "2026-10-29",
-      "released_in": "0.1.0-alpha.2"
+      "updated": "2026-11-01",
+      "released_in": "0.1.0-alpha.2",
+      "review_verification": {
+        "build": "placement-export-review-20261101-141051",
+        "scope": "Click/Shift-click/marquee selection, movement and handles, keyboard nudges, groups and child editing.",
+        "evidence": [
+          "docs/manual-verification.json: recorded user passes; scope limited to described current behavior",
+          "docs/placement-export-work.md: automated rendering/input qualification"
+        ]
+      }
     },
     {
       "id": "EDIT-010",
@@ -377,7 +393,15 @@
         "Four new core tests cover persistence, invalid input/history, wrapping, clipping, alpha compositing, and translated output."
       ],
       "released_in": "0.1.0-alpha.3",
-      "updated": "2026-10-29"
+      "updated": "2026-11-01",
+      "review_verification": {
+        "build": "placement-export-review-20261101-141051",
+        "scope": "Text boxes with installed fonts, whole-object typography, fit modes, justification, outline and Undo. Mixed formatting within one text box remains planned.",
+        "evidence": [
+          "docs/manual-verification.json: recorded user passes; scope limited to described current behavior",
+          "docs/placement-export-work.md: automated rendering/input qualification"
+        ]
+      }
     },
     {
       "id": "EDIT-012",
@@ -449,7 +473,7 @@
         "2026-10-30 planning refresh: alpha.29 prioritizes the observed arrow stroke defect; this unfinished provisional target is rescheduled by priority.",
         "2026-10-31 user verified A1, A6. User reports all checks through I5 passed except G3 font color. Tested build inferred as step-outline-controls-preview-20261031-014235 (SHA256 3b81acc603d91079d9f591fdc45622cf248c38b122b237785a43f558d92e6238); exact binary not directly confirmed. Scope is the listed checks, not all options or full reference parity. docs/manual-verification.json preserves prior evidence. No new desktop publication."
       ],
-      "updated": "2026-10-31",
+      "updated": "2026-11-01",
       "depends_on": [
         "EDIT-004"
       ],
@@ -471,7 +495,15 @@
         "0.1.0-alpha.29"
       ],
       "missed_target_version": "0.1.0-alpha.6",
-      "schedule_status": "unscheduled"
+      "schedule_status": "unscheduled",
+      "review_verification": {
+        "build": "placement-export-review-20261101-141051",
+        "scope": "Rounded callout bodies and editable pointers, inline text, live styling, transforms and Undo. Additional body families remain separate.",
+        "evidence": [
+          "docs/manual-verification.json: recorded user passes; scope limited to described current behavior",
+          "docs/placement-export-work.md: automated rendering/input qualification"
+        ]
+      }
     },
     {
       "id": "FILE-003",
@@ -753,7 +785,7 @@
         "Alpha.24 native project/save revisions, restart thumbnails, seven-object recovery, unsaved Cancel/Discard, missing-file recovery and real capture/Open Recent pass. 768000 exact native pixels. docs/alpha24-history-verification.md",
         "Exact optimized package verifies clipboard/new-canvas recording, View Library/recent actions, seven-object recovery and256000 pixels. All five origins executed; total1024000 native pixels. docs/alpha24-history-verification.md"
       ],
-      "updated": "2026-10-30",
+      "updated": "2026-11-01",
       "depends_on": [
         "DOC-001",
         "FILE-002"
@@ -769,7 +801,15 @@
         "0.1.0-alpha.14",
         "0.1.0-alpha.22",
         "0.1.0-alpha.25"
-      ]
+      ],
+      "review_verification": {
+        "build": "placement-export-review-20261101-141051",
+        "scope": "Editable local Library snapshots, autosave/reopen, metadata and non-evicting storage controls. Native Library selection and bulk actions passed R1.",
+        "evidence": [
+          "docs/manual-verification.json: recorded user passes; scope limited to described current behavior",
+          "docs/placement-export-work.md: automated rendering/input qualification"
+        ]
+      }
     },
     {
       "id": "LIB-002",
@@ -913,7 +953,7 @@
         "Native alpha.29 rectangle drawing, radius drag, Undo/Redo and optimized reopening pass. docs/alpha29-tools-verification.md",
         "Native alpha.29 creation/radius/Undo/save/optimized reopen confirmed; alpha.30 shared selected-property previews. docs/alpha29-tools-verification.md; docs/alpha30-live-verification.md"
       ],
-      "updated": "2026-10-30",
+      "updated": "2026-11-01",
       "original_target_version": "0.1.0-alpha.5",
       "original_target_commit": "a3edd56e49aac63622bdf6abaca8aacc3f73488b",
       "target_history": [
@@ -930,7 +970,15 @@
         "0.1.0-alpha.25",
         "0.1.0-alpha.29"
       ],
-      "released_in": "0.1.0-alpha.29"
+      "released_in": "0.1.0-alpha.29",
+      "review_verification": {
+        "build": "placement-export-review-20261101-141051",
+        "scope": "Editable rectangle, ellipse and polygon shapes with fills, outlines, rounded corners and inline text.",
+        "evidence": [
+          "docs/manual-verification.json: recorded user passes; scope limited to described current behavior",
+          "docs/placement-export-work.md: automated rendering/input qualification"
+        ]
+      }
     },
     {
       "id": "EDIT-003",
@@ -1066,8 +1114,16 @@
       "evidence": [
         "Native arrow drawing and saved-project reopening passed."
       ],
-      "updated": "2026-10-29",
-      "released_in": "0.1.0-alpha.1"
+      "updated": "2026-11-01",
+      "released_in": "0.1.0-alpha.1",
+      "review_verification": {
+        "build": "placement-export-review-20261101-141051",
+        "scope": "Editable arrows with endpoints, line patterns and curves; selection, live styling, transforms and Undo.",
+        "evidence": [
+          "docs/manual-verification.json: recorded user passes; scope limited to described current behavior",
+          "docs/placement-export-work.md: automated rendering/input qualification"
+        ]
+      }
     },
     {
       "id": "EDIT-002",
@@ -1095,8 +1151,16 @@
         "Native export matched all 576,000 fixture pixels.",
         "Optimized CLI save/reopen/render comparison also matched exactly."
       ],
-      "updated": "2026-10-29",
-      "released_in": "0.1.0-alpha.1"
+      "updated": "2026-11-01",
+      "released_in": "0.1.0-alpha.1",
+      "review_verification": {
+        "build": "placement-export-review-20261101-141051",
+        "scope": "PNG/JPEG/PDF export, image/page preview and export options. Native Q1 and S2 passed.",
+        "evidence": [
+          "docs/manual-verification.json: recorded user passes; scope limited to described current behavior",
+          "docs/placement-export-work.md: automated rendering/input qualification"
+        ]
+      }
     },
     {
       "id": "SHIP-001",
@@ -1117,19 +1181,21 @@
       "id": "FILE-005",
       "title": "Remember image and export folders",
       "category": "Files",
-      "status": "in_progress",
-      "priority": "soon",
-      "description": "Alpha.7 retains successful file-operation directories during the session. Native Save As still fails inspection after explicit user focus, so folder verification and persistence across restarts remain unfinished.",
-      "completion": "Verify that importing an image retains its directory for Save As and export, including launches from outside the project folder.",
+      "status": "needs_verification",
+      "priority": "next",
+      "description": "Separate Open, Project Save and Export folders persist across restarts, with a safe fallback when a remembered folder no longer exists.",
+      "completion": "Verify preferences migration/reopen and real native dialogs after restarting.",
       "evidence": [
         "Native testing found that an imported image's first Save As still starts from the application's launch directory.",
         "The local editor stores the last successful file location independently of its editable-project path, fixing the code path that discarded imported-image directories. Native verification blocked; no released behavior claimed.",
         "Editor inspection is restored, but common Save As dialogs still report foreground window did not report a process id. Fresh selection and user-focus retry failed; avoid unchanged retries. docs/native-alpha7-verification.md.",
         "2026-10-30 planning refresh: alpha.22 prioritized verified resize confirmation; this unfinished scope is rescheduled, not marked complete.",
         "2026-10-30 planning refresh: unfinished scope remains pending after alpha.27 Library browsing; provisional target moved to alpha.29.",
-        "2026-10-30 planning refresh: alpha.29 prioritizes the observed arrow stroke defect; this unfinished provisional target is rescheduled by priority."
+        "2026-10-30 planning refresh: alpha.29 prioritizes the observed arrow stroke defect; this unfinished provisional target is rescheduled by priority.",
+        "2026-11-01 user authorized bounded review batch. Implementation and automated checks in docs/review-polish-work.md; no native inspection or public binary release claimed.",
+        "Local workflow-review-20261101-154526; SHA256 3b1193a37dff69c8e48158174897cd59447afeefa682e73124cd8f86def97907; 575 tests/fmt/Clippy, 34 optimized image comparisons and Windows imports pass. Native T1\u2013T3 pending. docs/review-polish-work.md. No public binary release."
       ],
-      "updated": "2026-10-30",
+      "updated": "2026-11-01",
       "released_in": "0.1.0-alpha.7",
       "original_target_version": "0.1.0-alpha.5",
       "original_target_commit": "a3edd56e49aac63622bdf6abaca8aacc3f73488b",
@@ -1192,7 +1258,7 @@
         "2026-10-30: user requested breadth over repeated arrow refinement. Pen, line and highlighter share editable stroke geometry, persistence and renderer. Active implementation; no native completion claim yet.",
         "Native behavior, editable persistence and exact clipboard output verified for the scoped implementation. docs/alpha29-tools-verification.md"
       ],
-      "updated": "2026-10-30",
+      "updated": "2026-11-01",
       "depends_on": [
         "EDIT-005"
       ],
@@ -1210,7 +1276,15 @@
         "0.1.0-alpha.27",
         "0.1.0-alpha.29"
       ],
-      "released_in": "0.1.0-alpha.29"
+      "released_in": "0.1.0-alpha.29",
+      "review_verification": {
+        "build": "placement-export-review-20261101-141051",
+        "scope": "Pen, Line and pen/rectangle Highlighter; styling, width-sized brush previews, Alt-wheel width, live gestures and Undo. Pen pressure remains planned.",
+        "evidence": [
+          "docs/manual-verification.json: recorded user passes; scope limited to described current behavior",
+          "docs/placement-export-work.md: automated rendering/input qualification"
+        ]
+      }
     },
     {
       "id": "EDIT-014",
@@ -1390,7 +1464,7 @@
         "2026-10-30 planning refresh: alpha.29 prioritizes the observed arrow stroke defect; this unfinished provisional target is rescheduled by priority.",
         "2026-10-31 lean beta batch approved. PNG/JPEG/PDF and print preview, local installed fonts, image stamp import/search/place, Library bulk tags/export/delete and adjustable non-evicting storage implemented; qualification underway. docs/lean-beta-work.md. No native or published completion claimed."
       ],
-      "updated": "2026-10-31",
+      "updated": "2026-11-01",
       "depends_on": [
         "EDIT-005"
       ],
@@ -1406,7 +1480,15 @@
         "0.1.0-alpha.29"
       ],
       "missed_target_version": "0.1.0-alpha.10",
-      "schedule_status": "unscheduled"
+      "schedule_status": "unscheduled",
+      "review_verification": {
+        "build": "placement-export-review-20261101-141051",
+        "scope": "Original editable vector stamps (up to five colors), import/search of raster stamps, repeat placement, selection editing and Undo. General SVG/EPS import remains planned.",
+        "evidence": [
+          "docs/manual-verification.json: recorded user passes; scope limited to described current behavior",
+          "docs/placement-export-work.md: automated rendering/input qualification"
+        ]
+      }
     },
     {
       "id": "EDIT-019",
@@ -1496,7 +1578,7 @@
         "2026-10-31 follow-up: docs/editor-interactions-work.md. User passed L5/L7/L8; L6 partial identifies remaining guide zoom-in/object-drag lag. Retained screenshot textures and translation caches implemented; optimized/headless qualification pending final candidate. Automatic Simplify scoped under EDIT-077; grouping/tool keys under UX-069; image crop/focus under EDIT-078. Broader parent parity is not claimed.",
         "2026-10-31T17:16:13.323745+00:00: editor-interactions-review-20261031-171522, SHA256 540c42927c052897cc84b883ed16a812d634307eee01814c5bf826695a4e008b.498 tests/fmt/Clippy and19 unchanged optimized export/viewport comparisons pass;73 user passes preserved. Headless production Options/Objects/Simplify/guide meshes and Simplify before/after output inspected. Native L6/O1/O2 pending; no new public desktop release. docs/editor-interactions-work.md."
       ],
-      "updated": "2026-10-31",
+      "updated": "2026-11-01",
       "depends_on": [
         "EDIT-015"
       ],
@@ -1509,7 +1591,15 @@
         "0.1.0-alpha.29"
       ],
       "missed_target_version": "0.1.0-alpha.14",
-      "schedule_status": "unscheduled"
+      "schedule_status": "unscheduled",
+      "review_verification": {
+        "build": "placement-export-review-20261101-141051",
+        "scope": "Grouped visual Simplify blocks with sampled colors, live resizing and Undo. Detection quality improvements, semantic recognition and Smart Move remain separate.",
+        "evidence": [
+          "docs/manual-verification.json: recorded user passes; scope limited to described current behavior",
+          "docs/placement-export-work.md: automated rendering/input qualification"
+        ]
+      }
     },
     {
       "id": "EDIT-022",
@@ -1956,18 +2046,19 @@
       "id": "CREATE-001",
       "title": "Image templates and visual guides",
       "category": "Creation",
-      "status": "planned",
-      "priority": "later",
-      "description": "Arrange images and editable text into original reusable guide layouts.",
-      "completion": "Inspect template workflows and verify editing, layout, persistence, and export.",
+      "status": "in_progress",
+      "priority": "next",
+      "description": "Original editable starter templates now build on the Step guide engine under CREATE-002. Full template packs, reusable user templates and reference parity remain unfinished.",
+      "completion": "Complete scoped gallery review before extending template families; verify editing, layout, persistence and export.",
       "evidence": [
         "Observed reference UI: artifacts/reference/ui/create-menu.png. Control presence only; behavior remains unverified.",
         "Observed reference UI: artifacts/reference/ui/file-menu.png. Control presence only; behavior remains unverified.",
         "2026-10-30: alpha.24 delivered local history; this unfinished provisional target is revised, not marked complete.",
         "2026-10-30 planning refresh: unfinished scope remains pending after alpha.27 Library browsing; provisional target moved to alpha.29.",
-        "2026-10-30 planning refresh: alpha.29 prioritizes the observed arrow stroke defect; this unfinished provisional target is rescheduled by priority."
+        "2026-10-30 planning refresh: alpha.29 prioritizes the observed arrow stroke defect; this unfinished provisional target is rescheduled by priority.",
+        "2026-11-01 user authorized bounded review batch. Implementation and automated checks in docs/review-polish-work.md; no native inspection or public binary release claimed."
       ],
-      "updated": "2026-10-30",
+      "updated": "2026-11-01",
       "depends_on": [
         "EDIT-004",
         "DOC-001"
@@ -2337,11 +2428,19 @@
         "All 256000 pixels from native Copy All while zoomed/panned match the original fixture. Six transform/input tests cover density, pan bounds, rendering/history, modifiers, Space-drag, Ctrl-wheel and draft suppression.",
         "Included in alpha.14; release publication is tracked by its immutable deployment receipt."
       ],
-      "updated": "2026-10-30",
+      "updated": "2026-11-01",
       "depends_on": [
         "EDIT-005"
       ],
-      "released_in": "0.1.0-alpha.14"
+      "released_in": "0.1.0-alpha.14",
+      "review_verification": {
+        "build": "placement-export-review-20261101-141051",
+        "scope": "Cursor-centered zoom, middle-mouse pan, fit/actual size, pixel grid and movement/snapping at varying zooms.",
+        "evidence": [
+          "docs/manual-verification.json: recorded user passes; scope limited to described current behavior",
+          "docs/placement-export-work.md: automated rendering/input qualification"
+        ]
+      }
     },
     {
       "id": "EDIT-027",
@@ -2533,15 +2632,17 @@
       "id": "LIB-004",
       "title": "Bulk import to Library",
       "category": "Library",
-      "status": "planned",
-      "priority": "later",
-      "description": "Import multiple images into Library with per-file validation, progress and errors. Single-image Open already records a snapshot.",
-      "completion": "Verify multi-file success, partial failures, cancellation and no replacement of the active document.",
+      "status": "needs_verification",
+      "priority": "next",
+      "description": "Background multi-image import with progress, cancellation between files, per-file errors and retained successful items. Current canvas and source files remain intact.",
+      "completion": "Verify mixed successes/failures, capacity limits, cancellation, active-canvas preservation and native multi-file picker.",
       "evidence": [
         "Identified during alpha.24 local-history verification; not implemented.",
-        "2026-10-30 planning refresh: alpha.29 prioritizes the observed arrow stroke defect; this unfinished provisional target is rescheduled by priority."
+        "2026-10-30 planning refresh: alpha.29 prioritizes the observed arrow stroke defect; this unfinished provisional target is rescheduled by priority.",
+        "2026-11-01 user authorized bounded review batch. Implementation and automated checks in docs/review-polish-work.md; no native inspection or public binary release claimed.",
+        "Local workflow-review-20261101-154526; SHA256 3b1193a37dff69c8e48158174897cd59447afeefa682e73124cd8f86def97907; 575 tests/fmt/Clippy, 34 optimized image comparisons and Windows imports pass. Native T1\u2013T3 pending. docs/review-polish-work.md. No public binary release."
       ],
-      "updated": "2026-10-30",
+      "updated": "2026-11-01",
       "depends_on": [
         "LIB-001"
       ],
@@ -2567,7 +2668,7 @@
         "Native multiword/name/dimension queries, no-results/Clear, Refresh/session retention, unfiltered recent tray and filtered reopening pass.256000 exact pixels; unchanged history hashes; nine CLI cases. docs/alpha25-search-verification.md",
         "Exact alpha25 package: case-insensitive spaced-dimension search, scoped Ready, correct300x200 filtered reopen and60000 exact white pixels. All history files unchanged; total316000 native pixels. docs/alpha25-search-verification.md"
       ],
-      "updated": "2026-10-30",
+      "updated": "2026-11-01",
       "depends_on": [
         "LIB-001"
       ],
@@ -2576,7 +2677,15 @@
       "original_target_commit": "8d412a829a039fe7c158fe9ea045cdb6f929fc84",
       "target_history": [
         "0.1.0-alpha.25"
-      ]
+      ],
+      "review_verification": {
+        "build": "placement-export-review-20261101-141051",
+        "scope": "Literal multiword search across names, source labels and tags; filter and metadata edits preserve projects.",
+        "evidence": [
+          "docs/manual-verification.json: recorded user passes; scope limited to described current behavior",
+          "docs/placement-export-work.md: automated rendering/input qualification"
+        ]
+      }
     },
     {
       "id": "LIB-006",
@@ -2650,11 +2759,19 @@
         "Native compact layout, active border, gold unsaved marker, same-item edit/Undo preservation, Cancel/Discard selection ownership and320000 exact pixels pass. docs/alpha26-tray-verification.md",
         "Exact alpha26 startup/Save select the correct clean revision; edits show the gold marker, Save clears it and preserves the previous snapshot.256000 optimized pixels, total576000 native pixels. docs/alpha26-tray-verification.md"
       ],
-      "updated": "2026-10-30",
+      "updated": "2026-11-01",
       "depends_on": [
         "LIB-001"
       ],
-      "released_in": "0.1.0-alpha.26"
+      "released_in": "0.1.0-alpha.26",
+      "review_verification": {
+        "build": "placement-export-review-20261101-141051",
+        "scope": "Recent thumbnails with active state, shared item menus, rename/tags/copy/duplicate/delete/Details. Pinning and per-item close remain separate.",
+        "evidence": [
+          "docs/manual-verification.json: recorded user passes; scope limited to described current behavior",
+          "docs/placement-export-work.md: automated rendering/input qualification"
+        ]
+      }
     },
     {
       "id": "LIB-009",
@@ -2668,13 +2785,21 @@
         "Native 981x687/880x580 layouts, 1970/2000/2026 counts, combined filters, four sorts, 50/100/200 percent sizing, Cancel preservation and256000 exact pixels pass. docs/alpha27-library-verification.md",
         "Exact optimized alpha27 verifies scoped labels, year filter/Refresh/reopen and256000 pixels; total512000 native pixels. All stored history hashes unchanged. docs/alpha27-library-verification.md"
       ],
-      "updated": "2026-10-30",
+      "updated": "2026-11-01",
       "depends_on": [
         "LIB-001",
         "LIB-005",
         "LIB-008"
       ],
-      "released_in": "0.1.0-alpha.27"
+      "released_in": "0.1.0-alpha.27",
+      "review_verification": {
+        "build": "placement-export-review-20261101-141051",
+        "scope": "Library search, tags/type/date filters, sorting, thumbnail size and bulk selection/actions.",
+        "evidence": [
+          "docs/manual-verification.json: recorded user passes; scope limited to described current behavior",
+          "docs/placement-export-work.md: automated rendering/input qualification"
+        ]
+      }
     },
     {
       "id": "UX-014",
@@ -2750,11 +2875,19 @@
       "evidence": [
         "Native 1/2/A creation, next-value reset, A-to-B label edit and Undo, editable reopening and exact output pass. docs/alpha29-tools-verification.md"
       ],
-      "updated": "2026-10-30",
+      "updated": "2026-11-01",
       "depends_on": [
         "EDIT-004"
       ],
-      "released_in": "0.1.0-alpha.29"
+      "released_in": "0.1.0-alpha.29",
+      "review_verification": {
+        "build": "placement-export-review-20261101-141051",
+        "scope": "Number/letter Step markers with shapes, outlines, independent text formatting, repeat placement and next-value cursor.",
+        "evidence": [
+          "docs/manual-verification.json: recorded user passes; scope limited to described current behavior",
+          "docs/placement-export-work.md: automated rendering/input qualification"
+        ]
+      }
     },
     {
       "id": "ENG-001",
@@ -2824,11 +2957,19 @@
         "Native draw/edit and one-step Undo plus original-fixture persistence/output; 117 Rust checks include rendered intermediate previews and cancellation. docs/alpha30-live-verification.md",
         "2026-10-30 user regression UX-039: outside-click dismissal incorrectly cancelled live color changes. Scoped fix is prepared for user verification; preserve original shipped slider evidence."
       ],
-      "updated": "2026-10-30",
+      "updated": "2026-11-01",
       "released_in": "0.1.0-alpha.30",
       "depends_on": [
         "EDIT-005"
-      ]
+      ],
+      "review_verification": {
+        "build": "placement-export-review-20261101-141051",
+        "scope": "Live object color/fill, width, corner and rotation editing; one Undo per completed gesture.",
+        "evidence": [
+          "docs/manual-verification.json: recorded user passes; scope limited to described current behavior",
+          "docs/placement-export-work.md: automated rendering/input qualification"
+        ]
+      }
     },
     {
       "id": "EDIT-036",
@@ -2953,11 +3094,19 @@
         "134 regular Rust tests, formatting and strict Clippy pass. Independent 256000-pixel block-average comparison, unchanged Blur outside pixels, and actual packaged clipboard comparison pass. docs/effects-verification.md.",
         "Immutable alpha.34 ZIP: e8832205d3758de11ba54c6448b090c0162959c17839956675428e241d5859a1. Publication receipt: artifacts/releases/0.1.0-alpha.34/published.json."
       ],
-      "updated": "2026-10-30",
+      "updated": "2026-11-01",
       "depends_on": [
         "UX-015"
       ],
-      "released_in": "0.1.0-alpha.34"
+      "released_in": "0.1.0-alpha.34",
+      "review_verification": {
+        "build": "placement-export-review-20261101-141051",
+        "scope": "Editable Blur/Pixelate regions, intensity presets, retained pixel effects, move/resize and Undo. Assisted sensitive-text detection remains planned.",
+        "evidence": [
+          "docs/manual-verification.json: recorded user passes; scope limited to described current behavior",
+          "docs/placement-export-work.md: automated rendering/input qualification"
+        ]
+      }
     },
     {
       "id": "EDIT-041",
@@ -2971,12 +3120,20 @@
         "docs/eraser-verification.md; artifacts/native-alpha35/checks.json; artifacts/native-alpha35/clipboard.log. Independent256000-pixel alpha match.",
         "2026-10-30 exact alpha.35 package: six-object reopen, native width24\u219232 and one Undo to clean saved state pass. All256000 actual clipboard pixels match. artifacts/native-alpha35/packaged/clipboard.log; artifacts/releases/0.1.0-alpha.35/published.json."
       ],
-      "updated": "2026-10-30",
+      "updated": "2026-11-01",
       "depends_on": [
         "EDIT-013",
         "UX-016"
       ],
-      "released_in": "0.1.0-alpha.35"
+      "released_in": "0.1.0-alpha.35",
+      "review_verification": {
+        "build": "placement-export-review-20261101-141051",
+        "scope": "Editable smooth eraser with brush preview, Alt-wheel size, move/resize, Undo and export transparency.",
+        "evidence": [
+          "docs/manual-verification.json: recorded user passes; scope limited to described current behavior",
+          "docs/placement-export-work.md: automated rendering/input qualification"
+        ]
+      }
     },
     {
       "id": "EDIT-042",
@@ -3009,12 +3166,20 @@
         "2026-10-30: native gestures, Ctrl+C/X, review Cancel, one Undo/Redo and saved output pass.129600 clipboard pixels and256000 saved pixels match independently.148 regular Rust tests/fmt/Clippy pass; docs/pixel-selection-verification.md. Not published.",
         "Exact alpha.37 package: reopened saved image, Select entire image, Delete, transparent selected Copy, one Undo to clean state and Copy All pass. Each packaged clipboard comparison matches256000pixels. artifacts/native-alpha37/packaged; artifacts/releases/0.1.0-alpha.37/published.json."
       ],
-      "updated": "2026-10-30",
+      "updated": "2026-11-01",
       "depends_on": [
         "EDIT-039",
         "FILE-003"
       ],
-      "released_in": "0.1.0-alpha.37"
+      "released_in": "0.1.0-alpha.37",
+      "review_verification": {
+        "build": "placement-export-review-20261101-141051",
+        "scope": "Rectangle, ellipse, polygon, freehand and inverse pixel selections; copy/cut/clear and pixel movement. Smart Move remains separate.",
+        "evidence": [
+          "docs/manual-verification.json: recorded user passes; scope limited to described current behavior",
+          "docs/placement-export-work.md: automated rendering/input qualification"
+        ]
+      }
     },
     {
       "id": "EDIT-044",
@@ -3038,7 +3203,15 @@
       "target_history": [
         "0.1.0-alpha.38"
       ],
-      "released_in": "0.1.0-alpha.39"
+      "released_in": "0.1.0-alpha.39",
+      "review_verification": {
+        "build": "placement-export-review-20261101-141051",
+        "scope": "Straight horizontal and vertical Cut Out with preview, confirmation, Undo and persistence. Decorative cut edges remain planned.",
+        "evidence": [
+          "docs/manual-verification.json: recorded user passes; scope limited to described current behavior",
+          "docs/placement-export-work.md: automated rendering/input qualification"
+        ]
+      }
     },
     {
       "id": "UX-017",
@@ -3266,7 +3439,7 @@
       ],
       "status": "shipped",
       "priority": "done",
-      "updated": "2026-10-30",
+      "updated": "2026-11-01",
       "evidence": [
         "User request2026-10-30; docs/core-tool-priorities.md. Audited DesignCraft hand_pan and bounds algorithms; no completion/release claim.",
         "Immediately next after alpha40: implement shared bounds-based alignment/distribution commands on UpdateMany, then remembered upper-right split controls. Not yet available.",
@@ -3275,7 +3448,15 @@
         "Alpha41 exact optimized executable restarted with independently saved alignment/distribution/justification choices. Main buttons apply to a fresh selection; distribution and justification each Undo in one step. Saved annotations match all3 expected callouts, and256000native clipboard pixels match.166Rust checks and576000release fixture pixels pass. docs/quick-controls-verification.md; artifacts/native-alpha41/packaged. Publication receipt records delivery.",
         "2026-10-30 later user correction supersedes alignment/distribution/justification split-button presentation with exposed grids in UX-044; historical shipped behavior and preferences are retained."
       ],
-      "released_in": "0.1.0-alpha.41"
+      "released_in": "0.1.0-alpha.41",
+      "review_verification": {
+        "build": "placement-export-review-20261101-141051",
+        "scope": "Remembered alignment, distribution and text justification; alignment expands the canvas as needed.",
+        "evidence": [
+          "docs/manual-verification.json: recorded user passes; scope limited to described current behavior",
+          "docs/placement-export-work.md: automated rendering/input qualification"
+        ]
+      }
     },
     {
       "id": "UX-023",
@@ -3293,8 +3474,16 @@
         "171local tests/fmt/Clippy; native callout custom save/repeated preset/batch apply/Undo and8core-tool presets pass. Saved objects independently checked;256000clipboard pixels exact. Exact optimized restart verification next. docs/object-template-verification.md.",
         "Exact alpha42 process reopened custom templates, applied saved source formatting to3different callouts, one Ctrl+Z restored all, and repeated application/save matched every expected field.256000packaged clipboard pixels exact.171Rust tests/fmt/Clippy;576000release fixture pixels. docs/object-template-verification.md; artifacts/native-alpha42/packaged; publication receipt records delivery."
       ],
-      "updated": "2026-10-30",
-      "released_in": "0.1.0-alpha.42"
+      "updated": "2026-11-01",
+      "released_in": "0.1.0-alpha.42",
+      "review_verification": {
+        "build": "placement-export-review-20261101-141051",
+        "scope": "Local reusable object styles, multi-selection application, active state and template continuity.",
+        "evidence": [
+          "docs/manual-verification.json: recorded user passes; scope limited to described current behavior",
+          "docs/placement-export-work.md: automated rendering/input qualification"
+        ]
+      }
     },
     {
       "id": "UX-024",
@@ -3314,11 +3503,19 @@
         "Corrected shared engine layout passes180Rust tests/fmt/Clippy and native borderline Package edit/commit/Undo. Prior43 remains immutable and withheld; fresh44 exact-package qualification required. artifacts/native-layout; docs/inline-text-verification.md.",
         "Alpha44 exact package: inline entry/commit stable wrapping; one Undo/Redo;10editable objects saved with9unchanged; Hide/Show restores selection;256000 complete clipboard pixels while hidden. artifacts/native-alpha44/checks.json; artifacts/releases/0.1.0-alpha.44/published.json."
       ],
-      "updated": "2026-10-30",
+      "updated": "2026-11-01",
       "target_history": [
         "0.1.0-alpha.43"
       ],
-      "released_in": "0.1.0-alpha.44"
+      "released_in": "0.1.0-alpha.44",
+      "review_verification": {
+        "build": "placement-export-review-20261101-141051",
+        "scope": "Tool shortcuts in hover labels, precise brush cursors, Step numbering preview and crisp stamp placement previews.",
+        "evidence": [
+          "docs/manual-verification.json: recorded user passes; scope limited to described current behavior",
+          "docs/placement-export-work.md: automated rendering/input qualification"
+        ]
+      }
     },
     {
       "id": "UX-025",
@@ -3449,11 +3646,19 @@
         "Local186Rust tests/fmt/Clippy and native Step drag/Undo/numbering/hover/selection, exact saved positions and256000clipboard pixels verified. Snapping native x320 vs317 when disabled. Exact alpha45 package verification pending. docs/step-snapping-verification.md.",
         "Alpha45 exact package: new marker3 follows drag, snaps right edge to340 and center Y to180, remains selected, one Undo restores sequence3; save/reopen and256000pixels exact. artifacts/native-alpha45/checks.json; artifacts/releases/0.1.0-alpha.45/published.json."
       ],
-      "updated": "2026-10-30",
+      "updated": "2026-11-01",
       "released_in": "0.1.0-alpha.45",
       "target_history": [
         "0.1.0-alpha.45"
-      ]
+      ],
+      "review_verification": {
+        "build": "placement-export-review-20261101-141051",
+        "scope": "Compatible-object hover bounds and selected handles. Rounded corner nodes appear only on selected objects.",
+        "evidence": [
+          "docs/manual-verification.json: recorded user passes; scope limited to described current behavior",
+          "docs/placement-export-work.md: automated rendering/input qualification"
+        ]
+      }
     },
     {
       "id": "UX-030",
@@ -5329,7 +5534,8 @@
       "evidence": [
         "User-approved 2026-11-01 follow-up. Local qualification in progress; no new desktop publication. docs/placement-export-work.md.",
         "Local placement-export-review-20261101-140249; SHA256 195862e34addcebf9e5f86ba44e9a880dfde632f3c665b40a5ad83d6541f5973; 557 tests/fmt/Clippy, 27 optimized image comparisons and Windows imports pass. Production egui UI and injected input verified; new native checks S1/S2. docs/placement-export-work.md.",
-        "Local placement-export-review-20261101-141051; SHA256 b72bcf849d2184b58da2d9202a5acd75f52f1546d8a90bfff9fc1074d3aa202d; 559 tests/fmt/Clippy, 27 optimized image comparisons and Windows imports pass. Production egui UI and injected input verified; new native checks S1/S2. docs/placement-export-work.md."
+        "Local placement-export-review-20261101-141051; SHA256 b72bcf849d2184b58da2d9202a5acd75f52f1546d8a90bfff9fc1074d3aa202d; 559 tests/fmt/Clippy, 27 optimized image comparisons and Windows imports pass. Production egui UI and injected input verified; new native checks S1/S2. docs/placement-export-work.md.",
+        "2026-11-01 user passed P1, Q2, S1 and S2 against inferred placement-export-review-20261101-141051. New refinements tracked separately; not a public desktop release."
       ]
     },
     {
@@ -5348,7 +5554,8 @@
       "evidence": [
         "User-approved 2026-11-01 follow-up. Local qualification in progress; no new desktop publication. docs/placement-export-work.md.",
         "Local placement-export-review-20261101-140249; SHA256 195862e34addcebf9e5f86ba44e9a880dfde632f3c665b40a5ad83d6541f5973; 557 tests/fmt/Clippy, 27 optimized image comparisons and Windows imports pass. Production egui UI and injected input verified; new native checks S1/S2. docs/placement-export-work.md.",
-        "Local placement-export-review-20261101-141051; SHA256 b72bcf849d2184b58da2d9202a5acd75f52f1546d8a90bfff9fc1074d3aa202d; 559 tests/fmt/Clippy, 27 optimized image comparisons and Windows imports pass. Production egui UI and injected input verified; new native checks S1/S2. docs/placement-export-work.md."
+        "Local placement-export-review-20261101-141051; SHA256 b72bcf849d2184b58da2d9202a5acd75f52f1546d8a90bfff9fc1074d3aa202d; 559 tests/fmt/Clippy, 27 optimized image comparisons and Windows imports pass. Production egui UI and injected input verified; new native checks S1/S2. docs/placement-export-work.md.",
+        "2026-11-01 user passed P1, Q2, S1 and S2 against inferred placement-export-review-20261101-141051. New refinements tracked separately; not a public desktop release."
       ]
     },
     {
@@ -5367,7 +5574,8 @@
       "evidence": [
         "User-approved 2026-11-01 follow-up. Local qualification in progress; no new desktop publication. docs/placement-export-work.md.",
         "Local placement-export-review-20261101-140249; SHA256 195862e34addcebf9e5f86ba44e9a880dfde632f3c665b40a5ad83d6541f5973; 557 tests/fmt/Clippy, 27 optimized image comparisons and Windows imports pass. Production egui UI and injected input verified; new native checks S1/S2. docs/placement-export-work.md.",
-        "Local placement-export-review-20261101-141051; SHA256 b72bcf849d2184b58da2d9202a5acd75f52f1546d8a90bfff9fc1074d3aa202d; 559 tests/fmt/Clippy, 27 optimized image comparisons and Windows imports pass. Production egui UI and injected input verified; new native checks S1/S2. docs/placement-export-work.md."
+        "Local placement-export-review-20261101-141051; SHA256 b72bcf849d2184b58da2d9202a5acd75f52f1546d8a90bfff9fc1074d3aa202d; 559 tests/fmt/Clippy, 27 optimized image comparisons and Windows imports pass. Production egui UI and injected input verified; new native checks S1/S2. docs/placement-export-work.md.",
+        "2026-11-01 user passed P1, Q2, S1 and S2 against inferred placement-export-review-20261101-141051. New refinements tracked separately; not a public desktop release."
       ]
     },
     {
@@ -5386,7 +5594,8 @@
       "evidence": [
         "User-approved 2026-11-01 follow-up. Local qualification in progress; no new desktop publication. docs/placement-export-work.md.",
         "Local placement-export-review-20261101-140249; SHA256 195862e34addcebf9e5f86ba44e9a880dfde632f3c665b40a5ad83d6541f5973; 557 tests/fmt/Clippy, 27 optimized image comparisons and Windows imports pass. Production egui UI and injected input verified; new native checks S1/S2. docs/placement-export-work.md.",
-        "Local placement-export-review-20261101-141051; SHA256 b72bcf849d2184b58da2d9202a5acd75f52f1546d8a90bfff9fc1074d3aa202d; 559 tests/fmt/Clippy, 27 optimized image comparisons and Windows imports pass. Production egui UI and injected input verified; new native checks S1/S2. docs/placement-export-work.md."
+        "Local placement-export-review-20261101-141051; SHA256 b72bcf849d2184b58da2d9202a5acd75f52f1546d8a90bfff9fc1074d3aa202d; 559 tests/fmt/Clippy, 27 optimized image comparisons and Windows imports pass. Production egui UI and injected input verified; new native checks S1/S2. docs/placement-export-work.md.",
+        "2026-11-01 user passed P1, Q2, S1 and S2 against inferred placement-export-review-20261101-141051. New refinements tracked separately; not a public desktop release."
       ]
     },
     {
@@ -5405,7 +5614,8 @@
       "evidence": [
         "User-approved 2026-11-01 follow-up. Local qualification in progress; no new desktop publication. docs/placement-export-work.md.",
         "Local placement-export-review-20261101-140249; SHA256 195862e34addcebf9e5f86ba44e9a880dfde632f3c665b40a5ad83d6541f5973; 557 tests/fmt/Clippy, 27 optimized image comparisons and Windows imports pass. Production egui UI and injected input verified; new native checks S1/S2. docs/placement-export-work.md.",
-        "Local placement-export-review-20261101-141051; SHA256 b72bcf849d2184b58da2d9202a5acd75f52f1546d8a90bfff9fc1074d3aa202d; 559 tests/fmt/Clippy, 27 optimized image comparisons and Windows imports pass. Production egui UI and injected input verified; new native checks S1/S2. docs/placement-export-work.md."
+        "Local placement-export-review-20261101-141051; SHA256 b72bcf849d2184b58da2d9202a5acd75f52f1546d8a90bfff9fc1074d3aa202d; 559 tests/fmt/Clippy, 27 optimized image comparisons and Windows imports pass. Production egui UI and injected input verified; new native checks S1/S2. docs/placement-export-work.md.",
+        "2026-11-01 user passed P1, Q2, S1 and S2 against inferred placement-export-review-20261101-141051. New refinements tracked separately; not a public desktop release."
       ]
     },
     {
@@ -5425,7 +5635,8 @@
         "User-approved 2026-11-01 follow-up. Local qualification in progress; no new desktop publication. docs/placement-export-work.md.",
         "2026-11-01 user: seems to be working now. Native build inferred from current launcher; actual automated properties-popup test also passes.",
         "Local placement-export-review-20261101-140249; SHA256 195862e34addcebf9e5f86ba44e9a880dfde632f3c665b40a5ad83d6541f5973; 557 tests/fmt/Clippy, 27 optimized image comparisons and Windows imports pass. Production egui UI and injected input verified; new native checks S1/S2. docs/placement-export-work.md.",
-        "Local placement-export-review-20261101-141051; SHA256 b72bcf849d2184b58da2d9202a5acd75f52f1546d8a90bfff9fc1074d3aa202d; 559 tests/fmt/Clippy, 27 optimized image comparisons and Windows imports pass. Production egui UI and injected input verified; new native checks S1/S2. docs/placement-export-work.md."
+        "Local placement-export-review-20261101-141051; SHA256 b72bcf849d2184b58da2d9202a5acd75f52f1546d8a90bfff9fc1074d3aa202d; 559 tests/fmt/Clippy, 27 optimized image comparisons and Windows imports pass. Production egui UI and injected input verified; new native checks S1/S2. docs/placement-export-work.md.",
+        "2026-11-01 user passed P1, Q2, S1 and S2 against inferred placement-export-review-20261101-141051. New refinements tracked separately; not a public desktop release."
       ]
     },
     {
@@ -5444,7 +5655,8 @@
       "evidence": [
         "User addition to bounded 2026-11-01 batch. Synthetic canvas wheel/draw input tests pass. docs/placement-export-work.md.",
         "Local placement-export-review-20261101-140249; SHA256 195862e34addcebf9e5f86ba44e9a880dfde632f3c665b40a5ad83d6541f5973; 557 tests/fmt/Clippy, 27 optimized image comparisons and Windows imports pass. Production egui UI and injected input verified; new native checks S1/S2. docs/placement-export-work.md.",
-        "Local placement-export-review-20261101-141051; SHA256 b72bcf849d2184b58da2d9202a5acd75f52f1546d8a90bfff9fc1074d3aa202d; 559 tests/fmt/Clippy, 27 optimized image comparisons and Windows imports pass. Production egui UI and injected input verified; new native checks S1/S2. docs/placement-export-work.md."
+        "Local placement-export-review-20261101-141051; SHA256 b72bcf849d2184b58da2d9202a5acd75f52f1546d8a90bfff9fc1074d3aa202d; 559 tests/fmt/Clippy, 27 optimized image comparisons and Windows imports pass. Production egui UI and injected input verified; new native checks S1/S2. docs/placement-export-work.md.",
+        "2026-11-01 user passed P1, Q2, S1 and S2 against inferred placement-export-review-20261101-141051. New refinements tracked separately; not a public desktop release."
       ]
     },
     {
@@ -5462,7 +5674,122 @@
       "updated": "2026-11-01",
       "evidence": [
         "User addition to bounded 2026-11-01 batch. Actual shell input/layout tests cover all four prior Recent/Properties combinations, recovery button, repeat, modifier chords and text/dialog guards. docs/placement-export-work.md.",
-        "Local placement-export-review-20261101-141051; SHA256 b72bcf849d2184b58da2d9202a5acd75f52f1546d8a90bfff9fc1074d3aa202d; 559 tests/fmt/Clippy, 27 optimized image comparisons and Windows imports pass. Production egui UI and injected input verified; new native checks S1/S2. docs/placement-export-work.md."
+        "Local placement-export-review-20261101-141051; SHA256 b72bcf849d2184b58da2d9202a5acd75f52f1546d8a90bfff9fc1074d3aa202d; 559 tests/fmt/Clippy, 27 optimized image comparisons and Windows imports pass. Production egui UI and injected input verified; new native checks S1/S2. docs/placement-export-work.md.",
+        "2026-11-01 user passed P1, Q2, S1 and S2 against inferred placement-export-review-20261101-141051. New refinements tracked separately; not a public desktop release."
+      ]
+    },
+    {
+      "id": "UX-082",
+      "title": "Review interaction and layout corrections",
+      "category": "Experience",
+      "status": "needs_verification",
+      "priority": "next",
+      "description": "Nested shadow color picking, stamp preview after editing, selected-only radius nodes, compact Rename footer, centered Show UI and focus-safe window sizing.",
+      "completion": "Actual popup/input/layout regressions, unchanged output fixtures and native cross-monitor focus review.",
+      "depends_on": [
+        "UX-075",
+        "UX-077",
+        "UX-081"
+      ],
+      "schedule_status": "unscheduled",
+      "updated": "2026-11-01",
+      "evidence": [
+        "User-authorized bounded follow-up 2026-11-01. docs/review-polish-work.md. No native desktop or OS clipboard use.",
+        "Local workflow-review-20261101-154526; SHA256 3b1193a37dff69c8e48158174897cd59447afeefa682e73124cd8f86def97907; 575 tests/fmt/Clippy, 34 optimized image comparisons and Windows imports pass. Native T1\u2013T3 pending. docs/review-polish-work.md. No public binary release."
+      ]
+    },
+    {
+      "id": "CAP-017",
+      "title": "Per-mode capture settings and controller polish",
+      "category": "Capture",
+      "status": "needs_verification",
+      "priority": "next",
+      "description": "Remember image-mode settings independently, apply them to matching capture shortcuts, default Steps cursor on, draw a real fullscreen gear and connect the full active tab height.",
+      "completion": "Save/reopen profiles, hotkey dispatch/clipboard adapter, controller meshes and native capture confirmation.",
+      "depends_on": [
+        "CAP-009",
+        "CAP-004"
+      ],
+      "schedule_status": "unscheduled",
+      "updated": "2026-11-01",
+      "evidence": [
+        "User-authorized bounded follow-up 2026-11-01. docs/review-polish-work.md. No native desktop or OS clipboard use.",
+        "Local workflow-review-20261101-154526; SHA256 3b1193a37dff69c8e48158174897cd59447afeefa682e73124cd8f86def97907; 575 tests/fmt/Clippy, 34 optimized image comparisons and Windows imports pass. Native T1\u2013T3 pending. docs/review-polish-work.md. No public binary release."
+      ]
+    },
+    {
+      "id": "EDIT-085",
+      "title": "Business stamp categories",
+      "category": "Editing",
+      "status": "needs_verification",
+      "priority": "next",
+      "description": "Eight original editable vector workflow stamps: time, lock, document, download, upload, idea, keyboard and target. Search intersects category filters; existing raster sample remains.",
+      "completion": "Verify palette bounds, portable paths, render/export and category/search behavior.",
+      "depends_on": [
+        "EDIT-083"
+      ],
+      "schedule_status": "unscheduled",
+      "updated": "2026-11-01",
+      "evidence": [
+        "User-authorized batch; public documentation and supplied template screenshots, original assets and implementation. docs/review-polish-work.md. Native review and release pending.",
+        "Local workflow-review-20261101-154526; SHA256 3b1193a37dff69c8e48158174897cd59447afeefa682e73124cd8f86def97907; 575 tests/fmt/Clippy, 34 optimized image comparisons and Windows imports pass. Native T1\u2013T3 pending. docs/review-polish-work.md. No public binary release."
+      ]
+    },
+    {
+      "id": "CREATE-002",
+      "title": "Create Image from Template starter gallery",
+      "category": "Creation",
+      "status": "needs_verification",
+      "priority": "next",
+      "description": "Six original editable layouts: two steps, three steps, four-step grid, before/after, overview and timeline. Choose files or Library images, reorder them, use Fit/Fill, edit guide sections and replace images nondestructively.",
+      "completion": "Verify gallery creation, all six layouts, image replacement Undo, portable save/reopen, Library Template classification and exact output.",
+      "depends_on": [
+        "CREATE-001",
+        "CAP-014"
+      ],
+      "schedule_status": "unscheduled",
+      "updated": "2026-11-01",
+      "evidence": [
+        "User-authorized batch; public documentation and supplied template screenshots, original assets and implementation. docs/review-polish-work.md. Native review and release pending.",
+        "Local workflow-review-20261101-154526; SHA256 3b1193a37dff69c8e48158174897cd59447afeefa682e73124cd8f86def97907; 575 tests/fmt/Clippy, 34 optimized image comparisons and Windows imports pass. Native T1\u2013T3 pending. docs/review-polish-work.md. No public binary release."
+      ]
+    },
+    {
+      "id": "UX-083",
+      "title": "Compact Library thumbnails and template classification",
+      "category": "Library",
+      "status": "needs_verification",
+      "priority": "next",
+      "description": "Thumbnail type overlays always remain visible. Default secondary text is name-only; Show thumbnail details reveals dimensions, type and date. Template documents use the From Template filter and Template overlay. File > Recent uses half-size thumbnails in rows of ten; Show more reveals ten more, retaining shared context actions.",
+      "completion": "Verify default/toggle persistence, overlays in both states and template filtering after reopen. Verify pagination, reopen reset and compact thumbnail geometry.",
+      "depends_on": [
+        "LIB-014",
+        "CREATE-002"
+      ],
+      "schedule_status": "unscheduled",
+      "updated": "2026-11-01",
+      "evidence": [
+        "User-authorized batch; public documentation and supplied template screenshots, original assets and implementation. docs/review-polish-work.md. Native review and release pending.",
+        "Local workflow-review-20261101-154526; SHA256 3b1193a37dff69c8e48158174897cd59447afeefa682e73124cd8f86def97907; 575 tests/fmt/Clippy, 34 optimized image comparisons and Windows imports pass. Native T1\u2013T3 pending. docs/review-polish-work.md. No public binary release."
+      ]
+    },
+    {
+      "id": "UX-084",
+      "title": "Distinct Capture Controller icon and launch shortcuts",
+      "category": "Experience",
+      "status": "needs_verification",
+      "priority": "next",
+      "description": "User-supplied Capture Controller SVG in its window and tray menu, a separate embedded Windows resource, and per-user Start menu entries for Editor and Capture Controller. Explicit launch flags reuse a compatible running app.",
+      "completion": "Validate all icon sizes and Windows resources, shortcut targets/arguments/icons, startup override and native tray/Start menu appearance.",
+      "depends_on": [
+        "CAP-009",
+        "UX-065"
+      ],
+      "schedule_status": "unscheduled",
+      "updated": "2026-11-01",
+      "evidence": [
+        "User supplied capturecontrollericon.svg on 2026-11-01; original source retained. docs/review-polish-work.md. Native menu/Start appearance pending.",
+        "Local workflow-review-20261101-154526; SHA256 3b1193a37dff69c8e48158174897cd59447afeefa682e73124cd8f86def97907; 575 tests/fmt/Clippy, 34 optimized image comparisons and Windows imports pass. Native T1\u2013T3 pending. docs/review-polish-work.md. No public binary release."
       ]
     }
   ]

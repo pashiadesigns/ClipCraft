@@ -32,6 +32,7 @@ $packageRoot = Join-Path $releaseRoot 'package'
 New-Item -ItemType Directory -Path $packageRoot,$downloadRoot -Force | Out-Null
 Copy-Item -LiteralPath (Join-Path $projectRoot 'target\release\capture-desktop.exe') -Destination (Join-Path $packageRoot 'ClipCraft.exe')
 Copy-Item -LiteralPath (Join-Path $projectRoot 'target\release\capture-cli.exe') -Destination $packageRoot
+Copy-Item -LiteralPath (Join-Path $projectRoot 'scripts/install-start-menu.ps1') -Destination $packageRoot
 $fixtureRoot = Join-Path $releaseRoot 'fixture'
 & (Join-Path $packageRoot 'capture-cli.exe') demo --out-dir $fixtureRoot
 if ($LASTEXITCODE -ne 0) { throw 'Release CLI fixture generation failed.' }
@@ -44,6 +45,8 @@ $readme = @"
 ClipCraft $Version - Windows x64 alpha
 
 Extract the entire ZIP and open ClipCraft.exe. No ClipCraft account is required.
+Optional: run install-start-menu.ps1 to add separate Editor and Capture Controller
+Start menu entries with their own icons. Explicit shortcuts reuse a running app.
 Open example.capture.json or a PNG/JPEG. Original pixels and editable annotations
 autosave to the local Library. Wait for Saved to Library before closing.
 Save As writes an additional portable project; Export PNG creates flattened output.

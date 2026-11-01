@@ -913,6 +913,7 @@ pub(crate) mod tests {
             step_placement: None,
             snapping_guides: [None; 2],
             new_image: None,
+            template_picker: None,
             resize_image: None,
             resize_canvas: None,
             export_dialog: None,

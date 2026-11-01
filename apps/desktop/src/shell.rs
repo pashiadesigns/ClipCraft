@@ -14,7 +14,7 @@ pub struct Tool {
     pub name: &'static str,
     pub feature: &'static str,
     kind: Option<Kind>,
-    implemented: bool,
+    pub(super) implemented: bool,
 }
 pub const TOOLS: &[Tool] = &[
     Tool {
@@ -191,6 +191,7 @@ pub struct Shell {
     pub(super) library_tab_rect: Option<egui::Rect>,
     pub(super) backstage: Option<crate::backstage::Page>,
     pub(super) recent_query: String,
+    pub(super) recent_limit: usize,
     pub(crate) help: bool,
 }
 impl Default for Shell {
@@ -213,6 +214,7 @@ impl Default for Shell {
             library_tab_rect: None,
             backstage: None,
             recent_query: String::new(),
+            recent_limit: 10,
             help: false,
         }
     }

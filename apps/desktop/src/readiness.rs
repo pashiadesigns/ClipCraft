@@ -18,6 +18,13 @@ struct Feature {
     released_in: Option<String>,
     target_version: Option<String>,
     missed_target_version: Option<String>,
+    review_verification: Option<ReviewVerification>,
+}
+#[derive(Deserialize)]
+struct ReviewVerification {
+    build: String,
+    scope: String,
+    evidence: Vec<String>,
 }
 impl Feature {
     // A Ready badge describes behavior verified in this binary. Canonical
@@ -227,8 +234,19 @@ pub fn badge(id: &str) -> Badge {
         };
     };
     let verified = VERIFIED.iter().find(|(key, _)| *key == id);
-    let ready =
-        verified.is_some() && feature.build_release().is_some() && !feature.evidence.is_empty();
+    let review = feature.review_verification.as_ref().filter(|v| {
+        !v.build.is_empty()
+            && !v.scope.is_empty()
+            && !v.evidence.is_empty()
+            && matches!(
+                feature.status.as_str(),
+                "shipped" | "needs_verification" | "in_progress"
+            )
+    });
+    let ready = review.is_some()
+        || (verified.is_some()
+            && feature.build_release().is_some()
+            && !feature.evidence.is_empty());
     let label = if ready {
         "Ready".into()
     } else {
@@ -257,7 +275,14 @@ pub fn badge(id: &str) -> Badge {
                 "{} · {}\n{}",
                 feature.id,
                 feature.title,
-                verified.unwrap().1
+                review
+                    .map(|v| format!(
+                        "{}\nVerified scope: {}\n{}",
+                        v.scope,
+                        v.build,
+                        v.evidence.join("; ")
+                    ))
+                    .unwrap_or_else(|| verified.unwrap().1.into())
             )
         } else {
             format!(
@@ -282,6 +307,35 @@ pub fn badge(id: &str) -> Badge {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn qualified_tool_scopes_get_ready_without_claiming_parent_parity_or_release() {
+        for tool in crate::shell::TOOLS.iter().filter(|t| t.implemented) {
+            assert!(
+                badge(tool.feature).ready,
+                "missing current tool evidence: {}",
+                tool.name
+            );
+        }
+        for id in ["EDIT-006", "EDIT-018", "EDIT-021"] {
+            let f = INVENTORY.features.iter().find(|f| f.id == id).unwrap();
+            let v = f.review_verification.as_ref().unwrap();
+            assert!(!v.build.is_empty() && !v.scope.is_empty() && !v.evidence.is_empty());
+            assert!(badge(id).detail.contains(&v.scope));
+        }
+        for id in [
+            "VIDEO-001",
+            "CAP-003",
+            "CAP-010",
+            "EDIT-015",
+            "EDIT-020",
+            "EDIT-084",
+        ] {
+            assert!(
+                !badge(id).ready,
+                "unfinished capability must remain Target: {id}"
+            );
+        }
+    }
     #[test]
     fn badges_require_native_evidence_and_a_release_definition() {
         let mut ids = std::collections::HashSet::new();

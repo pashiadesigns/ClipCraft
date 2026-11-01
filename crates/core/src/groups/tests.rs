@@ -143,6 +143,7 @@ fn section_duplication_remaps_group_identity_and_removal_prunes_membership() {
         );
     }
     d.guide = Some(Layout {
+        template: None,
         top: 20.,
         sections: vec![Section {
             id: 1,

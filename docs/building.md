@@ -40,10 +40,12 @@ are never overwritten. It does not publish or modify the website or Library.
 Brand PNGs/ICO and the Windows resource include SVG/RC inputs.
 `scripts/verify-windows-resource.ps1` recompiles and compares the resource with the
 Windows SDK. Optional PNG/ICO regeneration uses `sharp` and
-`scripts/build-brand-assets.cjs`; normal builds do not require it. Optional
+`scripts/build-brand-assets.cjs` (editor) or `node scripts/build-brand-assets.cjs capture-controller`; normal builds do not require it. Optional
 headless mesh-image inspection uses Python, Pillow and NumPy with
 `scripts/render-egui-fixture.py`.
 
 Legacy website self-hosting scripts expect archived ZIPs and a host-specific
 configuration excluded from Git. GitHub release builds need only the checked-in
 feature/release inventories, not a running website or private host settings.
+
+Portable builds include `install-start-menu.ps1` for per-user Editor and Capture Controller shortcuts. From a source checkout, pass `-Executable <path-to-ClipCraft.exe>`. No elevation or application launch is needed. The shortcuts use `--editor` and `--capture-controller` plus embedded icon resources 101 and 102. These arguments override the saved startup window for that launch; a compatible running app is reused.

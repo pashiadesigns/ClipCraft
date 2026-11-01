@@ -123,10 +123,13 @@ impl Editor {
             _ => (),
         }
     }
-    pub(super) fn apply_startup_window(&mut self, ctx: &egui::Context, explicit_file: bool) {
-        if self.lifecycle.available
-            && !explicit_file
-            && self.quick_controls.startup_window() == StartupWindow::CaptureController
+    pub(super) fn apply_startup_window(
+        &mut self,
+        ctx: &egui::Context,
+        explicit_file: bool,
+        window: StartupWindow,
+    ) {
+        if self.lifecycle.available && !explicit_file && window == StartupWindow::CaptureController
         {
             self.lifecycle.hidden = true;
             ctx.send_viewport_cmd_to(
@@ -141,7 +144,12 @@ impl Editor {
     pub(super) fn background_logic(&mut self, ctx: &egui::Context) {
         if self.lifecycle.startup_pending {
             self.lifecycle.startup_pending = false;
-            self.apply_startup_window(ctx, std::env::args_os().nth(1).is_some());
+            let launch = crate::launch::Request::read();
+            self.apply_startup_window(
+                ctx,
+                launch.file.is_some(),
+                launch.startup(self.quick_controls.startup_window()),
+            );
         }
         let actions = self
             .lifecycle

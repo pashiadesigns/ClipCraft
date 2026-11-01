@@ -52,6 +52,10 @@ pub(super) fn properties(ui: &mut egui::Ui, a: &mut Annotation) {
         "Image frame",
         "Crop image enables edge and corner cropping; drag inside to reposition the source. The center crop handle pans the image at any time. Ctrl-drag also crops or pans. Original pixels remain intact. Reset crop restores the entire screenshot.",
     );
+    if ui.button("Replace image…").clicked() {
+        ui.ctx()
+            .data_mut(|d| d.insert_temp(egui::Id::unique("replace-frame-image"), a.id));
+    }
     let before = bitmap.view();
     let mut view = before;
     ui.horizontal(|ui| {

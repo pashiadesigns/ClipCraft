@@ -1,5 +1,10 @@
 fn main() {
-    for asset in ["clipcraft.res", "clipcraft.rc", "clipcraft.ico"] {
+    for asset in [
+        "clipcraft.res",
+        "clipcraft.rc",
+        "clipcraft.ico",
+        "capture-controller.ico",
+    ] {
         println!("cargo:rerun-if-changed=assets/brand/{asset}");
     }
     // The checked-in, architecture-neutral resource is generated from the ICO

@@ -149,25 +149,29 @@ pub(super) fn dialog_actions(
     destructive: bool,
 ) -> (bool, bool) {
     ui.add_space(8.);
-    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-        let cancel = ui
-            .add_sized([82., 26.], egui::Button::new(secondary))
-            .clicked();
-        let color = if destructive {
-            egui::Color32::from_rgb(177, 43, 49)
-        } else {
-            crate::shell::ACCENT
-        };
-        let submit = ui
-            .add_enabled(
-                enabled,
-                egui::Button::new(primary)
-                    .min_size(egui::vec2(82., 26.))
-                    .fill(color),
-            )
-            .clicked();
-        (submit, cancel)
-    })
+    ui.allocate_ui_with_layout(
+        egui::vec2(ui.available_width(), 26.),
+        egui::Layout::right_to_left(egui::Align::Center),
+        |ui| {
+            let cancel = ui
+                .add_sized([82., 26.], egui::Button::new(secondary))
+                .clicked();
+            let color = if destructive {
+                egui::Color32::from_rgb(177, 43, 49)
+            } else {
+                crate::shell::ACCENT
+            };
+            let submit = ui
+                .add_enabled(
+                    enabled,
+                    egui::Button::new(primary)
+                        .min_size(egui::vec2(82., 26.))
+                        .fill(color),
+                )
+                .clicked();
+            (submit, cancel)
+        },
+    )
     .inner
 }
 

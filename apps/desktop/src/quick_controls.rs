@@ -66,8 +66,37 @@ impl QuickControls {
         Ok(())
     }
 
+    pub(super) fn thumbnail_details(&self) -> bool {
+        self.prefs.thumbnail_details
+    }
+    pub(super) fn set_thumbnail_details(&mut self, value: bool) {
+        self.remember(Choice::ThumbnailDetails(value));
+    }
+    pub(super) fn folder(
+        &self,
+        kind: capture_core::quick_preferences::Folder,
+    ) -> Option<std::path::PathBuf> {
+        self.prefs
+            .folders
+            .get(&kind)
+            .filter(|p| p.is_dir())
+            .cloned()
+    }
+    pub(super) fn remember_folder(
+        &mut self,
+        kind: capture_core::quick_preferences::Folder,
+        path: std::path::PathBuf,
+    ) {
+        self.remember(Choice::Folder(kind, path));
+    }
     pub(super) fn capture_settings(&self) -> capture_core::capture_options::Settings {
         self.prefs.capture.clone()
+    }
+    pub(super) fn capture_for(
+        &self,
+        selection: capture_core::capture_options::Selection,
+    ) -> capture_core::capture_options::Settings {
+        self.prefs.capture_for(selection)
     }
     pub(super) fn remember_capture(&mut self, settings: capture_core::capture_options::Settings) {
         self.remember(Choice::Capture(settings));

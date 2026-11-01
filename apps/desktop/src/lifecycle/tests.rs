@@ -80,7 +80,7 @@ fn startup_preference_file_override_and_tray_failure_have_accessible_windows() {
             e.lifecycle.available = available;
             e.quick_controls
                 .test_lifecycle(true, StartupWindow::CaptureController);
-            e.apply_startup_window(&ctx, explicit_file);
+            e.apply_startup_window(&ctx, explicit_file, e.quick_controls.startup_window());
             assert_eq!(e.lifecycle.hidden, available && !explicit_file);
             assert_eq!(e.capture_controller.open, available && !explicit_file);
         }

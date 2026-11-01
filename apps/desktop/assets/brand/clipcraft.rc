@@ -1,2 +1,3 @@
 // Original application icon, shared by Explorer and native capture windows.
 101 ICON "clipcraft.ico"
+102 ICON "capture-controller.ico"

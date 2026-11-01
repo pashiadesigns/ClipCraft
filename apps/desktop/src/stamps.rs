@@ -5,6 +5,7 @@ pub(super) struct Panel {
     armed: Option<Armed>,
     store: Option<capture_core::stamps::Library>,
     query: String,
+    category: String,
     textures: std::collections::HashMap<String, egui::TextureHandle>,
     error: String,
     pub anchor: Option<(crate::Kind, [f32; 2])>,
@@ -86,6 +87,35 @@ impl Editor {
                 self.stamps.textures.clear();
             }
         });
+        ui.horizontal(|ui| {
+            ui.label("Category");
+            egui::ComboBox::from_id_salt("stamp-category")
+                .selected_text(if self.stamps.category.is_empty() {
+                    "All"
+                } else {
+                    &self.stamps.category
+                })
+                .show_ui(ui, |ui| {
+                    for name in [
+                        "All",
+                        "Status",
+                        "Notes & alerts",
+                        "Workflow",
+                        "Imported",
+                        "Samples",
+                    ] {
+                        ui.selectable_value(
+                            &mut self.stamps.category,
+                            if name == "All" {
+                                String::new()
+                            } else {
+                                name.into()
+                            },
+                            name,
+                        );
+                    }
+                });
+        });
         ui.label("Search stamps");
         ui.text_edit_singleline(&mut self.stamps.query);
         if !self.stamps.error.is_empty() {
@@ -93,7 +123,10 @@ impl Editor {
         }
         let mut entries: Vec<Choice> = capture_core::stamps::builtin::ALL
             .iter()
-            .filter(|s| s.matches_query(&self.stamps.query))
+            .filter(|s| {
+                s.matches_query(&self.stamps.query)
+                    && (self.stamps.category.is_empty() || s.category() == self.stamps.category)
+            })
             .map(|s| Choice {
                 id: s.id.into(),
                 label: s.label.into(),
@@ -106,7 +139,11 @@ impl Editor {
                 .map(|s| {
                     s.0.entries()
                         .iter()
-                        .filter(|e| e.matches_query(&self.stamps.query))
+                        .filter(|e| {
+                            e.matches_query(&self.stamps.query)
+                                && (self.stamps.category.is_empty()
+                                    || self.stamps.category == "Imported")
+                        })
                         .map(|e| Choice {
                             id: e.id.clone(),
                             label: e.label.clone(),
@@ -355,7 +392,17 @@ impl Editor {
             self.select_only(None);
             self.stamps.armed.as_mut().unwrap().placing = true;
         }
-        if self.selected.is_some() || self.edit_drag.is_some() {
+        if self.edit_drag.is_some()
+            || self.rotation_drag.is_some()
+            || point.is_some_and(|p| {
+                self.tool_hit(transform.image_point(p), 7. / transform.scale)
+                    .is_some()
+                    || self.selected_annotation().is_some_and(|a| {
+                        a.hit_handle(transform.image_point(p), 7. / transform.scale)
+                            .is_some()
+                    })
+            })
+        {
             return false;
         }
         let Some(point) = point else {
@@ -679,6 +726,23 @@ mod tests {
         assert_eq!(e.selected, Some(first));
         assert!(e.stamps.armed.is_some());
         assert!(e.stamps.active);
+        let _ = frame(&mut e, vec![button(130., 110., false)]);
+        // An edited selection remains selected, but empty-canvas hover immediately
+        // previews the updated template without requiring a deselection click.
+        let mut edited = e.session.document.annotations[0].clone();
+        edited.end = [edited.start[0] + 90., edited.start[1] + 90.];
+        e.execute(Command::Update { annotation: edited });
+        let _ = frame(
+            &mut e,
+            vec![egui::Event::PointerMoved(egui::pos2(450., 300.))],
+        );
+        assert_eq!(e.selected, Some(first));
+        let armed = e.stamps.armed.as_ref().unwrap();
+        assert_eq!(
+            armed.payload.objects[0].end[0] - armed.payload.objects[0].start[0],
+            90.
+        );
+        assert_eq!(armed.preview.as_ref().unwrap().1, [90, 90]);
     }
 
     #[test]
@@ -724,6 +788,12 @@ mod tests {
         if let Ok(dir) = std::env::var("CLIPCRAFT_HEADLESS_BETA_DIR") {
             dump_meshes(&ctx, &dir, "Stamps", first, output);
         }
+        e.stamps.query.clear();
+        e.stamps.category = "Workflow".into();
+        let output = frame(&mut e);
+        assert!(crate::color_widgets::tests::text_rect(&output.shapes, "Time").is_some());
+        assert!(crate::color_widgets::tests::text_rect(&output.shapes, "Green check").is_none());
+        e.stamps.category.clear();
         e.stamps.query = "no match".into();
         let output = frame(&mut e);
         assert!(

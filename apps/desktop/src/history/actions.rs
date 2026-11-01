@@ -313,7 +313,11 @@ impl Editor {
         };
         let mut submit = false;
         let mut cancel = false;
-        egui::Modal::new(egui::Id::unique("library_entry_dialog")).show(ctx, |ui| {
+        egui::Modal::new(egui::Id::unique((
+            "library_entry_dialog",
+            dialog.action.label(),
+        )))
+        .show(ctx, |ui| {
             ui.set_width(if dialog.action == Action::Details {
                 520.
             } else {

@@ -7,6 +7,15 @@ pub struct Stamp {
     png: &'static [u8],
 }
 impl Stamp {
+    pub fn category(&self) -> &'static str {
+        match self.id.trim_start_matches("builtin-") {
+            "check-green" | "check-circle" | "cross-red" | "cross-circle" => "Status",
+            "caution-yellow" | "exclamation" | "exclamation-circle" | "question"
+            | "information" => "Notes & alerts",
+            "raster-sample" | "five-color" => "Samples",
+            _ => "Workflow",
+        }
+    }
     pub fn matches_query(&self, query: &str) -> bool {
         let text = format!("{} {}", self.label, self.keywords).to_lowercase();
         query
@@ -45,11 +54,27 @@ macro_rules! stamp {
             id: concat!("builtin-", $id),
             label: $label,
             keywords: $words,
-            png: include_bytes!(concat!("../../assets/stamps/", $id, ".png")),
+            png: &[],
         }
     };
 }
 pub const ALL: &[Stamp] = &[
+    stamp!("clock", "Time", "workflow clock wait duration deadline"),
+    stamp!(
+        "lock",
+        "Secure",
+        "workflow security lock private permission"
+    ),
+    stamp!(
+        "document",
+        "Document",
+        "workflow file page attachment instructions"
+    ),
+    stamp!("download", "Download", "workflow save receive import down"),
+    stamp!("upload", "Upload", "workflow send export up"),
+    stamp!("lightbulb", "Tip", "workflow idea suggestion light bulb"),
+    stamp!("keyboard", "Keyboard", "workflow shortcut type enter keys"),
+    stamp!("target", "Target", "workflow goal focus destination"),
     Stamp {
         id: "builtin-five-color",
         label: "Five-color workflow",
@@ -129,7 +154,7 @@ mod tests {
     #[test]
     fn starter_art_is_transparent_searchable_and_persists_as_editable_stamps() {
         let mut fixture =
-            crate::Session::new(crate::Document::canvas(640, 480, [245, 245, 245, 255]).unwrap())
+            crate::Session::new(crate::Document::canvas(640, 840, [245, 245, 245, 255]).unwrap())
                 .unwrap();
         for stamp in ALL {
             let pixels = stamp.pixels().unwrap();

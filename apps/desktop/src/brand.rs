@@ -20,6 +20,21 @@ pub(super) fn icon() -> Arc<egui::IconData> {
     Arc::clone(&ICON)
 }
 
+pub(super) fn controller_icon() -> Arc<egui::IconData> {
+    static ICON: LazyLock<Arc<egui::IconData>> = LazyLock::new(|| {
+        let pixels =
+            image::load_from_memory(include_bytes!("../assets/brand/capture-controller-256.png"))
+                .expect("validated supplied Capture Controller icon")
+                .into_rgba8();
+        Arc::new(egui::IconData {
+            width: pixels.width(),
+            height: pixels.height(),
+            rgba: pixels.into_raw(),
+        })
+    });
+    Arc::clone(&ICON)
+}
+
 pub(super) fn paint(ui: &egui::Ui, rect: egui::Rect) {
     let key = egui::Id::unique("clipcraft-brand-texture");
     let texture = ui
@@ -68,6 +83,32 @@ mod tests {
         assert!(icon.rgba.as_chunks::<4>().0.contains(&[0, 170, 226, 255]));
         let ico = include_bytes!("../assets/brand/clipcraft.ico");
         assert_eq!(&ico[..4], &[0, 0, 1, 0]);
+        let count = u16::from_le_bytes(ico[4..6].try_into().unwrap()) as usize;
+        assert_eq!(count, 9);
+        for i in 0..count {
+            let entry = &ico[6 + i * 16..6 + (i + 1) * 16];
+            let size = if entry[0] == 0 {
+                256
+            } else {
+                u32::from(entry[0])
+            };
+            let len = u32::from_le_bytes(entry[8..12].try_into().unwrap()) as usize;
+            let offset = u32::from_le_bytes(entry[12..16].try_into().unwrap()) as usize;
+            let pixels = image::load_from_memory(&ico[offset..offset + len])
+                .unwrap()
+                .into_rgba8();
+            assert_eq!(pixels.dimensions(), (size, size));
+            if size == 256 {
+                assert_eq!(pixels.as_raw(), &icon.rgba);
+            }
+        }
+    }
+    #[test]
+    fn controller_has_a_distinct_icon_at_every_windows_size() {
+        let icon = controller_icon();
+        assert_eq!((icon.width, icon.height), (256, 256));
+        assert_ne!(icon.rgba, super::icon().rgba);
+        let ico = include_bytes!("../assets/brand/capture-controller.ico");
         let count = u16::from_le_bytes(ico[4..6].try_into().unwrap()) as usize;
         assert_eq!(count, 9);
         for i in 0..count {

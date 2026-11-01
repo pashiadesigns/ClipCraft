@@ -154,3 +154,75 @@ fn direction_settings_live_slider_batch_inheritance_and_one_undo() {
     let styled = e.step_marker([60., 60.]).unwrap();
     assert!(styled.shadow.is_some());
 }
+
+#[test]
+fn shadow_color_opens_nested_picker_and_commits_one_undo() {
+    let ctx = egui::Context::default();
+    crate::shell::configure(&ctx);
+    ctx.all_styles_mut(|s| s.animation_time = 0.);
+    let mut e = crate::canvas::tests::editor(&ctx);
+    e.session.document.annotations.push(
+        capture_core::steps::marker(
+            1,
+            [100., 100.],
+            64,
+            [40, 100, 180, 255],
+            (1, false),
+            [640, 400],
+        )
+        .unwrap(),
+    );
+    e.tool = Some(crate::Kind::Step);
+    e.select_only(Some(1));
+    e.shell.badges = false;
+    let original = e.session.document.annotations.clone();
+    let mut first = frame(&ctx, &mut e, vec![]);
+    frame(&ctx, &mut e, vec![]);
+    let rect = |key| ctx.data(|d| d.get_temp::<Rect>(egui::Id::unique(key)).unwrap());
+    click(&ctx, &mut e, rect("shadow-settings").center());
+    click(&ctx, &mut e, rect("shadow-color").center());
+    let output = frame(&ctx, &mut e, vec![]);
+    assert!(
+        crate::color_widgets::tests::text_rect(&output.shapes, "Saturation / brightness").is_some(),
+        "nested color picker vanished"
+    );
+    let red = ctx.data(|d| {
+        d.get_temp::<Rect>(egui::Id::unique(("preset-swatch", "Red")))
+            .unwrap()
+    });
+    click(&ctx, &mut e, red.center());
+    let output = frame(&ctx, &mut e, vec![]);
+    assert_eq!(
+        e.preview_document().annotations[0].shadow.unwrap().color,
+        [237, 32, 36, 255]
+    );
+    assert!(
+        crate::color_widgets::tests::text_rect(&output.shapes, "Saturation / brightness").is_some()
+    );
+    if let Ok(root) = std::env::var("CLIPCRAFT_SHADOW_UI_DIR") {
+        let updates: TextureUpdates = ctx.data(|d| {
+            d.get_temp(egui::Id::unique("shadow-test-textures"))
+                .unwrap()
+        });
+        first.0.textures_delta.set.clear();
+        for (id, updates) in updates {
+            first
+                .0
+                .textures_delta
+                .set
+                .entry(id)
+                .or_default()
+                .extend(updates);
+        }
+        dump_meshes(&ctx, &root, "shadow-color", first, output);
+    }
+    click(&ctx, &mut e, egui::pos2(8., 830.));
+    click(&ctx, &mut e, egui::pos2(8., 830.));
+    assert_eq!(
+        e.session.document.annotations[0].shadow.unwrap().color,
+        [237, 32, 36, 255]
+    );
+    e.execute(crate::Command::Undo);
+    assert_eq!(e.session.document.annotations, original);
+    assert!(!e.session.can_undo());
+}

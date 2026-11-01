@@ -6,16 +6,33 @@ use std::{
 };
 use windows_sys::Win32::{
     Foundation::*,
+    Graphics::Gdi::*,
     System::{LibraryLoader::GetModuleHandleW, Threading::GetCurrentThreadId},
     UI::{Shell::*, WindowsAndMessaging::*},
 };
 
 const CALLBACK: u32 = WM_APP + 43;
+const ACTIVATE: u32 = WM_APP + 44;
+const ACTIVATE_ACK: usize = 0x43434150;
 const ICON_ID: u32 = 1;
 // Windows SDK macro: NIN_SELECT | NINF_KEY (not emitted by windows-sys).
 const NIN_KEYSELECT: u32 = NIN_SELECT | 1;
 fn wide(s: &str) -> Vec<u16> {
     s.encode_utf16().chain(Some(0)).collect()
+}
+pub(super) fn activate(window: capture_core::quick_preferences::StartupWindow) -> bool {
+    let id = if window == capture_core::quick_preferences::StartupWindow::Editor {
+        1
+    } else {
+        2
+    };
+    unsafe {
+        let hwnd = FindWindowW(wide("ClipCraft.NotificationArea").as_ptr(), null());
+        let mut response = 0;
+        !hwnd.is_null()
+            && SendMessageTimeoutW(hwnd, ACTIVATE, id, 0, SMTO_ABORTIFHUNG, 250, &mut response) != 0
+            && response == ACTIVATE_ACK
+    }
 }
 fn menu_action(id: u32) -> Option<Action> {
     match id {
@@ -81,6 +98,12 @@ unsafe extern "system" fn procedure(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM) 
     }
     let state = unsafe { (GetWindowLongPtrW(hwnd, GWLP_USERDATA) as *const State).as_ref() };
     if let Some(state) = state {
+        if msg == ACTIVATE {
+            if let Some(action @ (Action::Editor | Action::Controller)) = menu_action(w as u32) {
+                state.send(action);
+            }
+            return ACTIVATE_ACK as LRESULT;
+        }
         if msg == state.taskbar_created {
             // Explorer loses notification icons when it restarts. A hidden
             // top-level window receives its broadcast (HWND_MESSAGE does not).
@@ -122,6 +145,10 @@ unsafe fn show_menu(hwnd: HWND, position: WPARAM, state: &State) {
     if menu.is_null() {
         return;
     }
+    let icons = [
+        (1, MenuBitmap::new(&crate::brand::icon())),
+        (2, MenuBitmap::new(&crate::brand::controller_icon())),
+    ];
     for (id, label) in [
         (1, "Open ClipCraft Editor"),
         (2, "Open Capture Controller"),
@@ -135,6 +162,19 @@ unsafe fn show_menu(hwnd: HWND, position: WPARAM, state: &State) {
         }
         unsafe {
             AppendMenuW(menu, MF_STRING, id, wide(label).as_ptr());
+        }
+    }
+    for (id, icon) in &icons {
+        if !icon.0.is_null() {
+            let info = MENUITEMINFOW {
+                cbSize: size_of::<MENUITEMINFOW>() as u32,
+                fMask: MIIM_BITMAP,
+                hbmpItem: icon.0,
+                ..Default::default()
+            };
+            unsafe {
+                SetMenuItemInfoW(menu, *id, 0, &info);
+            }
         }
     }
     unsafe {
@@ -162,6 +202,65 @@ unsafe fn show_menu(hwnd: HWND, position: WPARAM, state: &State) {
     }
     if let Some(action) = menu_action(command as u32) {
         state.send(action);
+    }
+}
+
+struct MenuBitmap(HBITMAP);
+impl MenuBitmap {
+    fn new(icon: &crate::egui::IconData) -> Self {
+        let size = unsafe { GetSystemMetrics(SM_CXMENUCHECK) }.clamp(16, 64);
+        let Some(image) = image::RgbaImage::from_raw(icon.width, icon.height, icon.rgba.clone())
+        else {
+            return Self(null_mut());
+        };
+        let pixels = image::imageops::resize(
+            &image,
+            size as u32,
+            size as u32,
+            image::imageops::FilterType::Lanczos3,
+        );
+        let info = BITMAPINFO {
+            bmiHeader: BITMAPINFOHEADER {
+                biSize: size_of::<BITMAPINFOHEADER>() as u32,
+                biWidth: size,
+                biHeight: -size,
+                biPlanes: 1,
+                biBitCount: 32,
+                biCompression: BI_RGB,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let mut bits = null_mut();
+        let bitmap = unsafe {
+            CreateDIBSection(null_mut(), &info, DIB_RGB_COLORS, &mut bits, null_mut(), 0)
+        };
+        if !bitmap.is_null() && !bits.is_null() {
+            let target = unsafe {
+                std::slice::from_raw_parts_mut(bits.cast::<u8>(), (size * size * 4) as usize)
+            };
+            for (out, p) in target
+                .as_chunks_mut::<4>()
+                .0
+                .iter_mut()
+                .zip(pixels.pixels())
+            {
+                for (n, source) in [2, 1, 0].into_iter().enumerate() {
+                    out[n] = (u16::from(p[source]) * u16::from(p[3]) / 255) as u8;
+                }
+                out[3] = p[3];
+            }
+        }
+        Self(bitmap)
+    }
+}
+impl Drop for MenuBitmap {
+    fn drop(&mut self) {
+        if !self.0.is_null() {
+            unsafe {
+                DeleteObject(self.0);
+            }
+        }
     }
 }
 pub(super) struct Worker {
@@ -292,6 +391,27 @@ pub(super) fn start(ctx: crate::egui::Context) -> Result<Tray, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn tray_menu_icons_are_small_owned_bitmaps() {
+        for icon in [crate::brand::icon(), crate::brand::controller_icon()] {
+            let bitmap = MenuBitmap::new(&icon);
+            assert!(!bitmap.0.is_null());
+            let mut info = BITMAP::default();
+            assert_ne!(
+                unsafe {
+                    GetObjectW(
+                        bitmap.0,
+                        size_of::<BITMAP>() as i32,
+                        (&mut info as *mut BITMAP).cast(),
+                    )
+                },
+                0
+            );
+            assert!((16..=64).contains(&info.bmWidth));
+            assert_eq!(info.bmHeight, info.bmWidth);
+            assert_eq!(info.bmBitsPixel, 32);
+        }
+    }
     #[test]
     fn version_four_mouse_keyboard_and_menu_commands_route_only_valid_ids() {
         for event in [NIN_SELECT, NIN_KEYSELECT] {

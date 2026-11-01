@@ -70,6 +70,14 @@ impl Default for View {
     }
 }
 impl View {
+    pub(super) fn start_import(&mut self) {
+        self.year = None;
+        self.kind = None;
+        self.tag = None;
+        self.selected.clear();
+        self.anchor = None;
+        self.marquee = None;
+    }
     fn select(&mut self, id: &str, visible: &[Entry], modifiers: egui::Modifiers) {
         if modifiers.shift {
             let index = |id: &str| visible.iter().position(|e| e.id == id);
@@ -204,6 +212,7 @@ impl Editor {
                             (None, "All Files", "Library"),
                             (Some(MediaKind::Image), "Images", "Image"),
                             (Some(MediaKind::Steps), "Step Captures", "Steps"),
+                            (Some(MediaKind::Template), "From Template", "Image"),
                         ] {
                             let count = entries
                                 .iter()
@@ -287,6 +296,22 @@ impl Editor {
             .show(ui, |ui| {
                 ui.horizontal_wrapped(|ui| {
                     ui.heading("Library");
+                    self.library_import_button(ui);
+                    if ui.button("Create from Template…").clicked() {
+                        let selected: Vec<_> = self
+                            .history
+                            .library
+                            .filtered(&entries, &self.history.query)
+                            .into_iter()
+                            .filter(|e| self.history.library.selected.contains(&e.id))
+                            .collect();
+                        self.templates_from_library(&selected);
+                    }
+                    let mut details = self.quick_controls.thumbnail_details();
+                    if crate::controls::toggle(ui, &mut details, "Show thumbnail details").changed()
+                    {
+                        self.quick_controls.set_thumbnail_details(details);
+                    }
                     if crate::ribbon::icon(
                         ui,
                         "Refresh",
@@ -311,6 +336,7 @@ impl Editor {
                             }
                         });
                 });
+                self.library_import_progress(ui);
                 let visible = self.history.library.filtered(&entries, &self.history.query);
                 self.library_bulk_bar(ui, &visible);
                 ui.label(format!("{} of {} captures", visible.len(), entries.len()));
@@ -355,18 +381,21 @@ impl Editor {
                                             self.history_card(ui, entry, size);
                                             ui.add(egui::Label::new(&entry.label).truncate())
                                                 .on_hover_text(&entry.label);
-                                            ui.add(
-                                                egui::Label::new(format!(
-                                                    "{} × {} · {}",
-                                                    entry.width,
-                                                    entry.height,
-                                                    entry.kind.label()
-                                                ))
-                                                .truncate(),
-                                            );
-                                            ui.add(
-                                                egui::Label::new(entry.created_utc()).truncate(),
-                                            );
+                                            if self.quick_controls.thumbnail_details() {
+                                                ui.add(
+                                                    egui::Label::new(format!(
+                                                        "{} × {} · {}",
+                                                        entry.width,
+                                                        entry.height,
+                                                        entry.kind.label()
+                                                    ))
+                                                    .truncate(),
+                                                );
+                                                ui.add(
+                                                    egui::Label::new(entry.created_utc())
+                                                        .truncate(),
+                                                );
+                                            }
                                         });
                                         let response = ui.interact(
                                             card.response.rect,

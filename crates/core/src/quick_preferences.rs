@@ -59,6 +59,12 @@ pub struct Preferences {
     pub keybinds: crate::keybinds::Keybinds,
     #[serde(default)]
     pub capture: crate::capture_options::Settings,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub capture_profiles: Vec<crate::capture_options::Settings>,
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub folders: std::collections::BTreeMap<Folder, PathBuf>,
+    #[serde(default)]
+    pub thumbnail_details: bool,
     pub version: u32,
     pub alignment: LayoutAction,
     pub distribution: LayoutAction,
@@ -94,6 +100,9 @@ impl Default for Preferences {
             startup_window: StartupWindow::Editor,
             keybinds: Default::default(),
             capture: Default::default(),
+            capture_profiles: Vec::new(),
+            folders: Default::default(),
+            thumbnail_details: false,
             alignment: LayoutAction::HorizontalCenter,
             distribution: LayoutAction::HorizontalGaps,
             justification: Justification::CenterMiddle,
@@ -109,8 +118,33 @@ impl Default for Preferences {
     }
 }
 impl Preferences {
+    pub fn capture_for(
+        &self,
+        selection: crate::capture_options::Selection,
+    ) -> crate::capture_options::Settings {
+        self.capture_profiles
+            .iter()
+            .find(|p| p.selection == selection)
+            .cloned()
+            .or_else(|| (self.capture.selection == selection).then(|| self.capture.clone()))
+            .unwrap_or_else(|| crate::capture_options::Settings {
+                selection,
+                cursor: selection == crate::capture_options::Selection::Steps,
+                ..Default::default()
+            })
+    }
+
     pub fn choose(&mut self, choice: Choice) -> Result<()> {
         match choice {
+            Choice::ThumbnailDetails(value) => {
+                self.thumbnail_details = value;
+                self.version = self.version.max(11);
+            }
+            Choice::Folder(kind, path) => {
+                validate_folder(&path)?;
+                self.folders.insert(kind, path);
+                self.version = self.version.max(11);
+            }
             Choice::CloseToTray(value) => {
                 self.close_to_tray = value;
                 self.version = self.version.max(8);
@@ -132,8 +166,19 @@ impl Preferences {
             }
             Choice::Capture(settings) => {
                 settings.validate()?;
+                // Retain the legacy/current mode before switching to another.
+                if !self
+                    .capture_profiles
+                    .iter()
+                    .any(|p| p.selection == self.capture.selection)
+                {
+                    self.capture_profiles.push(self.capture.clone());
+                }
+                self.capture_profiles
+                    .retain(|p| p.selection != settings.selection);
+                self.capture_profiles.push(settings.clone());
                 self.capture = settings;
-                self.version = self.version.max(5);
+                self.version = self.version.max(10);
             }
             Choice::Alignment(action) if action.minimum_objects() == 2 => self.alignment = action,
             Choice::Distribution(action) if action.minimum_objects() == 3 => {
@@ -210,8 +255,12 @@ impl Preferences {
         Ok(())
     }
     fn validate(&self) -> Result<()> {
-        if !matches!(self.version, 1..=9)
+        if !matches!(self.version, 1..=11)
+            || (self.version < 11 && (!self.folders.is_empty() || self.thumbnail_details))
+            || self.folders.len() > 3
             || self.snapping_limit.is_some_and(|n| n == 0 || n > 10000)
+            || (self.version < 10 && !self.capture_profiles.is_empty())
+            || self.capture_profiles.len() > crate::capture_options::Selection::ALL.len()
             || (self.version < 9 && self.snapping_limit.is_some())
             || (self.version < 8
                 && (!self.close_to_tray || self.startup_window != StartupWindow::Editor))
@@ -234,6 +283,18 @@ impl Preferences {
             return Err(Error::Invalid(
                 "Unsupported quick control preferences; file preserved".into(),
             ));
+        }
+        for path in self.folders.values() {
+            validate_folder(path)?;
+        }
+        for (index, profile) in self.capture_profiles.iter().enumerate() {
+            profile.validate()?;
+            if self.capture_profiles[..index]
+                .iter()
+                .any(|p| p.selection == profile.selection)
+            {
+                return Err(Error::Invalid("Duplicate capture settings".into()));
+            }
         }
         for (category, name) in &self.style_choices {
             validate_style_choice(category, name)?;
@@ -271,6 +332,8 @@ fn validate_style_choice(category: &str, name: &str) -> Result<()> {
 }
 #[derive(Clone)]
 pub enum Choice {
+    Folder(Folder, PathBuf),
+    ThumbnailDetails(bool),
     CloseToTray(bool),
     StartupWindow(StartupWindow),
     Keybinds(crate::keybinds::Keybinds),
@@ -548,5 +611,53 @@ mod lifecycle_tests {
         assert_eq!(next.keybinds, original.keybinds);
         assert_eq!(next.favorite_tools, original.favorite_tools);
         assert_eq!(next.toolbar_order, original.toolbar_order);
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Folder {
+    Open,
+    Project,
+    Export,
+}
+fn validate_folder(path: &Path) -> Result<()> {
+    if !path.is_absolute()
+        || path.to_string_lossy().len() > 2048
+        || path.to_string_lossy().chars().any(char::is_control)
+    {
+        return Err(Error::Invalid("Invalid remembered folder".into()));
+    }
+    Ok(())
+}
+#[cfg(test)]
+mod folder_tests {
+    use super::*;
+    #[test]
+    fn folders_survive_restart_without_overwriting_other_preferences() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(dir.path()).unwrap();
+        for kind in [Folder::Open, Folder::Project, Folder::Export] {
+            store
+                .remember(Choice::Folder(kind, dir.path().to_path_buf()))
+                .unwrap();
+        }
+        store.remember(Choice::CanvasSnapping(false)).unwrap();
+        store.remember(Choice::ThumbnailDetails(true)).unwrap();
+        let reopened = Store::open(dir.path()).unwrap().read().unwrap();
+        assert_eq!(reopened.folders.len(), 3);
+        assert!(reopened.thumbnail_details);
+        assert!(!Preferences::default().thumbnail_details);
+        assert!(!reopened.canvas_snapping);
+        let before = std::fs::read(dir.path().join("quick-controls.json")).unwrap();
+        assert!(
+            store
+                .remember(Choice::Folder(Folder::Open, "relative".into()))
+                .is_err()
+        );
+        assert_eq!(
+            before,
+            std::fs::read(dir.path().join("quick-controls.json")).unwrap()
+        );
     }
 }

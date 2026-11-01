@@ -19,12 +19,14 @@ impl Editor {
             self.cancel_gesture();
             self.shell.preview_ui = false;
             self.shell.backstage = Some(Page::Home);
+            self.shell.recent_limit = 10;
         }
     }
     pub(super) fn show_backstage(&mut self, ui: &mut egui::Ui) {
         let ctx = ui.ctx().clone();
         if self.new_image.is_none()
             && self.pending.is_none()
+            && self.template_picker.is_none()
             && !egui::Popup::is_any_open(&ctx)
             && ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape))
         {
@@ -123,7 +125,7 @@ impl Editor {
                             ui.menu_button("Capture delay", |ui|self.capture_delay_menu(ui));
                             ui.add_space(24.0);
                             ui.heading("Templates");
-                            ui.label(RichText::new("Image templates are planned. Saved object styles are available in the editor's Quick Styles.").color(Color32::from_gray(185)));
+                            if ui.button("Create Image from Template…").clicked() { self.open_template_picker(vec![]); }
                             if page==Page::Home {ui.add_space(32.0);self.backstage_recent(ui);}
                         }
                         Page::Open => {
@@ -163,11 +165,16 @@ impl Editor {
         ui.horizontal(|ui| {
             ui.heading("Recent");
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                ui.add(
-                    egui::TextEdit::singleline(&mut self.shell.recent_query)
-                        .hint_text("Search for an image")
-                        .desired_width(240.0),
-                );
+                if ui
+                    .add(
+                        egui::TextEdit::singleline(&mut self.shell.recent_query)
+                            .hint_text("Search for an image")
+                            .desired_width(240.0),
+                    )
+                    .changed()
+                {
+                    self.shell.recent_limit = 10;
+                }
             });
         });
         ui.add_space(10.0);
@@ -179,22 +186,36 @@ impl Editor {
                 "Your library images appear here. Use Open to browse for an image or project.",
             );
         }
-        for entry in entries.iter().take(12) {
-            let response = ui.add_sized(
-                [ui.available_width(), 42.0],
-                egui::Button::new(format!(
-                    "{}    ·    {} × {}    ·    {}",
-                    entry.label,
-                    entry.width,
-                    entry.height,
-                    entry.created_utc()
-                ))
-                .wrap_mode(egui::TextWrapMode::Truncate),
-            );
-            self.history_context(&response, entry, true);
-            if response.clicked() {
-                self.open_history(&entry.id, &ui.ctx().clone());
-            }
+        let visible = self.shell.recent_limit.min(entries.len());
+        let mut open = None;
+        egui::ScrollArea::horizontal()
+            .id_salt("file_recent_thumbnails")
+            .show(ui, |ui| {
+                for row in entries[..visible].chunks(10) {
+                    ui.horizontal(|ui| {
+                        ui.spacing_mut().item_spacing.x = 8.;
+                        for entry in row {
+                            ui.vertical(|ui| {
+                                ui.set_width(80.);
+                                let response = self.history_card(ui, entry, egui::vec2(80., 48.));
+                                let available = self.history.available(&entry.id);
+                                self.history_context(&response, entry, available);
+                                if response.clicked() && available {
+                                    open = Some(entry.id.clone());
+                                }
+                                ui.add(egui::Label::new(&entry.label).truncate())
+                                    .on_hover_text(&entry.label);
+                            });
+                        }
+                    });
+                    ui.add_space(10.);
+                }
+            });
+        if visible < entries.len() && ui.button("Show more").clicked() {
+            self.shell.recent_limit += 10;
+        }
+        if let Some(id) = open {
+            self.open_history(&id, &ui.ctx().clone());
         }
     }
     fn file_help(&mut self, ui: &mut egui::Ui) {
@@ -359,6 +380,57 @@ fn card(
 mod tests {
     use super::*;
     use crate::property_layout::tests::{PaintedOutput, dump_meshes};
+    #[test]
+    fn file_recent_shows_ten_small_thumbnails_and_expands_in_batches() {
+        let root = tempfile::tempdir().unwrap();
+        let mut history = capture_core::history::History::open(root.path()).unwrap();
+        for n in 0..23 {
+            history
+                .create(
+                    &capture_core::Document::canvas(80, 50, [30, 90 + n, 160, 255]).unwrap(),
+                    &format!("Example {n:02}"),
+                    capture_core::history::Origin::Image,
+                )
+                .unwrap();
+        }
+        let ctx = egui::Context::default();
+        crate::shell::configure(&ctx);
+        ctx.style_mut_of(egui::Theme::Dark, |s| s.animation_time = 0.);
+        let mut e = crate::canvas::tests::editor(&ctx);
+        e.history = crate::history::HistoryPanel::isolated(root.path());
+        e.shell.backstage = Some(Page::Open);
+        let badges = |out: &PaintedOutput| {
+            out.shapes
+                .iter()
+                .filter_map(|s| {
+                    if let egui::Shape::Text(t) = &s.shape {
+                        (t.galley.text() == "IMAGE").then_some(t.pos)
+                    } else {
+                        None
+                    }
+                })
+                .collect::<Vec<_>>()
+        };
+        let first = frame(&ctx, &mut e, 1280., vec![]);
+        let output = frame(&ctx, &mut e, 1280., vec![]);
+        let row = badges(&output);
+        assert_eq!(row.len(), 10);
+        assert!(row.iter().all(|p| p.y == row[0].y));
+        assert!(row.windows(2).all(|p| (p[1].x - p[0].x - 88.).abs() < 0.1));
+        let show = text_rect(&output, "Show more");
+        if let Ok(dir) = std::env::var("CLIPCRAFT_HEADLESS_FILE_DIR") {
+            dump_meshes(&ctx, &dir, "recent-ten", first, output);
+        }
+        click(&ctx, &mut e, show);
+        let output = frame(&ctx, &mut e, 1280., vec![]);
+        assert_eq!(badges(&output).len(), 20);
+        click(&ctx, &mut e, text_rect(&output, "Show more"));
+        let output = frame(&ctx, &mut e, 1280., vec![]);
+        assert_eq!(badges(&output).len(), 23);
+        assert!(crate::color_widgets::tests::text_rect(&output.shapes, "Show more").is_none());
+        e.open_file_workspace();
+        assert_eq!(e.shell.recent_limit, 10);
+    }
     fn frame(
         ctx: &egui::Context,
         e: &mut Editor,

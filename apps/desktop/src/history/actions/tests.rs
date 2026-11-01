@@ -3,6 +3,59 @@ use crate::property_layout::tests::{PaintedOutput, dump_meshes};
 use capture_core::{Document, Kind};
 
 #[test]
+fn rename_modal_sizes_to_content_and_actions_stay_bottom_right() {
+    let root = tempfile::tempdir().unwrap();
+    let ctx = egui::Context::default();
+    crate::shell::configure(&ctx);
+    ctx.style_mut_of(egui::Theme::Dark, |s| s.animation_time = 0.);
+    let mut e = crate::canvas::tests::editor(&ctx);
+    e.history = HistoryPanel::isolated(root.path());
+    let entry = e
+        .history
+        .store
+        .as_mut()
+        .unwrap()
+        .create(
+            &Document::blank(40, 30).unwrap(),
+            "Test capture",
+            Origin::Capture,
+        )
+        .unwrap();
+    let frame = |e: &mut Editor| {
+        PaintedOutput(ctx.run_ui(
+            egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    egui::vec2(1000., 800.),
+                )),
+                ..Default::default()
+            },
+            |ui| e.show_history_dialog(ui.ctx()),
+        ))
+    };
+    e.history_action(&entry, Action::Details, &ctx);
+    let mut first = frame(&mut e);
+    frame(&mut e);
+    e.history_action(&entry, Action::Rename, &ctx);
+    let out = frame(&mut e);
+    first.0.textures_delta.append(out.0.textures_delta.clone());
+    let output = frame(&mut e);
+    let text = |s| crate::color_widgets::tests::text_rect(&output.shapes, s).unwrap();
+    let title = text("Rename");
+    let save = text("Save");
+    let cancel = text("Cancel");
+    assert!(save.top() > title.bottom());
+    assert!(
+        save.bottom() - title.top() < 160.,
+        "Rename footer left a huge gap"
+    );
+    assert!(save.left() > title.left() + 180. && cancel.left() > save.right());
+    if let Ok(dir) = std::env::var("CLIPCRAFT_HEADLESS_LIBRARY_DIR") {
+        dump_meshes(&ctx, &dir, "library-rename", first, output);
+    }
+}
+
+#[test]
 fn details_show_real_file_properties_without_changing_the_project() {
     let root = tempfile::tempdir().unwrap();
     let ctx = egui::Context::default();

@@ -219,7 +219,7 @@ mod tests {
             fullscreen: Fullscreen::All,
         };
         let saved = store.remember(Choice::Capture(settings.clone())).unwrap();
-        assert_eq!(saved.version, 5);
+        assert_eq!(saved.version, 10);
         assert_eq!(
             Store::open(dir.path()).unwrap().read().unwrap().capture,
             settings
@@ -259,5 +259,60 @@ mod tests {
         }
         settings.delay_seconds = 9;
         assert!(settings.validate().is_err());
+    }
+
+    #[test]
+    fn mode_profiles_persist_independently_and_steps_default_to_cursor() {
+        use crate::quick_preferences::{Choice, Preferences, Store};
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(dir.path()).unwrap();
+        let defaults = Preferences::default();
+        assert!(defaults.capture_for(Selection::Steps).cursor);
+        assert!(!defaults.capture_for(Selection::Window).cursor);
+        let region = Settings {
+            clipboard: true,
+            delay_seconds: 3,
+            ..Default::default()
+        };
+        store.remember(Choice::Capture(region.clone())).unwrap();
+        let window = Settings {
+            selection: Selection::Window,
+            preview: false,
+            cursor: true,
+            ..Default::default()
+        };
+        store.remember(Choice::Capture(window.clone())).unwrap();
+        let steps = Settings {
+            selection: Selection::Steps,
+            cursor: false,
+            ..Default::default()
+        };
+        store.remember(Choice::Capture(steps.clone())).unwrap();
+        let reopened = Store::open(dir.path()).unwrap().read().unwrap();
+        assert_eq!(reopened.capture_for(Selection::Region), region);
+        assert_eq!(reopened.capture_for(Selection::Window), window);
+        assert_eq!(
+            reopened.capture_for(Selection::Steps),
+            steps,
+            "explicit cursor-off must survive restart"
+        );
+        let mut bad = reopened.clone();
+        bad.capture_profiles.push(region.clone());
+        std::fs::write(
+            dir.path().join("quick-controls.json"),
+            serde_json::to_vec(&bad).unwrap(),
+        )
+        .unwrap();
+        assert!(
+            store.read().is_err(),
+            "ambiguous duplicate profiles must fail"
+        );
+        let mut legacy = serde_json::to_value(&reopened).unwrap();
+        legacy.as_object_mut().unwrap().remove("capture_profiles");
+        legacy["version"] = 9.into();
+        legacy["capture"] = serde_json::to_value(&region).unwrap();
+        let legacy: Preferences = serde_json::from_value(legacy).unwrap();
+        assert_eq!(legacy.capture_for(Selection::Region), region);
+        assert!(legacy.capture_for(Selection::Steps).cursor);
     }
 }

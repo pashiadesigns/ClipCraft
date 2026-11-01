@@ -387,6 +387,7 @@ impl Guide {
             top += displayed[1] + HEADER + MARGIN;
         }
         d.guide = Some(crate::guide_sections::Layout {
+            template: None,
             top: MARGIN as f32,
             sections,
         });

@@ -80,6 +80,114 @@ impl VectorStamp {
                 stroke,
             });
         };
+        match id {
+            "clock" => {
+                add(circle.clone(), blue, Some(7.));
+                add("M 64 30 L 64 65 L 85 78".into(), ink, Some(7.));
+            }
+            "lock" => {
+                add(
+                    "M 38 57 L 38 37 C 38 8 90 8 90 37 L 90 57".into(),
+                    ink,
+                    Some(8.),
+                );
+                add("M 23 52 L 105 52 L 105 114 L 23 114 Z".into(), blue, None);
+                add("M 64 75 L 64 94".into(), white, Some(9.));
+            }
+            "document" => {
+                add(
+                    "M 28 10 L 80 10 L 104 34 L 104 116 L 28 116 Z".into(),
+                    white,
+                    None,
+                );
+                add(
+                    "M 28 10 L 80 10 L 104 34 L 104 116 L 28 116 Z M 80 10 L 80 34 L 104 34".into(),
+                    blue,
+                    Some(5.),
+                );
+                add(
+                    "M 44 56 L 88 56 M 44 74 L 88 74 M 44 92 L 76 92".into(),
+                    ink,
+                    Some(5.),
+                );
+            }
+            "download" | "upload" => {
+                add("M 20 86 L 20 110 L 108 110 L 108 86".into(), ink, Some(7.));
+                add(
+                    if id == "download" {
+                        "M 64 16 L 64 84 M 40 61 L 64 86 L 88 61"
+                    } else {
+                        "M 64 87 L 64 19 M 40 42 L 64 17 L 88 42"
+                    }
+                    .into(),
+                    blue,
+                    Some(9.),
+                );
+            }
+            "lightbulb" => {
+                add(
+                    "M 44 88 C 44 72 25 65 25 43 C 25 0 103 0 103 43 C 103 65 84 72 84 88 Z".into(),
+                    [245, 190, 48, 255],
+                    None,
+                );
+                add(
+                    "M 45 94 L 83 94 M 48 106 L 80 106 M 56 116 L 72 116".into(),
+                    ink,
+                    Some(6.),
+                );
+                add(
+                    "M 53 68 L 64 80 L 75 68 M 64 80 L 64 89".into(),
+                    white,
+                    Some(4.),
+                );
+            }
+            "keyboard" => {
+                add("M 10 30 L 118 30 L 118 99 L 10 99 Z".into(), blue, Some(6.));
+                for y in [46., 62.] {
+                    for x in [25., 44., 63., 82., 101.] {
+                        add(
+                            Rect::new(x - 4., y - 3., x + 4., y + 3.)
+                                .to_path(0.01)
+                                .to_svg(),
+                            ink,
+                            None,
+                        );
+                    }
+                }
+                add("M 36 83 L 92 83".into(), ink, Some(6.));
+            }
+            "target" => {
+                add(circle.clone(), red, Some(7.));
+                add(
+                    Ellipse::from_rect(Rect::new(30., 30., 98., 98.))
+                        .to_path(0.01)
+                        .to_svg(),
+                    red,
+                    Some(7.),
+                );
+                add(
+                    Ellipse::from_rect(Rect::new(52., 52., 76., 76.))
+                        .to_path(0.01)
+                        .to_svg(),
+                    red,
+                    None,
+                );
+            }
+            _ => {}
+        }
+        if matches!(
+            id,
+            "clock"
+                | "lock"
+                | "document"
+                | "download"
+                | "upload"
+                | "lightbulb"
+                | "keyboard"
+                | "target"
+        ) {
+            return result;
+        }
         if id == "five-color" {
             for (i, color) in [blue, green, [245, 190, 48, 255], red, white]
                 .into_iter()

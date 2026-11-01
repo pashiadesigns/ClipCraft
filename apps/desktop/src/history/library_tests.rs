@@ -204,3 +204,67 @@ fn pointer_selection_ranges_marquee_context_and_double_open() {
     );
     assert_eq!(e.history.active.as_deref(), Some(cards[3].0.as_str()));
 }
+
+#[test]
+fn thumbnails_default_to_names_and_details_are_opt_in() {
+    let root = tempfile::tempdir().unwrap();
+    let ctx = egui::Context::default();
+    crate::shell::configure(&ctx);
+    let mut e = crate::canvas::tests::editor(&ctx);
+    e.shell.library = true;
+    e.history = HistoryPanel::isolated(root.path());
+    let entry = e
+        .history
+        .store
+        .as_mut()
+        .unwrap()
+        .create(
+            &capture_core::Document::canvas(80, 50, [40, 130, 170, 255]).unwrap(),
+            "Onboarding",
+            Origin::Canvas,
+        )
+        .unwrap();
+    let frame = |e: &mut Editor| {
+        PaintedOutput(ctx.run_ui(
+            egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    egui::vec2(1200., 700.),
+                )),
+                ..Default::default()
+            },
+            |ui| e.show_library(ui),
+        ))
+    };
+    frame(&mut e);
+    let output = frame(&mut e);
+    let has = |output: &PaintedOutput, s: &str| {
+        crate::color_widgets::tests::text_rect(&output.shapes, s).is_some()
+    };
+    assert!(has(&output, &entry.label));
+    assert!(!has(&output, "80 × 50 · Image"));
+    assert!(!has(&output, &entry.created_utc()));
+    assert!(has(&output, "IMAGE"));
+    let template = capture_core::templates::build(
+        "overview",
+        "Quick reference",
+        &[],
+        capture_core::templates::Scale::Fit,
+    )
+    .unwrap();
+    e.history
+        .store
+        .as_mut()
+        .unwrap()
+        .create(&template, "Reference", Origin::Canvas)
+        .unwrap();
+    e.history.refresh();
+    let output = frame(&mut e);
+    assert!(has(&output, "Template"));
+    assert!(has(&output, "From Template  (1)"));
+    e.quick_controls.set_thumbnail_details(true);
+    let output = frame(&mut e);
+    assert!(has(&output, "80 × 50 · Image"));
+    assert!(has(&output, &entry.created_utc()));
+    assert!(has(&output, "IMAGE"));
+}

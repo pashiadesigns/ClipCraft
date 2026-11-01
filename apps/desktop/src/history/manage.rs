@@ -284,7 +284,9 @@ impl Editor {
                         d.format.extension()
                     };
                     rfd::FileDialog::new()
-                        .set_directory(self.dialog_directory())
+                        .set_directory(
+                            self.dialog_folder(capture_core::quick_preferences::Folder::Export),
+                        )
                         .add_filter("Selected format", &[extension])
                         .set_file_name(format!("{}.{}", safe_name(&d.name), extension))
                         .save_file()
@@ -292,6 +294,10 @@ impl Editor {
                             self.save_library_item(&d.entries[0], &path, format)?;
                             if let Some(parent) = path.parent() {
                                 self.last_directory = parent.to_path_buf();
+                                self.quick_controls.remember_folder(
+                                    capture_core::quick_preferences::Folder::Export,
+                                    parent.to_path_buf(),
+                                );
                             }
                             let warning = self
                                 .export_preferences
@@ -308,10 +314,16 @@ impl Editor {
                         })
                 } else {
                     rfd::FileDialog::new()
-                        .set_directory(self.dialog_directory())
+                        .set_directory(
+                            self.dialog_folder(capture_core::quick_preferences::Folder::Export),
+                        )
                         .pick_folder()
                         .map(|folder| {
                             self.last_directory = folder.clone();
+                            self.quick_controls.remember_folder(
+                                capture_core::quick_preferences::Folder::Export,
+                                folder.clone(),
+                            );
                             self.export_library_batch(&d.entries, &folder, format, &d.name)
                         })
                 };

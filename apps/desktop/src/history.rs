@@ -1,5 +1,6 @@
 mod actions;
 pub(crate) mod autosave;
+mod import;
 mod library;
 mod manage;
 use crate::{Editor, FileAction, egui};
@@ -23,6 +24,7 @@ pub struct HistoryPanel {
     library: library::View,
     dialog: Option<actions::Dialog>,
     manage: Option<manage::Dialog>,
+    import: import::Import,
     pub(crate) active: Option<String>,
     pub recent: bool,
 }
@@ -138,7 +140,7 @@ impl HistoryPanel {
             .insert(entry.id.clone(), Some(texture.clone()));
         Some(texture)
     }
-    fn available(&mut self, id: &str) -> bool {
+    pub(super) fn available(&mut self, id: &str) -> bool {
         *self
             .availability
             .entry(id.to_owned())
@@ -200,7 +202,7 @@ impl Editor {
             }
         }
     }
-    fn history_card(
+    pub(super) fn history_card(
         &mut self,
         ui: &mut egui::Ui,
         entry: &Entry,
@@ -270,27 +272,31 @@ impl Editor {
                     egui::Color32::WHITE,
                 );
             }
-            let badge = if !available {
-                "MISSING"
-            } else if entry.kind == capture_core::history::MediaKind::Steps {
-                "STEPS"
-            } else if matches!(entry.origin, Origin::Project | Origin::Saved) {
-                "CLIP"
-            } else {
-                "IMAGE"
-            };
-            let badge_rect = egui::Rect::from_min_size(
-                rect.left_bottom() + egui::vec2(5.0, -18.0),
-                egui::vec2(52.0, 14.0),
-            );
-            painter.rect_filled(badge_rect, 2, egui::Color32::from_black_alpha(210));
-            painter.text(
-                badge_rect.center(),
-                egui::Align2::CENTER_CENTER,
-                badge,
-                egui::FontId::proportional(10.0),
-                egui::Color32::WHITE,
-            );
+            {
+                let badge = if !available {
+                    "MISSING"
+                } else if entry.kind == capture_core::history::MediaKind::Steps {
+                    "STEPS"
+                } else if entry.kind == capture_core::history::MediaKind::Template {
+                    "Template"
+                } else if matches!(entry.origin, Origin::Project | Origin::Saved) {
+                    "CLIP"
+                } else {
+                    "IMAGE"
+                };
+                let badge_rect = egui::Rect::from_min_size(
+                    rect.left_bottom() + egui::vec2(5.0, -18.0),
+                    egui::vec2(52.0, 14.0),
+                );
+                painter.rect_filled(badge_rect, 2, egui::Color32::from_black_alpha(210));
+                painter.text(
+                    badge_rect.center(),
+                    egui::Align2::CENTER_CENTER,
+                    badge,
+                    egui::FontId::proportional(10.0),
+                    egui::Color32::WHITE,
+                );
+            }
             if if self.shell.library {
                 self.history.library.selected.contains(&entry.id)
             } else {

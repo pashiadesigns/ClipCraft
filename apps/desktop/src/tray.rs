@@ -32,3 +32,15 @@ impl Tray {
 }
 #[cfg(windows)]
 mod windows;
+
+pub(super) fn activate(window: capture_core::quick_preferences::StartupWindow) -> bool {
+    #[cfg(windows)]
+    {
+        windows::activate(window)
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = window;
+        false
+    }
+}

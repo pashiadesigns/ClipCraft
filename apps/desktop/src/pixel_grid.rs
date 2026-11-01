@@ -62,6 +62,7 @@ impl Editor {
 
     pub fn pixel_grid_shortcut(&mut self, ctx: &egui::Context) {
         let owns_input = self.pending.is_none()
+            && self.template_picker.is_none()
             && self.new_image.is_none()
             && self.resize_image.is_none()
             && self.resize_canvas.is_none()

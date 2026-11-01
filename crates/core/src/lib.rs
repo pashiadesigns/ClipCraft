@@ -13,7 +13,7 @@ use std::{
 };
 
 pub const MAX_PIXELS: u64 = 25_000_000;
-pub const MAX_PROJECT_VERSION: u32 = 23;
+pub const MAX_PROJECT_VERSION: u32 = 24;
 mod arrow;
 pub mod bitmap;
 pub mod callout;
@@ -36,6 +36,7 @@ mod image_transform;
 pub mod keybinds;
 mod obscure;
 pub mod stamps;
+pub mod templates;
 pub use image_transform::ImageTransform;
 #[cfg(test)]
 mod eraser_tests;
@@ -341,6 +342,9 @@ impl Document {
             .any(|a| a.text.as_ref().is_some_and(|s| s.outline.is_some()))
         {
             self.version = self.version.max(12);
+        }
+        if self.guide.as_ref().is_some_and(|g| g.template.is_some()) {
+            self.version = self.version.max(24);
         }
         if self.guide.is_some() {
             self.version = self.version.max(11);

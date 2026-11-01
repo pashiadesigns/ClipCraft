@@ -48,7 +48,7 @@ impl Editor {
             return;
         }
         let area = egui::Rect::from_min_size(
-            egui::pos2(ui.max_rect().right() - 86., ui.min_rect().top() + 2.),
+            egui::pos2(ui.max_rect().right() - 86., ui.min_rect().center().y - 15.),
             egui::vec2(80., 30.),
         );
         let r = ui

@@ -45,6 +45,7 @@ if ($LASTEXITCODE -ne 0) { throw 'Project reopen/render failed.' }
 if ($LASTEXITCODE -ne 0) { throw 'Export roundtrip differs.' }
 Copy-Item -LiteralPath (Join-Path $fixture 'demo.capture.json') -Destination (Join-Path $package 'example.capture.json')
 Copy-Item -LiteralPath LICENSE,NOTICE,SECURITY.md,README.md -Destination $package
+Copy-Item -LiteralPath scripts/install-start-menu.ps1 -Destination $package
 Copy-Item -LiteralPath $notesPath -Destination (Join-Path $package 'release-notes.json')
 $packageDocs = Join-Path $package 'docs'
 New-Item -ItemType Directory -Path $packageDocs -Force | Out-Null
@@ -53,6 +54,8 @@ Copy-Item -LiteralPath docs/building.md,docs/security-model.md,docs/github-relea
 ClipCraft $Version - unsigned Windows x64 preview
 
 Extract the entire ZIP and run ClipCraft.exe. No ClipCraft account is required.
+Optional: run install-start-menu.ps1 for separate Editor and Capture Controller
+Start menu shortcuts with their own icons.
 Open example.capture.json for a synthetic editable document. Use the File menu
 for exports, printing and options. See release-notes.md for pending checks.
 

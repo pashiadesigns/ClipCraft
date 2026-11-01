@@ -89,9 +89,30 @@ pub(super) fn show(ui: &mut egui::Ui, a: &mut Annotation) {
             #[cfg(test)]
             ui.ctx()
                 .data_mut(|d| d.insert_temp(egui::Id::unique("shadow-settings"), r.rect));
-            egui::Popup::menu(&r)
+            // The color picker owns egui's single memory popup slot. Keep the
+            // parent alive independently while its nested picker is open.
+            let popup_id = r.id.with("shadow-popup");
+            let state_id = r.id.with("shadow-open");
+            let mut open = ui
+                .ctx()
+                .data_mut(|d| d.get_temp::<bool>(state_id).unwrap_or(false));
+            if r.clicked() {
+                open = !open;
+                if open {
+                    egui::Popup::open_id(ui.ctx(), popup_id);
+                }
+            }
+            let child_open =
+                egui::Popup::is_any_open(ui.ctx()) && !egui::Popup::is_id_open(ui.ctx(), popup_id);
+            egui::Popup::from_response(&r)
+                .id(popup_id)
+                .open_bool(&mut open)
                 .frame(egui::Frame::popup(ui.style()).inner_margin(12))
-                .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
+                .close_behavior(if child_open {
+                    egui::PopupCloseBehavior::IgnoreClicks
+                } else {
+                    egui::PopupCloseBehavior::CloseOnClickOutside
+                })
                 .show(|ui| {
                     ui.set_width(248.);
                     let mut shadow = a.shadow.unwrap_or_default();
@@ -100,11 +121,17 @@ pub(super) fn show(ui: &mut egui::Ui, a: &mut Annotation) {
                     let was_enabled = enabled;
                     ui.horizontal(|ui| {
                         ui.label("Color");
-                        crate::color_widgets::property_rgba(
+                        let color = crate::color_widgets::property_rgba(
                             ui,
                             &mut shadow.color,
                             crate::color_widgets::Preview::Fill,
                         );
+                        #[cfg(test)]
+                        ui.ctx().data_mut(|d| {
+                            d.insert_temp(egui::Id::unique("shadow-color"), color.rect)
+                        });
+                        #[cfg(not(test))]
+                        let _ = color;
                         crate::controls::toggle(ui, &mut enabled, "Enabled");
                     });
                     property_layout::slider(
@@ -139,6 +166,12 @@ pub(super) fn show(ui: &mut egui::Ui, a: &mut Annotation) {
                         a.shadow = enabled.then_some(shadow);
                     }
                 });
+            if open && !egui::Popup::is_any_open(ui.ctx()) {
+                egui::Popup::open_id(ui.ctx(), popup_id);
+            } else if !open {
+                egui::Popup::close_id(ui.ctx(), popup_id);
+            }
+            ui.ctx().data_mut(|d| d.insert_temp(state_id, open));
         });
     });
 }

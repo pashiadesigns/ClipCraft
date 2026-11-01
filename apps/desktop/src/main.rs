@@ -34,6 +34,7 @@ mod hotkey;
 mod icons;
 mod image_frame;
 mod image_transform;
+mod launch;
 mod lifecycle;
 mod line_properties;
 mod move_tool;
@@ -69,6 +70,7 @@ mod step_tool;
 mod stroke_input;
 mod style_tile;
 mod tabs;
+mod template_picker;
 mod text_edit;
 mod text_layout;
 mod text_properties;
@@ -80,9 +82,14 @@ mod tray;
 const CAPTURE_ENABLED: bool = cfg!(windows);
 
 fn main() -> eframe::Result {
-    let show_editor = std::env::args_os().nth(1).is_some()
-        || quick_controls::QuickControls::new().startup_window()
-            == capture_core::quick_preferences::StartupWindow::Editor;
+    let launch = launch::Request::read();
+    if let Some(window) = launch.window
+        && tray::activate(window)
+    {
+        return Ok(());
+    }
+    let show_editor = launch.startup(quick_controls::QuickControls::new().startup_window())
+        == capture_core::quick_preferences::StartupWindow::Editor;
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_icon(brand::icon())
@@ -125,6 +132,7 @@ struct Editor {
     step_placement: Option<Annotation>,
     snapping_guides: [Option<f32>; 2],
     new_image: Option<new_image::NewImage>,
+    template_picker: Option<template_picker::Picker>,
     resize_image: Option<resize_image::ResizeImage>,
     resize_canvas: Option<resize_canvas::ResizeCanvas>,
     export_dialog: Option<export_ui::Dialog>,
@@ -168,6 +176,7 @@ enum FileAction {
     New,
     CreateCanvas(new_image::CanvasSpec),
     FromClipboard(Session),
+    Template { session: Session, title: String },
     HistorySnapshot { session: Session, id: String },
     Open,
     Close,
@@ -204,10 +213,10 @@ impl Editor {
         let mut last_directory = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
         let mut imported_image = false;
         let mut startup_status = "Open an image, then drag to annotate.".to_string();
-        let document = std::env::args_os()
-            .nth(1)
+        let document = launch::Request::read()
+            .file
             .and_then(|arg| {
-                let path = std::path::absolute(&arg).unwrap_or_else(|_| PathBuf::from(arg));
+                let path = std::path::absolute(&arg).unwrap_or(arg);
                 let is_project = path
                     .extension()
                     .is_some_and(|extension| extension == "json");
@@ -286,6 +295,7 @@ impl Editor {
             step_placement: None,
             snapping_guides: [None; 2],
             new_image: None,
+            template_picker: None,
             resize_image: None,
             resize_canvas: None,
             export_dialog: None,
@@ -423,9 +433,10 @@ impl Editor {
                     self.quick_controls.snap_recent.clear();
                     self.stamps.reset_document();
                     self.view = canvas_view::CanvasView::default();
-                    if let Some(parent) = path.parent() {
-                        self.last_directory = parent.to_path_buf();
-                    }
+                    self.remember_dialog_folder(
+                        capture_core::quick_preferences::Folder::Open,
+                        &path,
+                    );
                     let history_label = path
                         .file_name()
                         .unwrap_or_default()
@@ -457,7 +468,7 @@ impl Editor {
         let path = self.path.clone().filter(|_| !save_as).or_else(|| {
             self.suspend_global_capture();
             let dialog = rfd::FileDialog::new()
-                .set_directory(self.dialog_directory())
+                .set_directory(self.dialog_folder(capture_core::quick_preferences::Folder::Project))
                 .set_file_name(
                     self.path
                         .as_ref()
@@ -472,9 +483,10 @@ impl Editor {
             match self.session.save(&path) {
                 Ok(()) => {
                     self.status = format!("Saved {}", path.display());
-                    if let Some(parent) = path.parent() {
-                        self.last_directory = parent.to_path_buf();
-                    }
+                    self.remember_dialog_folder(
+                        capture_core::quick_preferences::Folder::Project,
+                        &path,
+                    );
                     self.path = Some(path);
                     return true;
                 }
@@ -520,6 +532,7 @@ impl Editor {
             && self.shell.backstage.is_none()
             && self.pending.is_none()
             && self.autosave.action.is_none()
+            && self.template_picker.is_none()
             && self.new_image.is_none()
             && self.resize_image.is_none()
             && self.resize_canvas.is_none()
@@ -547,7 +560,27 @@ impl Editor {
     }
 
     fn dialog_directory(&self) -> PathBuf {
-        self.last_directory.clone()
+        self.dialog_folder(capture_core::quick_preferences::Folder::Open)
+    }
+    fn dialog_folder(&self, kind: capture_core::quick_preferences::Folder) -> PathBuf {
+        self.quick_controls.folder(kind).unwrap_or_else(|| {
+            if self.last_directory.is_dir() {
+                self.last_directory.clone()
+            } else {
+                std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
+            }
+        })
+    }
+    fn remember_dialog_folder(
+        &mut self,
+        kind: capture_core::quick_preferences::Folder,
+        path: &std::path::Path,
+    ) {
+        if let Some(folder) = path.parent().filter(|p| p.is_dir()) {
+            self.last_directory = folder.to_path_buf();
+            self.quick_controls
+                .remember_folder(kind, folder.to_path_buf());
+        }
     }
 
     fn request_action(&mut self, action: FileAction, ctx: &egui::Context) {
@@ -582,6 +615,7 @@ impl Editor {
             && self.pending.is_none()
             && self.autosave.action.is_none()
             && !self.view.panning
+            && self.template_picker.is_none()
             && self.new_image.is_none()
             && self.resize_image.is_none()
             && self.resize_canvas.is_none()
@@ -630,6 +664,20 @@ impl Editor {
                 self.record_history("New canvas", capture_core::history::Origin::Canvas);
             }
             FileAction::Open => self.open(),
+            FileAction::Template { session, title } => {
+                self.session = session;
+                self.quick_controls.snap_recent.clear();
+                self.stamps.reset_document();
+                self.view = Default::default();
+                self.path = None;
+                self.select_only(None);
+                self.drag_start = None;
+                self.needs_render = true;
+                self.shell.return_to_editor();
+                self.status =
+                    "Template created. Edit images, captions and sections on the canvas.".into();
+                self.record_history(&title, capture_core::history::Origin::Canvas);
+            }
             FileAction::FromClipboard(session) => {
                 self.session = session;
                 self.quick_controls.snap_recent.clear();
@@ -808,6 +856,8 @@ impl eframe::App for Editor {
                 )
                 .show(ui, |ui| self.show_workspace(ui));
         }
+        self.show_template_picker(&ctx);
+        self.replace_frame_image_request(&ctx);
         self.show_new_image(&ctx);
         self.show_resize(&ctx);
         self.show_resize_canvas(&ctx);
@@ -863,6 +913,7 @@ impl eframe::App for Editor {
             }
             let canvas_owns_input = self.pending.is_none()
                 && !self.shell.annotations_hidden
+                && self.template_picker.is_none()
                 && self.new_image.is_none()
                 && self.text_draft.is_none()
                 && !self.capture_requested
@@ -940,6 +991,7 @@ impl eframe::App for Editor {
             self.close_editor_window(&ctx);
         }
         self.confirm_unsaved(&ctx);
+        self.poll_library_import();
         self.show_history_dialog(&ctx);
         self.show_capture_controller(&ctx);
         self.show_ocr(&ctx);

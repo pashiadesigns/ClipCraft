@@ -88,6 +88,7 @@ pub fn title_and_controls(ui: &mut egui::Ui, title: &str) -> bool {
         response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Label, true, title));
         let drag_id = egui::Id::unique("window_title_drag");
         if !maximized
+            && ctx.input(|i| i.focused)
             && response.is_pointer_button_down_on()
             && let Some(point) = ctx.input(|i| i.pointer.press_origin())
         {
@@ -100,7 +101,10 @@ pub fn title_and_controls(ui: &mut egui::Ui, title: &str) -> bool {
         if response.double_clicked() {
             ctx.data_mut(|d| d.remove::<Pos2>(drag_id));
             ctx.send_viewport_cmd(ViewportCommand::Maximized(!maximized));
-        } else if !maximized && let Some(anchor) = ctx.data(|d| d.get_temp::<Pos2>(drag_id)) {
+        } else if !maximized
+            && ctx.input(|i| i.focused && i.pointer.primary_down())
+            && let Some(anchor) = ctx.data(|d| d.get_temp::<Pos2>(drag_id))
+        {
             if let Some((point, outer)) =
                 ctx.input(|i| i.pointer.interact_pos().zip(i.viewport().outer_rect))
             {
@@ -109,6 +113,9 @@ pub fn title_and_controls(ui: &mut egui::Ui, title: &str) -> bool {
             if !ctx.input(|i| i.pointer.primary_down() && i.focused) {
                 ctx.data_mut(|d| d.remove::<Pos2>(drag_id));
             }
+        }
+        if maximized || !ctx.input(|i| i.focused && i.pointer.primary_down()) {
+            ctx.data_mut(|d| d.remove::<Pos2>(drag_id));
         }
         response.on_hover_text(title);
     });
@@ -138,13 +145,20 @@ fn resize_direction(rect: Rect, point: Pos2) -> Option<(ResizeDirection, CursorI
 }
 
 pub fn resize_edges(ctx: &egui::Context) {
+    let id = egui::Id::unique("window_resize");
     if ctx.input(|i| {
-        i.viewport().maximized.unwrap_or(false) || i.viewport().fullscreen.unwrap_or(false)
+        !i.focused
+            || i.viewport().maximized.unwrap_or(false)
+            || i.viewport().fullscreen.unwrap_or(false)
     }) {
+        ctx.data_mut(|d| d.remove::<ResizeDrag>(id));
         return;
     }
-    let id = egui::Id::unique("window_resize");
     if let Some(drag) = ctx.data(|d| d.get_temp::<ResizeDrag>(id)) {
+        if !ctx.input(|i| i.pointer.primary_down()) {
+            ctx.data_mut(|d| d.remove::<ResizeDrag>(id));
+            return;
+        }
         if let Some((point, outer)) =
             ctx.input(|i| i.pointer.interact_pos().zip(i.viewport().outer_rect))
         {
@@ -209,6 +223,63 @@ fn resized_rect(mut rect: Rect, direction: ResizeDirection, delta: egui::Vec2) -
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn focus_loss_maximize_and_released_pointer_cancel_stale_resize() {
+        for (focused, maximized, held) in [
+            (false, false, true),
+            (true, true, true),
+            (true, false, false),
+        ] {
+            let ctx = egui::Context::default();
+            let id = egui::Id::unique("window_resize");
+            let area = Rect::from_min_size(Pos2::ZERO, egui::vec2(1920., 1080.));
+            ctx.data_mut(|d| {
+                d.insert_temp(
+                    id,
+                    ResizeDrag {
+                        rect: area,
+                        pointer: area.right_center(),
+                        direction: ResizeDirection::East,
+                    },
+                )
+            });
+            let mut raw = egui::RawInput {
+                screen_rect: Some(area),
+                focused,
+                ..Default::default()
+            };
+            raw.viewports
+                .get_mut(&egui::ViewportId::ROOT)
+                .unwrap()
+                .maximized = Some(maximized);
+            raw.viewports
+                .get_mut(&egui::ViewportId::ROOT)
+                .unwrap()
+                .outer_rect = Some(area);
+            raw.events
+                .push(egui::Event::PointerMoved(egui::pos2(1750., 500.)));
+            if held {
+                raw.events.push(egui::Event::PointerButton {
+                    pos: egui::pos2(1750., 500.),
+                    button: egui::PointerButton::Primary,
+                    pressed: true,
+                    modifiers: egui::Modifiers::NONE,
+                });
+            }
+            let out = crate::property_layout::tests::PaintedOutput(
+                ctx.run_ui(raw, |ui| resize_edges(ui.ctx())),
+            );
+            assert!(ctx.data(|d| d.get_temp::<ResizeDrag>(id).is_none()));
+            assert!(
+                out.viewport_output
+                    .values()
+                    .all(|v| v.commands.iter().all(|c| !matches!(
+                        c,
+                        ViewportCommand::InnerSize(_) | ViewportCommand::OuterPosition(_)
+                    )))
+            );
+        }
+    }
     #[test]
     fn resize_hit_regions_do_not_take_document_or_outside_clicks() {
         let rect = Rect::from_min_size(egui::pos2(10.0, 20.0), egui::vec2(981.0, 687.0));

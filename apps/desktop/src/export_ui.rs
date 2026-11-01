@@ -284,7 +284,7 @@ impl Editor {
             self.suspend_global_capture();
             let format = d.options.format;
             if let Some(mut path) = rfd::FileDialog::new()
-                .set_directory(self.dialog_directory())
+                .set_directory(self.dialog_folder(capture_core::quick_preferences::Folder::Export))
                 .set_file_name(format!("capture.{}", format.extension()))
                 .add_filter(format.label(), &[format.extension()])
                 .save_file()
@@ -305,7 +305,10 @@ impl Editor {
                     .and_then(|bytes| capture_core::export::write(&path, &bytes));
                 match result {
                     Ok(()) => {
-                        self.last_directory = path.parent().unwrap().to_path_buf();
+                        self.remember_dialog_folder(
+                            capture_core::quick_preferences::Folder::Export,
+                            &path,
+                        );
                         self.status = format!("Exported {}", path.display());
                         if let Err(error) = d.after.open(&path, true) {
                             self.status =

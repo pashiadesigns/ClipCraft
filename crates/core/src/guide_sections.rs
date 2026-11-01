@@ -26,6 +26,8 @@ pub struct Section {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Layout {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub template: Option<String>,
     pub top: f32,
     pub sections: Vec<Section>,
 }
@@ -68,7 +70,11 @@ impl Layout {
             .collect()
     }
     pub fn validate(&self, document: &Document) -> Result<()> {
-        if document.version < 11
+        if self
+            .template
+            .as_ref()
+            .is_some_and(|name| document.version < 24 || name.is_empty() || name.len() > 120)
+            || document.version < 11
             || !self.top.is_finite()
             || self.top < 0.
             || self.sections.len() > 256
