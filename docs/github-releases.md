@@ -59,9 +59,14 @@ publisher identity appears on certificates. SignPath Foundation is a possible fr
 option for qualifying open-source projects, subject to approval and its policies;
 its certificate publisher is SignPath Foundation. On 2026-11-01 the maintainer
 selected Microsoft Artifact Signing and individual publisher verification.
-Registration is awaiting the maintainer's Microsoft/Azure sign-in; no signing
-account, identity validation, subscription charge or certificate profile has
-been confirmed. Published previews remain unsigned.
+The Basic signing account was created in East US on 2026-11-01 after the
+maintainer upgraded the Azure subscription. Account billing begins at creation;
+no invoice amount has been verified. The displayed Microsoft terms were accepted
+with maintainer confirmation, and the Identity Verifier role was assigned to the
+maintainer only at signing-account scope. The individual validation form is ready
+for the maintainer's legal-identity review and submission. Identity validation and
+certificate-profile creation are not complete.
+Published previews remain unsigned.
 
 Before enabling signed releases, protect the release branch and version tags,
 configure narrowly scoped federated signing permission, and qualify the signed

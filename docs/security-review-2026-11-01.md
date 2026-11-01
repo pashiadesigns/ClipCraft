@@ -134,9 +134,13 @@ requests. Live infrastructure penetration testing was not performed.
 
 ## Signing status
 
-Microsoft Artifact Signing with individual verification was selected. Azure sign-in
-and subsequent identity/subscription setup are pending; no account, certificate
-profile or charge is confirmed. Windows installers and signed releases remain
+Microsoft Artifact Signing with individual verification was selected. The Basic
+account was created in East US on 2026-11-01 after the maintainer upgraded Azure.
+Account billing begins at creation; no invoice amount has been verified. Updated
+terms were accepted and the maintainer's account-scoped Identity Verifier role was
+assigned with explicit confirmation. Individual validation awaits the maintainer's
+legal-identity review and submission. No certificate profile or signed artifact exists. Windows
+installers and signed releases remain
 future work. Signing establishes publisher identity and detects file modification;
 it does not resolve these findings or certify the absence of backdoors.
 
