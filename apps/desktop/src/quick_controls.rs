@@ -15,6 +15,7 @@ mod typography_controls;
 #[derive(Default)]
 pub(super) struct QuickControls {
     prefs: Preferences,
+    pub snap_recent: Vec<u64>,
     store: Option<Store>,
     warning: Option<String>,
     pub(super) format_source: Option<capture_core::Annotation>,
@@ -140,6 +141,41 @@ impl QuickControls {
             name: name.into(),
         });
     }
+    pub(super) fn touch_snap(&mut self, id: u64) {
+        self.snap_recent.retain(|n| *n != id);
+        self.snap_recent.push(id);
+    }
+    pub(super) fn snap_candidates(&self) -> Option<(&[u64], usize)> {
+        self.prefs
+            .snapping_limit
+            .map(|n| (self.snap_recent.as_slice(), n))
+    }
+    pub(super) fn snapping_popup(&mut self, ui: &mut egui::Ui) {
+        crate::property_layout::section_help(
+            ui,
+            "Canvas snapping",
+            "Snap to edges and centers. A finite maximum uses the objects you most recently selected, placed or edited; new objects fill any remaining slots.",
+        );
+        let mut enabled = self.snapping();
+        if crate::controls::toggle(ui, &mut enabled, "Enable snapping").changed() {
+            self.set_snapping(enabled);
+        }
+        let mut infinite = self.prefs.snapping_limit.is_none();
+        if crate::controls::toggle(ui, &mut infinite, "Infinite candidates").changed() {
+            self.remember(Choice::SnappingLimit(if infinite { None } else { Some(5) }));
+        }
+        if let Some(mut n) = self.prefs.snapping_limit {
+            ui.horizontal(|ui| {
+                ui.label("Maximum candidates");
+                if ui
+                    .add(egui::DragValue::new(&mut n).range(1..=10000))
+                    .changed()
+                {
+                    self.remember(Choice::SnappingLimit(Some(n)));
+                }
+            });
+        }
+    }
     pub(super) fn snapping(&self) -> bool {
         self.prefs.canvas_snapping
     }
@@ -165,6 +201,7 @@ impl QuickControls {
         };
         match Store::open(&root).and_then(|s| s.read().map(|p| (s, p))) {
             Ok((store, prefs)) => Self {
+                snap_recent: vec![],
                 store: Some(store),
                 prefs,
                 warning: None,
@@ -1289,6 +1326,7 @@ mod tests {
         let store = Store::open(directory.path()).unwrap();
         store.remember(Choice::CanvasSnapping(false)).unwrap();
         let mut controls = QuickControls {
+            snap_recent: vec![],
             prefs: store.read().unwrap(),
             store: Some(store),
             warning: None,
@@ -1667,6 +1705,7 @@ mod tests {
         let mut e = crate::canvas::tests::editor(&ctx);
         let directory = tempfile::tempdir().unwrap();
         e.quick_controls.store = Some(Store::open(directory.path()).unwrap());
+        e.quick_controls.set_auto_switch_tool(true);
         e.tool = Some(crate::Kind::Rectangle);
         let mut rectangle = e.new_annotation(crate::Kind::Rectangle, [20.0, 20.0], [160.0, 120.0]);
         rectangle.color = [210, 20, 70, 255];

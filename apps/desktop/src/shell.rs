@@ -174,6 +174,7 @@ pub(super) enum PropertyTab {
 }
 
 pub struct Shell {
+    pub(super) preview_ui: bool,
     pub badges: bool,
     pub pixel_grid: bool,
     pub annotations_hidden: bool,
@@ -195,6 +196,7 @@ pub struct Shell {
 impl Default for Shell {
     fn default() -> Self {
         Self {
+            preview_ui: false,
             badges: true,
             pixel_grid: false,
             annotations_hidden: false,
@@ -220,6 +222,7 @@ impl Shell {
         self.library
     }
     pub fn return_to_editor(&mut self) {
+        self.preview_ui = false;
         self.library = false;
         self.backstage = None;
         self.planned_tool = None;
@@ -565,15 +568,22 @@ impl Editor {
     }
 
     pub fn show_shell(&mut self, ui: &mut egui::Ui) {
+        self.preview_ui_input(ui.ctx());
         self.show_quick_access(ui);
         if self.shell.backstage.is_some() {
             self.show_backstage(ui);
             return;
         }
         self.show_ribbon(ui);
-        self.show_recent_history(ui);
+        if !self.shell.preview_ui {
+            self.show_recent_history(ui);
+        }
         self.show_footer(ui);
-        if self.shell.properties && !self.shell.library && self.crop.is_none() {
+        if self.shell.properties
+            && !self.shell.preview_ui
+            && !self.shell.library
+            && self.crop.is_none()
+        {
             egui::Panel::right("properties")
                 .default_size(262.0)
                 .min_size(262.0)

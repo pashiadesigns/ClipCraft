@@ -120,7 +120,9 @@ impl Editor {
                 if ui
                     .add_enabled(
                         available,
-                        egui::Button::new("Save Style").min_size(egui::vec2(240.0, 30.0)),
+                        egui::Button::new("Save Style")
+                            .fill(crate::shell::ACCENT)
+                            .min_size(egui::vec2(240.0, 30.0)),
                     )
                     .on_disabled_hover_text("Select one object with available local style storage.")
                     .clicked()

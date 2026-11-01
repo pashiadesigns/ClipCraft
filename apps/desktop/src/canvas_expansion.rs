@@ -1,20 +1,35 @@
 use crate::{Annotation, Command, Document, Editor, canvas_view::Transform, egui};
 use capture_core::{canvas_expansion::MovePlan, snapping::SnapResult};
 
-pub(super) fn move_with_snapping(
+pub(super) fn move_with_candidates(
     document: &Document,
     objects: &[Annotation],
     delta: [f32; 2],
     tolerance: Option<f32>,
     duplicate: bool,
+    candidates: Option<(&[u64], usize)>,
 ) -> capture_core::Result<SnapResult> {
     let result = if let Some(tolerance) = tolerance {
-        let visible: Vec<_> = document
+        let mut visible: Vec<_> = document
             .annotations
             .iter()
-            .filter(|a| document.object_visible(a.id))
-            .cloned()
+            .filter(|a| document.object_visible(a.id) && !objects.iter().any(|o| o.id == a.id))
             .collect();
+        if let Some((recent, limit)) = candidates {
+            visible.sort_by_key(|a| {
+                (
+                    recent
+                        .iter()
+                        .rposition(|id| *id == a.id)
+                        .map(|n| n + 1)
+                        .unwrap_or(0),
+                    a.id,
+                )
+            });
+            visible.reverse();
+            visible.truncate(limit);
+        }
+        let visible: Vec<_> = visible.into_iter().cloned().collect();
         capture_core::snapping::translated_expanding(objects, &visible, delta, tolerance)?
     } else {
         SnapResult {
@@ -93,3 +108,14 @@ impl Editor {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+pub(super) fn move_with_snapping(
+    document: &Document,
+    objects: &[Annotation],
+    delta: [f32; 2],
+    tolerance: Option<f32>,
+    duplicate: bool,
+) -> capture_core::Result<SnapResult> {
+    move_with_candidates(document, objects, delta, tolerance, duplicate, None)
+}

@@ -47,11 +47,13 @@ mod ocr;
 mod options;
 mod pixel_grid;
 mod pixel_selection;
+mod preview_ui;
 mod property_layout;
 mod property_preview;
 mod quick_controls;
 mod quick_styles;
 mod readiness;
+mod redact_placement;
 mod resize_canvas;
 mod resize_image;
 mod ribbon;
@@ -64,6 +66,7 @@ mod simplify;
 mod split_button;
 mod stamps;
 mod step_tool;
+mod stroke_input;
 mod style_tile;
 mod tabs;
 mod text_edit;
@@ -125,6 +128,7 @@ struct Editor {
     resize_image: Option<resize_image::ResizeImage>,
     resize_canvas: Option<resize_canvas::ResizeCanvas>,
     export_dialog: Option<export_ui::Dialog>,
+    export_preferences: export_ui::Preferences,
     stamps: stamps::Panel,
     image_transform: Option<capture_core::ImageTransform>,
     crop: Option<crop::Crop>,
@@ -285,6 +289,7 @@ impl Editor {
             resize_image: None,
             resize_canvas: None,
             export_dialog: None,
+            export_preferences: Default::default(),
             stamps: Default::default(),
             image_transform: None,
             crop: None,
@@ -354,6 +359,8 @@ impl Editor {
                         .find(|a| a.id == id)
                         .cloned()
                     {
+                        self.quick_controls.touch_snap(annotation.id);
+                        self.remember_placement_template(&annotation);
                         self.remember_annotation_style(&annotation);
                     }
                 }
@@ -413,6 +420,8 @@ impl Editor {
             }) {
                 Ok(session) => {
                     self.session = session;
+                    self.quick_controls.snap_recent.clear();
+                    self.stamps.reset_document();
                     self.view = canvas_view::CanvasView::default();
                     if let Some(parent) = path.parent() {
                         self.last_directory = parent.to_path_buf();
@@ -606,6 +615,8 @@ impl Editor {
                     }
                 };
                 self.session = session;
+                self.quick_controls.snap_recent.clear();
+                self.stamps.reset_document();
                 self.view = canvas_view::CanvasView::default();
                 self.path = None;
                 self.select_only(None);
@@ -621,6 +632,8 @@ impl Editor {
             FileAction::Open => self.open(),
             FileAction::FromClipboard(session) => {
                 self.session = session;
+                self.quick_controls.snap_recent.clear();
+                self.stamps.reset_document();
                 self.view = canvas_view::CanvasView::default();
                 self.path = None;
                 self.select_only(None);
@@ -632,6 +645,8 @@ impl Editor {
             }
             FileAction::HistorySnapshot { session, id } => {
                 self.session = session;
+                self.quick_controls.snap_recent.clear();
+                self.stamps.reset_document();
                 let entry = self.history.entry(&id);
                 self.autosave.reset(
                     &self.session.document,
@@ -708,15 +723,17 @@ impl Editor {
             ui.label("Save an editable project to keep your annotations.");
             ui.label("Exporting a PNG does not save the editable project.");
             ui.add_space(12.0);
-            ui.horizontal(|ui| {
-                if ui.button("Save and continue").clicked() && self.save(false) {
-                    proceed = true;
-                }
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                cancel = ui.button("Cancel").clicked();
                 if ui.button("Discard changes").clicked() {
                     proceed = true;
                 }
-                if ui.button("Cancel").clicked() {
-                    cancel = true;
+                if ui
+                    .add(egui::Button::new("Save and continue").fill(crate::shell::ACCENT))
+                    .clicked()
+                    && self.save(false)
+                {
+                    proceed = true;
                 }
             });
         });

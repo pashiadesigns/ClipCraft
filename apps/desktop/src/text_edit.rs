@@ -302,6 +302,9 @@ impl Editor {
         let apply = ctx.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::Enter));
         if cancel {
             self.text_draft = None;
+            self.tool = None;
+            self.stamps.active = false;
+            self.fill_tool.active = false;
             self.needs_render = true;
             ctx.request_repaint();
         } else if apply {

@@ -202,14 +202,9 @@ impl Editor {
             if let Err(error)=&spec {
                 ui.colored_label(egui::Color32::from_rgb(255,170,160),error);
             }
-            ui.horizontal(|ui| {
-                let detail=match &spec {
-                    Ok([width,height])=>format!("Resize to {width} × {height} px. Editable objects require flattening confirmation. Undo restores the previous image and objects; original pixels remain available for Revert."),
-                    Err(error)=>error.clone()
-                };
-                if ui.add_enabled(spec.as_ref().is_ok_and(|size|*size!=draft.original),egui::Button::new("Apply").min_size(egui::vec2(91.0,22.0))).on_hover_text(detail).clicked() {apply=spec.ok();}
-                cancel|=ui.add_sized([91.0,22.0],egui::Button::new("Cancel")).clicked();
-            });
+            let (submit,closed)=crate::controls::dialog_actions(ui,"Apply","Cancel",spec.as_ref().is_ok_and(|size|*size!=draft.original),false);
+            if submit {apply=spec.ok();}
+            cancel |= closed;
             if self.shell.badges { ui.horizontal(|ui| {ui.small("Image size");crate::shell::badge(ui,true,"EDIT-027");}); }
         });
         // Closing a nested units popup must not cancel the enclosing draft.

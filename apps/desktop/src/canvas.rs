@@ -161,8 +161,18 @@ impl Editor {
             && !self.crop.as_ref().is_some_and(|crop| crop.dragging())
             && !self.pixel_selection.as_ref().is_some_and(|s| s.dragging())
             && !self.cut_out.as_ref().is_some_and(|s| s.dragging());
+        let stroke_wheel = self.stroke_wheel(
+            ui,
+            response.hovered() || self.drag_start.is_some(),
+            interactive
+                && !ui.ctx().egui_wants_keyboard_input()
+                && !self.view.panning
+                && self.edit_drag.is_none()
+                && self.group_drag.is_none()
+                && self.rotation_drag.is_none(),
+        );
         if navigation_enabled && gesture_idle {
-            if self.text_draft.is_none() && response.hovered() {
+            if self.text_draft.is_none() && response.hovered() && !stroke_wheel {
                 let (zoom_delta, scroll, pointer) =
                     ui.input(|i| (i.zoom_delta(), i.smooth_scroll_delta, i.pointer.hover_pos()));
                 if zoom_delta != 1.0 {
@@ -245,6 +255,16 @@ impl Editor {
             }
         }
         self.paint_canvas_display(ui, display_transform);
+        if interactive && ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+            self.cancel_gesture();
+            self.stamps.active = false;
+            self.fill_tool.active = false;
+            self.shell.planned_tool = None;
+            self.tool = None;
+            self.select_only(None);
+            ui.ctx().request_repaint();
+            return;
+        }
         // Empty workspace is a universal deselection target. Keep the current
         // tool armed, and leave image-only tool gestures inside the image.
         if interactive
@@ -294,6 +314,9 @@ impl Editor {
         if self.crop.is_some() {
             self.crop_canvas(ui, &response, transform, interactive);
             self.canvas_pointer(ui, &response, transform, interactive);
+            return;
+        }
+        if self.redact_placement_input(ui, &response, transform, interactive) {
             return;
         }
         if self.stamp_placement_input(ui, &response, transform, interactive) {
@@ -605,12 +628,13 @@ impl Editor {
                     self.update_creation(start, pointer, kind, drawing_shift(ui), alt);
                 }
                 if let Some(drag) = &mut self.group_drag {
-                    let result = crate::canvas_expansion::move_with_snapping(
+                    let result = crate::canvas_expansion::move_with_candidates(
                         &self.session.document,
                         &drag.originals,
                         [pointer[0] - drag.from[0], pointer[1] - drag.from[1]],
                         self.quick_controls.snapping().then_some(6.0 / scale),
                         drag.duplicate,
+                        self.quick_controls.snap_candidates(),
                     )
                     .map(|result| {
                         self.snapping_guides = result.guides;
@@ -646,12 +670,13 @@ impl Editor {
                                     from_center: i.modifiers.alt,
                                 }),
                             ),
-                            None => crate::canvas_expansion::move_with_snapping(
+                            None => crate::canvas_expansion::move_with_candidates(
                                 &self.session.document,
                                 std::slice::from_ref(&drag.original),
                                 [pointer[0] - drag.from[0], pointer[1] - drag.from[1]],
                                 self.quick_controls.snapping().then_some(6.0 / scale),
                                 false,
+                                self.quick_controls.snap_candidates(),
                             )
                             .map(|mut result| {
                                 self.snapping_guides = result.guides;
@@ -891,6 +916,7 @@ pub(crate) mod tests {
             resize_image: None,
             resize_canvas: None,
             export_dialog: None,
+            export_preferences: Default::default(),
             stamps: Default::default(),
             image_transform: None,
             crop: None,
@@ -2144,8 +2170,12 @@ pub(crate) mod tests {
             frame(&ctx, &mut e, vec![button(q, false)]);
             assert_eq!(e.session.document.annotations.len(), 1, "{kind:?}");
             assert_eq!(e.tool, Some(kind));
-            assert_eq!(e.selected, Some(e.session.document.annotations[0].id));
-            assert_eq!(e.selected_annotation().unwrap().kind, kind);
+            if kind == Kind::Redact {
+                assert!(e.selected.is_none(), "Redact stays ready to repeat");
+            } else {
+                assert_eq!(e.selected, Some(e.session.document.annotations[0].id));
+                assert_eq!(e.selected_annotation().unwrap().kind, kind);
+            }
         }
     }
 

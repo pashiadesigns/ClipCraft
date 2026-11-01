@@ -151,6 +151,24 @@ pub(super) fn draw_icon(p: &egui::Painter, c: egui::Pos2, name: &str, color: Col
         "Record" => {
             p.circle_filled(c, 6.0, color);
         }
+        "Details" => {
+            p.circle_stroke(c, 8., stroke);
+            p.circle_filled(at(0., -4.), 1.2, color);
+            p.line_segment([at(0., -1.), at(0., 5.)], Stroke::new(2., color));
+        }
+        "Refresh" => {
+            let points = (0..25)
+                .map(|i| {
+                    let a = i as f32 * 0.21;
+                    at(a.cos() * 7., a.sin() * 7.)
+                })
+                .collect();
+            p.add(egui::Shape::line(points, stroke));
+            p.add(egui::Shape::line(
+                vec![at(1., -9.), at(5., -6.), at(1., -3.)],
+                stroke,
+            ));
+        }
         "Undo" | "Redo" | "Revert" => {
             let direction = if name != "Redo" { -1.0 } else { 1.0 };
             p.add(egui::epaint::CubicBezierShape::from_points_stroke(
@@ -409,6 +427,7 @@ impl Editor {
                     self.commit_property_preview();
                     self.cancel_gesture();
                     self.shell.backstage = None;
+                    self.shell.preview_ui = false;
                     self.shell.library = true;
                     self.history.refresh();
                 }
@@ -527,6 +546,7 @@ impl Editor {
     }
     pub(super) fn show_ribbon(&mut self, ui: &mut egui::Ui) -> [Response; 4] {
         egui::Panel::top("workspace_ribbon")
+            .show_separator_line(false)
             .frame(egui::Frame::new().fill(crate::shell::SURROUND))
             .show(ui, |ui| {
                 // One panel avoids a separator through the active tab's join.
@@ -535,6 +555,10 @@ impl Editor {
                     .inner_margin(egui::Margin::symmetric(8, 2))
                     .show(ui, |ui| ui.horizontal(|ui| self.ribbon_tabs(ui)).inner)
                     .inner;
+                if self.shell.preview_ui {
+                    self.show_ui_button(ui);
+                    return tabs;
+                }
                 if self.shell.library {
                     let active = self.shell.library_tab_rect.unwrap();
                     ui.add_space(3.);

@@ -31,7 +31,12 @@ pub(super) fn tab(ui: &mut egui::Ui, label: &str, selected: bool, width: f32) ->
     };
     let p = ui.painter();
     p.rect_filled(rect, 4.0, fill);
-    let c = rect.left_center() + egui::vec2(15.0, 0.0);
+    let title = p.layout_no_wrap(
+        label.into(),
+        egui::FontId::proportional(13.0),
+        Color32::WHITE,
+    );
+    let c = rect.center() - egui::vec2((title.size().x + 24.) * 0.5 - 8., 0.);
     let stroke = Stroke::new(1.4, Color32::WHITE);
     let at = |x, y| c + egui::vec2(x, y);
     match label {
@@ -113,7 +118,7 @@ pub(super) fn tab(ui: &mut egui::Ui, label: &str, selected: bool, width: f32) ->
         }
     }
     p.text(
-        rect.left_center() + egui::vec2(29.0, 0.0),
+        c + egui::vec2(16.0, 0.0),
         egui::Align2::LEFT_CENTER,
         label,
         egui::FontId::proportional(13.0),

@@ -381,3 +381,50 @@ fn held_new_step_expands_canvas_without_committing_until_release() {
     assert_eq!(serde_json::to_vec(&e.session.document).unwrap(), original);
     assert!(!e.session.can_undo());
 }
+
+#[test]
+fn finite_snap_candidates_follow_interaction_order_and_exclude_the_moving_object() {
+    let ctx = egui::Context::default();
+    let mut e = crate::canvas::tests::editor(&ctx);
+    for i in 1..=6 {
+        let mut a = e.new_annotation(
+            crate::Kind::Rectangle,
+            [i as f32 * 80., 50.],
+            [i as f32 * 80. + 30., 100.],
+        );
+        a.id = i;
+        e.execute(Command::Add { annotation: a });
+    }
+    e.quick_controls
+        .change_toolbar(capture_core::quick_preferences::Choice::SnappingLimit(
+            Some(1),
+        ))
+        .unwrap();
+    e.select_only(Some(1));
+    e.select_only(Some(3));
+    e.select_only(Some(6));
+    assert_eq!(e.quick_controls.snap_recent.last(), Some(&6));
+    let moving = e.session.document.annotations[5].clone();
+    let delta = [-238., 0.]; // moving left edge is two pixels from object 3's left edge
+    let limited = super::move_with_candidates(
+        &e.session.document,
+        std::slice::from_ref(&moving),
+        delta,
+        Some(6.),
+        false,
+        e.quick_controls.snap_candidates(),
+    )
+    .unwrap();
+    assert_eq!(limited.annotations[0].start[0], 240.);
+    e.select_only(Some(1));
+    let excluded = super::move_with_candidates(
+        &e.session.document,
+        &[moving],
+        delta,
+        Some(6.),
+        false,
+        e.quick_controls.snap_candidates(),
+    )
+    .unwrap();
+    assert_eq!(excluded.annotations[0].start[0], 242.);
+}

@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "updated": "2026-11-01",
-  "scope": "Local Library/stamps candidate qualified: 546 tests and 26 optimized image comparisons. Library selection, bulk actions, Details and editable vector starter stamps implemented. Native review pending; immutable preview.1 downloads unchanged. Automation paused.",
+  "scope": "Local placement/export/Library follow-up qualified: 559 tests and 27 optimized image comparisons. Native review pending; immutable preview.1 and 49 downloads unchanged. Automation remains paused.",
   "features": [
     {
       "id": "UX-002",
@@ -5254,7 +5254,8 @@
       "updated": "2026-11-01",
       "evidence": [
         "Local implementation and automated qualification underway; no published release or native observation yet. docs/library-stamps-work.md.",
-        "Local library-stamps-review-20261101-123859; SHA256 10ef2909755c01043906b4a745243e4114814e6ff77b9d03e8071da1bbdef1c8; 546 tests/fmt/Clippy, 26 optimized image comparisons and Windows imports pass. Headless production UI inspected; native review R1/R2 pending. docs/library-stamps-work.md."
+        "Local library-stamps-review-20261101-123859; SHA256 10ef2909755c01043906b4a745243e4114814e6ff77b9d03e8071da1bbdef1c8; 546 tests/fmt/Clippy, 26 optimized image comparisons and Windows imports pass. Headless production UI inspected; native review R1/R2 pending. docs/library-stamps-work.md.",
+        "2026-11-01 user passed R1 native Library Save As and R2 stamp colors/movement on the previous Library/stamps candidate; release still pending."
       ]
     },
     {
@@ -5272,7 +5273,8 @@
       "updated": "2026-11-01",
       "evidence": [
         "Local implementation and automated qualification underway; no published release or native observation yet. docs/library-stamps-work.md.",
-        "Local library-stamps-review-20261101-123859; SHA256 10ef2909755c01043906b4a745243e4114814e6ff77b9d03e8071da1bbdef1c8; 546 tests/fmt/Clippy, 26 optimized image comparisons and Windows imports pass. Headless production UI inspected; native review R1/R2 pending. docs/library-stamps-work.md."
+        "Local library-stamps-review-20261101-123859; SHA256 10ef2909755c01043906b4a745243e4114814e6ff77b9d03e8071da1bbdef1c8; 546 tests/fmt/Clippy, 26 optimized image comparisons and Windows imports pass. Headless production UI inspected; native review R1/R2 pending. docs/library-stamps-work.md.",
+        "2026-11-01 user passed R1 native Library Save As and R2 stamp colors/movement on the previous Library/stamps candidate; release still pending."
       ]
     },
     {
@@ -5290,7 +5292,8 @@
       "updated": "2026-11-01",
       "evidence": [
         "Local implementation and automated qualification underway; no published release or native observation yet. docs/library-stamps-work.md.",
-        "Local library-stamps-review-20261101-123859; SHA256 10ef2909755c01043906b4a745243e4114814e6ff77b9d03e8071da1bbdef1c8; 546 tests/fmt/Clippy, 26 optimized image comparisons and Windows imports pass. Headless production UI inspected; native review R1/R2 pending. docs/library-stamps-work.md."
+        "Local library-stamps-review-20261101-123859; SHA256 10ef2909755c01043906b4a745243e4114814e6ff77b9d03e8071da1bbdef1c8; 546 tests/fmt/Clippy, 26 optimized image comparisons and Windows imports pass. Headless production UI inspected; native review R1/R2 pending. docs/library-stamps-work.md.",
+        "2026-11-01 user passed R1 native Library Save As and R2 stamp colors/movement on the previous Library/stamps candidate; release still pending."
       ]
     },
     {
@@ -5308,6 +5311,158 @@
       "updated": "2026-11-01",
       "evidence": [
         "User-requested follow-up; docs/library-stamps-work.md. General SVG/EPS parsers are not included in this bounded implementation."
+      ]
+    },
+    {
+      "id": "UX-075",
+      "title": "Repeat placement with current object formatting",
+      "category": "Experience",
+      "status": "needs_verification",
+      "priority": "next",
+      "description": "Crisp cached vector stamp previews; current stamp/step formatting and size; Shift alignment, repeat-placement bounds, and Redact click-repeat or drag-to-size. Escape returns to Move.",
+      "completion": "Verify placement, re-selection, editing, one-step Undo, current sequence, preview reuse and portable stamp names.",
+      "depends_on": [
+        "EDIT-083"
+      ],
+      "schedule_status": "unscheduled",
+      "updated": "2026-11-01",
+      "evidence": [
+        "User-approved 2026-11-01 follow-up. Local qualification in progress; no new desktop publication. docs/placement-export-work.md.",
+        "Local placement-export-review-20261101-140249; SHA256 195862e34addcebf9e5f86ba44e9a880dfde632f3c665b40a5ad83d6541f5973; 557 tests/fmt/Clippy, 27 optimized image comparisons and Windows imports pass. Production egui UI and injected input verified; new native checks S1/S2. docs/placement-export-work.md.",
+        "Local placement-export-review-20261101-141051; SHA256 b72bcf849d2184b58da2d9202a5acd75f52f1546d8a90bfff9fc1074d3aa202d; 559 tests/fmt/Clippy, 27 optimized image comparisons and Windows imports pass. Production egui UI and injected input verified; new native checks S1/S2. docs/placement-export-work.md."
+      ]
+    },
+    {
+      "id": "UX-076",
+      "title": "Recent-object snapping candidate limit",
+      "category": "Experience",
+      "status": "needs_verification",
+      "priority": "next",
+      "description": "Canvas snapping dropdown with an enable toggle and persistent finite maximum or Infinite. Candidates use recent selection and editing, excluding the object being moved.",
+      "completion": "Verify recency replacement, hidden/deleted/moving exclusion, persistence and defaults.",
+      "depends_on": [
+        "UX-075"
+      ],
+      "schedule_status": "unscheduled",
+      "updated": "2026-11-01",
+      "evidence": [
+        "User-approved 2026-11-01 follow-up. Local qualification in progress; no new desktop publication. docs/placement-export-work.md.",
+        "Local placement-export-review-20261101-140249; SHA256 195862e34addcebf9e5f86ba44e9a880dfde632f3c665b40a5ad83d6541f5973; 557 tests/fmt/Clippy, 27 optimized image comparisons and Windows imports pass. Production egui UI and injected input verified; new native checks S1/S2. docs/placement-export-work.md.",
+        "Local placement-export-review-20261101-141051; SHA256 b72bcf849d2184b58da2d9202a5acd75f52f1546d8a90bfff9fc1074d3aa202d; 559 tests/fmt/Clippy, 27 optimized image comparisons and Windows imports pass. Production egui UI and injected input verified; new native checks S1/S2. docs/placement-export-work.md."
+      ]
+    },
+    {
+      "id": "UX-077",
+      "title": "Consistent export and dialog actions",
+      "category": "Experience",
+      "status": "needs_verification",
+      "priority": "next",
+      "description": "Right-aligned primary/secondary actions, top-anchored export format controls, session settings, and Open export folder / Open image after export options for single and bulk image outputs.",
+      "completion": "Verify format controls stay stationary, settings survive reopening, correct file/folder targets, failed opens preserve successful exports, and native dialog review.",
+      "depends_on": [
+        "LIB-013"
+      ],
+      "schedule_status": "unscheduled",
+      "updated": "2026-11-01",
+      "evidence": [
+        "User-approved 2026-11-01 follow-up. Local qualification in progress; no new desktop publication. docs/placement-export-work.md.",
+        "Local placement-export-review-20261101-140249; SHA256 195862e34addcebf9e5f86ba44e9a880dfde632f3c665b40a5ad83d6541f5973; 557 tests/fmt/Clippy, 27 optimized image comparisons and Windows imports pass. Production egui UI and injected input verified; new native checks S1/S2. docs/placement-export-work.md.",
+        "Local placement-export-review-20261101-141051; SHA256 b72bcf849d2184b58da2d9202a5acd75f52f1546d8a90bfff9fc1074d3aa202d; 559 tests/fmt/Clippy, 27 optimized image comparisons and Windows imports pass. Production egui UI and injected input verified; new native checks S1/S2. docs/placement-export-work.md."
+      ]
+    },
+    {
+      "id": "LIB-014",
+      "title": "Library filter and metadata presentation",
+      "category": "Library",
+      "status": "needs_verification",
+      "priority": "next",
+      "description": "Automatic Tags expansion when tags first appear, icon Refresh and Details, aligned metadata rows and separators, less footer prose, centered ribbon tabs and removal of the Library-only ribbon separator.",
+      "completion": "Inspect production panels, actual metadata, tag availability and seamless Library tab outline.",
+      "depends_on": [
+        "LIB-013"
+      ],
+      "schedule_status": "unscheduled",
+      "updated": "2026-11-01",
+      "evidence": [
+        "User-approved 2026-11-01 follow-up. Local qualification in progress; no new desktop publication. docs/placement-export-work.md.",
+        "Local placement-export-review-20261101-140249; SHA256 195862e34addcebf9e5f86ba44e9a880dfde632f3c665b40a5ad83d6541f5973; 557 tests/fmt/Clippy, 27 optimized image comparisons and Windows imports pass. Production egui UI and injected input verified; new native checks S1/S2. docs/placement-export-work.md.",
+        "Local placement-export-review-20261101-141051; SHA256 b72bcf849d2184b58da2d9202a5acd75f52f1546d8a90bfff9fc1074d3aa202d; 559 tests/fmt/Clippy, 27 optimized image comparisons and Windows imports pass. Production egui UI and injected input verified; new native checks S1/S2. docs/placement-export-work.md."
+      ]
+    },
+    {
+      "id": "UX-078",
+      "title": "Precise brush cursors and opt-in tool switching",
+      "category": "Experience",
+      "status": "needs_verification",
+      "priority": "next",
+      "description": "Automatic tool switching defaults off while explicit saved choices remain. Pen and freehand Highlighter cursors show their true stroke diameter at the current zoom.",
+      "completion": "Verify new defaults, persisted opt-in, zoom-aware brush circles and normal object interaction.",
+      "depends_on": [
+        "UX-075"
+      ],
+      "schedule_status": "unscheduled",
+      "updated": "2026-11-01",
+      "evidence": [
+        "User-approved 2026-11-01 follow-up. Local qualification in progress; no new desktop publication. docs/placement-export-work.md.",
+        "Local placement-export-review-20261101-140249; SHA256 195862e34addcebf9e5f86ba44e9a880dfde632f3c665b40a5ad83d6541f5973; 557 tests/fmt/Clippy, 27 optimized image comparisons and Windows imports pass. Production egui UI and injected input verified; new native checks S1/S2. docs/placement-export-work.md.",
+        "Local placement-export-review-20261101-141051; SHA256 b72bcf849d2184b58da2d9202a5acd75f52f1546d8a90bfff9fc1074d3aa202d; 559 tests/fmt/Clippy, 27 optimized image comparisons and Windows imports pass. Production egui UI and injected input verified; new native checks S1/S2. docs/placement-export-work.md."
+      ]
+    },
+    {
+      "id": "UX-079",
+      "title": "Regular text fitting regression verification",
+      "category": "Experience",
+      "status": "needs_verification",
+      "priority": "next",
+      "description": "User confirms the standalone-text Resize shape to fit text option works. Actual properties-popup selection, resize and Undo regression passes without a speculative code change; prior Shrink bounds follow-up stays tracked separately.",
+      "completion": "Reproduce the reported workflow and confirm Resize shape fitting together with Shrink, installed fonts and Undo.",
+      "depends_on": [
+        "EDIT-012"
+      ],
+      "schedule_status": "unscheduled",
+      "updated": "2026-11-01",
+      "evidence": [
+        "User-approved 2026-11-01 follow-up. Local qualification in progress; no new desktop publication. docs/placement-export-work.md.",
+        "2026-11-01 user: seems to be working now. Native build inferred from current launcher; actual automated properties-popup test also passes.",
+        "Local placement-export-review-20261101-140249; SHA256 195862e34addcebf9e5f86ba44e9a880dfde632f3c665b40a5ad83d6541f5973; 557 tests/fmt/Clippy, 27 optimized image comparisons and Windows imports pass. Production egui UI and injected input verified; new native checks S1/S2. docs/placement-export-work.md.",
+        "Local placement-export-review-20261101-141051; SHA256 b72bcf849d2184b58da2d9202a5acd75f52f1546d8a90bfff9fc1074d3aa202d; 559 tests/fmt/Clippy, 27 optimized image comparisons and Windows imports pass. Production egui UI and injected input verified; new native checks S1/S2. docs/placement-export-work.md."
+      ]
+    },
+    {
+      "id": "UX-080",
+      "title": "Alt-wheel stroke sizing",
+      "category": "Experience",
+      "status": "needs_verification",
+      "priority": "next",
+      "description": "Alt + mouse wheel changes active Pen, Highlighter pen, Eraser, Line and Arrow widths with immediate canvas cursor feedback, without pan or zoom leakage.",
+      "completion": "Verify width clamping, raw event handling without smoothing repeats, scaled cursor feedback, live drawing and one-step Undo; preserve ordinary pan and Ctrl-wheel zoom.",
+      "depends_on": [
+        "UX-078"
+      ],
+      "schedule_status": "unscheduled",
+      "updated": "2026-11-01",
+      "evidence": [
+        "User addition to bounded 2026-11-01 batch. Synthetic canvas wheel/draw input tests pass. docs/placement-export-work.md.",
+        "Local placement-export-review-20261101-140249; SHA256 195862e34addcebf9e5f86ba44e9a880dfde632f3c665b40a5ad83d6541f5973; 557 tests/fmt/Clippy, 27 optimized image comparisons and Windows imports pass. Production egui UI and injected input verified; new native checks S1/S2. docs/placement-export-work.md.",
+        "Local placement-export-review-20261101-141051; SHA256 b72bcf849d2184b58da2d9202a5acd75f52f1546d8a90bfff9fc1074d3aa202d; 559 tests/fmt/Clippy, 27 optimized image comparisons and Windows imports pass. Production egui UI and injected input verified; new native checks S1/S2. docs/placement-export-work.md."
+      ]
+    },
+    {
+      "id": "UX-081",
+      "title": "Tab preview interface toggle",
+      "category": "Experience",
+      "status": "needs_verification",
+      "priority": "next",
+      "description": "Tab temporarily hides ribbon content, Recent and tool properties while retaining tab titles and a blue Show UI recovery button beneath Close. Previous pane choices return on restoration.",
+      "completion": "Verify both Tab and Show UI restore previous pane states, text/dialog navigation retains Tab, key repeat does not flicker and documents stay unchanged.",
+      "depends_on": [
+        "UX-073"
+      ],
+      "schedule_status": "unscheduled",
+      "updated": "2026-11-01",
+      "evidence": [
+        "User addition to bounded 2026-11-01 batch. Actual shell input/layout tests cover all four prior Recent/Properties combinations, recovery button, repeat, modifier chords and text/dialog guards. docs/placement-export-work.md.",
+        "Local placement-export-review-20261101-141051; SHA256 b72bcf849d2184b58da2d9202a5acd75f52f1546d8a90bfff9fc1074d3aa202d; 559 tests/fmt/Clippy, 27 optimized image comparisons and Windows imports pass. Production egui UI and injected input verified; new native checks S1/S2. docs/placement-export-work.md."
       ]
     }
   ]

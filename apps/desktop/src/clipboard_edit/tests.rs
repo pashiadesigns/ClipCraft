@@ -298,3 +298,22 @@ fn pasted_image_properties_and_render_are_visible_without_unusable_drawing_prese
         dump_meshes(&ctx, &dir, "ImageProperties", first, output);
     }
 }
+
+#[test]
+fn empty_object_selection_copies_full_composite_raster_without_changing_document() {
+    let ctx = egui::Context::default();
+    let mut e = setup(&ctx);
+    e.select_only(None);
+    let before = e.session.document.clone();
+    let expected = before.render().unwrap();
+    let mut written = None;
+    e.copy_all_with(|doc| {
+        written = Some(doc.render().unwrap());
+        Ok(())
+    });
+    assert_eq!(written, Some(expected));
+    assert_eq!(
+        serde_json::to_value(&e.session.document).unwrap(),
+        serde_json::to_value(&before).unwrap()
+    );
+}

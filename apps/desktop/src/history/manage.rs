@@ -140,9 +140,9 @@ impl Editor {
                         "Capture".into()
                     },
                     entries,
-                    editable: true,
+                    editable: self.export_preferences.library_format.is_none(),
                     limits,
-                    format: Default::default(),
+                    format: self.export_preferences.library_format.unwrap_or_default(),
                     error: String::new(),
                 };
                 if action == Action::Duplicate {
@@ -253,14 +253,18 @@ impl Editor {
                                 }
                             });
                         });
+                        self.export_preferences.after.controls(ui);
                         if d.entries.len()>1 {ui.small("A new subfolder keeps existing files untouched.");}
                     }
                 },
                 Action::Duplicate=>{},
             }
             if !d.error.is_empty(){ui.colored_label(egui::Color32::LIGHT_RED,&d.error);}
-            ui.horizontal(|ui|{cancel=ui.button("Cancel").clicked();let text=match d.action{Action::Delete=>"Delete",Action::Export=>if d.entries.len()>1 {"Choose folder…"}else{"Choose file…"},_=>"Save"};let mut button=egui::Button::new(text);if d.action==Action::Delete{button=button.fill(egui::Color32::from_rgb(166,42,48));}submit=ui.add(button).clicked();});
+            (submit,cancel) = crate::controls::dialog_actions(ui,if d.action==Action::Delete {"Delete"} else {"Save"},"Cancel",true,d.action==Action::Delete);
         });
+        if d.action == Action::Export {
+            self.export_preferences.library_format = (!d.editable).then_some(d.format);
+        }
         if cancel || crate::text_edit::cancel_on_escape(&modal) {
             return;
         }
@@ -280,17 +284,36 @@ impl Editor {
                         d.format.extension()
                     };
                     rfd::FileDialog::new()
+                        .set_directory(self.dialog_directory())
                         .add_filter("Selected format", &[extension])
                         .set_file_name(format!("{}.{}", safe_name(&d.name), extension))
                         .save_file()
                         .map(|path| {
-                            self.save_library_item(&d.entries[0], &path, format)
-                                .map(|()| format!("Saved {}", path.display()))
+                            self.save_library_item(&d.entries[0], &path, format)?;
+                            if let Some(parent) = path.parent() {
+                                self.last_directory = parent.to_path_buf();
+                            }
+                            let warning = self
+                                .export_preferences
+                                .after
+                                .open(&path, format.is_some())
+                                .err();
+                            Ok(format!(
+                                "Saved {}{}",
+                                path.display(),
+                                warning
+                                    .map(|e| format!("; could not open: {e}"))
+                                    .unwrap_or_default()
+                            ))
                         })
                 } else {
-                    rfd::FileDialog::new().pick_folder().map(|folder| {
-                        self.export_library_batch(&d.entries, &folder, format, &d.name)
-                    })
+                    rfd::FileDialog::new()
+                        .set_directory(self.dialog_directory())
+                        .pick_folder()
+                        .map(|folder| {
+                            self.last_directory = folder.clone();
+                            self.export_library_batch(&d.entries, &folder, format, &d.name)
+                        })
                 };
                 if let Some(result) = result {
                     match result {
@@ -335,7 +358,7 @@ impl Editor {
                 path,
                 &capture_core::export::Options {
                     format,
-                    ..Default::default()
+                    ..self.export_preferences.options.clone()
                 },
             )
         } else {
@@ -372,10 +395,35 @@ impl Editor {
                 ));
             }
         }
+        let after = self.export_preferences.after;
+        let opened = (|| -> Result<(), String> {
+            if after.folder {
+                crate::export_ui::AfterExport {
+                    folder: true,
+                    image: false,
+                }
+                .open(&directory.join("capture"), false)?;
+            }
+            if after.image && format.is_some() {
+                for path in std::fs::read_dir(&directory).map_err(|e| e.to_string())? {
+                    crate::export_ui::AfterExport {
+                        folder: false,
+                        image: true,
+                    }
+                    .open(&path.map_err(|e| e.to_string())?.path(), true)?;
+                }
+            }
+            Ok(())
+        })();
+        let warning = opened
+            .err()
+            .map(|e| format!("; saved, but could not open: {e}"))
+            .unwrap_or_default();
         Ok(format!(
-            "Exported {} captures to {}",
+            "Exported {} captures to {}{}",
             entries.len(),
-            directory.display()
+            directory.display(),
+            warning
         ))
     }
 }

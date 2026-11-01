@@ -22,24 +22,28 @@ pub(super) fn properties(ui: &mut egui::Ui, a: &mut Annotation) {
             "Vector stamp",
             "Edit up to five colors independently. Paths stay crisp at any size; color edits apply only to this stamp and support Undo.",
         );
-        ui.horizontal_wrapped(|ui| {
-            for (i, color) in vector.colors.iter_mut().enumerate() {
-                ui.push_id(i, |ui| {
-                    ui.vertical(|ui| {
-                        ui.label(format!("Color {}", i + 1));
-                        crate::color_widgets::property_rgba(
-                            ui,
-                            color,
-                            crate::color_widgets::Preview::Fill,
-                        );
-                    });
-                });
-            }
-        });
+        let columns = if vector.colors.len() == 5 { 3 } else { 4 };
+        egui::Grid::new("stamp-palette")
+            .num_columns(columns)
+            .spacing(egui::vec2(8., 8.))
+            .show(ui, |ui| {
+                for (i, color) in vector.colors.iter_mut().enumerate() {
+                    property_layout::swatch(ui, &format!("Color {}", i + 1), color);
+                    if (i + 1) % columns == 0 {
+                        ui.end_row();
+                    }
+                }
+            });
         if &vector != before
             && let Ok(bitmap) = capture_core::bitmap::Bitmap::from_vector(vector)
         {
-            a.image = Some(std::sync::Arc::new(bitmap));
+            a.image = Some(std::sync::Arc::new(
+                if let Some(name) = a.image.as_ref().and_then(|b| b.stamp_name()) {
+                    bitmap.named_stamp(name)
+                } else {
+                    bitmap
+                },
+            ));
         }
         return;
     }

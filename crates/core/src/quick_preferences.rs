@@ -65,9 +65,11 @@ pub struct Preferences {
     pub justification: Justification,
     #[serde(default = "snapping_default")]
     pub canvas_snapping: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub snapping_limit: Option<usize>,
     #[serde(default)]
     pub style_choices: std::collections::BTreeMap<String, String>,
-    #[serde(default = "snapping_default")]
+    #[serde(default)]
     pub auto_switch_tool: bool,
     #[serde(default = "crate::toolbar::default_order")]
     pub toolbar_order: Vec<crate::toolbar::ToolId>,
@@ -96,8 +98,9 @@ impl Default for Preferences {
             distribution: LayoutAction::HorizontalGaps,
             justification: Justification::CenterMiddle,
             canvas_snapping: true,
+            snapping_limit: None,
             style_choices: Default::default(),
-            auto_switch_tool: true,
+            auto_switch_tool: false,
             toolbar_order: crate::toolbar::default_order(),
             favorite_tools: crate::toolbar::default_favorites(),
             canvas_tool: default_canvas_tool(),
@@ -138,6 +141,10 @@ impl Preferences {
             }
             Choice::Justification(value) => self.justification = value,
             Choice::CanvasSnapping(value) => self.canvas_snapping = value,
+            Choice::SnappingLimit(value) => {
+                self.snapping_limit = value;
+                self.version = self.version.max(9);
+            }
             Choice::AutoSwitchTool(value) => self.auto_switch_tool = value,
             Choice::DrawingStyle(style) => {
                 style.validate()?;
@@ -203,7 +210,9 @@ impl Preferences {
         Ok(())
     }
     fn validate(&self) -> Result<()> {
-        if !matches!(self.version, 1..=8)
+        if !matches!(self.version, 1..=9)
+            || self.snapping_limit.is_some_and(|n| n == 0 || n > 10000)
+            || (self.version < 9 && self.snapping_limit.is_some())
             || (self.version < 8
                 && (!self.close_to_tray || self.startup_window != StartupWindow::Editor))
             || (self.version < 7
@@ -270,6 +279,7 @@ pub enum Choice {
     Distribution(LayoutAction),
     Justification(Justification),
     CanvasSnapping(bool),
+    SnappingLimit(Option<usize>),
     AutoSwitchTool(bool),
     DrawingStyle(crate::object_styles::ObjectStyle),
     MoveTool {
@@ -452,7 +462,7 @@ mod tests {
         let p = a.read().unwrap();
         assert!(p.style_choices.is_empty());
         assert!(p.canvas_snapping);
-        assert!(p.auto_switch_tool);
+        assert!(!p.auto_switch_tool);
     }
     #[test]
     fn independent_choices_persist_and_merge_across_windows() {
@@ -495,14 +505,14 @@ mod tests {
         }
     }
     #[test]
-    fn automatic_tool_switching_defaults_on_but_explicit_off_survives_restart() {
-        assert!(Preferences::default().auto_switch_tool);
+    fn automatic_tool_switching_defaults_off_but_explicit_on_survives_restart() {
+        assert!(!Preferences::default().auto_switch_tool);
         let temp = tempfile::tempdir().unwrap();
         let store = Store::open(temp.path()).unwrap();
-        assert!(store.read().unwrap().auto_switch_tool);
-        store.remember(Choice::AutoSwitchTool(false)).unwrap();
+        assert!(!store.read().unwrap().auto_switch_tool);
+        store.remember(Choice::AutoSwitchTool(true)).unwrap();
         assert!(
-            !Store::open(temp.path())
+            Store::open(temp.path())
                 .unwrap()
                 .read()
                 .unwrap()

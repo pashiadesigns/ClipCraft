@@ -49,10 +49,8 @@ impl Editor {
             ui.separator();
             ui.label("This transforms the complete image, including every object.");
             ui.label("Objects will be flattened. Undo restores their editability.");
-            ui.horizontal(|ui| {
-                confirm = ui.button("Flatten and transform").clicked();
-                cancel = ui.button("Cancel").clicked();
-            });
+            (confirm, cancel) =
+                crate::controls::dialog_actions(ui, "Flatten and transform", "Cancel", true, false);
         });
         cancel |= modal.is_top_modal
             && !modal.any_popup_open

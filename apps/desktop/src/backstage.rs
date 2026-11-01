@@ -17,6 +17,7 @@ impl Editor {
     pub(super) fn open_file_workspace(&mut self) {
         if self.commit_text() {
             self.cancel_gesture();
+            self.shell.preview_ui = false;
             self.shell.backstage = Some(Page::Home);
         }
     }

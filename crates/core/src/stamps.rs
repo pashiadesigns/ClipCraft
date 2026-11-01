@@ -33,7 +33,15 @@ impl Library {
     }
     pub fn payload(&self, id: &str) -> Result<ObjectPayload> {
         let pixels = self.0.load(id)?.render()?;
-        from_pixels(pixels)
+        let mut payload = from_pixels(pixels)?;
+        if let Some(entry) = self.0.entries().iter().find(|e| e.id == id) {
+            let bitmap = payload.objects[0].image.as_ref().unwrap();
+            payload.objects[0].image = Some(std::sync::Arc::new(
+                (**bitmap).clone().named_stamp(&entry.label),
+            ));
+            payload.document_version = 23;
+        }
+        Ok(payload)
     }
 }
 fn from_pixels(pixels: image::RgbaImage) -> Result<ObjectPayload> {

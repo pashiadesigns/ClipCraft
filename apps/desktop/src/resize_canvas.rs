@@ -191,7 +191,9 @@ impl Editor {
                 if ui
                     .add_enabled(
                         spec.as_ref().is_ok_and(|size| *size != draft.original),
-                        egui::Button::new("OK").min_size(egui::vec2(80.0, 24.0)),
+                        egui::Button::new("OK")
+                            .fill(crate::shell::ACCENT)
+                            .min_size(egui::vec2(80.0, 24.0)),
                     )
                     .clicked()
                 {

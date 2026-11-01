@@ -248,6 +248,42 @@ impl Editor {
                     egui::Id::unique("canvas_tool_pointer"),
                 ))
                 .with_clip_rect(transform.viewport);
+            if matches!(name, "Pen" | "Highlighter" | "Eraser")
+                && !(name == "Highlighter" && self.drawing_rectangle_highlighter())
+            {
+                let radius = self.width as f32 * transform.scale * 0.5;
+                painter.circle_filled(
+                    pos,
+                    radius,
+                    egui::Color32::from_rgba_unmultiplied(
+                        self.color[0],
+                        self.color[1],
+                        self.color[2],
+                        if name == "Highlighter" { 80 } else { 40 },
+                    ),
+                );
+                painter.circle_stroke(
+                    pos,
+                    radius,
+                    egui::Stroke::new(2. * scale, egui::Color32::WHITE),
+                );
+                painter.circle_stroke(
+                    pos,
+                    radius,
+                    egui::Stroke::new(scale, egui::Color32::from_gray(35)),
+                );
+                return;
+            }
+            if matches!(name, "Line" | "Arrow") {
+                let start = pos + egui::vec2(12., 30.) * scale;
+                painter.line_segment(
+                    [start, start + egui::vec2(25. * scale, 0.)],
+                    egui::Stroke::new(
+                        self.width as f32 * transform.scale,
+                        egui::Color32::from_rgb(self.color[0], self.color[1], self.color[2]),
+                    ),
+                );
+            }
             paint_hotspot(&painter, pos, feedback.icon, scale);
             painter.rect_filled(rect, 2.0, egui::Color32::from_white_alpha(235));
             painter.rect_stroke(
@@ -995,5 +1031,54 @@ mod tests {
             region.cursor(t.screen_point([200.0, 170.0]), t, [640, 400]),
             None
         );
+    }
+}
+
+#[cfg(test)]
+mod brush_preview_tests {
+    use super::*;
+    #[test]
+    fn pen_and_highlighter_cursor_diameter_tracks_stroke_and_canvas_zoom() {
+        let ctx = egui::Context::default();
+        let mut e = crate::canvas::tests::editor(&ctx);
+        let area = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(800., 600.));
+        for kind in [Kind::Pen, Kind::Highlighter, Kind::Eraser] {
+            for zoom in [0.5, 1., 2.5] {
+                e.tool = Some(kind);
+                e.width = 24;
+                let draw = || {
+                    crate::property_layout::tests::PaintedOutput(ctx.run_ui(
+                        egui::RawInput {
+                            focused: true,
+                            screen_rect: Some(area),
+                            events: vec![egui::Event::PointerMoved(egui::pos2(300., 250.))],
+                            ..Default::default()
+                        },
+                        |ui| {
+                            let r = ui.interact(
+                                area,
+                                egui::Id::unique("brush-preview-test"),
+                                egui::Sense::click(),
+                            );
+                            e.canvas_pointer(
+                                ui,
+                                &r,
+                                Transform {
+                                    image: area,
+                                    viewport: area,
+                                    scale: zoom,
+                                    zoom,
+                                },
+                                true,
+                            );
+                        },
+                    ))
+                };
+                draw();
+                let output = draw();
+                assert!(output.shapes.iter().any(|s|matches!(&s.shape,egui::Shape::Circle(c) if (c.radius-12.*zoom).abs()<0.01)),"{kind:?} {zoom}");
+                assert!(e.session.document.annotations.is_empty());
+            }
+        }
     }
 }

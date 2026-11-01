@@ -152,52 +152,151 @@ impl Editor {
         for entry in &entries {
             *years.entry(entry.created_date()[0]).or_default() += 1;
         }
-        egui::Panel::left("library_sidebar").default_size(280.0).min_size(280.0).max_size(280.0).resizable(false)
-            .frame(egui::Frame::new().fill(egui::Color32::from_rgb(52,57,60)).corner_radius(egui::CornerRadius{nw:8,sw:8,ne:0,se:0}).inner_margin(egui::Margin::same(12)))
-            .show(ui,|ui| {
-                ui.add(egui::TextEdit::singleline(&mut self.history.query).hint_text("Search Library").char_limit(120).desired_width(f32::INFINITY))
-                    .on_hover_text("Search names, tags, capture types and dimensions. Every word must match.");
+        egui::Panel::left("library_sidebar")
+            .default_size(280.0)
+            .min_size(280.0)
+            .max_size(280.0)
+            .resizable(false)
+            .frame(
+                egui::Frame::new()
+                    .fill(egui::Color32::from_rgb(52, 57, 60))
+                    .corner_radius(egui::CornerRadius {
+                        nw: 8,
+                        sw: 8,
+                        ne: 0,
+                        se: 0,
+                    })
+                    .inner_margin(egui::Margin::same(12)),
+            )
+            .show(ui, |ui| {
+                ui.add(
+                    egui::TextEdit::singleline(&mut self.history.query)
+                        .hint_text("Search Library")
+                        .char_limit(120)
+                        .desired_width(f32::INFINITY),
+                )
+                .on_hover_text(
+                    "Search names, tags, capture types and dimensions. Every word must match.",
+                );
                 ui.horizontal(|ui| {
-                    if ui.add_enabled(!self.history.query.is_empty() || self.history.library.year.is_some() || self.history.library.kind.is_some() || self.history.library.tag.is_some(),egui::Button::new("Clear filters")).clicked() {
-                        self.history.query.clear(); self.history.library.year=None; self.history.library.kind=None; self.history.library.tag=None;
+                    if ui
+                        .add_enabled(
+                            !self.history.query.is_empty()
+                                || self.history.library.year.is_some()
+                                || self.history.library.kind.is_some()
+                                || self.history.library.tag.is_some(),
+                            egui::Button::new("Clear filters"),
+                        )
+                        .clicked()
+                    {
+                        self.history.query.clear();
+                        self.history.library.year = None;
+                        self.history.library.kind = None;
+                        self.history.library.tag = None;
                     }
-                    crate::shell::badge(ui,self.shell.badges,"LIB-005");
+                    crate::shell::badge(ui, self.shell.badges, "LIB-005");
                 });
                 ui.add_space(10.0);
-                egui::ScrollArea::vertical().id_salt("library_categories").show(ui,|ui| {
-                    for (kind, label, icon) in [(None, "All Files", "Library"), (Some(MediaKind::Image), "Images", "Image"), (Some(MediaKind::Steps), "Step Captures", "Steps")] {
-                        let count = entries.iter().filter(|e| kind.is_none_or(|k| e.kind == k)).count();
-                        if filter(ui,self.history.library.kind == kind,&format!("{label}  ({count})"),icon).clicked() { self.history.library.kind = kind; }
-                    }
-                    ui.add_enabled_ui(false,|ui|filter(ui,false,"Videos  (0)","Video"));
-                    ui.separator();
-                    if ui.selectable_label(self.history.library.year.is_none(),"All dates").clicked() {self.history.library.year=None;}
-                    for (&year,count) in years.iter().rev() {
-                        if ui.selectable_label(self.history.library.year==Some(year),format!("{year}  ({count})")).clicked() {self.history.library.year=Some(year);}
-                    }
-                    ui.small("Snapshot dates · UTC");
-                    ui.separator();
-                    ui.collapsing("Tags", |ui| {
-                        let mut tags = std::collections::BTreeSet::new();
-                        for e in &entries { tags.extend(e.tags.iter().cloned()); }
-                        if tags.is_empty() { ui.small("Right-click a capture to add tags."); }
-                        if ui.selectable_label(self.history.library.tag.is_none(), "All tags").clicked() { self.history.library.tag = None; }
-                        for tag in tags { if ui.selectable_label(self.history.library.tag.as_ref() == Some(&tag), &tag).clicked() { self.history.library.tag = Some(tag); } }
+                egui::ScrollArea::vertical()
+                    .id_salt("library_categories")
+                    .show(ui, |ui| {
+                        for (kind, label, icon) in [
+                            (None, "All Files", "Library"),
+                            (Some(MediaKind::Image), "Images", "Image"),
+                            (Some(MediaKind::Steps), "Step Captures", "Steps"),
+                        ] {
+                            let count = entries
+                                .iter()
+                                .filter(|e| kind.is_none_or(|k| e.kind == k))
+                                .count();
+                            if filter(
+                                ui,
+                                self.history.library.kind == kind,
+                                &format!("{label}  ({count})"),
+                                icon,
+                            )
+                            .clicked()
+                            {
+                                self.history.library.kind = kind;
+                            }
+                        }
+                        ui.add_enabled_ui(false, |ui| filter(ui, false, "Videos  (0)", "Video"));
+                        ui.separator();
+                        if ui
+                            .selectable_label(self.history.library.year.is_none(), "All dates")
+                            .clicked()
+                        {
+                            self.history.library.year = None;
+                        }
+                        for (&year, count) in years.iter().rev() {
+                            if ui
+                                .selectable_label(
+                                    self.history.library.year == Some(year),
+                                    format!("{year}  ({count})"),
+                                )
+                                .clicked()
+                            {
+                                self.history.library.year = Some(year);
+                            }
+                        }
+                        ui.separator();
+                        egui::CollapsingHeader::new("Tags")
+                            .id_salt(("library-tags", entries.iter().any(|e| !e.tags.is_empty())))
+                            .default_open(entries.iter().any(|e| !e.tags.is_empty()))
+                            .show(ui, |ui| {
+                                let mut tags = std::collections::BTreeSet::new();
+                                for e in &entries {
+                                    tags.extend(e.tags.iter().cloned());
+                                }
+                                if tags.is_empty() {
+                                    ui.small("Right-click a capture to add tags.");
+                                }
+                                if ui
+                                    .selectable_label(
+                                        self.history.library.tag.is_none(),
+                                        "All tags",
+                                    )
+                                    .clicked()
+                                {
+                                    self.history.library.tag = None;
+                                }
+                                for tag in tags {
+                                    if ui
+                                        .selectable_label(
+                                            self.history.library.tag.as_ref() == Some(&tag),
+                                            &tag,
+                                        )
+                                        .clicked()
+                                    {
+                                        self.history.library.tag = Some(tag);
+                                    }
+                                }
+                            });
+                        for label in ["Applications", "Websites"] {
+                            ui.collapsing(label, |ui| {
+                                ui.label("Not available yet.");
+                                crate::shell::badge(ui, self.shell.badges, "LIB-002");
+                            });
+                        }
+                        ui.add_space(16.0);
+                        crate::shell::badge(ui, self.shell.badges, "LIB-006");
                     });
-                    for label in ["Applications","Websites"] {
-                        ui.collapsing(label,|ui| {ui.label("Not available yet.");crate::shell::badge(ui,self.shell.badges,"LIB-002");});
-                    }
-                    ui.add_space(16.0);
-                    ui.small("Editable Library · saves never remove older items. Manage capacity with Storage.");
-                    crate::shell::badge(ui,self.shell.badges,"LIB-006");
-                });
             });
         egui::CentralPanel::default()
             .frame(egui::Frame::new().inner_margin(egui::Margin::same(12)))
             .show(ui, |ui| {
                 ui.horizontal_wrapped(|ui| {
                     ui.heading("Library");
-                    if ui.button("Refresh").clicked() {
+                    if crate::ribbon::icon(
+                        ui,
+                        "Refresh",
+                        "Refresh Library",
+                        true,
+                        false,
+                        egui::vec2(28., 26.),
+                    )
+                    .clicked()
+                    {
                         self.history.refresh();
                     }
                     egui::ComboBox::from_id_salt("library_order")

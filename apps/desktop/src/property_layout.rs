@@ -68,7 +68,7 @@ pub(super) fn tool_help(kind: Option<Kind>) -> &'static str {
             "Drag a rectangle, then move or resize it with its handles. Intensity updates live. These are visual effects: use Redact for an opaque cover. Editable projects retain the original image."
         }
         Some(Kind::Eraser) => {
-            "Drag to erase to transparency; release to keep, Undo to restore. Strokes remain editable. Smooth brush edges are available; brush presets and hard edges are planned."
+            "Drag to erase to transparency; release to keep, Undo to restore. Strokes remain editable. Alt + mouse wheel adjusts the brush width. Smooth brush edges are available; brush presets and hard edges are planned."
         }
         Some(Kind::Text | Kind::Callout) => TEXT_HELP,
         Some(Kind::Step) => {
@@ -78,13 +78,13 @@ pub(super) fn tool_help(kind: Option<Kind>) -> &'static str {
             "Drag to draw; hold Shift for equal proportions. Handles resize the object live; corner nodes round supported shapes. Double-click to edit text. Shift-click selects multiple objects for shared formatting."
         }
         Some(Kind::Arrow | Kind::Line) => {
-            "Drag to draw; hold Shift to constrain the angle. Drag endpoints to resize, or the middle diamond to bend. Choose circular or Bézier curves, endpoint shapes/sizes and line patterns. Alt-drag copies an object; Shift-click selects multiple objects for shared formatting."
+            "Drag to draw; hold Shift to constrain the angle. Alt + mouse wheel adjusts the stroke width. Drag endpoints to resize, or the middle diamond to bend. Choose circular or Bézier curves, endpoint shapes/sizes and line patterns. Alt-drag copies an object; Shift-click selects multiple objects for shared formatting."
         }
         Some(Kind::Highlighter) => {
-            "Choose Highlighter pen for freehand strokes or Highlighter rectangle for a filled region. Drag to create; Shift constrains a rectangle to a square. Color and opacity update live. Release commits one Undo."
+            "Choose Highlighter pen for freehand strokes or Highlighter rectangle for a filled region. Alt + mouse wheel adjusts pen width. Drag to create; Shift constrains a rectangle to a square. Color and opacity update live. Release commits one Undo."
         }
         Some(Kind::Pen) => {
-            "Drag to draw a stroke. Select a stroke to change its color, width or opacity live. Shift-click selects multiple objects for shared formatting."
+            "Drag to draw a stroke. Alt + mouse wheel adjusts the stroke width. Select a stroke to change its color, width or opacity live. Shift-click selects multiple objects for shared formatting."
         }
         _ => {
             "Click an object to select it; Shift-click toggles multiple selection. Drag objects or their handles. Arrow keys nudge; Shift moves 10 pixels. Same-type selections share formatting; mixed selections move together."

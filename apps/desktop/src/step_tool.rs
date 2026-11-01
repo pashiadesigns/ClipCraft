@@ -41,7 +41,7 @@ impl Editor {
                 i.pointer.button_pressed(egui::PointerButton::Primary),
                 i.pointer.button_released(egui::PointerButton::Primary),
                 i.pointer.interact_pos(),
-                i.modifiers.shift || i.modifiers.command || i.modifiers.alt,
+                i.modifiers.command || i.modifiers.alt,
                 i.key_down(egui::Key::Space),
             )
         });
@@ -78,6 +78,14 @@ impl Editor {
                 }
             }
         }
+        let pointer = pointer.map(|p| {
+            transform.screen_point(self.constrain_placement(
+                Kind::Step,
+                transform.image_point(p),
+                ui.input(|i| i.modifiers.shift),
+            ))
+        });
+        let anchor = self.stamps.anchor;
         let Some(step) = &mut self.step_placement else {
             return false;
         };
@@ -87,7 +95,7 @@ impl Editor {
                 (step.start[0] + step.end[0]) * 0.5,
                 (step.start[1] + step.end[1]) * 0.5,
             ];
-            if let Ok(mut result) = crate::canvas_expansion::move_with_snapping(
+            if let Ok(mut result) = crate::canvas_expansion::move_with_candidates(
                 &self.session.document,
                 std::slice::from_ref(step),
                 [point[0] - center[0], point[1] - center[1]],
@@ -95,9 +103,22 @@ impl Editor {
                     .snapping()
                     .then_some(6.0 / transform.scale),
                 true,
+                self.quick_controls.snap_candidates(),
             ) {
                 self.snapping_guides = result.guides;
-                let moved = result.annotations.remove(0);
+                let mut moved = result.annotations.remove(0);
+                if ui.input(|i| i.modifiers.shift)
+                    && let Some((Kind::Step, anchor)) = anchor
+                {
+                    let c = [
+                        (moved.start[0] + moved.end[0]) * 0.5,
+                        (moved.start[1] + moved.end[1]) * 0.5,
+                    ];
+                    let axis =
+                        usize::from((point[0] - anchor[0]).abs() > (point[1] - anchor[1]).abs());
+                    moved.start[axis] += anchor[axis] - c[axis];
+                    moved.end[axis] += anchor[axis] - c[axis];
+                }
                 if moved != *step {
                     *step = moved;
                     self.needs_render = true;
@@ -210,6 +231,31 @@ impl Editor {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn selecting_and_editing_step_carries_size_format_and_sequence_into_next_marker() {
+        let ctx = egui::Context::default();
+        let mut e = crate::canvas::tests::editor(&ctx);
+        e.tool = Some(Kind::Step);
+        e.add_step([100., 100.]);
+        let mut step = e.session.document.annotations[0].clone();
+        step.color = [55, 110, 190, 255];
+        step.end = [step.start[0] + 80., step.start[1] + 80.];
+        step.text.as_mut().unwrap().content = "D".into();
+        e.execute(Command::Update {
+            annotation: step.clone(),
+        });
+        e.select_only(Some(step.id));
+        e.select_only(None);
+        let next = e.step_marker([300., 100.]).unwrap();
+        assert_eq!(next.color, step.color);
+        assert_eq!(next.text.as_ref().unwrap().content, "E");
+        assert_eq!(next.end[0] - next.start[0], 80.);
+        assert_eq!(
+            e.constrain_placement(Kind::Step, [400., 110.], true)[1],
+            (step.start[1] + step.end[1]) * 0.5
+        );
+    }
     #[test]
     fn placement_reads_highest_label_after_gaps_manual_edits_reopen_and_undo() {
         let ctx = egui::Context::default();

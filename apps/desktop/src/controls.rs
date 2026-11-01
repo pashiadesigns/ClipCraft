@@ -140,6 +140,37 @@ pub(super) fn slider(ui: &mut egui::Ui, slider: egui::Slider<'_>) -> egui::Respo
     .inner
 }
 
+/// Footer order is primary then secondary, aligned to the dialog's right edge.
+pub(super) fn dialog_actions(
+    ui: &mut egui::Ui,
+    primary: &str,
+    secondary: &str,
+    enabled: bool,
+    destructive: bool,
+) -> (bool, bool) {
+    ui.add_space(8.);
+    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+        let cancel = ui
+            .add_sized([82., 26.], egui::Button::new(secondary))
+            .clicked();
+        let color = if destructive {
+            egui::Color32::from_rgb(177, 43, 49)
+        } else {
+            crate::shell::ACCENT
+        };
+        let submit = ui
+            .add_enabled(
+                enabled,
+                egui::Button::new(primary)
+                    .min_size(egui::vec2(82., 26.))
+                    .fill(color),
+            )
+            .clicked();
+        (submit, cancel)
+    })
+    .inner
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

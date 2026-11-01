@@ -58,6 +58,8 @@ impl Editor {
                 match capture_core::Session::new(document) {
                     Ok(session) => {
                         self.session = session;
+                        self.quick_controls.snap_recent.clear();
+                        self.stamps.reset_document();
                         self.view = Default::default();
                         self.path = None;
                         self.select_only(None);
@@ -126,6 +128,8 @@ impl Editor {
             Ok(session) => {
                 self.capture_controller.restore_focus = Some(true);
                 self.session = session;
+                self.quick_controls.snap_recent.clear();
+                self.stamps.reset_document();
                 self.view = Default::default();
                 self.path = None;
                 self.select_only(None);

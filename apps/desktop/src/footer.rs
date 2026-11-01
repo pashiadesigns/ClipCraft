@@ -151,7 +151,7 @@ impl Editor {
         ui.set_min_height(34.);
         if !self.shell.library {
             let recent = ui
-                .button(if self.history.recent {
+                .button(if self.history.recent && !self.shell.preview_ui {
                     "Hide Recent"
                 } else {
                     "Show Recent"
@@ -161,7 +161,8 @@ impl Editor {
             ui.ctx()
                 .data_mut(|d| d.insert_temp(egui::Id::unique("footer-recent"), recent.rect));
             if recent.clicked() {
-                self.history.recent = !self.history.recent;
+                self.history.recent = self.shell.preview_ui || !self.history.recent;
+                self.shell.preview_ui = false;
                 if self.history.recent {
                     self.history.refresh();
                 }
@@ -211,7 +212,9 @@ impl Editor {
                     let response = crate::tabs::tab(
                         ui,
                         label,
-                        self.shell.properties && self.shell.effects == effects,
+                        self.shell.properties
+                            && !self.shell.preview_ui
+                            && self.shell.effects == effects,
                         width,
                     );
                     #[cfg(test)]
@@ -219,6 +222,7 @@ impl Editor {
                         d.insert_temp(egui::Id::unique(("footer-tab", label)), response.rect)
                     });
                     if response.clicked() {
+                        self.shell.preview_ui = false;
                         self.shell.properties = true;
                         self.shell.effects = effects;
                     }

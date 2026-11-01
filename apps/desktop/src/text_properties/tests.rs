@@ -413,3 +413,50 @@ fn object_text_entry_routes_to_text_properties_and_back_commits_one_edit() {
         "standalone Text has no object back button"
     );
 }
+
+#[test]
+fn regular_text_resize_fit_can_be_chosen_from_actual_properties_popup() {
+    let ctx = egui::Context::default();
+    crate::shell::configure(&ctx);
+    ctx.style_mut_of(egui::Theme::Dark, |s| s.animation_time = 0.);
+    let mut e = fixture(&ctx);
+    let id = e.session.document.annotations[0].id;
+    e.select_only(Some(id));
+    frame(&ctx, &mut e, vec![]);
+    let output = frame(&ctx, &mut e, vec![]);
+    let advanced = crate::color_widgets::tests::text_rect(&output.shapes, "Advanced")
+        .unwrap()
+        .center();
+    click(&ctx, &mut e, advanced);
+    let output = frame(&ctx, &mut e, vec![]);
+    let combo = crate::color_widgets::tests::text_rect(
+        &output.shapes,
+        e.selected_annotation()
+            .unwrap()
+            .text
+            .as_ref()
+            .unwrap()
+            .fit
+            .label(),
+    )
+    .unwrap()
+    .center();
+    click(&ctx, &mut e, combo);
+    let output = frame(&ctx, &mut e, vec![]);
+    let choice = crate::color_widgets::tests::text_rect(&output.shapes, "Resize shape to fit text")
+        .unwrap()
+        .center();
+    click(&ctx, &mut e, choice);
+    assert_eq!(
+        e.selected_annotation().unwrap().text.as_ref().unwrap().fit,
+        TextFit::ResizeShape,
+        "{}",
+        e.status
+    );
+    assert!(e.session.can_undo());
+    e.execute(crate::Command::Undo);
+    assert_ne!(
+        e.selected_annotation().unwrap().text.as_ref().unwrap().fit,
+        TextFit::ResizeShape
+    );
+}

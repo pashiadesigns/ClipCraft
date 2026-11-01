@@ -2,12 +2,57 @@ use crate::{Editor, egui};
 use capture_core::export::{Format, Options};
 #[cfg(windows)]
 mod windows;
+#[derive(Default)]
+pub(super) struct Preferences {
+    pub options: Options,
+    pub after: AfterExport,
+    pub library_format: Option<Format>,
+}
+#[derive(Clone, Copy, Default)]
+pub(super) struct AfterExport {
+    pub folder: bool,
+    pub image: bool,
+}
+impl AfterExport {
+    pub fn controls(&mut self, ui: &mut egui::Ui) {
+        crate::controls::toggle(ui, &mut self.folder, "Open export folder");
+        crate::controls::toggle(ui, &mut self.image, "Open image after export");
+    }
+    pub fn open_with(
+        &self,
+        path: &std::path::Path,
+        is_image: bool,
+        mut open: impl FnMut(&std::path::Path) -> Result<(), String>,
+    ) -> Result<(), String> {
+        if self.folder
+            && let Some(parent) = path.parent()
+        {
+            open(parent)?;
+        }
+        if self.image && is_image {
+            open(path)?;
+        }
+        Ok(())
+    }
+    pub fn open(&self, path: &std::path::Path, is_image: bool) -> Result<(), String> {
+        #[cfg(windows)]
+        {
+            self.open_with(path, is_image, windows::open_export)
+        }
+        #[cfg(not(windows))]
+        {
+            let _ = (path, is_image);
+            Ok(())
+        }
+    }
+}
+
 pub(super) struct Dialog {
     pixels: image::RgbaImage,
     texture: Option<egui::TextureHandle>,
     options: Options,
     print: bool,
-    preview_after: bool,
+    after: AfterExport,
     page: usize,
     error: String,
 }
@@ -25,11 +70,15 @@ impl Editor {
                     pixels,
                     texture: None,
                     options: Options {
-                        format: if print { Format::Pdf } else { Format::Png },
-                        ..Default::default()
+                        format: if print {
+                            Format::Pdf
+                        } else {
+                            self.export_preferences.options.format
+                        },
+                        ..self.export_preferences.options.clone()
                     },
                     print,
-                    preview_after: false,
+                    after: self.export_preferences.after,
                     page: 0,
                     error: String::new(),
                 })
@@ -44,36 +93,190 @@ impl Editor {
         let mut save = false;
         let mut print = false;
         let mut cancel = false;
-        let modal=egui::Modal::new(egui::Id::unique("export-print")).show(ctx,|ui|{
-            ui.set_width(520.);ui.heading(if d.print{"Print preview"}else{"Export image"});
-            ui.horizontal(|ui|{ui.label("Format");for format in [Format::Png,Format::Jpeg,Format::Pdf]{ui.selectable_value(&mut d.options.format,format,format.label());}});
-            if d.options.format==Format::Jpeg {crate::property_layout::slider(ui,"Quality",egui::Slider::new(&mut d.options.quality,1..=100));}
-            if d.options.format!=Format::Png{ui.horizontal(|ui|{ui.label("Transparency background");crate::color_widgets::rgb_preview(ui, &mut d.options.background, crate::color_widgets::Preview::Fill);});}
-            let paged=d.print||d.options.format==Format::Pdf;
-            if paged {
-                ui.horizontal(|ui|{ui.label("Paper");for (label,size) in [("Letter",[612.,792.]),("A4",[595.276,841.89])]{let same=d.options.page.size==size;if ui.selectable_label(same,label).clicked(){d.options.page.size=size;}}if ui.button("Rotate page").clicked(){d.options.page.size.swap(0,1);}});
-                crate::property_layout::slider(ui,"Margin (pt)",egui::Slider::new(&mut d.options.page.margin,0.0..=72.0));
-                ui.horizontal(|ui|{ui.label("Long images");ui.selectable_value(&mut d.options.page.paginate,false,"Fit one page");ui.selectable_value(&mut d.options.page.paginate,true,"Multiple pages");});
-            }
-            let texture=d.texture.get_or_insert_with(||{let thumb=image::imageops::thumbnail(&d.pixels,1000,1000);ctx.load_texture("export-preview",egui::ColorImage::from_rgba_unmultiplied([thumb.width() as usize,thumb.height() as usize],thumb.as_raw()),egui::TextureOptions::LINEAR)});
-            let pages=d.options.page.pages([d.pixels.width(),d.pixels.height()]);
-            let (rect,_)=ui.allocate_exact_size(egui::vec2(520.,300.),egui::Sense::hover());
-            if paged {
-                if let Ok(pages)=&pages {
-                    d.page=d.page.min(pages.len()-1);let p=&pages[d.page];let scale=(480./d.options.page.size[0]).min(280./d.options.page.size[1]);
-                    let paper=egui::Rect::from_center_size(rect.center(),egui::vec2((d.options.page.size[0]*scale) as f32,(d.options.page.size[1]*scale) as f32));ui.painter().rect_filled(paper,0.,egui::Color32::WHITE);
-                    let [x,y,w,h]=p.destination;let image=egui::Rect::from_min_size(paper.min+egui::vec2((x*scale) as f32,(y*scale) as f32),egui::vec2((w*scale) as f32,(h*scale) as f32));
-                    ui.painter().rect_filled(image,0.,egui::Color32::from_rgb(d.options.background[0],d.options.background[1],d.options.background[2]));
-                    ui.painter().image(texture.id(),image,egui::Rect::from_min_max(egui::pos2(0.,p.source[1] as f32/d.pixels.height() as f32),egui::pos2(1.,(p.source[1]+p.source[3]) as f32/d.pixels.height() as f32)),egui::Color32::WHITE);
-                    ui.horizontal(|ui|{if ui.add_enabled(d.page>0,egui::Button::new("Previous")).clicked(){d.page-=1;}ui.label(format!("Page {} of {}",d.page+1,pages.len()));if ui.add_enabled(d.page+1<pages.len(),egui::Button::new("Next")).clicked(){d.page+=1;}});
+        let modal = egui::Modal::new(egui::Id::unique("export-print"))
+            .area(
+                egui::Area::new(egui::Id::unique("export-print"))
+                    .anchor(egui::Align2::CENTER_TOP, egui::vec2(0., 32.)),
+            )
+            .show(ctx, |ui| {
+                ui.set_width(520.);
+                ui.heading(if d.print {
+                    "Print preview"
+                } else {
+                    "Export image"
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Format");
+                    for format in [Format::Png, Format::Jpeg, Format::Pdf] {
+                        ui.selectable_value(&mut d.options.format, format, format.label());
+                    }
+                });
+                if d.options.format == Format::Jpeg {
+                    crate::property_layout::slider(
+                        ui,
+                        "Quality",
+                        egui::Slider::new(&mut d.options.quality, 1..=100),
+                    );
                 }
-            }else{let size=egui::vec2(d.pixels.width() as f32,d.pixels.height() as f32);let image=egui::Rect::from_center_size(rect.center(),size*(480./size.x).min(280./size.y));ui.painter().rect_filled(image,0.,egui::Color32::from_rgb(d.options.background[0],d.options.background[1],d.options.background[2]));ui.painter().image(texture.id(),image,egui::Rect::from_min_max(egui::Pos2::ZERO,egui::pos2(1.,1.)),egui::Color32::WHITE);}
-            ui.label(format!("{} × {} pixels",d.pixels.width(),d.pixels.height()));
-            if let Err(e)=&pages{ui.colored_label(egui::Color32::LIGHT_RED,e.to_string());}
-            if !d.error.is_empty(){ui.colored_label(egui::Color32::LIGHT_RED,&d.error);}
-            ui.horizontal(|ui| { ui.label("Preview export after"); ui.checkbox(&mut d.preview_after, ""); });
-            ui.horizontal(|ui|{save=ui.button("Save export…").clicked();print=ui.add_enabled(pages.is_ok(),egui::Button::new("Print…")).on_hover_text("Choose a printer and its paper settings. No print job is sent until you accept the Windows dialog.").clicked();cancel=ui.button("Close").clicked();});
-        });
+                if d.options.format != Format::Png {
+                    ui.horizontal(|ui| {
+                        ui.label("Transparency background");
+                        crate::color_widgets::rgb_preview(
+                            ui,
+                            &mut d.options.background,
+                            crate::color_widgets::Preview::Fill,
+                        );
+                    });
+                }
+                let paged = d.print || d.options.format == Format::Pdf;
+                if paged {
+                    ui.horizontal(|ui| {
+                        ui.label("Paper");
+                        for (label, size) in [("Letter", [612., 792.]), ("A4", [595.276, 841.89])] {
+                            let same = d.options.page.size == size;
+                            if ui.selectable_label(same, label).clicked() {
+                                d.options.page.size = size;
+                            }
+                        }
+                        if ui.button("Rotate page").clicked() {
+                            d.options.page.size.swap(0, 1);
+                        }
+                    });
+                    crate::property_layout::slider(
+                        ui,
+                        "Margin (pt)",
+                        egui::Slider::new(&mut d.options.page.margin, 0.0..=72.0),
+                    );
+                    ui.horizontal(|ui| {
+                        ui.label("Long images");
+                        ui.selectable_value(&mut d.options.page.paginate, false, "Fit one page");
+                        ui.selectable_value(&mut d.options.page.paginate, true, "Multiple pages");
+                    });
+                }
+                let texture = d.texture.get_or_insert_with(|| {
+                    let thumb = image::imageops::thumbnail(&d.pixels, 1000, 1000);
+                    ctx.load_texture(
+                        "export-preview",
+                        egui::ColorImage::from_rgba_unmultiplied(
+                            [thumb.width() as usize, thumb.height() as usize],
+                            thumb.as_raw(),
+                        ),
+                        egui::TextureOptions::LINEAR,
+                    )
+                });
+                let pages = d.options.page.pages([d.pixels.width(), d.pixels.height()]);
+                let (rect, _) =
+                    ui.allocate_exact_size(egui::vec2(520., 300.), egui::Sense::hover());
+                if paged {
+                    if let Ok(pages) = &pages {
+                        d.page = d.page.min(pages.len() - 1);
+                        let p = &pages[d.page];
+                        let scale =
+                            (480. / d.options.page.size[0]).min(280. / d.options.page.size[1]);
+                        let paper = egui::Rect::from_center_size(
+                            rect.center(),
+                            egui::vec2(
+                                (d.options.page.size[0] * scale) as f32,
+                                (d.options.page.size[1] * scale) as f32,
+                            ),
+                        );
+                        ui.painter().rect_filled(paper, 0., egui::Color32::WHITE);
+                        let [x, y, w, h] = p.destination;
+                        let image = egui::Rect::from_min_size(
+                            paper.min + egui::vec2((x * scale) as f32, (y * scale) as f32),
+                            egui::vec2((w * scale) as f32, (h * scale) as f32),
+                        );
+                        ui.painter().rect_filled(
+                            image,
+                            0.,
+                            egui::Color32::from_rgb(
+                                d.options.background[0],
+                                d.options.background[1],
+                                d.options.background[2],
+                            ),
+                        );
+                        ui.painter().image(
+                            texture.id(),
+                            image,
+                            egui::Rect::from_min_max(
+                                egui::pos2(0., p.source[1] as f32 / d.pixels.height() as f32),
+                                egui::pos2(
+                                    1.,
+                                    (p.source[1] + p.source[3]) as f32 / d.pixels.height() as f32,
+                                ),
+                            ),
+                            egui::Color32::WHITE,
+                        );
+                        ui.horizontal(|ui| {
+                            if ui
+                                .add_enabled(d.page > 0, egui::Button::new("Previous"))
+                                .clicked()
+                            {
+                                d.page -= 1;
+                            }
+                            ui.label(format!("Page {} of {}", d.page + 1, pages.len()));
+                            if ui
+                                .add_enabled(d.page + 1 < pages.len(), egui::Button::new("Next"))
+                                .clicked()
+                            {
+                                d.page += 1;
+                            }
+                        });
+                    }
+                } else {
+                    let size = egui::vec2(d.pixels.width() as f32, d.pixels.height() as f32);
+                    let image = egui::Rect::from_center_size(
+                        rect.center(),
+                        size * (480. / size.x).min(280. / size.y),
+                    );
+                    ui.painter().rect_filled(
+                        image,
+                        0.,
+                        egui::Color32::from_rgb(
+                            d.options.background[0],
+                            d.options.background[1],
+                            d.options.background[2],
+                        ),
+                    );
+                    ui.painter().image(
+                        texture.id(),
+                        image,
+                        egui::Rect::from_min_max(egui::Pos2::ZERO, egui::pos2(1., 1.)),
+                        egui::Color32::WHITE,
+                    );
+                }
+                ui.label(format!(
+                    "{} × {} pixels",
+                    d.pixels.width(),
+                    d.pixels.height()
+                ));
+                if let Err(e) = &pages {
+                    ui.colored_label(egui::Color32::LIGHT_RED, e.to_string());
+                }
+                if !d.error.is_empty() {
+                    ui.colored_label(egui::Color32::LIGHT_RED, &d.error);
+                }
+                d.after.controls(ui);
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    cancel = ui.button("Close").clicked();
+                    print = ui
+                        .add_enabled(
+                            pages.is_ok(),
+                            egui::Button::new("Print…").fill(if d.print {
+                                crate::shell::ACCENT
+                            } else {
+                                ui.visuals().widgets.inactive.bg_fill
+                            }),
+                        )
+                        .on_hover_text("Choose a printer and confirm in the Windows print dialog.")
+                        .clicked();
+                    save = ui
+                        .add(egui::Button::new("Save").fill(crate::shell::ACCENT))
+                        .clicked();
+                });
+            });
+        self.export_preferences.options = d.options.clone();
+        self.export_preferences.after = d.after;
         if cancel || crate::text_edit::cancel_on_escape(&modal) {
             return;
         }
@@ -104,14 +307,9 @@ impl Editor {
                     Ok(()) => {
                         self.last_directory = path.parent().unwrap().to_path_buf();
                         self.status = format!("Exported {}", path.display());
-                        if d.preview_after {
-                            #[cfg(windows)]
-                            if let Err(error) = windows::open_export(&path) {
-                                self.status = format!(
-                                    "Exported {}, but preview could not open: {error}",
-                                    path.display()
-                                );
-                            }
+                        if let Err(error) = d.after.open(&path, true) {
+                            self.status =
+                                format!("Exported {}, but could not open: {error}", path.display());
                         }
                         return;
                     }
@@ -156,6 +354,82 @@ impl Editor {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn export_session_memory_stable_format_position_and_post_save_targets() {
+        use crate::property_layout::tests::PaintedOutput;
+        let ctx = egui::Context::default();
+        crate::shell::configure(&ctx);
+        let mut e = crate::canvas::tests::editor(&ctx);
+        e.begin_export(false);
+        let frame = |e: &mut Editor| {
+            PaintedOutput(ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        egui::vec2(900., 850.),
+                    )),
+                    ..Default::default()
+                },
+                |ui| e.show_export(ui.ctx(), None),
+            ))
+        };
+        frame(&mut e);
+        frame(&mut e);
+        let mut y = None;
+        for format in [Format::Png, Format::Pdf, Format::Jpeg, Format::Png] {
+            e.export_dialog.as_mut().unwrap().options.format = format;
+            frame(&mut e);
+            let out = frame(&mut e);
+            let pos = crate::color_widgets::tests::text_rect(&out.shapes, "Format")
+                .unwrap()
+                .top();
+            assert!(y.is_none_or(|prior: f32| (prior - pos).abs() < 0.1));
+            y = Some(pos);
+        }
+        e.export_dialog.as_mut().unwrap().options.format = Format::Jpeg;
+        e.export_dialog.as_mut().unwrap().options.quality = 82;
+        e.export_dialog.as_mut().unwrap().after = AfterExport {
+            folder: true,
+            image: true,
+        };
+        frame(&mut e);
+        e.export_dialog = None;
+        e.begin_export(false);
+        let d = e.export_dialog.as_ref().unwrap();
+        assert_eq!(d.options.format, Format::Jpeg);
+        assert_eq!(d.options.quality, 82);
+        let mut opened = vec![];
+        d.after
+            .open_with(std::path::Path::new("exports/result.jpg"), true, |p| {
+                opened.push(p.to_path_buf());
+                Ok(())
+            })
+            .unwrap();
+        assert_eq!(
+            opened,
+            vec![
+                std::path::PathBuf::from("exports"),
+                std::path::PathBuf::from("exports/result.jpg")
+            ]
+        );
+        opened.clear();
+        d.after
+            .open_with(
+                std::path::Path::new("exports/editable.capture.json"),
+                false,
+                |p| {
+                    opened.push(p.to_path_buf());
+                    Ok(())
+                },
+            )
+            .unwrap();
+        assert_eq!(
+            opened.len(),
+            1,
+            "editable projects are never opened as images"
+        );
+    }
     #[test]
     fn export_preview_is_modal_and_keeps_document_unchanged() {
         use crate::property_layout::tests::{PaintedOutput, dump_meshes};

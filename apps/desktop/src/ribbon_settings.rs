@@ -199,7 +199,12 @@ impl Editor {
                         };
                         let response =
                             command_icon(ui, action.label(), action.enabled(self), selected);
-                        if response.clicked() {
+                        if action == Action::Snapping {
+                            egui::Popup::menu(&response).show(|ui| {
+                                ui.set_width(260.);
+                                self.quick_controls.snapping_popup(ui);
+                            });
+                        } else if response.clicked() {
                             self.run_settings_action(action);
                         }
                         responses.push((action, response));
@@ -576,7 +581,9 @@ mod tests {
         assert!(!e.session.can_undo());
         let snap = e.quick_controls.snapping();
         click(&ctx, &mut e, Action::Snapping.label());
-        assert_eq!(e.quick_controls.snapping(), !snap);
+        assert_eq!(e.quick_controls.snapping(), snap);
+        assert!(egui::Popup::is_any_open(&ctx));
+        egui::Popup::close_all(&ctx);
         click(&ctx, &mut e, Action::PixelGrid.label());
         assert!(e.shell.pixel_grid);
         click(&ctx, &mut e, "Actual size · 100%");

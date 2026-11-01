@@ -57,6 +57,19 @@ impl Editor {
         }) {
             self.editing_group = None;
         }
+        if let Some(a) = id
+            .and_then(|id| {
+                self.session
+                    .document
+                    .annotations
+                    .iter()
+                    .find(|a| a.id == id)
+            })
+            .cloned()
+        {
+            self.quick_controls.touch_snap(a.id);
+            self.remember_placement_template(&a);
+        }
         self.selected = id;
         self.extra_selected.clear();
         self.selection_order = id.into_iter().collect();

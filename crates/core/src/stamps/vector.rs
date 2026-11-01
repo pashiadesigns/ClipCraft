@@ -80,6 +80,22 @@ impl VectorStamp {
                 stroke,
             });
         };
+        if id == "five-color" {
+            for (i, color) in [blue, green, [245, 190, 48, 255], red, white]
+                .into_iter()
+                .enumerate()
+            {
+                let x = 12. + i as f64 * 21.;
+                add(
+                    Ellipse::from_rect(Rect::new(x, 44., x + 20., 84.))
+                        .to_path(0.01)
+                        .to_svg(),
+                    color,
+                    None,
+                );
+            }
+            return result;
+        }
         let circled = id.ends_with("circle") || matches!(id, "question" | "information");
         if circled {
             add(

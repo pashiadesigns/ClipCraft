@@ -11,6 +11,8 @@ pub struct Bitmap {
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     stamp: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    stamp_name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     vector: Option<Arc<crate::stamps::vector::VectorStamp>>,
     /// Presence identifies a captured cursor. Indices preserve Windows XOR
     /// pixels so an I-beam still inverts the background after it is moved.
@@ -30,6 +32,7 @@ impl PartialEq for Bitmap {
     fn eq(&self, other: &Self) -> bool {
         (Arc::ptr_eq(&self.raster, &other.raster) || self.raster == other.raster)
             && self.stamp == other.stamp
+            && self.stamp_name == other.stamp_name
             && self.vector == other.vector
             && self.cursor_invert == other.cursor_invert
             && self.view == other.view
@@ -62,6 +65,14 @@ impl Bitmap {
         value.opaque = OnceLock::new();
         Ok(value)
     }
+    pub fn stamp_name(&self) -> Option<&str> {
+        self.stamp_name.as_deref()
+    }
+    pub fn named_stamp(mut self, name: &str) -> Self {
+        self.stamp = true;
+        self.stamp_name = Some(name.chars().filter(|c| !c.is_control()).take(120).collect());
+        self
+    }
     pub fn is_stamp(&self) -> bool {
         self.stamp
     }
@@ -90,6 +101,11 @@ impl Bitmap {
         self.view.is_some()
     }
     pub(crate) fn validate_view(&self) -> Result<()> {
+        if self.stamp_name.as_ref().is_some_and(|n| {
+            !self.stamp || n.chars().count() > 120 || n.chars().any(char::is_control)
+        }) {
+            return Err(Error::Invalid("Invalid stamp name".into()));
+        }
         if let Some(vector) = &self.vector {
             vector.validate()?;
             if !self.stamp || self.is_cursor() || self.view.is_some() || self.size() != [128, 128] {
@@ -123,6 +139,7 @@ impl Bitmap {
             .png
             .len()
             .saturating_add(w as usize * h as usize * 4)
+            .saturating_add(self.stamp_name.as_ref().map_or(0, String::len))
             .saturating_add(self.cursor_invert.as_ref().map_or(0, |v| v.len() * 4))
             .saturating_add(self.vector.as_ref().map_or(0, |v| {
                 v.paths.iter().map(|p| p.data.len()).sum::<usize>() + v.colors.len() * 4
@@ -132,6 +149,7 @@ impl Bitmap {
         let value = Self {
             raster,
             stamp: false,
+            stamp_name: None,
             vector: None,
             cursor_invert: None,
             view: None,

@@ -31,6 +31,11 @@ impl Stamp {
                     super::vector::VectorStamp::builtin(self.id.trim_start_matches("builtin-")),
                 )?));
         }
+        let bitmap = payload.objects[0].image.as_ref().unwrap();
+        payload.objects[0].image = Some(std::sync::Arc::new(
+            (**bitmap).clone().named_stamp(self.label),
+        ));
+        payload.document_version = 23;
         Ok(payload)
     }
 }
@@ -45,6 +50,12 @@ macro_rules! stamp {
     };
 }
 pub const ALL: &[Stamp] = &[
+    Stamp {
+        id: "builtin-five-color",
+        label: "Five-color workflow",
+        keywords: "palette test five color workflow process",
+        png: &[],
+    },
     stamp!(
         "check-green",
         "Green check",
@@ -91,6 +102,30 @@ pub fn find(id: &str) -> Option<&'static Stamp> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn named_five_color_stamp_preserves_all_slots_and_backward_version_guards() {
+        let mut doc =
+            crate::Session::new(crate::Document::canvas(500, 200, [255; 4]).unwrap()).unwrap();
+        doc.execute(crate::Command::PasteObjects {
+            payload: find("builtin-five-color").unwrap().payload().unwrap(),
+            center: [250., 100.],
+        })
+        .unwrap();
+        assert_eq!(doc.document.version, 23);
+        let b = doc.document.annotations[0].image.as_ref().unwrap();
+        assert_eq!(b.stamp_name(), Some("Five-color workflow"));
+        assert_eq!(b.vector().unwrap().colors.len(), 5);
+        let bytes = serde_json::to_vec(&doc.document).unwrap();
+        let mut reopened: crate::Document = serde_json::from_slice(&bytes).unwrap();
+        reopened.validate().unwrap();
+        assert_eq!(doc.document.render().unwrap(), reopened.render().unwrap());
+        reopened.version = 22;
+        assert!(reopened.validate().is_err());
+        if let Ok(path) = std::env::var("CLIPCRAFT_FIVE_COLOR_FIXTURE") {
+            doc.document.save(std::path::Path::new(&path)).unwrap();
+        }
+    }
     #[test]
     fn starter_art_is_transparent_searchable_and_persists_as_editable_stamps() {
         let mut fixture =

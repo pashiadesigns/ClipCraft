@@ -166,7 +166,7 @@ fn menu(ui: &mut egui::Ui, available: bool, busy: bool) -> Option<Action> {
         };
         let name = match action {
             Action::SaveAs => "Save As",
-            Action::Details => "File",
+            Action::Details => "Details",
             Action::Open => "Editor",
             Action::Copy | Action::Duplicate => "Copy",
             Action::Rename => "Text",
@@ -314,7 +314,11 @@ impl Editor {
         let mut submit = false;
         let mut cancel = false;
         egui::Modal::new(egui::Id::unique("library_entry_dialog")).show(ctx, |ui| {
-            ui.set_width(380.);
+            ui.set_width(if dialog.action == Action::Details {
+                520.
+            } else {
+                380.
+            });
             ui.heading(dialog.action.label());
             ui.add_space(8.);
             if dialog.action == Action::Details {
@@ -323,8 +327,20 @@ impl Editor {
                         .max_height(450.)
                         .show(ui, |ui| {
                             for (title, value) in details(store, &dialog.entry) {
-                                ui.label(egui::RichText::new(title).strong());
-                                ui.add(egui::Label::new(value).wrap().selectable(true));
+                                ui.horizontal_top(|ui| {
+                                    ui.allocate_ui_with_layout(
+                                        egui::vec2(145., 20.),
+                                        egui::Layout::top_down(egui::Align::Min),
+                                        |ui| {
+                                            ui.set_min_width(145.);
+                                            ui.label(egui::RichText::new(title).strong());
+                                        },
+                                    );
+                                    ui.add(egui::Label::new(value).wrap().selectable(true));
+                                });
+                                ui.add_space(3.);
+                                ui.separator();
+                                ui.add_space(3.);
                             }
                         });
                 }
@@ -352,19 +368,25 @@ impl Editor {
                 ui.colored_label(egui::Color32::LIGHT_RED, &dialog.error);
             }
             ui.add_space(10.);
-            ui.horizontal(|ui| {
-                if dialog.action == Action::Details {
-                    cancel = ui.button("Close").clicked();
-                    return;
-                }
-                cancel = ui.button("Cancel").clicked();
-                let button = if dialog.action == Action::Delete {
-                    egui::Button::new("Delete").fill(egui::Color32::from_rgb(177, 43, 49))
-                } else {
-                    egui::Button::new("Save").fill(crate::shell::ACCENT)
-                };
-                submit = ui.add(button).clicked();
-            });
+            if dialog.action == Action::Details {
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    cancel = ui
+                        .add(egui::Button::new("Close").fill(crate::shell::ACCENT))
+                        .clicked();
+                });
+            } else {
+                (submit, cancel) = crate::controls::dialog_actions(
+                    ui,
+                    if dialog.action == Action::Delete {
+                        "Delete"
+                    } else {
+                        "Save"
+                    },
+                    "Cancel",
+                    true,
+                    dialog.action == Action::Delete,
+                );
+            }
         });
         cancel |= ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape));
         if submit {

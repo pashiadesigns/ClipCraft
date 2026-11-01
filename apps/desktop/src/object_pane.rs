@@ -139,6 +139,9 @@ fn color_name(c: [u8; 4]) -> &'static str {
 fn label(a: &Annotation) -> String {
     match a.kind {
         Kind::Image => {
+            if let Some(b) = a.image.as_ref().filter(|b| b.is_stamp()) {
+                return format!("Stamp: {}", b.stamp_name().unwrap_or("Imported stamp"));
+            }
             let size = a.image.as_ref().map(|b| b.size()).unwrap_or([0; 2]);
             format!(
                 "{} ({} × {})",

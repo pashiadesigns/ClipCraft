@@ -13,7 +13,7 @@ use std::{
 };
 
 pub const MAX_PIXELS: u64 = 25_000_000;
-pub const MAX_PROJECT_VERSION: u32 = 22;
+pub const MAX_PROJECT_VERSION: u32 = 23;
 mod arrow;
 pub mod bitmap;
 pub mod callout;
@@ -285,6 +285,13 @@ impl Document {
         if self
             .annotations
             .iter()
+            .any(|a| a.image.as_ref().is_some_and(|b| b.stamp_name().is_some()))
+        {
+            self.version = self.version.max(23);
+        }
+        if self
+            .annotations
+            .iter()
             .any(|a| a.image.as_ref().is_some_and(|b| b.vector().is_some()))
         {
             self.version = self.version.max(22);
@@ -377,6 +384,16 @@ impl Document {
             return Err(Error::Invalid("Unsupported project version".into()));
         }
         validate_dimensions(self.width, self.height)?;
+        if self.version < 23
+            && self
+                .annotations
+                .iter()
+                .any(|a| a.image.as_ref().is_some_and(|b| b.stamp_name().is_some()))
+        {
+            return Err(Error::Invalid(
+                "Named stamps require project version 23".into(),
+            ));
+        }
         if self.version < 22
             && self
                 .annotations

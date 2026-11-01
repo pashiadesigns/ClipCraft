@@ -7,7 +7,7 @@ use std::sync::Arc;
 fn vector_stamp_colors_are_visible_and_passive_without_image_crop_controls() {
     let ctx = egui::Context::default();
     crate::shell::configure(&ctx);
-    let mut a = capture_core::stamps::builtin::find("builtin-check-circle")
+    let mut a = capture_core::stamps::builtin::find("builtin-five-color")
         .unwrap()
         .payload()
         .unwrap()
@@ -28,7 +28,14 @@ fn vector_stamp_colors_are_visible_and_passive_without_image_crop_controls() {
     };
     let first = frame(&mut a);
     let output = frame(&mut a);
-    for text in ["Vector stamp", "Color 1", "Color 2"] {
+    for text in [
+        "Vector stamp",
+        "Color 1",
+        "Color 2",
+        "Color 3",
+        "Color 4",
+        "Color 5",
+    ] {
         assert!(crate::color_widgets::tests::text_rect(&output.shapes, text).is_some());
     }
     assert!(crate::color_widgets::tests::text_rect(&output.shapes, "Crop image").is_none());
