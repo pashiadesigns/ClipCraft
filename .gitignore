@@ -12,6 +12,7 @@
 /docs/*
 !/docs/building.md
 !/docs/security-model.md
+!/docs/security-review-2026-11-01.md
 !/docs/github-releases.md
 !/docs/designcraft-reuse-audit.md
 **/.openai/

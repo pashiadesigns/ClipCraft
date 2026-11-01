@@ -2,7 +2,7 @@
 
 Updated: 2026-11-01
 
-Approved portable preview.2 published on GitHub: current editor/capture refinements, templates, vector PDF, Library operations/recovery, thumbnail replacement and Blank sections. All release review gates closed; T1 remains a known defect deferred under UX-086. Broader engineering/reference work remains separately tracked; automation paused.
+Preview.2 remains the immutable unsigned release. Bounded internal security review and individual Microsoft Artifact Signing registration are authorized; Azure sign-in remains pending. Test/documentation changes do not constitute a new desktop release. Automation remains paused; no broader development restart.
 
 Generated from roadmap.json. Edit that source and run node scripts/build.mjs; do not edit this generated view.
 
@@ -241,6 +241,10 @@ Generated from roadmap.json. Edit that source and run node scripts/build.mjs; do
 | FILE-012: Vector-preserving PDF export | Files | Shipped | Delivered |
 | UX-086: Inactive cross-monitor right-border defect | Experience | Deferred | Later |
 | CREATE-005: Empty editable guide sections | Creation | Shipped | Delivered |
+| ENG-006: Security regression checks and dated internal review | Engineering | Needs verification | Next |
+| ENG-007: Verified publisher signing and major-release installer | Engineering | In progress | Next |
+| ENG-008: Protect release branch, version tags and signing access | Engineering | Planned | Next |
+| ENG-009: Unmaintained dependencies and adversarial parser testing | Engineering | Planned | Next |
 
 ## Completion checks and evidence
 
@@ -4117,3 +4121,51 @@ Completion: Verify insert, resize, reorder, duplicate/delete, one-step Undo, for
 - Evidence: Released https://github.com/pashiadesigns/ClipCraft/releases/tag/v0.1.0-preview.2 from c25acbb2093a569c8da0035bd96d0048090bcbda. 596 Rust tests/fmt/Clippy, 13 script checks, 43 exact optimized comparisons (42 unchanged), six PDF fixtures and production UI/input checks; user release acceptance with T1 explicitly deferred. Hosted ZIP SHA256 4a53c410e06edaa0d42955f6cbf3ceb635e9513b837db2eeef010a7528dd7dd1.
 - Release: 0.1.0-preview.2
 - Depends on: CREATE-002
+
+### ENG-006: Security regression checks and dated internal review
+
+**Needs verification** · Next · Updated 2026-11-01
+
+AI-assisted source and exact-package review with six synthetic trust-boundary regressions. Internal review is complete locally; tests await a future desktop release. This is not independent security certification.
+
+Completion: Record exact reviewed source/package, run malformed-input and opaque-redaction checks, dependency and antivirus scans, document limitations, and qualify the added regressions in hosted CI and a later release.
+
+- Evidence: 2026-11-01: 602 Rust tests/fmt/Clippy and 13 script checks pass; Defender found no threats in exact hosted preview.2 package; fresh RustSec scan has zero known vulnerabilities and five unsuppressed maintenance warnings. docs/security-review-2026-11-01.md; crates/core/tests/security_inputs.rs.
+- Release not scheduled; priorities are not version promises.
+- Depends on: ENG-005
+
+### ENG-007: Verified publisher signing and major-release installer
+
+**In progress** · Next · Updated 2026-11-01
+
+Microsoft Artifact Signing individual registration, timestamped application signing and a qualified major-release Windows installer. Portable ZIPs and source remain available.
+
+Completion: Complete supported Azure subscription and legal-identity validation; restrict federated signing permission; verify signed payload and installer, upgrade/uninstall behavior, final hashes and provenance before publication.
+
+- Evidence: 2026-11-01: user selected individual Microsoft signing. Official setup/pricing reviewed; awaiting user Azure sign-in. No signing account, identity submission, charge, certificate profile or signed release confirmed. Existing previews remain unsigned. docs/github-releases.md.
+- Release not scheduled; priorities are not version promises.
+- Depends on: ENG-005
+
+### ENG-008: Protect release branch, version tags and signing access
+
+**Planned** · Next · Updated 2026-11-01
+
+Required checks and restrictions on force pushes/deletions, protected version tags and a narrowly scoped signing release environment before enabling signed releases.
+
+Completion: Configure agreed policies and verify they prevent bypass/rewrite while allowing the intended release workflow; keep signing permissions narrowly scoped and federated.
+
+- Evidence: 2026-11-01 live GitHub inspection: main has no branch protection and repository rulesets are empty. Secret scanning, push protection and dependency security updates are enabled; zero open dependency/secret alerts. No access policy changed in this review.
+- Release not scheduled; priorities are not version promises.
+- Depends on: ENG-005
+
+### ENG-009: Unmaintained dependencies and adversarial parser testing
+
+**Planned** · Next · Updated 2026-11-01
+
+Prioritize the Windows font parser maintenance warning; evaluate maintained alternatives and compatibility. Add sustained fuzzing and memory/CPU tests for untrusted project, clipboard and image/font data.
+
+Completion: Document dependency disposition with no silent suppressions, qualify replacements, run bounded adversarial tests and independently review Windows FFI where assurance requirements demand it.
+
+- Evidence: 2026-11-01 RustSec: ttf-parser 0.25.1 and paste 1.0.15 maintenance warnings; zbus_names/zvariant/zvariant_derive warnings outside resolved Windows inventory. Six new synthetic security regression tests pass, but no sustained fuzzing or parser sandbox is claimed.
+- Release not scheduled; priorities are not version promises.
+- Depends on: ENG-005

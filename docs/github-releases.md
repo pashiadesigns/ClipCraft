@@ -57,8 +57,16 @@ for 5,000 signatures. It requires a supported paid Azure subscription and identi
 validation; individual developers must be in the US or Canada. The verified legal
 publisher identity appears on certificates. SignPath Foundation is a possible free
 option for qualifying open-source projects, subject to approval and its policies;
-its certificate publisher is SignPath Foundation. No provider has been selected,
-account created, identity submitted, or payment authorized for this work.
+its certificate publisher is SignPath Foundation. On 2026-11-01 the maintainer
+selected Microsoft Artifact Signing and individual publisher verification.
+Registration is awaiting the maintainer's Microsoft/Azure sign-in; no signing
+account, identity validation, subscription charge or certificate profile has
+been confirmed. Published previews remain unsigned.
+
+Before enabling signed releases, protect the release branch and version tags,
+configure narrowly scoped federated signing permission, and qualify the signed
+package. The dated [security review](security-review-2026-11-01.md) records the
+current repository controls and remaining gaps.
 
 Once configured, a protected release workflow should sign and timestamp application
 binaries, build and sign the MSI, verify both signatures, then generate the final

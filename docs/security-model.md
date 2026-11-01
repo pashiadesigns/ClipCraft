@@ -19,6 +19,14 @@ Cropping, blurring and redacting editable objects do not remove original pixels
 from a project. Share a flattened export when concealing content, and inspect that
 export. Do not distribute the editable project as a secure redaction.
 
+Use opaque Redact for information that must be removed from the shared image;
+blur and pixelation can leave information inferable. The Library may keep up to
+three previous revisions per item within a global 256 MiB recovery budget.
+Recovery copies, backups and editable clipboard payloads can therefore retain
+content no longer visible in the current canvas. Saved templates are editable
+documents too: replacing image frames with placeholders is not a data-sanitizing
+operation and does not clear background/original pixels, text, stamps or cursors.
+
 ## System integration
 
 Clipboard commands exchange images, text and editable object payloads with the OS
@@ -58,3 +66,8 @@ The scan covers the full cross-platform lockfile; the zbus/zvariant entries are
 outside the resolved Windows dependency inventory. Maintenance warnings have not
 been suppressed. Reassess replacements in a dependency-maintenance batch and
 consult the latest scan; this dated result is not a continuing guarantee.
+
+The [2026-11-01 security review](security-review-2026-11-01.md) records a fresh
+dependency scan, a Defender scan of the published preview.2 package, synthetic
+input/export tests, reviewed trust boundaries and remaining work. It is an
+AI-assisted internal review, not independent security certification.
