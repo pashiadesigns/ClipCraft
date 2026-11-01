@@ -1,6 +1,8 @@
 use crate::{Annotation, Command, Editor, Kind, egui, property_layout};
 use capture_core::image_frame::ImageView;
 mod context;
+mod shape_frames;
+pub(super) use shape_frames::content_mode;
 
 #[cfg(test)]
 mod tests;
@@ -131,12 +133,14 @@ pub(super) fn properties(ui: &mut egui::Ui, a: &mut Annotation) {
     {
         *a = edited;
     }
-    let max = a.max_corner_radius();
-    property_layout::slider(
-        ui,
-        "Corners",
-        egui::Slider::new(&mut a.corner_radius, 0.0..=max),
-    );
+    if matches!(a.kind, Kind::Image | Kind::Rectangle) {
+        let max = a.max_corner_radius();
+        property_layout::slider(
+            ui,
+            "Corners",
+            egui::Slider::new(&mut a.corner_radius, 0.0..=max),
+        );
+    }
 }
 
 impl Editor {
@@ -258,7 +262,7 @@ impl Editor {
     ) {
         let selected = self
             .selected_annotation()
-            .filter(|a| a.kind == Kind::Image)
+            .filter(|a| a.kind == Kind::Image || a.is_image_frame())
             .map(|a| a.id);
         ui.ctx().data_mut(|d| {
             if d.get_temp::<u64>(crop_mode_key()) != selected {
@@ -360,3 +364,6 @@ impl Editor {
         }
     }
 }
+
+#[cfg(test)]
+mod shape_frames_tests;

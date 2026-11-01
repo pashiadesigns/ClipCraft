@@ -3,8 +3,13 @@ use crate::{Annotation, Document, Error, Kind, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 
+mod pages;
 #[cfg(test)]
 mod tests;
+pub use pages::{PAGE_GAP, PageLayout};
+fn page_zero(page: &usize) -> bool {
+    *page == 0
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -17,6 +22,8 @@ pub enum SectionKind {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Section {
+    #[serde(default, skip_serializing_if = "page_zero")]
+    pub page: usize,
     pub id: u64,
     pub kind: SectionKind,
     pub height: f32,
@@ -28,6 +35,8 @@ pub struct Section {
 #[serde(deny_unknown_fields)]
 pub struct Layout {
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pages: Option<PageLayout>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub template: Option<String>,
     pub top: f32,
     pub sections: Vec<Section>,
@@ -35,6 +44,24 @@ pub struct Layout {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "action", rename_all = "snake_case")]
 pub enum Action {
+    AddPage {
+        page: usize,
+        copy: bool,
+    },
+    DeletePage {
+        page: usize,
+    },
+    SectionPage {
+        id: u64,
+        page: usize,
+        copy: bool,
+    },
+    PageSize {
+        width: u32,
+        height: u32,
+        auto_overflow: bool,
+    },
+    Paginate,
     Insert {
         after: Option<u64>,
         kind: SectionKind,
@@ -60,13 +87,14 @@ pub enum Action {
 }
 impl Layout {
     pub fn spans(&self) -> Vec<(u64, f32, f32)> {
-        let mut y = self.top;
+        let mut positions = vec![self.top; self.page_count()];
         self.sections
             .iter()
             .map(|s| {
-                let top = y;
-                y += s.height;
-                (s.id, top, y)
+                let slot = s.page.min(positions.len() - 1);
+                let top = positions[slot] + self.page_origin(slot);
+                positions[slot] += s.height;
+                (s.id, top, top + s.height)
             })
             .collect()
     }
@@ -82,6 +110,7 @@ impl Layout {
         {
             return Err(Error::Invalid("Invalid guide section layout".into()));
         }
+        self.validate_pages(document)?;
         let mut sections = BTreeSet::new();
         let mut objects = BTreeSet::new();
         for s in &self.sections {
@@ -126,7 +155,10 @@ impl Layout {
 }
 impl Document {
     pub(crate) fn reconcile_guide(&mut self) {
-        if self.annotations.is_empty() && self.raster.is_some() {
+        if self.annotations.is_empty()
+            && self.raster.is_some()
+            && self.guide.as_ref().is_none_or(|g| g.pages.is_none())
+        {
             self.guide = None;
             return;
         }
@@ -145,10 +177,11 @@ impl Document {
             for a in self.annotations.iter().filter(|a| !owned.contains(&a.id)) {
                 let (lo, hi) = a.bounds();
                 let center = (lo[1] + hi[1]) * 0.5;
-                if let Some((id, _, _)) = spans
-                    .iter()
-                    .find(|(_, top, bottom)| center >= *top && center < *bottom)
-                {
+                if let Some((id, _, _)) = spans.iter().find(|(_, top, bottom)| {
+                    center >= *top
+                        && center < *bottom
+                        && (layout.pages.is_none() || (lo[1] >= *top - 1. && hi[1] <= *bottom + 1.))
+                }) {
                     layout
                         .sections
                         .iter_mut()
@@ -162,6 +195,16 @@ impl Document {
     }
     pub fn edit_guide(&self, action: &Action) -> Result<Self> {
         self.validate()?;
+        if matches!(
+            action,
+            Action::AddPage { .. }
+                | Action::DeletePage { .. }
+                | Action::SectionPage { .. }
+                | Action::PageSize { .. }
+                | Action::Paginate
+        ) {
+            return self.edit_pages(action);
+        }
         let mut next = self.clone();
         let mut layout = next
             .guide
@@ -274,6 +317,11 @@ impl Document {
                 layout.sections.insert(
                     at,
                     Section {
+                        page: if at == 0 {
+                            0
+                        } else {
+                            layout.sections[at - 1].page
+                        },
                         id: next_section,
                         kind,
                         height,
@@ -343,10 +391,25 @@ impl Document {
                 if destination >= layout.sections.len() {
                     return Err(Error::Invalid("Invalid section destination".into()));
                 }
+                if layout.sections[at].page != layout.sections[destination].page {
+                    return Err(Error::Invalid(
+                        "Use Move to to move a section between pages".into(),
+                    ));
+                }
                 let section = layout.sections.remove(at);
                 layout.sections.insert(destination, section);
             }
+            _ => unreachable!(),
         }
+        self.finish_guide(next, layout, old_tops)
+    }
+    fn finish_guide(
+        &self,
+        mut next: Document,
+        mut layout: Layout,
+        old_tops: BTreeMap<u64, f32>,
+    ) -> Result<Self> {
+        layout.overflow_sections()?;
         for (id, top, _) in layout.spans() {
             let delta = top - old_tops[&id];
             if delta == 0. {
@@ -391,7 +454,10 @@ impl Document {
             .iter()
             .map(|a| a.bounds().1[1])
             .fold(0., f32::max);
-        next.height = bottom.max(objects_bottom + 12.).ceil() as u32;
+        next.height = layout.pages.as_ref().map_or_else(
+            || bottom.max(objects_bottom + 12.).ceil() as u32,
+            |_| layout.canvas_height(),
+        );
         crate::validate_dimensions(next.width, next.height)?;
         next.auto_canvas_base = None;
         next.guide = Some(layout);
@@ -402,3 +468,6 @@ impl Document {
         Ok(next)
     }
 }
+
+#[cfg(test)]
+mod pages_tests;

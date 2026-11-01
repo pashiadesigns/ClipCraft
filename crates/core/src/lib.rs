@@ -13,7 +13,7 @@ use std::{
 };
 
 pub const MAX_PIXELS: u64 = 25_000_000;
-pub const MAX_PROJECT_VERSION: u32 = 26;
+pub const MAX_PROJECT_VERSION: u32 = 27;
 mod arrow;
 pub mod bitmap;
 pub mod callout;
@@ -283,6 +283,14 @@ impl Document {
     /// Promote documents that use newer editable annotation properties.
     /// Old applications reject these projects instead of silently losing rules.
     pub fn promote_features(&mut self) {
+        if self.guide.as_ref().is_some_and(|g| g.pages.is_some())
+            || self
+                .annotations
+                .iter()
+                .any(|a| a.is_shape() && a.image.is_some())
+        {
+            self.version = self.version.max(27);
+        }
         if self.guide.as_ref().is_some_and(|g| {
             g.sections
                 .iter()
@@ -547,7 +555,22 @@ impl Document {
                 ));
             }
             match (annotation.kind, &annotation.image) {
-                (Kind::Image, Some(bitmap)) if self.version >= 8 => {
+                (_, Some(bitmap))
+                    if (annotation.kind == Kind::Image && self.version >= 8)
+                        || (annotation.is_shape() && self.version >= 27) =>
+                {
+                    if annotation.is_shape()
+                        && (annotation.text.is_some() || bitmap.is_cursor() || bitmap.is_stamp())
+                    {
+                        return Err(Error::Invalid(
+                            "Shape frames contain an image instead of text".into(),
+                        ));
+                    }
+                    if bitmap.has_frame_opacity() && (!annotation.is_shape() || self.version < 27) {
+                        return Err(Error::Invalid(
+                            "Separate image opacity requires a shape frame".into(),
+                        ));
+                    }
                     bitmap.validate_cursor()?;
                     bitmap.validate_view()?;
                     if bitmap.is_placeholder() && self.version < 25 {
@@ -832,6 +855,10 @@ fn render_annotation(image: &mut RgbaImage, a: &Annotation) {
 }
 
 fn render_annotation_ink(image: &mut RgbaImage, a: &Annotation) {
+    if a.is_shape() && a.image.is_some() {
+        display::render_rotated(image, a);
+        return;
+    }
     if a.analysis.is_some() {
         return;
     }

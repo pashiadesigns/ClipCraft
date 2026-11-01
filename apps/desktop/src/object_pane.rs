@@ -137,6 +137,16 @@ fn color_name(c: [u8; 4]) -> &'static str {
     }
 }
 fn label(a: &Annotation) -> String {
+    if a.is_shape() && a.is_image_frame() {
+        return format!(
+            "{} image frame",
+            match a.kind {
+                Kind::Ellipse => "Ellipse",
+                Kind::Polygon => "Polygon",
+                _ => "Rectangle",
+            }
+        );
+    }
     match a.kind {
         Kind::Image => {
             if let Some(b) = a.image.as_ref().filter(|b| b.is_stamp()) {

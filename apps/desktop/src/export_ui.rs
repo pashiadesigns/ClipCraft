@@ -166,7 +166,7 @@ impl Editor {
                         egui::TextureOptions::LINEAR,
                     )
                 });
-                let pages = d.options.page.pages([d.pixels.width(), d.pixels.height()]);
+                let pages = d.options.page.document_pages(&d.document);
                 let (rect, _) =
                     ui.allocate_exact_size(egui::vec2(520., 300.), egui::Sense::hover());
                 if paged {
@@ -336,7 +336,7 @@ impl Editor {
                         });
                 match owner
                     .ok_or("Cannot access editor window.".into())
-                    .and_then(|owner| windows::print(owner, &d.pixels, &d.options))
+                    .and_then(|owner| windows::print(owner, &d.pixels, &d.document, &d.options))
                 {
                     Ok(true) => {
                         self.status = "Print job sent.".into();

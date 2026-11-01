@@ -123,7 +123,7 @@ impl Editor {
         // Reserve workspace gutters for guide section actions; never place
         // those buttons over the screenshot or include them in its export.
         let image_viewport = if self.session.document.guide.is_some() {
-            viewport.shrink2(egui::vec2(34., 0.))
+            viewport.shrink2(egui::vec2(34., 40.))
         } else {
             viewport
         };
@@ -405,6 +405,14 @@ impl Editor {
                 if !entered_group {
                     self.click_selection(hit, additive);
                 }
+                if self
+                    .selected_annotation()
+                    .is_some_and(|a| a.is_image_frame())
+                {
+                    ui.ctx().data_mut(|d| {
+                        d.remove::<u64>(egui::Id::unique("frame-content-mode"));
+                    });
+                }
                 self.auto_activate_selected_tool();
                 if self.selected.is_none() && !additive && self.tool == Some(Kind::Eraser) {
                     let p = point(p);
@@ -415,7 +423,11 @@ impl Editor {
                 }
             }
             if response.double_clicked() {
-                if entered_group || self.tool.is_none() {
+                if let Some(a) = self.selected_annotation().filter(|a| a.is_image_frame()) {
+                    ui.ctx()
+                        .data_mut(|d| d.insert_temp(egui::Id::unique("frame-content-mode"), a.id));
+                    self.shell.property_tab = crate::shell::PropertyTab::Tool;
+                } else if entered_group || self.tool.is_none() {
                     self.activate_selected_tool();
                     // Text editing is explicit on a subsequent double click;
                     // entering a group first exposes the child's own handles.
@@ -545,11 +557,12 @@ impl Editor {
                                             | Handle::BottomLeft
                                             | Handle::BottomRight
                                     )
-                                }) && original.kind == Kind::Image
+                                }) && (original.kind == Kind::Image
+                                    || original.is_image_frame())
                                     && original.image.as_ref().is_some_and(|b| !b.is_cursor())
                                     && cropping,
                                 image_content: handle.is_none()
-                                    && original.kind == Kind::Image
+                                    && (original.kind == Kind::Image || original.is_image_frame())
                                     && original.image.as_ref().is_some_and(|b| !b.is_cursor())
                                     && (cropping || pan_handle),
                                 preview: original.clone(),
@@ -867,6 +880,7 @@ impl Editor {
         }
         self.canvas_pointer(ui, &response, transform, interactive);
         self.show_image_frame_buttons(ui, transform);
+        self.frame_file_drop(ui, transform);
         self.show_guide_controls(ui, transform);
         self.show_inline_text(ui, transform);
         self.paint_rotation_node(ui, transform);

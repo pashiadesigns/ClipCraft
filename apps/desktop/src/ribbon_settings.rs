@@ -167,6 +167,12 @@ impl Editor {
             );
         });
         divider(ui, height);
+        if self.session.document.guide.is_some() {
+            group(ui, "Step Guide", 142., height, |ui| {
+                self.guide_page_settings(ui)
+            });
+            divider(ui, height);
+        }
         group(ui, "Canvas", 66.0, height, |ui| {
             self.settings_grid(
                 ui,
@@ -200,10 +206,12 @@ impl Editor {
                         let response =
                             command_icon(ui, action.label(), action.enabled(self), selected);
                         if action == Action::Snapping {
-                            egui::Popup::menu(&response).show(|ui| {
-                                ui.set_width(260.);
-                                self.quick_controls.snapping_popup(ui);
-                            });
+                            egui::Popup::menu(&response)
+                                .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
+                                .show(|ui| {
+                                    ui.set_width(260.);
+                                    self.quick_controls.snapping_popup(ui);
+                                });
                         } else if response.clicked() {
                             self.run_settings_action(action);
                         }
@@ -552,6 +560,63 @@ mod tests {
                 ],
             );
         }
+    }
+    #[test]
+    fn snapping_popup_stays_open_for_both_switches_and_closes_outside() {
+        use crate::property_layout::tests::PaintedOutput;
+        let ctx = egui::Context::default();
+        let mut e = crate::canvas::tests::editor(&ctx);
+        crate::shell::configure(&ctx);
+        let render = |e: &mut Editor, events: Vec<Event>| {
+            PaintedOutput(ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        egui::vec2(600., 400.),
+                    )),
+                    focused: true,
+                    events,
+                    ..Default::default()
+                },
+                |ui| {
+                    e.settings_grid(ui, &[Action::Snapping], 1);
+                },
+            ))
+        };
+        let click_at = |e: &mut Editor, p| {
+            for pressed in [true, false] {
+                render(
+                    e,
+                    vec![
+                        Event::PointerMoved(p),
+                        Event::PointerButton {
+                            pos: p,
+                            pressed,
+                            button: PointerButton::Primary,
+                            modifiers: Modifiers::NONE,
+                        },
+                    ],
+                );
+            }
+        };
+        render(&mut e, vec![]);
+        click_at(&mut e, egui::pos2(20., 20.));
+        let before = e.quick_controls.snapping();
+        let output = render(&mut e, vec![]);
+        let p = crate::color_widgets::tests::text_rect(&output.shapes, "Enable snapping")
+            .unwrap()
+            .center();
+        click_at(&mut e, p);
+        assert_ne!(e.quick_controls.snapping(), before);
+        assert!(egui::Popup::is_any_open(&ctx));
+        let output = render(&mut e, vec![]);
+        let p = crate::color_widgets::tests::text_rect(&output.shapes, "Infinite candidates")
+            .unwrap()
+            .center();
+        click_at(&mut e, p);
+        assert!(egui::Popup::is_any_open(&ctx));
+        click_at(&mut e, egui::pos2(560., 360.));
+        assert!(!egui::Popup::is_any_open(&ctx));
     }
     #[test]
     fn relocated_icon_actions_use_document_commands_and_keep_view_changes_out_of_undo() {

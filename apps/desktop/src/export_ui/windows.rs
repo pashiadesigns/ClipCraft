@@ -6,6 +6,7 @@ use windows_sys::Win32::{
 pub(super) fn print(
     owner: isize,
     pixels: &image::RgbaImage,
+    document: &capture_core::Document,
     options: &capture_core::export::Options,
 ) -> Result<bool, String> {
     unsafe {
@@ -54,7 +55,7 @@ pub(super) fn print(
                 ..options.page
             };
             let pages = settings
-                .pages([pixels.width(), pixels.height()])
+                .document_pages(document)
                 .map_err(|e| e.to_string())?;
             let title = "ClipCraft image\0".encode_utf16().collect::<Vec<_>>();
             let info = DOCINFOW {

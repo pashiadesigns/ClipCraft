@@ -8,6 +8,7 @@ pub mod effect_patch;
 pub mod vector;
 mod viewport;
 pub use viewport::Viewport;
+pub(crate) use viewport::body_path as frame_body_path;
 pub use viewport::render_annotation_preview;
 pub(crate) use viewport::{render_rotated, render_vector};
 

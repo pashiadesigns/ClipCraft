@@ -360,8 +360,8 @@ pub(super) fn encode(document: &Document, options: &Options) -> Result<Vec<u8>> 
                     hi[1] as f64 + reach,
                 )
                 .intersect(bounds);
-                let raster = a.kind == crate::Kind::Image
-                    && !a.image.as_ref().is_some_and(|b| b.vector().is_some());
+                let raster =
+                    a.image.is_some() && !a.image.as_ref().is_some_and(|b| b.vector().is_some());
                 if raster || future.iter().any(|p| p.intersect(r).area() > 0.) {
                     let x = r.x0.floor().max(0.) as i32;
                     let y = r.y0.floor().max(0.) as i32;
@@ -373,17 +373,41 @@ pub(super) fn encode(document: &Document, options: &Options) -> Result<Vec<u8>> 
                     let mut pixels = RgbaImage::new(w, h);
                     let mut a = a.clone();
                     a.shadow = None;
-                    crate::display::render_vector(
-                        &mut pixels,
-                        &a,
-                        crate::display::Viewport {
-                            size: [w, h],
-                            origin: [x as f64, y as f64],
-                            scale: 1.,
-                        },
-                    );
+                    let shape_frame = a.is_shape()
+                        && a.is_image_frame()
+                        && !future.iter().any(|p| p.intersect(r).area() > 0.);
+                    if shape_frame {
+                        let mut shell = a.clone();
+                        shell.image = None;
+                        shell.color[3] = 0;
+                        vector(&mut pdf, &mut content, &shell, bounds)?;
+                        crate::bitmap::render(
+                            &mut pixels,
+                            &a,
+                            crate::display::Viewport {
+                                size: [w, h],
+                                origin: [x as f64, y as f64],
+                                scale: 1.,
+                            },
+                        );
+                    } else {
+                        crate::display::render_vector(
+                            &mut pixels,
+                            &a,
+                            crate::display::Viewport {
+                                size: [w, h],
+                                origin: [x as f64, y as f64],
+                                scale: 1.,
+                            },
+                        );
+                    }
                     erase(&mut pixels, [x, y], &future);
                     image(&mut pdf, &mut content, &pixels, [x, y])?;
+                    if shape_frame {
+                        a.image = None;
+                        a.fill = None;
+                        vector(&mut pdf, &mut content, &a, bounds)?;
+                    }
                 } else {
                     vector(&mut pdf, &mut content, &a, bounds)?;
                 }
@@ -392,7 +416,7 @@ pub(super) fn encode(document: &Document, options: &Options) -> Result<Vec<u8>> 
     }
     let drawing = pdf.form(&content, bounds, false)?;
     let mut kids = vec![];
-    for page in options.page.pages([document.width, document.height])? {
+    for page in options.page.document_pages(document)? {
         let [dx, dy, dw, dh] = page.destination;
         let scale = dw / page.source[2] as f64;
         let page_content = format!(

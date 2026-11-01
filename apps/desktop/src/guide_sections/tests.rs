@@ -78,6 +78,153 @@ fn button(pos: egui::Pos2, pressed: bool) -> egui::Event {
 }
 
 #[test]
+fn page_settings_apply_presets_and_overflow_toggle_as_one_undo() {
+    let ctx = egui::Context::default();
+    crate::shell::configure(&ctx);
+    let mut e = crate::canvas::tests::editor(&ctx);
+    e.session = Session::new(
+        capture_core::templates::build(
+            "two-steps",
+            "Layout",
+            &[],
+            capture_core::templates::Scale::Fill,
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    let before = serde_json::to_vec(&e.session.document).unwrap();
+    let render = |e: &mut Editor, events| {
+        PaintedOutput(ctx.run_ui(
+            egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    egui::vec2(640., 500.),
+                )),
+                events,
+                focused: true,
+                ..Default::default()
+            },
+            |ui| {
+                ui.set_width(142.);
+                e.guide_page_settings(ui);
+            },
+        ))
+    };
+    let click = |e: &mut Editor, label: &str| {
+        let output = render(e, vec![]);
+        let p = crate::color_widgets::tests::text_rect(&output.shapes, label)
+            .unwrap_or_else(|| panic!("missing {label}"))
+            .center();
+        for pressed in [true, false] {
+            render(e, vec![egui::Event::PointerMoved(p), button(p, pressed)]);
+        }
+    };
+    render(&mut e, vec![]);
+    click(&mut e, "Page size…");
+    click(&mut e, "A4");
+    click(&mut e, "Automatically add overflow pages");
+    assert!(egui::Popup::is_any_open(&ctx));
+    click(&mut e, "Apply");
+    let pages = e
+        .session
+        .document
+        .guide
+        .as_ref()
+        .unwrap()
+        .pages
+        .as_ref()
+        .unwrap();
+    assert_eq!(pages.size, [794, 1123]);
+    assert!(!pages.auto_overflow);
+    e.execute(Command::Undo);
+    assert_eq!(serde_json::to_vec(&e.session.document).unwrap(), before);
+}
+
+#[test]
+fn page_layout_and_section_destination_menus_are_visible() {
+    let ctx = egui::Context::default();
+    crate::shell::configure(&ctx);
+    let mut e = crate::canvas::tests::editor(&ctx);
+    let d = capture_core::templates::build(
+        "two-steps",
+        "Synthetic guide",
+        &[],
+        capture_core::templates::Scale::Fill,
+    )
+    .unwrap()
+    .edit_guide(&Action::PageSize {
+        width: 900,
+        height: 550,
+        auto_overflow: true,
+    })
+    .unwrap();
+    e.session = Session::new(d).unwrap();
+    e.tool = None;
+    e.needs_render = true;
+    let first = frame(&ctx, &mut e, vec![]);
+    let output = frame(&ctx, &mut e, vec![]);
+    assert!(crate::color_widgets::tests::text_rect(&output.shapes, "Add Page").is_some());
+    assert!(crate::color_widgets::tests::text_rect(&output.shapes, "Delete Page").is_some());
+    if let Ok(dir) = std::env::var("CLIPCRAFT_FRAME_PAGES_UI") {
+        dump_meshes(&ctx, &dir, "guide-pages", first, output);
+    }
+    let t = e.view.current_transform().unwrap();
+    let p = controls(&e.session.document, t)[0].menu.center();
+    for pressed in [true, false] {
+        frame(
+            &ctx,
+            &mut e,
+            vec![egui::Event::PointerMoved(p), button(p, pressed)],
+        );
+    }
+    let output = frame(&ctx, &mut e, vec![]);
+    for label in ["Move to", "Copy to"] {
+        assert!(
+            crate::color_widgets::tests::text_rect(&output.shapes, label).is_some(),
+            "{label}"
+        );
+    }
+}
+
+#[test]
+fn page_buttons_add_blank_confirm_delete_and_restore_with_undo() {
+    let ctx = egui::Context::default();
+    crate::shell::configure(&ctx);
+    let mut e = crate::canvas::tests::editor(&ctx);
+    e.session = Session::new(fixture()).unwrap();
+    e.tool = None;
+    e.needs_render = true;
+    frame(&ctx, &mut e, vec![]);
+    let click = |e: &mut Editor, label: &str| {
+        let output = frame(&ctx, e, vec![]);
+        let p = crate::color_widgets::tests::text_rect(&output.shapes, label)
+            .unwrap_or_else(|| panic!("missing {label}"))
+            .center();
+        for pressed in [true, false] {
+            frame(
+                &ctx,
+                e,
+                vec![egui::Event::PointerMoved(p), button(p, pressed)],
+            );
+        }
+    };
+    click(&mut e, "Add Page");
+    click(&mut e, "Blank Page");
+    assert_eq!(e.session.document.guide.as_ref().unwrap().page_count(), 2);
+    let before = serde_json::to_vec(&e.session.document).unwrap();
+    click(&mut e, "Delete Page");
+    click(&mut e, "Cancel");
+    assert_eq!(serde_json::to_vec(&e.session.document).unwrap(), before);
+    click(&mut e, "Delete Page");
+    click(&mut e, "Delete");
+    assert_eq!(e.session.document.guide.as_ref().unwrap().page_count(), 1);
+    // Deleting the original content page keeps the remaining blank page editable.
+    assert!(e.session.document.annotations.is_empty());
+    e.execute(Command::Undo);
+    assert_eq!(serde_json::to_vec(&e.session.document).unwrap(), before);
+}
+
+#[test]
 fn bottom_handle_previews_reflow_commits_on_release_and_undoes_once() {
     let ctx = egui::Context::default();
     crate::shell::configure(&ctx);

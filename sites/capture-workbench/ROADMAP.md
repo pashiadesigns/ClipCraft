@@ -245,6 +245,9 @@ Generated from roadmap.json. Edit that source and run node scripts/build.mjs; do
 | ENG-007: Verified publisher signing and major-release installer | Engineering | Deferred | Later |
 | ENG-008: Protect release branch, version tags and signing access | Engineering | Planned | Next |
 | ENG-009: Unmaintained dependencies and adversarial parser testing | Engineering | Planned | Next |
+| EDIT-087: External image drops into shape frames | Editing | Needs verification | Next |
+| EDIT-088: Multiple pages for templates and step guides | Editing | Needs verification | Next |
+| UX-087: Keep canvas snapping settings open while editing | Experience | Needs verification | Next |
 
 ## Completion checks and evidence
 
@@ -4172,3 +4175,42 @@ Completion: Document dependency disposition with no silent suppressions, qualify
 - Evidence: 2026-11-01 RustSec: ttf-parser 0.25.1 and paste 1.0.15 maintenance warnings; zbus_names/zvariant/zvariant_derive warnings outside resolved Windows inventory. Six new synthetic security regression tests pass, but no sustained fuzzing or parser sandbox is claimed.
 - Release not scheduled; priorities are not version promises.
 - Depends on: ENG-005
+
+### EDIT-087: External image drops into shape frames
+
+**Needs verification** · Next · Updated 2026-11-01
+
+Drop a local image into an editable frame with target feedback. Convert rectangle, ellipse and polygon shapes to image frames and back; retain geometry, outline, fills, crop and source pixels. Single-click shape and double-click content properties; dedicated frame presets.
+
+Completion: Shape masks, crop, file-drop targeting, lock handling, one-step Undo and persistence pass. Production properties and previews are inspected. Native external drops verified before shipping.
+
+- Evidence: 2026-11-01 user-authorized bounded batch. Implementation on feature/shape-frames-guide-pages; not released. docs/shape-frames-guide-pages-work.md.
+- Evidence: Core and production egui tests pass for masks, frame conversion/Undo, synthetic file drops, click modes, retained textures, pages, page menus, overflow, PDF and snapping popup. Native Explorer file drop and final review remain pending; no release claim.
+- Provisional target: 0.1.0-preview.3
+- Depends on: EDIT-086
+
+### EDIT-088: Multiple pages for templates and step guides
+
+**Needs verification** · Next · Updated 2026-11-01
+
+Add blank or copied pages, confirm deletion, move/copy sections between pages, set dimensions and automatically move overflow sections to additional pages. Export explicit guide pages in PDF.
+
+Completion: Page and section ownership, resizing, overflow, save/reopen, atomic Undo, PDF page boundaries and production UI are qualified.
+
+- Evidence: 2026-11-01 user-authorized bounded batch. Implementation on feature/shape-frames-guide-pages; not released. docs/shape-frames-guide-pages-work.md.
+- Evidence: Core and production egui tests pass for masks, frame conversion/Undo, synthetic file drops, click modes, retained textures, pages, page menus, overflow, PDF and snapping popup. Native Explorer file drop and final review remain pending; no release claim.
+- Provisional target: 0.1.0-preview.3
+- Depends on: EDIT-086
+
+### UX-087: Keep canvas snapping settings open while editing
+
+**Needs verification** · Next · Updated 2026-11-01
+
+Canvas snapping popup remains open when toggling snapping and changing candidate settings.
+
+Completion: Production popup survives an internal toggle and closes on outside click.
+
+- Evidence: 2026-11-01 user-authorized bounded batch. Implementation on feature/shape-frames-guide-pages; not released. docs/shape-frames-guide-pages-work.md.
+- Evidence: Core and production egui tests pass for masks, frame conversion/Undo, synthetic file drops, click modes, retained textures, pages, page menus, overflow, PDF and snapping popup. Native Explorer file drop and final review remain pending; no release claim.
+- Provisional target: 0.1.0-preview.3
+- Depends on: UX-076

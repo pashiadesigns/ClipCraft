@@ -7,6 +7,8 @@ use std::sync::{Arc, OnceLock};
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Bitmap {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    frame_opacity: Option<u8>,
     raster: Arc<RasterImage>,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     placeholder: bool,
@@ -40,10 +42,22 @@ impl PartialEq for Bitmap {
             && self.cursor_invert == other.cursor_invert
             && self.view == other.view
             && self.focus == other.focus
+            && self.frame_opacity == other.frame_opacity
     }
 }
 
 impl Bitmap {
+    pub fn frame_opacity(&self) -> u8 {
+        self.frame_opacity.unwrap_or(255)
+    }
+    pub fn with_frame_opacity(&self, value: u8) -> Self {
+        let mut next = self.clone();
+        next.frame_opacity = (value != 255).then_some(value);
+        next
+    }
+    pub(crate) fn has_frame_opacity(&self) -> bool {
+        self.frame_opacity.is_some()
+    }
     pub fn is_placeholder(&self) -> bool {
         self.placeholder
     }
@@ -168,6 +182,7 @@ impl Bitmap {
             cursor_invert: None,
             view: None,
             focus: None,
+            frame_opacity: None,
             decoded: OnceLock::new(),
             opaque: OnceLock::new(),
         };
@@ -285,6 +300,7 @@ fn render_impl(target: &mut RgbaImage, a: &Annotation, view: Viewport, fast: boo
         return;
     }
     if fast
+        && !matches!(a.kind, Kind::Ellipse | Kind::Polygon)
         && a.rotation_degrees == 0.0
         && !bitmap.is_cursor()
         && *bitmap
@@ -326,8 +342,7 @@ fn render_impl(target: &mut RgbaImage, a: &Annotation, view: Viewport, fast: boo
                 {
                     continue;
                 }
-                let coverage =
-                    crate::image_frame::round_coverage(local, extent, a.corner_radius, view.scale);
+                let coverage = crate::image_frame::coverage(a, local, extent, view.scale);
                 let point = [
                     local[0] * ratio[0] + crop[0] * source.width() as f64 - 0.5,
                     local[1] * ratio[1] + crop[1] * source.height() as f64 - 0.5,
@@ -349,7 +364,9 @@ fn render_impl(target: &mut RgbaImage, a: &Annotation, view: Viewport, fast: boo
             }
             if sum[3] > 0.0 {
                 let rgba = [0, 1, 2].map(|i| (sum[i] / sum[3]).round().clamp(0.0, 255.0) as u8);
-                let alpha = (sum[3] * f64::from(a.color[3])).round().clamp(0.0, 255.0) as u8;
+                let alpha = (sum[3] * f64::from(a.image_opacity()))
+                    .round()
+                    .clamp(0.0, 255.0) as u8;
                 crate::text::composite(
                     target.get_pixel_mut(x, y),
                     [rgba[0], rgba[1], rgba[2], alpha],
@@ -424,14 +441,16 @@ fn render_upright_opaque(
                 sum[3] += w;
             }
             let rgb = [0, 1, 2].map(|i| (sum[i] / sum[3]).round().clamp(0., 255.) as u8);
-            let alpha = (sum[3] * f64::from(a.color[3])).round().clamp(0., 255.) as u8;
+            let alpha = (sum[3] * f64::from(a.image_opacity()))
+                .round()
+                .clamp(0., 255.) as u8;
             let coverage = if a.corner_radius > 0. {
                 let local = [
                     view.origin[0] + (f64::from(left + index as u32) + 0.5) / view.scale
                         - f64::from(min[0]),
                     view.origin[1] + (f64::from(y) + 0.5) / view.scale - f64::from(min[1]),
                 ];
-                crate::image_frame::round_coverage(local, extent, a.corner_radius, view.scale)
+                crate::image_frame::coverage(a, local, extent, view.scale)
             } else {
                 1.
             };

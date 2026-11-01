@@ -265,7 +265,8 @@ impl Scene {
             if !screen.intersects(t.viewport) {
                 continue;
             }
-            if a.kind == Kind::Image
+            if (a.kind == Kind::Image || a.is_image_frame())
+                && a.convex_frame()
                 && a.image.as_ref().is_some_and(|b| b.vector().is_none())
                 && a.rotation_degrees == 0.
                 && a.shadow.is_none()
@@ -297,17 +298,58 @@ impl Scene {
                 let rect = egui::Rect::from_min_max(t.screen_point(min), t.screen_point(max));
                 let [x, y, w, h] = b.view().rect;
                 with_holes(&painter, rect, &holes, |p| {
-                    p.add(
-                        egui::epaint::RectShape::filled(
-                            rect,
-                            (a.corner_radius * t.scale).round().clamp(0., 255.) as u8,
-                            egui::Color32::from_white_alpha(a.color[3]),
-                        )
-                        .with_texture(
-                            texture.id(),
-                            egui::Rect::from_min_max(egui::pos2(x, y), egui::pos2(x + w, y + h)),
-                        ),
-                    );
+                    if a.is_shape() {
+                        let boundary = a.frame_boundary();
+                        let points: Vec<_> = boundary.iter().map(|p| t.screen_point(*p)).collect();
+                        if let Some(fill) = a.fill {
+                            p.add(egui::Shape::convex_polygon(
+                                points.clone(),
+                                egui::Color32::from_rgba_unmultiplied(
+                                    fill[0], fill[1], fill[2], fill[3],
+                                ),
+                                egui::Stroke::NONE,
+                            ));
+                        }
+                        let mut mesh = egui::Mesh::with_texture(texture.id());
+                        for (local, screen) in boundary.iter().zip(&points) {
+                            mesh.vertices.push(egui::epaint::Vertex {
+                                pos: *screen,
+                                uv: egui::pos2(
+                                    x + (local[0] - min[0]) / (max[0] - min[0]) * w,
+                                    y + (local[1] - min[1]) / (max[1] - min[1]) * h,
+                                ),
+                                color: egui::Color32::from_white_alpha(a.image_opacity()),
+                            });
+                        }
+                        for i in 1..points.len().saturating_sub(1) {
+                            mesh.indices.extend([0, i as u32, i as u32 + 1]);
+                        }
+                        p.add(mesh);
+                        p.add(egui::Shape::closed_line(
+                            points,
+                            egui::Stroke::new(
+                                a.width as f32 * t.scale,
+                                egui::Color32::from_rgba_unmultiplied(
+                                    a.color[0], a.color[1], a.color[2], a.color[3],
+                                ),
+                            ),
+                        ));
+                    } else {
+                        p.add(
+                            egui::epaint::RectShape::filled(
+                                rect,
+                                (a.corner_radius * t.scale).round().clamp(0., 255.) as u8,
+                                egui::Color32::from_white_alpha(a.image_opacity()),
+                            )
+                            .with_texture(
+                                texture.id(),
+                                egui::Rect::from_min_max(
+                                    egui::pos2(x, y),
+                                    egui::pos2(x + w, y + h),
+                                ),
+                            ),
+                        );
+                    }
                 });
                 continue;
             }
@@ -402,6 +444,60 @@ impl Scene {
 mod tests {
     use super::*;
     use crate::property_layout::tests::{PaintedOutput, dump_meshes};
+    #[test]
+    fn shape_frames_reuse_source_texture_during_movement_and_zoom() {
+        let ctx = egui::Context::default();
+        for kind in [Kind::Rectangle, Kind::Ellipse, Kind::Polygon] {
+            let mut d = Document::canvas(800, 600, [255; 4]).unwrap();
+            let mut a = capture_core::templates::placeholder()
+                .unwrap()
+                .annotation(1);
+            a.kind = kind;
+            a.start = [100., 100.];
+            a.end = [400., 400.];
+            a.corner_radius = if kind == Kind::Rectangle { 20. } else { 0. };
+            if kind == Kind::Polygon {
+                a.points = capture_core::polygon::outline(a.start, a.end, 6);
+            }
+            d.annotations.push(a);
+            d.promote_features();
+            let mut scene = Scene::default();
+            let paint = |scene: &mut Scene, d: &Document, zoom| {
+                PaintedOutput(ctx.run_ui(
+                    egui::RawInput {
+                        screen_rect: Some(egui::Rect::from_min_size(
+                            egui::Pos2::ZERO,
+                            egui::vec2(700., 500.),
+                        )),
+                        ..Default::default()
+                    },
+                    |ui| {
+                        let t = Transform {
+                            image: ui.max_rect(),
+                            viewport: ui.max_rect(),
+                            scale: zoom,
+                            zoom,
+                        };
+                        scene.paint(ui, d, t).unwrap();
+                    },
+                ))
+            };
+            paint(&mut scene, &d, 1.);
+            for zoom in [0.25, 0.5, 0.75, 1., 1.25, 2., 4.] {
+                d.annotations =
+                    capture_core::canvas_expansion::translated(&d.annotations, [0.3, 0.2]).unwrap();
+                let output = paint(&mut scene, &d, zoom);
+                assert!(
+                    output.textures_delta.set.is_empty(),
+                    "{kind:?} at {zoom} reuploaded its pixels"
+                );
+                assert!(
+                    scene.vectors.is_empty(),
+                    "shape image should use source texture and geometry"
+                );
+            }
+        }
+    }
     #[test]
     fn blank_canvas_raster_and_vector_stamps_reuse_pixels_during_fractional_movement() {
         for id in ["builtin-raster-sample", "builtin-check-circle"] {

@@ -259,15 +259,33 @@ pub(super) fn annotation_properties(
         slider(ui, "Opacity", egui::Slider::new(&mut a.color[3], 0..=255));
     }
     crate::obscure_properties::show(ui, a);
-    if a.kind == Kind::Image {
+    if a.kind == Kind::Image
+        || (a.is_image_frame() && crate::image_frame::content_mode(ui.ctx(), a.id))
+    {
         crate::image_frame::properties(ui, a);
-        slider(ui, "Opacity", egui::Slider::new(&mut a.color[3], 0..=255));
+        if a.is_shape() {
+            let mut opacity = a.image_opacity();
+            if slider(
+                ui,
+                "Image opacity",
+                egui::Slider::new(&mut opacity, 0..=255),
+            )
+            .changed()
+                && let Some(b) = &a.image
+            {
+                a.image = Some(std::sync::Arc::new(b.with_frame_opacity(opacity)));
+            }
+        } else {
+            slider(ui, "Opacity", egui::Slider::new(&mut a.color[3], 0..=255));
+        }
     }
     if a.kind == Kind::Eraser {
         slider(ui, "Brush width", egui::Slider::new(&mut a.width, 1..=32));
         slider(ui, "Opacity", egui::Slider::new(&mut a.color[3], 0..=255));
     }
-    crate::shape_properties::show(ui, a);
+    if !a.is_image_frame() || !crate::image_frame::content_mode(ui.ctx(), a.id) {
+        crate::shape_properties::show(ui, a);
+    }
     if matches!(
         a.kind,
         Kind::Arrow | Kind::Line | Kind::Pen | Kind::Highlighter
@@ -336,10 +354,10 @@ pub(super) fn annotation_properties(
                 .labelled_by(label.id);
             });
         }
-    } else {
+    } else if !a.is_image_frame() {
         crate::text_properties::show(ui, a, badges);
     }
-    if a.kind != Kind::Text {
+    if a.kind != Kind::Text && !a.is_image_frame() {
         crate::text_properties::outline_controls(ui, a);
     }
     if matches!(a.kind, Kind::Rectangle | Kind::Callout | Kind::Simplify) {
@@ -353,7 +371,7 @@ pub(super) fn annotation_properties(
     crate::line_properties::show(ui, a);
     crate::shadow_properties::show(ui, a);
     let requested = rotation_controls(ui, a).is_some_and(|r| r[0].changed() || r[1].clicked());
-    if a.kind != Kind::Step {
+    if a.kind != Kind::Step && !a.is_image_frame() {
         crate::text_properties::advanced(ui, a, badges);
     }
     requested

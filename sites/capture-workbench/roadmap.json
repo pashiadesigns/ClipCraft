@@ -6070,6 +6070,66 @@
       "depends_on": [
         "ENG-005"
       ]
+    },
+    {
+      "id": "EDIT-087",
+      "title": "External image drops into shape frames",
+      "category": "Editing",
+      "status": "needs_verification",
+      "priority": "next",
+      "description": "Drop a local image into an editable frame with target feedback. Convert rectangle, ellipse and polygon shapes to image frames and back; retain geometry, outline, fills, crop and source pixels. Single-click shape and double-click content properties; dedicated frame presets.",
+      "completion": "Shape masks, crop, file-drop targeting, lock handling, one-step Undo and persistence pass. Production properties and previews are inspected. Native external drops verified before shipping.",
+      "evidence": [
+        "2026-11-01 user-authorized bounded batch. Implementation on feature/shape-frames-guide-pages; not released. docs/shape-frames-guide-pages-work.md.",
+        "Core and production egui tests pass for masks, frame conversion/Undo, synthetic file drops, click modes, retained textures, pages, page menus, overflow, PDF and snapping popup. Native Explorer file drop and final review remain pending; no release claim."
+      ],
+      "updated": "2026-11-01",
+      "schedule_status": "scheduled",
+      "depends_on": [
+        "EDIT-086"
+      ],
+      "target_version": "0.1.0-preview.3",
+      "target_provisional": true
+    },
+    {
+      "id": "EDIT-088",
+      "title": "Multiple pages for templates and step guides",
+      "category": "Editing",
+      "status": "needs_verification",
+      "priority": "next",
+      "description": "Add blank or copied pages, confirm deletion, move/copy sections between pages, set dimensions and automatically move overflow sections to additional pages. Export explicit guide pages in PDF.",
+      "completion": "Page and section ownership, resizing, overflow, save/reopen, atomic Undo, PDF page boundaries and production UI are qualified.",
+      "evidence": [
+        "2026-11-01 user-authorized bounded batch. Implementation on feature/shape-frames-guide-pages; not released. docs/shape-frames-guide-pages-work.md.",
+        "Core and production egui tests pass for masks, frame conversion/Undo, synthetic file drops, click modes, retained textures, pages, page menus, overflow, PDF and snapping popup. Native Explorer file drop and final review remain pending; no release claim."
+      ],
+      "updated": "2026-11-01",
+      "schedule_status": "scheduled",
+      "depends_on": [
+        "EDIT-086"
+      ],
+      "target_version": "0.1.0-preview.3",
+      "target_provisional": true
+    },
+    {
+      "id": "UX-087",
+      "title": "Keep canvas snapping settings open while editing",
+      "category": "Experience",
+      "status": "needs_verification",
+      "priority": "next",
+      "description": "Canvas snapping popup remains open when toggling snapping and changing candidate settings.",
+      "completion": "Production popup survives an internal toggle and closes on outside click.",
+      "evidence": [
+        "2026-11-01 user-authorized bounded batch. Implementation on feature/shape-frames-guide-pages; not released. docs/shape-frames-guide-pages-work.md.",
+        "Core and production egui tests pass for masks, frame conversion/Undo, synthetic file drops, click modes, retained textures, pages, page menus, overflow, PDF and snapping popup. Native Explorer file drop and final review remain pending; no release claim."
+      ],
+      "updated": "2026-11-01",
+      "schedule_status": "scheduled",
+      "depends_on": [
+        "UX-076"
+      ],
+      "target_version": "0.1.0-preview.3",
+      "target_provisional": true
     }
   ]
 }

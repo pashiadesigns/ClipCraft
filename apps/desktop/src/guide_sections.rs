@@ -4,6 +4,7 @@ use capture_core::{
     guide_sections::{Action, SectionKind},
 };
 
+mod pages;
 #[cfg(test)]
 mod tests;
 
@@ -84,7 +85,8 @@ impl Editor {
             }
         })
         .is_some_and(|p| {
-            top_add(&self.session.document, transform).is_some_and(|r| r.contains(p))
+            self.page_controls_hovered(p, transform)
+                || top_add(&self.session.document, transform).is_some_and(|r| r.contains(p))
                 || controls(&self.session.document, transform)
                     .iter()
                     .any(|c| [c.resize, c.add, c.menu].iter().any(|r| r.contains(p)))
@@ -151,11 +153,21 @@ impl Editor {
         {
             return;
         }
+        self.show_page_controls(ui, transform);
         let document = self
             .guide_drag
             .as_ref()
             .map_or(&self.session.document, |d| &d.preview);
         let rows = controls(document, transform);
+        let layout = document
+            .guide
+            .clone()
+            .unwrap_or(capture_core::guide_sections::Layout {
+                pages: None,
+                template: None,
+                top: 0.,
+                sections: vec![],
+            });
         let viewport = transform.viewport;
         let mut action = None;
         let mut image_after = None;
@@ -272,8 +284,31 @@ impl Editor {
                     );
                 }
                 egui::Popup::menu(&menu).show(|ui| {
+                    let section = &layout.sections[index];
+                    if layout.page_count() > 1 {
+                        for (label, copy) in [("Move to", false), ("Copy to", true)] {
+                            ui.menu_button(label, |ui| {
+                                for page in 0..layout.page_count() {
+                                    if page != section.page
+                                        && ui.button(format!("Page {}", page + 1)).clicked()
+                                    {
+                                        action = Some(Action::SectionPage {
+                                            id: c.id,
+                                            page,
+                                            copy,
+                                        });
+                                        ui.close();
+                                    }
+                                }
+                            });
+                        }
+                        ui.separator();
+                    }
                     if ui
-                        .add_enabled(index > 0, egui::Button::new("Move Up"))
+                        .add_enabled(
+                            index > 0 && layout.sections[index - 1].page == section.page,
+                            egui::Button::new("Move Up"),
+                        )
                         .clicked()
                     {
                         action = Some(Action::Move {
@@ -287,7 +322,11 @@ impl Editor {
                         ui.close();
                     }
                     if ui
-                        .add_enabled(index + 1 < rows.len(), egui::Button::new("Move Down"))
+                        .add_enabled(
+                            index + 1 < rows.len()
+                                && layout.sections[index + 1].page == section.page,
+                            egui::Button::new("Move Down"),
+                        )
                         .clicked()
                     {
                         action = Some(Action::Move {

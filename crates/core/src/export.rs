@@ -65,6 +65,27 @@ pub struct Page {
     pub destination: [f64; 4],
 }
 impl PageSettings {
+    pub fn document_pages(self, document: &Document) -> Result<Vec<Page>> {
+        if let Some(layout) = document.guide.as_ref().filter(|g| g.pages.is_some()) {
+            let size = layout.pages.as_ref().unwrap().size;
+            let mut result = Vec::new();
+            for index in 0..layout.page_count() {
+                // Explicit guide pages are kept intact, even when the print setting paginates long images.
+                for mut page in (Self {
+                    paginate: false,
+                    ..self
+                })
+                .pages(size)?
+                {
+                    page.source[1] += layout.page_origin(index) as u32;
+                    result.push(page);
+                }
+            }
+            Ok(result)
+        } else {
+            self.pages([document.width, document.height])
+        }
+    }
     pub fn pages(self, image: [u32; 2]) -> Result<Vec<Page>> {
         crate::validate_dimensions(image[0], image[1])?;
         if !self

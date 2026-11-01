@@ -594,15 +594,29 @@ impl Editor {
                 .show(ui, |ui| {
                     self.property_tabs(ui);
                     let area = ui.available_rect_before_wrap();
+                    let convertible = self.selected_objects().len() == 1
+                        && self
+                            .selected_annotation()
+                            .is_some_and(|a| a.is_shape() || a.is_image_frame());
+                    let extra = if convertible { 36. } else { 0. };
                     let footer = egui::Rect::from_min_max(
                         egui::pos2(area.left(), area.bottom() - 36.0),
                         area.max,
                     );
                     egui::ScrollArea::vertical()
                         .auto_shrink([false, false])
-                        .max_height((area.height() - 44.0).max(0.0))
+                        .max_height((area.height() - 44.0 - extra).max(0.0))
                         .id_salt(("property_scroll", self.shell.property_tab as u8))
                         .show(ui, |ui| self.properties(ui));
+                    if convertible {
+                        self.frame_conversion_button(
+                            ui,
+                            egui::Rect::from_min_size(
+                                footer.min - egui::vec2(0., 36.),
+                                egui::vec2(footer.width(), 30.),
+                            ),
+                        );
+                    }
                     let count = self.selected_objects().len();
                     let delete = ui
                         .scope_builder(egui::UiBuilder::new().max_rect(footer), |ui| {
@@ -738,7 +752,13 @@ impl Editor {
             .unwrap_or_else(|| self.current_tool());
         let image_object = self
             .selected_annotation()
-            .is_some_and(|a| a.kind == Kind::Image);
+            .is_some_and(|a| a.kind == Kind::Image || a.is_image_frame());
+        if self
+            .selected_annotation()
+            .is_some_and(|a| a.is_image_frame())
+        {
+            self.frame_style_choices(ui);
+        }
         if !image_object {
             ui.vertical_centered(|ui| {
                 self.quick_styles_header(ui, tool.kind);
@@ -770,7 +790,7 @@ impl Editor {
                 )
             };
             crate::property_layout::section_help(ui, "Tool Properties", &help);
-            badge(ui, badges, tool.feature);
+            badge(ui, badges, if self.selected_annotation().is_some_and(|a| a.is_image_frame()) { "EDIT-087" } else { tool.feature });
         });
         if !tool.implemented {
             ui.label(format!("{} is planned.", tool.name));
