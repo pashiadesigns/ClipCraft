@@ -10,7 +10,7 @@ arboard = "3.7"
 capture-core.workspace = true
 eframe = { version = "0.37", default-features = false, features = ["default_fonts", "wgpu", "accesskit", "clipboard"] }
 egui = { version = "0.37", default-features = false, features = ["experimental"] }
-rfd = "0.15"
+rfd = "0.17"
 image.workspace = true
 serde.workspace = true
 serde_json.workspace = true
