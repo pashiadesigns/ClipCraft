@@ -249,6 +249,7 @@ Generated from roadmap.json. Edit that source and run node scripts/build.mjs; do
 | EDIT-088: Multiple pages for templates and step guides | Editing | Needs verification | Next |
 | UX-087: Keep canvas snapping settings open while editing | Experience | Needs verification | Next |
 | UX-088: Readable canvas controls and non-overlapping scrollbars | Experience | Needs verification | Next |
+| EDIT-089: Physical Page Setup and print marks | Editing | Needs verification | Next |
 
 ## Completion checks and evidence
 
@@ -4182,7 +4183,7 @@ Completion: Document dependency disposition with no silent suppressions, qualify
 
 ### EDIT-087: External image drops into shape frames
 
-**Needs verification** · Next · Updated 2026-11-01
+**Needs verification** · Next · Updated 2026-11-02
 
 Drop a local image into an editable frame with target feedback. Convert rectangle, ellipse and polygon shapes to image frames and back; retain geometry, outline, fills, crop and source pixels. Single-click shape and double-click content properties; dedicated frame presets.
 
@@ -4192,7 +4193,9 @@ Completion: Shape masks, crop, file-drop targeting, lock handling, one-step Undo
 - Evidence: Core and production egui tests pass for masks, frame conversion/Undo, synthetic file drops, click modes, retained textures, pages, page menus, overflow, PDF and snapping popup. Native Explorer file drop and final review remain pending; no release claim.
 - Evidence: 2026-11-01: U1 external Explorer drops passed by user. Follow-up requested for clipped outlines/high-zoom raster lag, horizontal page layout/reordering and Objects hierarchy, largest-overlap section ownership, shared Choose Image source menu. Qualification pending; not released.
 - Evidence: 2026-11-01 follow-up: 622 Rust tests/fmt/Clippy pass. Retained frame outlines no longer clip to image bodies; rotated/shadowed screenshots reuse source and shadow textures through 1600% zoom and fractional movement. Pages display horizontally with icon/reorder controls and a collapsed page/section/object hierarchy; largest-overlap membership, shared image source menu, migration, PDF pages, persistence and Undo covered. Production egui views inspected headlessly. User-reported native lag/edge correction awaits review; preview.2 remains unchanged.
-- Provisional target: 0.1.0-preview.3
+- Evidence: Included in 0.2.0-beta.1. Exact hosted package passed source/SBOM/hash verification, 51 image comparisons and nine independent PDF page comparisons. Pending native interaction reviews remain pending; beta inclusion does not assert they passed.
+- Provisional target: 0.2.0-beta.1
+- Recorded target history: 0.1.0-preview.3 → 0.2.0-beta.1
 - Depends on: EDIT-086
 
 ### EDIT-088: Multiple pages for templates and step guides
@@ -4210,12 +4213,14 @@ Completion: Page and section ownership, resizing, overflow, save/reopen, atomic 
 - Evidence: 2026-11-01 page-controls batch: icons approved by user; page arrows confirmed working. Local follow-up implements wider versioned gutters with legacy migration, paired section control alignment, shared hide-on-overlap/reappear policy, row drag previews and section reorder. GitHub publication paused pending complete batch review. No new native pass claimed.
 - Evidence: Page Setup follow-up: persisted per-page PPI, mixed dimensions and scoped edits; margins, proportional scaling/reflow, overflow; running headers/footers/numbering; bleed/crop marks and physical PDF boxes/printing. One large right-aligned ribbon entry replaces Step Guide. Local review, no publication. docs/page-setup-batch-work.md.
 - Evidence: Local follow-up adds canvas rail grips for atomic within/cross-page section relocation with a source highlight, drag outline and insertion marker; Page Setup follows the approved mockup with a fixed preview across all four tabs. Native review remains pending. docs/page-polish-work.md.
-- Provisional target: 0.1.0-preview.3
+- Evidence: Included in 0.2.0-beta.1. Exact hosted package passed source/SBOM/hash verification, 51 image comparisons and nine independent PDF page comparisons. Pending native interaction reviews remain pending; beta inclusion does not assert they passed.
+- Provisional target: 0.2.0-beta.1
+- Recorded target history: 0.1.0-preview.3 → 0.2.0-beta.1
 - Depends on: EDIT-086
 
 ### UX-087: Keep canvas snapping settings open while editing
 
-**Needs verification** · Next · Updated 2026-11-01
+**Needs verification** · Next · Updated 2026-11-02
 
 Canvas snapping popup remains open when toggling snapping and changing candidate settings.
 
@@ -4223,7 +4228,9 @@ Completion: Production popup survives an internal toggle and closes on outside c
 
 - Evidence: 2026-11-01 user-authorized bounded batch. Implementation on feature/shape-frames-guide-pages; not released. docs/shape-frames-guide-pages-work.md.
 - Evidence: Core and production egui tests pass for masks, frame conversion/Undo, synthetic file drops, click modes, retained textures, pages, page menus, overflow, PDF and snapping popup. Native Explorer file drop and final review remain pending; no release claim.
-- Provisional target: 0.1.0-preview.3
+- Evidence: Included in 0.2.0-beta.1. Exact hosted package passed source/SBOM/hash verification, 51 image comparisons and nine independent PDF page comparisons. Pending native interaction reviews remain pending; beta inclusion does not assert they passed.
+- Provisional target: 0.2.0-beta.1
+- Recorded target history: 0.1.0-preview.3 → 0.2.0-beta.1
 - Depends on: UX-076
 
 ### UX-088: Readable canvas controls and non-overlapping scrollbars
@@ -4237,5 +4244,19 @@ Completion: Verify collision thresholds at changing zoom/DPI, partial-frame pann
 - Evidence: 2026-11-01 user-approved page-controls follow-up. Local implementation and automated qualification; no publication or native verification claim. docs/page-controls-review-work.md.
 - Evidence: Page Setup follow-up: separate page strips persist with annotations hidden; controls remain within page height. Choose Image no longer recenters or becomes an icon. Confirmation actions use a shared 26 logical px height; footer reserves scrollbar/padding. Local qualification only; native U3 review pending. docs/page-setup-batch-work.md.
 - Evidence: Local follow-up fixes user-reported overflow/placeholder regressions. Advanced replaces Tool Settings; separate Advanced Settings removed, Restore retains Revert. Page Setup pinned at ribbon right. docs/page-polish-work.md.
-- Provisional target: 0.1.0-preview.3
+- Evidence: Included in 0.2.0-beta.1. Exact hosted package passed source/SBOM/hash verification, 51 image comparisons and nine independent PDF page comparisons. Pending native interaction reviews remain pending; beta inclusion does not assert they passed.
+- Provisional target: 0.2.0-beta.1
+- Recorded target history: 0.1.0-preview.3 → 0.2.0-beta.1
 - Depends on: EDIT-087, EDIT-088
+
+### EDIT-089: Physical Page Setup and print marks
+
+**Needs verification** · Next · Updated 2026-11-02
+
+Four-tab Page Setup with page presets, pixels/inches/cm, resolution, orientation, margins, headers/footers, page numbering, bleed and crop marks. Per-page physical geometry is retained in PDF and the print path.
+
+Completion: Broader native page-dialog and physical-printer review remains pending; automated physical geometry and independently rendered PDF pages pass.
+
+- Evidence: Included in 0.2.0-beta.1. Nine PDF page comparisons and physical page-box checks passed; this does not claim a physical printer test.
+- Provisional target: 0.2.0-beta.1
+- Depends on: EDIT-088
