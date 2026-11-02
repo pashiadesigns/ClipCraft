@@ -57,8 +57,10 @@ Section "ClipCraft"
   SetOutPath "$INSTDIR"
   !include "${INSTALL_FILES}"
   WriteUninstaller "$INSTDIR\Uninstall.exe"
-  CreateShortCut "$SMPROGRAMS\ClipCraft Editor.lnk" "$INSTDIR\ClipCraft.exe" "--editor" "$INSTDIR\ClipCraft.exe" -101
-  CreateShortCut "$SMPROGRAMS\ClipCraft Capture Controller.lnk" "$INSTDIR\ClipCraft.exe" "--capture-controller" "$INSTDIR\ClipCraft.exe" -102
+  ; NSIS stores shortcut icon indexes as unsigned 12-bit values. Use the two
+  ; ordered icon groups (101 then 102), not negative Windows resource IDs.
+  CreateShortCut "$SMPROGRAMS\ClipCraft Editor.lnk" "$INSTDIR\ClipCraft.exe" "--editor" "$INSTDIR\ClipCraft.exe" 0
+  CreateShortCut "$SMPROGRAMS\ClipCraft Capture Controller.lnk" "$INSTDIR\ClipCraft.exe" "--capture-controller" "$INSTDIR\ClipCraft.exe" 1
   WriteRegStr HKCU "${KEY}" "DisplayName" "ClipCraft"
   WriteRegStr HKCU "${KEY}" "DisplayVersion" "${VERSION}"
   WriteRegStr HKCU "${KEY}" "Publisher" "ClipCraft contributors"

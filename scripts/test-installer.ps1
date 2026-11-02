@@ -23,6 +23,13 @@ function CheckPayload {
         if ((Get-FileHash -LiteralPath $file.FullName).Hash -ne (Get-FileHash -LiteralPath (Join-Path $installPath $relative)).Hash) { throw "Installed bytes differ: $relative" }
     }
 }
+# First exercise the exact candidate on a clean machine, before the upgrade case.
+RunSetup $Installer '/S'
+CheckPayload
+RunSetup (Join-Path $installPath 'Uninstall.exe') '/S'
+$freshDeadline = [DateTime]::UtcNow.AddSeconds(30)
+while ((Test-Path -LiteralPath $key) -and [DateTime]::UtcNow -lt $freshDeadline) { Start-Sleep -Milliseconds 200 }
+if ((Test-Path -LiteralPath $key) -or (Test-Path -LiteralPath (Join-Path $installPath 'ClipCraft.exe'))) { throw 'Fresh install removal failed.' }
 $prior = Join-Path $evidence 'previous-version-fixture.exe'
 & (Join-Path $PSScriptRoot 'build-installer.ps1') -Package $Package -Output $prior -Version '0.1.9-test.1'
 RunSetup $prior '/S'
@@ -38,9 +45,9 @@ CheckPayload
 if ((Get-ItemProperty -LiteralPath $key).DisplayVersion -ne $Version) { throw 'Upgrade did not update the registered version.' }
 $shell = New-Object -ComObject WScript.Shell
 try {
-    foreach ($entry in @(@{Name=$links[0];Arg='--editor';Icon=101},@{Name=$links[1];Arg='--capture-controller';Icon=102})) {
+    foreach ($entry in @(@{Name=$links[0];Arg='--editor';Icon=0},@{Name=$links[1];Arg='--capture-controller';Icon=1})) {
         $link = $shell.CreateShortcut((Join-Path $start $entry.Name))
-        if ($link.TargetPath -ne (Join-Path $installPath 'ClipCraft.exe') -or $link.Arguments -ne $entry.Arg -or $link.IconLocation -notmatch (',\s*-' + $entry.Icon + '$')) { throw 'Start shortcut identity differs.' }
+        if ($link.TargetPath -ne (Join-Path $installPath 'ClipCraft.exe') -or $link.Arguments -ne $entry.Arg -or $link.IconLocation -notmatch (',\s*' + $entry.Icon + '$')) { throw "Start shortcut identity differs: target=$($link.TargetPath); arguments=$($link.Arguments); icon=$($link.IconLocation)" }
         [Runtime.InteropServices.Marshal]::FinalReleaseComObject($link) | Out-Null
     }
 } finally { [Runtime.InteropServices.Marshal]::FinalReleaseComObject($shell) | Out-Null }

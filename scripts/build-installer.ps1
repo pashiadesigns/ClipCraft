@@ -14,13 +14,13 @@ $archive = Join-Path $cache 'nsis-3.13.zip'
 $expected = 'ba63dffc4410ee89193e1cb5a41989991bd77c61068da17e3156d136b7b0b3d8'
 if (!(Test-Path -LiteralPath $archive)) {
     $url = 'https://downloads.sourceforge.net/project/nsis/NSIS%203/3.13/nsis-3.13.zip'
-    Invoke-WebRequest -Uri $url -OutFile $archive
+    Invoke-WebRequest -Uri $url -OutFile $archive -TimeoutSec 120
     if ((Get-FileHash -LiteralPath $archive).Hash.ToLowerInvariant() -ne $expected) {
         $html = Get-Content -Raw -LiteralPath $archive
         if ($html -match 'http-equiv="refresh" content="\d+; url=([^"]+)"') {
             $mirror = [Net.WebUtility]::HtmlDecode($Matches[1])
             if (!$mirror.StartsWith($url + '?', [StringComparison]::Ordinal)) { throw 'Unexpected NSIS mirror redirect.' }
-            Invoke-WebRequest -Uri $mirror -OutFile $archive
+            Invoke-WebRequest -Uri $mirror -OutFile $archive -TimeoutSec 120
         }
     }
 }
