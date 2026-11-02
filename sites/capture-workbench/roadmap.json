@@ -6086,15 +6086,20 @@
         "2026-11-01 user-authorized bounded batch. Implementation on feature/shape-frames-guide-pages; not released. docs/shape-frames-guide-pages-work.md.",
         "Core and production egui tests pass for masks, frame conversion/Undo, synthetic file drops, click modes, retained textures, pages, page menus, overflow, PDF and snapping popup. Native Explorer file drop and final review remain pending; no release claim.",
         "2026-11-01: U1 external Explorer drops passed by user. Follow-up requested for clipped outlines/high-zoom raster lag, horizontal page layout/reordering and Objects hierarchy, largest-overlap section ownership, shared Choose Image source menu. Qualification pending; not released.",
-        "2026-11-01 follow-up: 622 Rust tests/fmt/Clippy pass. Retained frame outlines no longer clip to image bodies; rotated/shadowed screenshots reuse source and shadow textures through 1600% zoom and fractional movement. Pages display horizontally with icon/reorder controls and a collapsed page/section/object hierarchy; largest-overlap membership, shared image source menu, migration, PDF pages, persistence and Undo covered. Production egui views inspected headlessly. User-reported native lag/edge correction awaits review; preview.2 remains unchanged."
+        "2026-11-01 follow-up: 622 Rust tests/fmt/Clippy pass. Retained frame outlines no longer clip to image bodies; rotated/shadowed screenshots reuse source and shadow textures through 1600% zoom and fractional movement. Pages display horizontally with icon/reorder controls and a collapsed page/section/object hierarchy; largest-overlap membership, shared image source menu, migration, PDF pages, persistence and Undo covered. Production egui views inspected headlessly. User-reported native lag/edge correction awaits review; preview.2 remains unchanged.",
+        "Included in 0.2.0-beta.1. Exact hosted package passed source/SBOM/hash verification, 51 image comparisons and nine independent PDF page comparisons. Pending native interaction reviews remain pending; beta inclusion does not assert they passed."
       ],
-      "updated": "2026-11-01",
+      "updated": "2026-11-02",
       "schedule_status": "scheduled",
       "depends_on": [
         "EDIT-086"
       ],
-      "target_version": "0.1.0-preview.3",
-      "target_provisional": true
+      "target_version": "0.2.0-beta.1",
+      "target_provisional": true,
+      "target_history": [
+        "0.1.0-preview.3",
+        "0.2.0-beta.1"
+      ]
     },
     {
       "id": "EDIT-088",
@@ -6111,15 +6116,20 @@
         "2026-11-01 follow-up: 622 Rust tests/fmt/Clippy pass. Retained frame outlines no longer clip to image bodies; rotated/shadowed screenshots reuse source and shadow textures through 1600% zoom and fractional movement. Pages display horizontally with icon/reorder controls and a collapsed page/section/object hierarchy; largest-overlap membership, shared image source menu, migration, PDF pages, persistence and Undo covered. Production egui views inspected headlessly. User-reported native lag/edge correction awaits review; preview.2 remains unchanged.",
         "2026-11-01 page-controls batch: icons approved by user; page arrows confirmed working. Local follow-up implements wider versioned gutters with legacy migration, paired section control alignment, shared hide-on-overlap/reappear policy, row drag previews and section reorder. GitHub publication paused pending complete batch review. No new native pass claimed.",
         "Page Setup follow-up: persisted per-page PPI, mixed dimensions and scoped edits; margins, proportional scaling/reflow, overflow; running headers/footers/numbering; bleed/crop marks and physical PDF boxes/printing. One large right-aligned ribbon entry replaces Step Guide. Local review, no publication. docs/page-setup-batch-work.md.",
-        "Local follow-up adds canvas rail grips for atomic within/cross-page section relocation with a source highlight, drag outline and insertion marker; Page Setup follows the approved mockup with a fixed preview across all four tabs. Native review remains pending. docs/page-polish-work.md."
+        "Local follow-up adds canvas rail grips for atomic within/cross-page section relocation with a source highlight, drag outline and insertion marker; Page Setup follows the approved mockup with a fixed preview across all four tabs. Native review remains pending. docs/page-polish-work.md.",
+        "Included in 0.2.0-beta.1. Exact hosted package passed source/SBOM/hash verification, 51 image comparisons and nine independent PDF page comparisons. Pending native interaction reviews remain pending; beta inclusion does not assert they passed."
       ],
       "updated": "2026-11-02",
       "schedule_status": "scheduled",
       "depends_on": [
         "EDIT-086"
       ],
-      "target_version": "0.1.0-preview.3",
-      "target_provisional": true
+      "target_version": "0.2.0-beta.1",
+      "target_provisional": true,
+      "target_history": [
+        "0.1.0-preview.3",
+        "0.2.0-beta.1"
+      ]
     },
     {
       "id": "UX-087",
@@ -6131,15 +6141,20 @@
       "completion": "Production popup survives an internal toggle and closes on outside click.",
       "evidence": [
         "2026-11-01 user-authorized bounded batch. Implementation on feature/shape-frames-guide-pages; not released. docs/shape-frames-guide-pages-work.md.",
-        "Core and production egui tests pass for masks, frame conversion/Undo, synthetic file drops, click modes, retained textures, pages, page menus, overflow, PDF and snapping popup. Native Explorer file drop and final review remain pending; no release claim."
+        "Core and production egui tests pass for masks, frame conversion/Undo, synthetic file drops, click modes, retained textures, pages, page menus, overflow, PDF and snapping popup. Native Explorer file drop and final review remain pending; no release claim.",
+        "Included in 0.2.0-beta.1. Exact hosted package passed source/SBOM/hash verification, 51 image comparisons and nine independent PDF page comparisons. Pending native interaction reviews remain pending; beta inclusion does not assert they passed."
       ],
-      "updated": "2026-11-01",
+      "updated": "2026-11-02",
       "schedule_status": "scheduled",
       "depends_on": [
         "UX-076"
       ],
-      "target_version": "0.1.0-preview.3",
-      "target_provisional": true
+      "target_version": "0.2.0-beta.1",
+      "target_provisional": true,
+      "target_history": [
+        "0.1.0-preview.3",
+        "0.2.0-beta.1"
+      ]
     },
     {
       "id": "UX-088",
@@ -6152,7 +6167,8 @@
       "evidence": [
         "2026-11-01 user-approved page-controls follow-up. Local implementation and automated qualification; no publication or native verification claim. docs/page-controls-review-work.md.",
         "Page Setup follow-up: separate page strips persist with annotations hidden; controls remain within page height. Choose Image no longer recenters or becomes an icon. Confirmation actions use a shared 26 logical px height; footer reserves scrollbar/padding. Local qualification only; native U3 review pending. docs/page-setup-batch-work.md.",
-        "Local follow-up fixes user-reported overflow/placeholder regressions. Advanced replaces Tool Settings; separate Advanced Settings removed, Restore retains Revert. Page Setup pinned at ribbon right. docs/page-polish-work.md."
+        "Local follow-up fixes user-reported overflow/placeholder regressions. Advanced replaces Tool Settings; separate Advanced Settings removed, Restore retains Revert. Page Setup pinned at ribbon right. docs/page-polish-work.md.",
+        "Included in 0.2.0-beta.1. Exact hosted package passed source/SBOM/hash verification, 51 image comparisons and nine independent PDF page comparisons. Pending native interaction reviews remain pending; beta inclusion does not assert they passed."
       ],
       "updated": "2026-11-02",
       "schedule_status": "scheduled",
@@ -6160,8 +6176,31 @@
         "EDIT-087",
         "EDIT-088"
       ],
-      "target_version": "0.1.0-preview.3",
-      "target_provisional": true
+      "target_version": "0.2.0-beta.1",
+      "target_provisional": true,
+      "target_history": [
+        "0.1.0-preview.3",
+        "0.2.0-beta.1"
+      ]
+    },
+    {
+      "id": "EDIT-089",
+      "title": "Physical Page Setup and print marks",
+      "category": "Editing",
+      "status": "needs_verification",
+      "priority": "next",
+      "description": "Four-tab Page Setup with page presets, pixels/inches/cm, resolution, orientation, margins, headers/footers, page numbering, bleed and crop marks. Per-page physical geometry is retained in PDF and the print path.",
+      "completion": "Broader native page-dialog and physical-printer review remains pending; automated physical geometry and independently rendered PDF pages pass.",
+      "evidence": [
+        "Included in 0.2.0-beta.1. Nine PDF page comparisons and physical page-box checks passed; this does not claim a physical printer test."
+      ],
+      "updated": "2026-11-02",
+      "target_version": "0.2.0-beta.1",
+      "target_provisional": true,
+      "schedule_status": "scheduled",
+      "depends_on": [
+        "EDIT-088"
+      ]
     }
   ]
 }
