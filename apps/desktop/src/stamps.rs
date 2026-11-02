@@ -394,14 +394,16 @@ impl Editor {
         }
         if self.edit_drag.is_some()
             || self.rotation_drag.is_some()
-            || point.is_some_and(|p| {
-                self.tool_hit(transform.image_point(p), 7. / transform.scale)
-                    .is_some()
-                    || self.selected_annotation().is_some_and(|a| {
-                        a.hit_handle(transform.image_point(p), 7. / transform.scale)
-                            .is_some()
-                    })
-            })
+            || (!self.stamps.armed.as_ref().unwrap().placing
+                && point.is_some_and(|p| {
+                    self.tool_hit(transform.image_point(p), 7. / transform.scale)
+                        .is_some()
+                        || self.selected_annotation().is_some_and(|a| {
+                            a.image.as_ref().is_some_and(|b| b.is_stamp())
+                                && a.hit_handle(transform.image_point(p), 7. / transform.scale)
+                                    .is_some()
+                        })
+                }))
         {
             return false;
         }
@@ -491,12 +493,13 @@ impl Editor {
         let payload = armed.payload.clone();
         let before = self.session.document.annotations.len();
         self.execute(Command::PasteObjects { payload, center });
-        if self.session.document.annotations.len() > before {
-            let a = self.session.document.annotations.last().unwrap();
-            self.stamps.placed.push(a.id);
-            self.quick_controls.touch_snap(a.id);
-            self.stamps.anchor = Some((crate::Kind::Image, annotation_center(a)));
+        if self.session.document.annotations.len() <= before {
+            return;
         }
+        let a = self.session.document.annotations.last().unwrap();
+        self.stamps.placed.push(a.id);
+        self.quick_controls.touch_snap(a.id);
+        self.stamps.anchor = Some((crate::Kind::Image, annotation_center(a)));
         self.select_only(None);
         self.status = "Stamp placed. Click to place another; select a stamp to edit it.".into();
     }
@@ -565,6 +568,102 @@ fn paint_preview(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn placement_owns_pointer_over_unlocked_shapes_text_and_raster_images() {
+        for kind in [
+            crate::Kind::Rectangle,
+            crate::Kind::Text,
+            crate::Kind::Image,
+        ] {
+            let ctx = egui::Context::default();
+            crate::shell::configure(&ctx);
+            let mut e = crate::canvas::tests::editor(&ctx);
+            assert!(!e.shell.badges);
+            let mut background = capture_core::steps::marker(
+                1,
+                [200., 160.],
+                160,
+                [30, 120, 180, 255],
+                (1, false),
+                [640, 400],
+            )
+            .unwrap();
+            background.kind = kind;
+            if kind != crate::Kind::Text {
+                background.text = None;
+            }
+            if kind == crate::Kind::Image {
+                background.image = capture_core::Document::from_capture_image(
+                    image::RgbaImage::from_pixel(40, 40, image::Rgba([20, 100, 200, 255])),
+                )
+                .unwrap()
+                .annotations[0]
+                    .image
+                    .clone();
+            }
+            e.session.document.annotations = vec![background.clone()];
+            e.session.document.promote_features();
+            e.session.document.validate().unwrap();
+            let stamp = &capture_core::stamps::builtin::ALL[0];
+            e.arm_stamp(&ctx, stamp.id.into(), stamp.payload().unwrap());
+            assert!(e.tool_hit([200., 160.], 7.).is_none());
+            let area = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(640., 400.));
+            let transform = crate::canvas_view::Transform {
+                image: area,
+                viewport: area,
+                scale: 1.,
+                zoom: 100.,
+            };
+            let at = egui::pos2(200., 160.);
+            for pressed in [None, Some(true), Some(false)] {
+                let mut events = vec![egui::Event::PointerMoved(at)];
+                if let Some(pressed) = pressed {
+                    events.push(egui::Event::PointerButton {
+                        pos: at,
+                        button: egui::PointerButton::Primary,
+                        pressed,
+                        modifiers: egui::Modifiers::NONE,
+                    });
+                }
+                let _ = crate::property_layout::tests::PaintedOutput(ctx.run_ui(
+                    egui::RawInput {
+                        screen_rect: Some(area),
+                        focused: true,
+                        events,
+                        ..Default::default()
+                    },
+                    |ui| {
+                        let response = ui.interact(
+                            area,
+                            egui::Id::unique("stamp-over-object"),
+                            egui::Sense::click_and_drag(),
+                        );
+                        assert!(
+                            e.stamp_placement_input(ui, &response, transform, true),
+                            "underlying {kind:?} stole the pointer"
+                        );
+                    },
+                ));
+            }
+            assert_eq!(
+                e.session.document.annotations.len(),
+                2,
+                "{kind:?}: {}",
+                e.status
+            );
+            assert_eq!(e.session.document.annotations[0], background);
+            assert!(
+                e.session.document.annotations[1]
+                    .image
+                    .as_ref()
+                    .unwrap()
+                    .is_stamp()
+            );
+            assert!(e.stamps.active && e.selected.is_none());
+            e.execute(Command::Undo);
+            assert_eq!(e.session.document.annotations, vec![background]);
+        }
+    }
 
     #[test]
     fn selected_stamp_edits_seed_repeat_placement_and_vector_preview_cache_tracks_zoom_only() {

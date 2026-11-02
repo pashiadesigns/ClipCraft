@@ -1,11 +1,14 @@
 //! Event-driven capture registration. Changes reserve new chords before releasing
-//! old ones, then commit only after preferences are saved. No keyboard hook.
+//! old ones, then commit only after preferences are saved. Reserved Print Screen
+//! has a narrow Windows compatibility path; other keys use RegisterHotKey only.
 use capture_core::keybinds::{Binding, Keybinds};
 use std::sync::{
     Arc,
     atomic::{AtomicBool, Ordering},
     mpsc::Receiver,
 };
+#[cfg(any(windows, test))]
+mod print_screen;
 mod registrations;
 #[cfg(windows)]
 mod windows;
@@ -32,6 +35,29 @@ pub(super) fn apply(
     registry.finish(true)
 }
 
+/// Startup has no previous active set to protect. Keep every available binding
+/// even if one chord belongs to another application; never rewrite preferences.
+fn register_available(registry: &mut impl Registration, keys: &Keybinds) -> Result<String, String> {
+    keys.validate().map_err(|e| e.to_string())?;
+    let mut active = keys.clone();
+    active.bindings.clear();
+    let mut warnings = Vec::new();
+    for binding in keys.bindings.iter().filter(|_| keys.enabled) {
+        let mut next = active.clone();
+        next.bindings.push(*binding);
+        match apply(registry, &next, || Ok(())) {
+            Ok(()) => active = next,
+            Err(error) => warnings.push(format!("{}: {error}", binding.action.label())),
+        }
+    }
+    let mut status = crate::options::status(&active);
+    if !warnings.is_empty() {
+        status.push_str(" Unavailable: ");
+        status.push_str(&warnings.join("; "));
+    }
+    Ok(status)
+}
+
 pub struct CaptureHotkey {
     pressed: Receiver<Binding>,
     accepting: Arc<AtomicBool>,
@@ -40,6 +66,20 @@ pub struct CaptureHotkey {
     worker: Option<windows::Worker>,
 }
 impl CaptureHotkey {
+    pub fn start_available(
+        ctx: eframe::egui::Context,
+        owner: Option<isize>,
+        keys: &Keybinds,
+    ) -> Result<(Self, String), String> {
+        let empty = Keybinds {
+            enabled: false,
+            bindings: vec![],
+            ..Default::default()
+        };
+        let mut worker = Self::start(ctx, owner, &empty)?;
+        let status = register_available(&mut worker, keys)?;
+        Ok((worker, status))
+    }
     #[cfg(test)]
     pub(super) fn test_pressed(binding: Binding) -> Self {
         let (send, pressed) = std::sync::mpsc::channel();

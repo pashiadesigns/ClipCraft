@@ -122,7 +122,7 @@ impl Editor {
                 }
             }
             if !scan.message.is_empty(){ui.label(&scan.message);}
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center),|ui|{close=ui.add(egui::Button::new("Close").fill(crate::shell::ACCENT)).clicked();});
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center),|ui|{close=ui.add(crate::controls::dialog_button("Close",true)).clicked();});
         });
         if close || crate::text_edit::cancel_on_escape(&modal) {
             return;

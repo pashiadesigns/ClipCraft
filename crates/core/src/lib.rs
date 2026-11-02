@@ -13,7 +13,7 @@ use std::{
 };
 
 pub const MAX_PIXELS: u64 = 25_000_000;
-pub const MAX_PROJECT_VERSION: u32 = 28;
+pub const MAX_PROJECT_VERSION: u32 = 30;
 mod arrow;
 pub mod bitmap;
 pub mod callout;
@@ -287,9 +287,17 @@ impl Document {
             .guide
             .as_ref()
             .and_then(|g| g.pages.as_ref())
+            .is_some_and(|p| !p.setup.is_empty())
+        {
+            self.version = self.version.max(30);
+        }
+        if self
+            .guide
+            .as_ref()
+            .and_then(|g| g.pages.as_ref())
             .is_some_and(|p| p.horizontal)
         {
-            self.version = self.version.max(28);
+            self.version = self.version.max(29);
         }
         if self.guide.as_ref().is_some_and(|g| g.pages.is_some())
             || self
@@ -709,15 +717,25 @@ impl Document {
             if !valid_path {
                 return Err(Error::Invalid("Strokes need 2-8192 points; polygons need 3-64; other objects cannot carry paths".into()));
             }
+            let bleed = self
+                .guide
+                .as_ref()
+                .and_then(|g| g.pages.as_ref())
+                .map_or(0., |p| {
+                    p.setup
+                        .iter()
+                        .map(|s| (s.bleed * s.ppi / 72.) as f32)
+                        .fold(0., f32::max)
+                });
             for point in [annotation.start, annotation.end]
                 .iter()
                 .chain(&annotation.points)
             {
                 if !point.iter().all(|n| n.is_finite())
-                    || point[0] < 0.0
-                    || point[1] < 0.0
-                    || point[0] > self.width as f32
-                    || point[1] > self.height as f32
+                    || point[0] < -bleed
+                    || point[1] < -bleed
+                    || point[0] > self.width as f32 + bleed
+                    || point[1] > self.height as f32 + bleed
                 {
                     return Err(Error::Invalid(
                         "Annotation coordinates are outside the image".into(),
@@ -766,6 +784,9 @@ impl Document {
         {
             render_annotation(&mut image, annotation);
         }
+        for a in self.page_furniture() {
+            render_annotation(&mut image, &a);
+        }
         Ok(image)
     }
 
@@ -797,7 +818,7 @@ impl Document {
             .guide
             .as_ref()
             .and_then(|g| g.pages.as_ref())
-            .is_some_and(|p| !p.horizontal)
+            .is_some_and(|p| !p.horizontal || p.gap != guide_sections::PAGE_GAP)
         {
             let mut editable = doc.clone();
             for state in editable.object_states.values_mut() {

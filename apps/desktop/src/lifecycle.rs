@@ -53,9 +53,9 @@ impl Editor {
             egui::ViewportId::ROOT,
             egui::ViewportCommand::RequestPaintWhileHidden,
         );
-        let id = egui::ViewportId::from_hash_of("clipcraft-capture-controller");
-        ctx.send_viewport_cmd_to(id, egui::ViewportCommand::Visible(true));
-        ctx.send_viewport_cmd_to(id, egui::ViewportCommand::Focus);
+        // The viewport applies its icon/identity before showing or focusing it.
+        // Issuing Visible here can expose a newly created window too early.
+        self.capture_controller.focus_requested = true;
         ctx.request_repaint_of(egui::ViewportId::ROOT);
     }
     pub(super) fn close_editor_window(&mut self, ctx: &egui::Context) {

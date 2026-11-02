@@ -148,10 +148,32 @@ impl Editor {
         &self,
         transform: crate::canvas_view::Transform,
     ) -> Vec<(u64, egui::Rect)> {
-        self.session
-            .document
+        let transform = self.guide_transform(transform);
+        let document = self
+            .guide_drag
+            .as_ref()
+            .map_or(&self.session.document, |d| &d.preview);
+        let candidates: Vec<_> = document
             .annotations
             .iter()
+            .map(|a| {
+                self.edit_drag
+                    .as_ref()
+                    .map(|d| &d.preview)
+                    .filter(|p| p.id == a.id)
+                    .or_else(|| {
+                        self.group_drag
+                            .as_ref()
+                            .and_then(|d| d.preview.iter().find(|p| p.id == a.id))
+                    })
+                    .or_else(|| {
+                        self.property_preview
+                            .as_ref()
+                            .map(|p| &p.preview)
+                            .filter(|p| p.id == a.id)
+                    })
+                    .unwrap_or(a)
+            })
             .filter(|a| {
                 a.image.as_ref().is_some_and(|b| b.is_placeholder())
                     && !self.session.document.object_state(a.id).locked
@@ -163,12 +185,25 @@ impl Editor {
                     transform.screen_point(min),
                     transform.screen_point(max),
                 );
-                let button = egui::Rect::from_center_size(rect.center(), egui::vec2(110., 28.));
-                (rect.width() >= 110.
-                    && rect.height() >= 28.
-                    && transform.viewport.contains_rect(button))
-                .then_some((a.id, button))
+                let scale = transform
+                    .scale
+                    .min(rect.width() / 118.)
+                    .min(rect.height() / 36.);
+                let button =
+                    egui::Rect::from_center_size(rect.center(), egui::vec2(110., 28.) * scale);
+                if !button.intersects(transform.viewport) {
+                    return None;
+                }
+                Some((a.id, button))
             })
+            .collect();
+        let mut rects: Vec<_> = candidates.iter().map(|(_, r)| *r).collect();
+        rects.extend(crate::guide_sections::visible_buttons(document, transform));
+        let shown = crate::canvas_buttons::visible(&rects);
+        candidates
+            .into_iter()
+            .zip(shown)
+            .filter_map(|(item, visible)| visible.then_some(item))
             .collect()
     }
     pub(super) fn image_pan_handle(
@@ -190,10 +225,49 @@ impl Editor {
         let (min, max) = a.body_bounds();
         let rect =
             egui::Rect::from_two_pos(transform.screen_point(min), transform.screen_point(max));
-        (rect.width() >= 50. && rect.height() >= 50.)
-            .then(|| egui::Rect::from_center_size(rect.center(), egui::vec2(28., 28.)))
+        if rect.width() < 50. || rect.height() < 50. {
+            return None;
+        }
+        let handle = egui::Rect::from_center_size(rect.center(), egui::vec2(28., 28.));
+        let mut buttons = vec![handle];
+        buttons.extend(
+            self.raw_image_frame_buttons(transform)
+                .into_iter()
+                .flatten(),
+        );
+        buttons.extend(crate::guide_sections::visible_buttons(
+            &self.session.document,
+            transform,
+        ));
+        crate::canvas_buttons::visible(&buttons)[0].then_some(handle)
     }
     fn image_frame_buttons(
+        &self,
+        transform: crate::canvas_view::Transform,
+    ) -> Option<[egui::Rect; 2]> {
+        let buttons = self.raw_image_frame_buttons(transform)?;
+        let mut all = buttons.to_vec();
+        if let Some(a) = self.selected_annotation() {
+            let (lo, hi) = a.body_bounds();
+            let rect =
+                egui::Rect::from_two_pos(transform.screen_point(lo), transform.screen_point(hi));
+            if rect.width() >= 50. && rect.height() >= 50. {
+                all.push(egui::Rect::from_center_size(
+                    rect.center(),
+                    egui::vec2(28., 28.),
+                ));
+            }
+        }
+        all.extend(crate::guide_sections::visible_buttons(
+            &self.session.document,
+            transform,
+        ));
+        crate::canvas_buttons::visible(&all)[..2]
+            .iter()
+            .all(|v| *v)
+            .then_some(buttons)
+    }
+    fn raw_image_frame_buttons(
         &self,
         transform: crate::canvas_view::Transform,
     ) -> Option<[egui::Rect; 2]> {
@@ -230,11 +304,7 @@ impl Editor {
         ui: &egui::Ui,
         transform: crate::canvas_view::Transform,
     ) -> bool {
-        if self.edit_drag.is_some()
-            || self.group_drag.is_some()
-            || self.rotation_drag.is_some()
-            || ui.input(|i| i.modifiers.alt || i.modifiers.ctrl)
-        {
+        if self.edit_drag.is_some() || self.group_drag.is_some() || self.rotation_drag.is_some() {
             return false;
         }
         // A drag started on the image still belongs to it when a fast pointer
@@ -249,7 +319,7 @@ impl Editor {
         .is_some_and(|p| {
             self.placeholder_buttons(transform)
                 .iter()
-                .any(|(_, r)| r.contains(p))
+                .any(|(_, r)| r.intersect(transform.viewport).contains(p))
                 || self
                     .image_frame_buttons(transform)
                     .is_some_and(|buttons| buttons.iter().any(|r| r.contains(p)))
@@ -269,23 +339,56 @@ impl Editor {
                 d.remove::<u64>(crop_mode_key());
             }
         });
-        if self.shell.raster_preview
-            || self.shell.annotations_hidden
-            || self.edit_drag.is_some()
-            || self.property_preview.is_some()
-            || ui.input(|i| i.modifiers.alt || i.modifiers.ctrl)
-        {
+        if self.shell.raster_preview || self.shell.annotations_hidden {
             return;
         }
+        let gesturing = self.edit_drag.is_some()
+            || self.group_drag.is_some()
+            || self.property_preview.is_some()
+            || self.rotation_drag.is_some();
         for (id, rect) in self.placeholder_buttons(transform) {
-            let response = ui.put(
-                rect,
-                egui::Button::new("Choose Image").fill(crate::shell::ACCENT),
-            );
-            self.choose_frame_source(ui, &response, id);
+            let scale = rect.width() / 110.;
+            let response = ui
+                .scope_builder(egui::UiBuilder::new().max_rect(rect), |ui| {
+                    ui.set_clip_rect(ui.clip_rect().intersect(transform.viewport));
+                    if gesturing {
+                        ui.disable();
+                    }
+                    let response = ui.interact(
+                        rect,
+                        egui::Id::unique(("choose-image-scaled", id)),
+                        egui::Sense::click(),
+                    );
+                    let fill = if response.hovered() {
+                        crate::shell::ACCENT.gamma_multiply(1.15)
+                    } else {
+                        crate::shell::ACCENT
+                    };
+                    ui.painter()
+                        .rect_filled(rect, (6. * scale).min(255.) as u8, fill);
+                    ui.painter().text(
+                        rect.center(),
+                        egui::Align2::CENTER_CENTER,
+                        "Choose Image",
+                        egui::FontId::proportional(13. * scale),
+                        egui::Color32::WHITE,
+                    );
+                    response
+                })
+                .inner
+                .on_hover_text("Choose Image");
+            response.widget_info(|| {
+                egui::WidgetInfo::labeled(egui::Role::Button, !gesturing, "Choose Image")
+            });
+            if !gesturing {
+                self.choose_frame_source(ui, &response, id);
+            }
             #[cfg(test)]
             ui.ctx()
                 .data_mut(|d| d.insert_temp(egui::Id::unique(("choose-frame-image", id)), rect));
+        }
+        if gesturing {
+            return;
         }
         if let Some(rect) = self.image_pan_handle(transform) {
             let response = ui

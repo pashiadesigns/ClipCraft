@@ -98,12 +98,13 @@ impl Scene {
     ) -> capture_core::Result<()> {
         let painter = ui.painter().with_clip_rect(t.viewport.intersect(t.image));
         let shift = offset.map(|n| n as f32);
-        let objects: Vec<_> = d
+        let mut objects: Vec<_> = d
             .annotations
             .iter()
             .filter(|a| d.object_visible(a.id) && a.analysis.is_none())
             .cloned()
             .collect();
+        objects.extend(d.page_furniture());
         let plans: Vec<_> = objects
             .iter()
             .enumerate()

@@ -38,29 +38,6 @@ impl State {
     }
 }
 impl Editor {
-    pub(super) fn request_ocr(&mut self, ctx: &egui::Context) {
-        if self.ocr.busy() {
-            self.ocr.open = true;
-            return;
-        }
-        let document = self.session.document.clone();
-        let ctx = ctx.clone();
-        let (tx, rx) = mpsc::channel();
-        self.ocr.receiver = Some(rx);
-        self.ocr.result = None;
-        self.ocr.open = true;
-        self.ocr.plain = false;
-        self.ocr.copy_status = None;
-        self.status = "Recognizing text locally…".into();
-        std::thread::spawn(move || {
-            let result = document
-                .render()
-                .map_err(|e| e.to_string())
-                .and_then(|pixels| recognize(&pixels));
-            let _ = tx.send(result);
-            ctx.request_repaint();
-        });
-    }
     pub(super) fn show_ocr(&mut self, ctx: &egui::Context) {
         self.ocr.poll();
         self.ocr.show(ctx);

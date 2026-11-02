@@ -217,7 +217,7 @@ impl Editor {
         ui.heading("Help & About");
         ui.label("Independent Rust image editor · alpha preview");
         ui.add_space(18.0);
-        ui.label("Home: Clipboard and drawing tools\nTool Settings: text formatting, arrangement, image and canvas settings\nExport: PNG and editable projects\nFile → Open: images and editable projects\nCtrl+S: Save · Ctrl+Shift+S: Save As\nCtrl+Z / Ctrl+Y: Undo / Redo\nText: draw a box and type directly; click away to finish\nAlt+drag an object: duplicate · Shift+drag handles: constrain proportions\nCtrl+wheel: zoom at pointer · middle-drag or Space+drag: pan\nBottom bar: zoom percentage, Fit to Screen and Actual Size");
+        ui.label("Tools: Clipboard and drawing tools\nAdvanced: text formatting, arrangement, canvas, Restore and Page Setup\nExport: PNG and editable projects\nFile → Open: images and editable projects\nCtrl+S: Save · Ctrl+Shift+S: Save As\nCtrl+Z / Ctrl+Y: Undo / Redo\nText: draw a box and type directly; click away to finish\nAlt+drag an object: duplicate · Shift+drag handles: constrain proportions\nCtrl+wheel: zoom at pointer · middle-drag or Space+drag: pan\nBottom bar: zoom percentage, Fit to Screen and Actual Size");
         ui.add_space(18.0);
         if ui.button("Configure capture keybinds…").clicked() {
             self.shell.backstage = Some(Page::Options);

@@ -254,13 +254,13 @@ mod tests {
         })
         .unwrap();
         b.remember(Choice::CanvasTool(ToolId::CutOut)).unwrap();
-        // Drawing defaults must not downgrade version4 and erase favorites.
+        // Drawing defaults must not downgrade startup preferences or erase favorites.
         b.remember(Choice::DrawingStyle(
             crate::object_styles::presets(crate::Kind::Text).remove(0),
         ))
         .unwrap();
         let loaded = a.read().unwrap();
-        assert_eq!(loaded.version, 4);
+        assert_eq!(loaded.version, 8);
         assert_eq!(loaded.favorite_tools, vec![ToolId::Crop, ToolId::Text]);
         assert_eq!(loaded.canvas_tool, ToolId::CutOut);
         let order = grouped_order(&loaded.toolbar_order, &loaded.favorite_tools);

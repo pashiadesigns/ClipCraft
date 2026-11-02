@@ -21,6 +21,6 @@
     "Alignment uses selected object bounds, including callout pointers. Key-object/page alignment, persistent groups and group rotation remain unfinished.",
     "Text entry still uses the existing dialog. Inline centered text and shape text, reusable templates beyond arrows, crisp vector zoom, editable autosave and toolbar ordering remain priority work.",
     "Middle-button panning passes input tests but still needs a physical held-middle-button drag check. It has no Ready claim.",
-    "This unsigned Windows alpha does not claim complete Snagit UI or behavior parity."
+    "This unsigned historical alpha covers only the workflows verified in its release notes."
   ]
 }

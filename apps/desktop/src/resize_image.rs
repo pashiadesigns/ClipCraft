@@ -294,11 +294,14 @@ impl Editor {
                     crate::shell::badge(ui, self.shell.badges, "EDIT-029");
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         cancel |= ui
-                            .add_sized([85.0, 24.0], egui::Button::new("Cancel"))
+                            .add_sized(
+                                [85.0, crate::controls::DIALOG_ACTION_HEIGHT],
+                                egui::Button::new("Cancel"),
+                            )
                             .clicked();
                         confirm |= ui
                             .add_sized(
-                                [102.0, 24.0],
+                                [102.0, crate::controls::DIALOG_ACTION_HEIGHT],
                                 egui::Button::new("Flatten All")
                                     .fill(egui::Color32::from_rgb(0, 118, 181)),
                             )

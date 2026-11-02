@@ -63,13 +63,104 @@ impl Default for PageSettings {
 pub struct Page {
     pub source: [u32; 4],
     pub destination: [f64; 4],
+    pub media_size: [f64; 2],
+    pub setup: Option<crate::guide_sections::PageSetup>,
+}
+impl Page {
+    /// Printer raster at document resolution, including real bleed artwork and marks.
+    /// The caller positions this at its physical size, never fit-to-paper.
+    pub fn print_pixels(&self, document: &Document) -> Result<RgbaImage> {
+        let Some(s) = &self.setup else {
+            return Ok(image::imageops::crop_imm(
+                &document.render()?,
+                self.source[0],
+                self.source[1],
+                self.source[2],
+                self.source[3],
+            )
+            .to_image());
+        };
+        let k = s.ppi / 72.;
+        let size = self.media_size.map(|n| (n * k).ceil() as u32);
+        crate::validate_dimensions(size[0], size[1])?;
+        let pad = s.surround() * k;
+        let offset = [pad - self.source[0] as f64, pad - self.source[1] as f64];
+        let mut base = RgbaImage::new(size[0], size[1]);
+        image::imageops::overlay(
+            &mut base,
+            &document.base_image()?,
+            offset[0].round() as i64,
+            offset[1].round() as i64,
+        );
+        let mut objects: Vec<_> = document
+            .annotations
+            .iter()
+            .filter(|a| document.object_visible(a.id))
+            .cloned()
+            .collect();
+        objects.extend(document.page_furniture());
+        let objects = crate::canvas_expansion::translated(&objects, offset.map(|n| n as f32))?;
+        let mut pixels = base;
+        for a in &objects {
+            crate::render_annotation(&mut pixels, a);
+        }
+        let bleed = s.bleed * k;
+        let trim = s.trim_points().map(|n| n * k);
+        // Artwork ends at the bleed box; registration marks live outside it.
+        for (x, y, p) in pixels.enumerate_pixels_mut() {
+            if (x as f64) < pad - bleed
+                || (y as f64) < pad - bleed
+                || x as f64 >= pad + trim[0] + bleed
+                || y as f64 >= pad + trim[1] + bleed
+            {
+                *p = image::Rgba([0; 4]);
+            }
+        }
+        if s.crop_marks {
+            let mut line = |x: f64, y: f64, w: f64, h: f64| {
+                let x0 = (x * k).floor().max(0.) as u32;
+                let y0 = (y * k).floor().max(0.) as u32;
+                for yy in y0..((y + h) * k).ceil().min(size[1] as f64) as u32 {
+                    for xx in x0..((x + w) * k).ceil().min(size[0] as f64) as u32 {
+                        pixels.put_pixel(xx, yy, image::Rgba([0, 0, 0, 255]));
+                    }
+                }
+            };
+            let pad = s.surround();
+            let [w, h] = s.trim_points();
+            let weight = s.mark_weight;
+            for x in [pad, pad + w] {
+                for y in [pad - s.mark_offset - s.mark_length, pad + h + s.mark_offset] {
+                    line(x - weight * 0.5, y, weight, s.mark_length);
+                }
+            }
+            for y in [pad, pad + h] {
+                for x in [pad - s.mark_offset - s.mark_length, pad + w + s.mark_offset] {
+                    line(x, y - weight * 0.5, s.mark_length, weight);
+                }
+            }
+        }
+        Ok(pixels)
+    }
 }
 impl PageSettings {
     pub fn document_pages(self, document: &Document) -> Result<Vec<Page>> {
         if let Some(layout) = document.guide.as_ref().filter(|g| g.pages.is_some()) {
-            let size = layout.pages.as_ref().unwrap().size;
             let mut result = Vec::new();
             for index in 0..layout.page_count() {
+                let size = layout.page_size(index, [document.width, document.height]);
+                if let Some(setup) = layout.page_setup(index) {
+                    let [w, h] = setup.trim_points();
+                    let pad = setup.surround();
+                    let origin = layout.page_offset(index);
+                    result.push(Page {
+                        source: [origin[0] as u32, origin[1] as u32, size[0], size[1]],
+                        destination: [pad, pad, w, h],
+                        media_size: setup.output_points(),
+                        setup: Some(setup.clone()),
+                    });
+                    continue;
+                }
                 // Explicit guide pages are kept intact, even when the print setting paginates long images.
                 for mut page in (Self {
                     paginate: false,
@@ -127,6 +218,8 @@ impl PageSettings {
                 let height = f64::from(h) * scale;
                 Page {
                     source: [0, y, image[0], h],
+                    media_size: self.size,
+                    setup: None,
                     destination: [
                         (self.size[0] - w) * 0.5,
                         if self.paginate {

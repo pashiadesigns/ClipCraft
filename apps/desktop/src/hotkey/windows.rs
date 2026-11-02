@@ -4,6 +4,7 @@ use super::{
 };
 use capture_core::keybinds::{Chord, Keybinds};
 use std::{
+    cell::RefCell,
     ptr::null_mut,
     sync::{
         Arc,
@@ -49,7 +50,88 @@ impl Drop for Worker {
         }
     }
 }
-struct Windows;
+struct HookState {
+    keys: super::print_screen::PrintScreen,
+    accepting: Arc<AtomicBool>,
+    recording: Arc<AtomicBool>,
+}
+thread_local! { static PRINT_SCREEN: RefCell<Option<HookState>> = const { RefCell::new(None) }; }
+unsafe extern "system" fn print_screen_hook(code: i32, message: usize, data: isize) -> isize {
+    if code >= 0
+        && matches!(
+            message as u32,
+            WM_KEYDOWN | WM_SYSKEYDOWN | WM_KEYUP | WM_SYSKEYUP
+        )
+    {
+        let key = unsafe { &*(data as *const KBDLLHOOKSTRUCT) };
+        if key.vkCode == u32::from(VK_SNAPSHOT) {
+            let pressed = matches!(message as u32, WM_KEYDOWN | WM_SYSKEYDOWN);
+            let mut modifiers = 0;
+            for (vk, mask) in [
+                (VK_MENU, 1),
+                (VK_CONTROL, 2),
+                (VK_SHIFT, 4),
+                (VK_LWIN, 8),
+                (VK_RWIN, 8),
+            ] {
+                if unsafe { GetAsyncKeyState(i32::from(vk)) } < 0 {
+                    modifiers |= mask;
+                }
+            }
+            let decision = PRINT_SCREEN.with(|slot| {
+                slot.borrow_mut().as_mut().and_then(|s| {
+                    s.keys.event(
+                        pressed,
+                        modifiers,
+                        key.flags & LLKHF_INJECTED != 0,
+                        s.accepting.load(Ordering::Acquire) || s.recording.load(Ordering::Acquire),
+                    )
+                })
+            });
+            if let Some(dispatch) = decision {
+                if let Some(id) = dispatch {
+                    unsafe {
+                        PostThreadMessageW(GetCurrentThreadId(), WM_HOTKEY, id as usize, 0);
+                    }
+                }
+                return 1;
+            }
+        }
+    }
+    unsafe { CallNextHookEx(null_mut(), code, message, data) }
+}
+struct Windows {
+    hook: HHOOK,
+}
+impl Windows {
+    fn register_print_screen(&mut self, id: i32, chord: Chord) -> Result<(), String> {
+        if self.hook.is_null() {
+            self.hook = unsafe {
+                SetWindowsHookExW(
+                    WH_KEYBOARD_LL,
+                    Some(print_screen_hook),
+                    windows_sys::Win32::System::LibraryLoader::GetModuleHandleW(std::ptr::null()),
+                    0,
+                )
+            };
+            if self.hook.is_null() {
+                return Err(format!(
+                    "Print Screen is reserved and compatibility capture could not start ({}). Choose another key in File > Options > Keybinds.",
+                    std::io::Error::last_os_error()
+                ));
+            }
+        }
+        PRINT_SCREEN.with(|slot| {
+            slot.borrow_mut()
+                .as_mut()
+                .unwrap()
+                .keys
+                .bindings
+                .push((id, chord))
+        });
+        Ok(())
+    }
+}
 impl Native for Windows {
     fn register(&mut self, id: i32, chord: Chord) -> Result<(), String> {
         if unsafe {
@@ -61,15 +143,40 @@ impl Native for Windows {
             )
         } == 0
         {
+            let error = std::io::Error::last_os_error();
+            // Windows or another screenshot app may reserve Print Screen. Only
+            // this explicitly configured key gets the narrow hook fallback.
+            if chord.key == VK_SNAPSHOT && error.raw_os_error() == Some(1409) {
+                return self.register_print_screen(id, chord);
+            }
             Err(format!(
-                "Windows could not register this combination ({}). Another app or a Windows shortcut may own it. Choose another combination; previous shortcuts are unchanged.",
-                std::io::Error::last_os_error()
+                "Windows could not register this combination ({error}). Choose another key in File > Options > Keybinds or release it in the other application."
             ))
         } else {
             Ok(())
         }
     }
     fn unregister(&mut self, id: i32) {
+        let removed = PRINT_SCREEN.with(|slot| {
+            let mut slot = slot.borrow_mut();
+            let keys = &mut slot.as_mut().unwrap().keys;
+            let old = keys.bindings.len();
+            keys.bindings.retain(|(i, _)| *i != id);
+            let removed = old != keys.bindings.len();
+            if removed && keys.bindings.is_empty() {
+                *keys = Default::default();
+            }
+            removed
+        });
+        if removed {
+            if PRINT_SCREEN.with(|s| s.borrow().as_ref().unwrap().keys.bindings.is_empty()) {
+                unsafe {
+                    UnhookWindowsHookEx(self.hook);
+                }
+                self.hook = null_mut();
+            }
+            return;
+        }
         unsafe { UnregisterHotKey(null_mut(), id) };
     }
 }
@@ -90,7 +197,14 @@ pub(super) fn start(
             let mut message = MSG::default();
             PeekMessageW(&mut message, null_mut(), 0, 0, PM_NOREMOVE);
             let mut state = Registrations::default();
-            let mut native = Windows;
+            PRINT_SCREEN.with(|slot| {
+                *slot.borrow_mut() = Some(HookState {
+                    keys: Default::default(),
+                    accepting: worker_accepting.clone(),
+                    recording: worker_recording.clone(),
+                })
+            });
+            let mut native = Windows { hook: null_mut() };
             if ready_tx.send(GetCurrentThreadId()).is_ok() {
                 while GetMessageW(&mut message, null_mut(), 0, 0) > 0 {
                     if message.message == CHANGE {
@@ -132,6 +246,7 @@ pub(super) fn start(
                 }
             }
             state.clear(&mut native);
+            PRINT_SCREEN.with(|slot| *slot.borrow_mut() = None);
         })
         .map_err(|e| format!("Cannot start capture shortcuts: {e}"))?;
     match ready_rx.recv() {

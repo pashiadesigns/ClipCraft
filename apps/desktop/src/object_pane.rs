@@ -337,9 +337,9 @@ impl Editor {
                     key,
                     label,
                     depth,
-                    page,
+                    target,
                 } => {
-                    if let Some(action) = guide_tree::header(ui, key, &label, depth, page) {
+                    if let Some(action) = guide_tree::header(ui, key, &label, depth, target) {
                         command = Some(Command::Guide { action });
                     }
                     continue;

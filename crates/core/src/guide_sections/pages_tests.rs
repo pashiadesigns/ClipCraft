@@ -18,6 +18,92 @@ fn execute(s: &mut Session, action: Action) {
 }
 
 #[test]
+fn section_relocation_across_pages_preserves_sources_and_is_one_atomic_undo() {
+    let original = template()
+        .edit_guide(&Action::AddPage {
+            page: 0,
+            copy: false,
+        })
+        .unwrap();
+    let id = original.guide.as_ref().unwrap().sections[1].id;
+    let members = original.guide.as_ref().unwrap().sections[1].objects.clone();
+    let mut session = Session::new(original.clone()).unwrap();
+    execute(
+        &mut session,
+        Action::Relocate {
+            id,
+            page: 1,
+            index: 0,
+        },
+    );
+    let after = &session.document;
+    assert_eq!(
+        after
+            .guide
+            .as_ref()
+            .unwrap()
+            .sections
+            .iter()
+            .find(|s| s.id == id)
+            .unwrap()
+            .page,
+        1
+    );
+    for object in members {
+        let before = original
+            .annotations
+            .iter()
+            .find(|a| a.id == object)
+            .unwrap();
+        let moved = after.annotations.iter().find(|a| a.id == object).unwrap();
+        assert!(moved.start[0] > before.start[0]);
+        assert_eq!(before.image, moved.image);
+    }
+    let json = bytes(after);
+    assert_eq!(
+        json,
+        bytes(&serde_json::from_slice::<Document>(&json).unwrap())
+    );
+    session.execute(Command::Undo).unwrap();
+    assert_eq!(bytes(&session.document), bytes(&original));
+    assert!(!session.can_undo());
+    let guide = original.guide.as_ref().unwrap();
+    let last = guide.sections.iter().filter(|s| s.page == 0).count() - 1;
+    execute(
+        &mut session,
+        Action::Relocate {
+            id: guide.sections[0].id,
+            page: 0,
+            index: last,
+        },
+    );
+    assert_eq!(
+        session.document.guide.as_ref().unwrap().sections[last].id,
+        guide.sections[0].id
+    );
+    session.execute(Command::Undo).unwrap();
+    assert_eq!(bytes(&session.document), bytes(&original));
+    assert!(
+        original
+            .edit_guide(&Action::Relocate {
+                id,
+                page: 9,
+                index: 0
+            })
+            .is_err()
+    );
+    assert!(
+        original
+            .edit_guide(&Action::Relocate {
+                id,
+                page: 1,
+                index: 99
+            })
+            .is_err()
+    );
+}
+
+#[test]
 fn page_copy_delete_move_roundtrip_and_atomic_undo_preserve_objects() {
     let original = template();
     let mut s = Session::new(original.clone()).unwrap();
@@ -33,7 +119,7 @@ fn page_copy_delete_move_roundtrip_and_atomic_undo_preserve_objects() {
     assert_eq!(s.document.annotations.len(), original.annotations.len() * 2);
     assert_eq!(s.document.width, original.width * 2 + PAGE_GAP);
     assert_eq!(s.document.height, original.height);
-    assert_eq!(s.document.version, 28);
+    assert_eq!(s.document.version, 29);
     let ids: BTreeSet<_> = s.document.annotations.iter().map(|a| a.id).collect();
     assert_eq!(ids.len(), s.document.annotations.len());
     let dir = tempfile::tempdir().unwrap();
@@ -355,7 +441,7 @@ fn legacy_vertical_pages_open_horizontally_without_changing_saved_file_or_locks(
         let page = g.page_at(a.start);
         let offset = [
             -(page as f32) * (p.size[0] + PAGE_GAP) as f32,
-            page as f32 * (p.size[1] + PAGE_GAP) as f32,
+            page as f32 * (p.size[1] + 48) as f32,
         ];
         *a = crate::canvas_expansion::translated(std::slice::from_ref(a), offset)
             .unwrap()
@@ -370,7 +456,8 @@ fn legacy_vertical_pages_open_horizontally_without_changing_saved_file_or_locks(
         .unwrap()
         .horizontal = false;
     legacy.width = p.size[0];
-    legacy.height = p.size[1] * p.count as u32 + PAGE_GAP * (p.count as u32 - 1);
+    legacy.guide.as_mut().unwrap().pages.as_mut().unwrap().gap = 48;
+    legacy.height = p.size[1] * p.count as u32 + 48 * (p.count as u32 - 1);
     legacy.version = 27;
     let id = legacy.annotations[0].id;
     let mut state = legacy.object_state(id);
@@ -396,4 +483,56 @@ fn legacy_vertical_pages_open_horizontally_without_changing_saved_file_or_locks(
     assert_eq!(loaded.height, horizontal.height);
     assert_eq!(loaded.annotations, horizontal.annotations);
     assert_eq!(std::fs::read(path).unwrap(), bytes);
+}
+
+#[test]
+fn legacy_narrow_gutters_reflow_without_changing_page_pixels_or_source_file() {
+    let expected = template()
+        .edit_guide(&Action::AddPage {
+            page: 0,
+            copy: true,
+        })
+        .unwrap();
+    let mut old = expected.clone();
+    let g = expected.guide.as_ref().unwrap();
+    let size = g.pages.as_ref().unwrap().size;
+    for a in &mut old.annotations {
+        let page = g.page_at(a.start);
+        *a = crate::canvas_expansion::translated(
+            std::slice::from_ref(a),
+            [page as f32 * (48. - PAGE_GAP as f32), 0.],
+        )
+        .unwrap()
+        .remove(0);
+    }
+    old.guide.as_mut().unwrap().pages.as_mut().unwrap().gap = 48;
+    old.width = size[0] * 2 + 48;
+    old.version = 28;
+    old.validate().unwrap();
+    let mut json = serde_json::to_value(&old).unwrap();
+    json["guide"]["pages"]
+        .as_object_mut()
+        .unwrap()
+        .remove("gap");
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("narrow.capture.json");
+    let original_bytes = serde_json::to_vec(&json).unwrap();
+    std::fs::write(&path, &original_bytes).unwrap();
+    let loaded = Document::load(&path).unwrap();
+    assert_eq!(loaded.annotations, expected.annotations);
+    assert_eq!(
+        loaded.guide.as_ref().unwrap().pages.as_ref().unwrap().size,
+        size
+    );
+    assert_eq!(std::fs::read(&path).unwrap(), original_bytes);
+    let before = old.render().unwrap();
+    let after = loaded.render().unwrap();
+    for page in 0..2 {
+        assert_eq!(
+            image::imageops::crop_imm(&before, page * (size[0] + 48), 0, size[0], size[1])
+                .to_image(),
+            image::imageops::crop_imm(&after, page * (size[0] + PAGE_GAP), 0, size[0], size[1])
+                .to_image()
+        );
+    }
 }

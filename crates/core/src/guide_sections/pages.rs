@@ -1,10 +1,18 @@
 use super::*;
 
-pub const PAGE_GAP: u32 = 48;
+pub const PAGE_GAP: u32 = 160;
+
+fn legacy_gap() -> u32 {
+    48
+}
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct PageLayout {
+    #[serde(default = "legacy_gap")]
+    pub gap: u32,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub setup: Vec<PageSetup>,
     #[serde(default)]
     pub horizontal: bool,
     pub size: [u32; 2],
@@ -20,7 +28,9 @@ impl Layout {
         self.pages.as_ref().map_or([0.; 2], |p| {
             let axis = usize::from(!p.horizontal);
             let mut offset = [0.; 2];
-            offset[axis] = page as f32 * (p.size[axis] + PAGE_GAP) as f32;
+            offset[axis] = (0..page)
+                .map(|i| self.page_size(i, p.size)[axis] + p.gap)
+                .sum::<u32>() as f32;
             offset
         })
     }
@@ -32,25 +42,43 @@ impl Layout {
     }
     pub fn canvas_size(&self) -> [u32; 2] {
         self.pages.as_ref().map_or([0; 2], |p| {
-            let mut size = p.size;
             let axis = usize::from(!p.horizontal);
-            size[axis] = (size[axis].saturating_add(PAGE_GAP))
-                .saturating_mul(p.count as u32)
-                .saturating_sub(PAGE_GAP);
+            let mut size = [0; 2];
+            size[axis] = (0..p.count)
+                .map(|i| self.page_size(i, p.size)[axis] + p.gap)
+                .sum::<u32>()
+                .saturating_sub(p.gap);
+            size[1 - axis] = (0..p.count)
+                .map(|i| self.page_size(i, p.size)[1 - axis])
+                .max()
+                .unwrap_or(0);
+
             size
         })
     }
     pub fn page_at(&self, point: [f32; 2]) -> usize {
         self.pages.as_ref().map_or(0, |p| {
             let axis = usize::from(!p.horizontal);
-            ((point[axis].max(0.) / (p.size[axis] + PAGE_GAP) as f32) as usize).min(p.count - 1)
+            (0..p.count)
+                .find(|i| {
+                    point[axis]
+                        < self.page_offset(*i)[axis]
+                            + self.page_size(*i, p.size)[axis] as f32
+                            + p.gap as f32 * 0.5
+                })
+                .unwrap_or(p.count - 1)
         })
     }
     pub fn section_origins(&self) -> BTreeMap<u64, [f32; 2]> {
         self.spans()
             .into_iter()
             .zip(&self.sections)
-            .map(|((id, top, _), s)| (id, [self.page_offset(s.page)[0], top]))
+            .map(|((id, top, _), s)| {
+                (
+                    id,
+                    [self.page_offset(s.page)[0] + self.content_left(s.page), top],
+                )
+            })
             .collect()
     }
     pub(super) fn validate_pages(&self, document: &Document) -> Result<()> {
@@ -58,6 +86,8 @@ impl Layout {
             && (document.version < 27
                 || !(1..=128).contains(&p.count)
                 || (p.horizontal && document.version < 28)
+                || (p.gap != 48 && document.version < 29)
+                || !(48..=1024).contains(&p.gap)
                 || p.size.iter().any(|n| !(128..=32768).contains(n))
                 || self.top + 48. > p.size[1] as f32
                 || [document.width, document.height] != self.canvas_size())
@@ -66,6 +96,14 @@ impl Layout {
                 "Invalid guide page dimensions or count".into(),
             ));
         }
+        if let Some(p) = &self.pages {
+            if !p.setup.is_empty() && (document.version < 30 || p.setup.len() != p.count) {
+                return Err(Error::Invalid("Invalid per-page settings".into()));
+            }
+            for setup in &p.setup {
+                setup.validate()?;
+            }
+        }
         let mut previous = 0;
         for s in &self.sections {
             if s.page >= self.page_count() || s.page < previous {
@@ -73,9 +111,13 @@ impl Layout {
             }
             previous = s.page;
         }
-        if let Some(p) = &self.pages {
+        if self.pages.is_some() {
             for (i, (_, _, bottom)) in self.spans().iter().enumerate() {
-                if *bottom > self.page_origin(self.sections[i].page) + p.size[1] as f32 + 0.01 {
+                if *bottom
+                    > self.page_origin(self.sections[i].page)
+                        + self.content_bottom(self.sections[i].page)
+                        + 0.01
+                {
                     return Err(Error::Invalid("Section exceeds its page; enable automatic overflow or increase page height".into()));
                 }
             }
@@ -83,39 +125,47 @@ impl Layout {
         Ok(())
     }
     pub(super) fn overflow_sections(&mut self) -> Result<()> {
-        let Some(pages) = &mut self.pages else {
+        if self.pages.is_none() {
             return Ok(());
-        };
+        }
         self.sections.sort_by_key(|s| s.page);
-        let available = pages.size[1] as f32 - self.top;
         let mut page = 0;
         let mut used = 0.;
-        for section in &mut self.sections {
-            if section.height > available + 0.01 {
-                return Err(Error::Invalid("A section is taller than the page. Increase page height or shorten that section before paginating.".into()));
-            }
-            if section.page > page {
-                page = section.page;
+        for i in 0..self.sections.len() {
+            if self.sections[i].page > page {
+                page = self.sections[i].page;
                 used = 0.;
             }
-            if used + section.height > available + 0.01 {
-                if !pages.auto_overflow {
+            loop {
+                let available = self.content_bottom(page) - self.content_top(page);
+                if self.sections[i].height <= available + 0.01
+                    && used + self.sections[i].height <= available + 0.01
+                {
+                    break;
+                }
+                if !self.pages.as_ref().unwrap().auto_overflow {
                     return Err(Error::Invalid(
-                        "Page is full. Enable automatic overflow or move sections to another page."
-                            .into(),
+                        "Page is full. Enable automatic overflow or increase its size.".into(),
                     ));
+                }
+                if used == 0. && page + 1 >= self.page_count() {
+                    return Err(Error::Invalid("A section is taller than the printable area. Increase page height, scale content or shorten the section.".into()));
                 }
                 page += 1;
                 used = 0.;
+                if page >= 128 {
+                    return Err(Error::Invalid("Guides support up to 128 pages".into()));
+                }
+                let p = self.pages.as_mut().unwrap();
+                if page >= p.count {
+                    p.count = page + 1;
+                    if let Some(last) = p.setup.last().cloned() {
+                        p.setup.push(last);
+                    }
+                }
             }
-            section.page = page;
-            used += section.height;
-        }
-        pages.count = pages.count.max(page + 1);
-        if pages.count > 128 {
-            return Err(Error::Invalid(
-                "Guides support up to 128 pages within the canvas pixel limit".into(),
-            ));
+            self.sections[i].page = page;
+            used += self.sections[i].height;
         }
         Ok(())
     }
@@ -131,12 +181,15 @@ impl Document {
         let mut old_origins = layout.section_origins();
         let old_layout = layout.clone();
         layout.pages.get_or_insert(PageLayout {
+            gap: PAGE_GAP,
+            setup: vec![],
             horizontal: true,
             size: [self.width, self.height],
             count: 1,
             auto_overflow: true,
         });
         layout.pages.as_mut().unwrap().horizontal = true;
+        layout.pages.as_mut().unwrap().gap = PAGE_GAP;
         let count = layout.page_count();
         let check_page = |page: usize| -> Result<()> {
             if page < count {
@@ -197,7 +250,12 @@ impl Document {
                         s.page += 1;
                     }
                 }
-                layout.pages.as_mut().unwrap().count += 1;
+                let p = layout.pages.as_mut().unwrap();
+                p.count += 1;
+                if !p.setup.is_empty() {
+                    let setup = p.setup[page].clone();
+                    p.setup.insert(page + 1, setup);
+                }
                 if copy {
                     let owned: BTreeSet<_> = old_layout
                         .sections
@@ -244,7 +302,7 @@ impl Document {
                     }
                 } else {
                     let height =
-                        (layout.pages.as_ref().unwrap().size[1] as f32 - layout.top).min(160.);
+                        (layout.content_bottom(page + 1) - layout.content_top(page + 1)).min(160.);
                     layout.sections.push(Section {
                         page: page + 1,
                         id: next_section,
@@ -280,11 +338,20 @@ impl Document {
                         s.page -= 1;
                     }
                 }
-                layout.pages.as_mut().unwrap().count -= 1;
+                let p = layout.pages.as_mut().unwrap();
+                p.count -= 1;
+                if !p.setup.is_empty() {
+                    p.setup.remove(page);
+                }
             }
             Action::MovePage { page, index } => {
                 check_page(page)?;
                 check_page(index)?;
+                let p = layout.pages.as_mut().unwrap();
+                if !p.setup.is_empty() {
+                    let setup = p.setup.remove(page);
+                    p.setup.insert(index, setup);
+                }
                 for section in &mut layout.sections {
                     section.page = reordered_page(section.page, page, index);
                 }
@@ -344,6 +411,10 @@ impl Document {
                 next.width = width;
                 let p = layout.pages.as_mut().unwrap();
                 p.size = [width, height];
+                for setup in &mut p.setup {
+                    setup.size = [width, height];
+                    setup.physical_points = None;
+                }
                 p.auto_overflow = auto_overflow;
             }
             Action::Paginate => {
@@ -352,6 +423,7 @@ impl Document {
                 }
                 let p = layout.pages.as_mut().unwrap();
                 p.count = 1;
+                p.setup.truncate(1);
                 p.auto_overflow = true;
             }
             _ => unreachable!(),
@@ -384,8 +456,11 @@ impl Document {
                 _ => Some(page),
             };
             if let Some(dest) = destination {
-                let scale =
-                    layout.page_width(next.width) as f32 / old_layout.page_width(self.width) as f32;
+                let scale = if matches!(action, Action::PageSize { .. }) {
+                    layout.page_width(next.width) as f32 / old_layout.page_width(self.width) as f32
+                } else {
+                    1.
+                };
                 let delta = [0, 1]
                     .map(|i| layout.page_offset(dest)[i] - old_layout.page_offset(page)[i] * scale);
                 if let Some(slot) = next.annotations.iter_mut().find(|n| n.id == a.id) {

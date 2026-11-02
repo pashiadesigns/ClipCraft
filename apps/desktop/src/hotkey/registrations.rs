@@ -104,9 +104,41 @@ mod tests {
         }
     }
     #[test]
+    fn startup_keeps_available_shortcuts_when_one_binding_cannot_register() {
+        let keys = Keybinds::default();
+        let mut adapter = Adapter::default();
+        adapter.native.fail = keys.get(Action::Saved);
+        let status = crate::hotkey::register_available(&mut adapter, &keys).unwrap();
+        assert_eq!(adapter.native.registered.len(), 1);
+        assert_eq!(adapter.state.active[0].1.action, Action::Region);
+        assert!(
+            status.contains("1 capture keybind") && status.contains("Capture with saved settings")
+        );
+        assert_eq!(
+            keys,
+            Keybinds::default(),
+            "startup never removes a saved preference"
+        );
+        adapter.native.fail = None;
+        apply(&mut adapter, &keys, || Ok(())).unwrap();
+        assert_eq!(adapter.native.registered.len(), 2);
+    }
+    #[test]
     fn replacement_is_atomic_across_native_conflict_persistence_failure_reassignment_and_disable() {
         let mut a = Adapter::default();
-        let old = Keybinds::default();
+        let mut old = Keybinds::default();
+        apply(&mut a, &old, || Ok(())).unwrap();
+        assert_eq!(a.native.registered.len(), 2);
+        a.state.clear(&mut a.native);
+        // Exercise replacement of a legacy/custom assignment as well as new defaults.
+        old.set(Action::Region, None);
+        old.set(
+            Action::Saved,
+            Some(Chord {
+                key: 0x43,
+                modifiers: 3,
+            }),
+        );
         apply(&mut a, &old, || Ok(())).unwrap();
         let registered = a.native.registered.clone();
         let mut next = old.clone();

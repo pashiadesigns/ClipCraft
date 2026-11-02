@@ -97,7 +97,7 @@ fn recording_conflicts_and_cancel_are_isolated_from_document_and_capture() {
     click(&ctx, &mut e, text(&o, "Keybinds"));
     assert!(e.options.tab == Tab::Keybinds);
     let o = frame(&ctx, &mut e, 980., vec![]);
-    click(&ctx, &mut e, text(&o, "Ctrl+Alt+C"));
+    click(&ctx, &mut e, text(&o, "Print Screen"));
     assert_eq!(
         e.options.recording,
         Some(ShortcutAction::Capture(Action::Saved))
@@ -115,7 +115,7 @@ fn recording_conflicts_and_cancel_are_isolated_from_document_and_capture() {
         &ctx,
         &mut e,
         980.,
-        vec![key(egui::Key::F11, egui::Modifiers::ALT)],
+        vec![key(egui::Key::F10, egui::Modifiers::ALT)],
     );
     assert!(e.options.recording.is_none());
     assert_eq!(
@@ -126,7 +126,7 @@ fn recording_conflicts_and_cancel_are_isolated_from_document_and_capture() {
             .get(Action::Saved)
             .unwrap()
             .label(),
-        "Alt+F11"
+        "Alt+F10"
     );
     assert_eq!(
         e.quick_controls.keybinds(),
@@ -138,17 +138,19 @@ fn recording_conflicts_and_cancel_are_isolated_from_document_and_capture() {
         &ctx,
         &mut e,
         980.,
-        vec![key(egui::Key::F11, egui::Modifiers::ALT)],
+        vec![key(egui::Key::F10, egui::Modifiers::ALT)],
     );
     assert!(e.options.error);
     assert!(e.options.message.contains("already assigned"));
-    assert!(
+    assert_eq!(
         e.options
             .draft
             .as_ref()
             .unwrap()
             .get(Action::Region)
-            .is_none()
+            .unwrap()
+            .label(),
+        "Alt+F11"
     );
     frame(
         &ctx,

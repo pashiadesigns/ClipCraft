@@ -4,7 +4,140 @@ use egui::{Event, Modifiers, PointerButton};
 
 struct Layout {
     header: Vec<(&'static str, Response)>,
-    tabs: [egui::Rect; 4],
+    tabs: [egui::Rect; 3],
+}
+
+#[test]
+fn ribbons_only_allocate_scrollbar_space_for_overflow_and_advanced_replaces_old_tabs() {
+    for width in [900., 1920.] {
+        let ctx = egui::Context::default();
+        crate::shell::configure(&ctx);
+        let mut e = crate::canvas::tests::editor(&ctx);
+        e.shell.badges = false;
+        for tab in [RibbonTab::Home, RibbonTab::ToolSettings, RibbonTab::Export] {
+            e.shell.ribbon_tab = tab;
+            for _ in 0..4 {
+                frame(&ctx, &mut e, vec![], width);
+            }
+            let (_, output) = frame(&ctx, &mut e, vec![], width);
+            assert!(
+                crate::color_widgets::tests::text_rect(&output.shapes, "Advanced Settings")
+                    .is_none()
+            );
+            assert!(
+                crate::color_widgets::tests::text_rect(&output.shapes, "Tool Settings").is_none()
+            );
+            let (content, inner, outer) = ctx
+                .data(|d| {
+                    d.get_temp::<(egui::Vec2, egui::Rect, egui::Rect)>(egui::Id::unique(
+                        "ribbon-overflow-geometry",
+                    ))
+                })
+                .unwrap();
+            let overflow = content.x > inner.width().ceil();
+            let rail = outer.height() - inner.height();
+            assert_eq!(
+                rail > 5.,
+                overflow,
+                "{tab:?} {width}: content {content:?}, inner {inner:?}, outer {outer:?}"
+            );
+            if width == 1920. {
+                assert!(!overflow, "wide {tab:?} must not show an idle scrollbar");
+            }
+        }
+    }
+}
+
+#[test]
+fn page_controls_review_shell_reserves_scrollbar_rails_in_restored_and_wide_windows() {
+    for width in [960., 1440.] {
+        let ctx = egui::Context::default();
+        crate::shell::configure(&ctx);
+        let mut e = crate::canvas::tests::editor(&ctx);
+        let d = capture_core::templates::build(
+            "three-steps",
+            "Guide review",
+            &[],
+            capture_core::templates::Scale::Fill,
+        )
+        .unwrap()
+        .edit_guide(&capture_core::guide_sections::Action::AddPage {
+            page: 0,
+            copy: true,
+        })
+        .unwrap();
+        if width == 960.
+            && let Ok(root) = std::env::var("CLIPCRAFT_FRAME_PAGES_FIXTURES")
+        {
+            std::fs::create_dir_all(&root).unwrap();
+            d.save(&std::path::Path::new(&root).join("review-guide.capture.json"))
+                .unwrap();
+        }
+        e.session = capture_core::Session::new(d).unwrap();
+        e.tool = None;
+        e.needs_render = true;
+        e.shell.badges = false;
+        e.shell.properties = true;
+        e.shell.property_tab = crate::shell::PropertyTab::Objects;
+        e.shell.ribbon_tab = RibbonTab::ToolSettings;
+        ctx.data_mut(|d| d.insert_temp(egui::Id::unique(("objects-page-expanded", 0usize)), true));
+        let render = |e: &mut crate::Editor| {
+            PaintedOutput(ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        egui::vec2(width, 740.),
+                    )),
+                    focused: true,
+                    ..Default::default()
+                },
+                |ui| {
+                    e.show_shell(ui);
+                    e.show_canvas(ui);
+                },
+            ))
+        };
+        let mut first = render(&mut e);
+        for _ in 0..2 {
+            let output = render(&mut e);
+            first
+                .0
+                .textures_delta
+                .append(output.0.textures_delta.clone());
+        }
+        let output = render(&mut e);
+        let content = ctx
+            .data(|d| d.get_temp::<egui::Rect>(egui::Id::unique("properties-scroll-content")))
+            .unwrap();
+        for a in &e.session.document.annotations {
+            if let Some((row, eye, lock, _)) = ctx.data(|d| {
+                d.get_temp::<(egui::Rect, egui::Rect, egui::Rect, String)>(egui::Id::unique((
+                    "object-row",
+                    a.id,
+                )))
+            }) {
+                assert!(
+                    row.right() <= content.right() + 0.1
+                        && eye.right() <= content.right() + 0.1
+                        && lock.right() <= content.right() + 0.1
+                );
+            }
+        }
+        let ribbon = ctx
+            .data(|d| d.get_temp::<egui::Rect>(egui::Id::unique("ribbon-scroll-content")))
+            .unwrap();
+        for caption in ["Font", "Justification", "Alignment", "Distribution"] {
+            if let Some(rect) = crate::color_widgets::tests::text_rect(&output.shapes, caption) {
+                assert!(
+                    rect.bottom() <= ribbon.bottom() + 0.1,
+                    "{caption}: {rect:?} {ribbon:?}"
+                );
+            }
+        }
+        if let Ok(root) = std::env::var("CLIPCRAFT_PAGE_CONTROLS_UI") {
+            dump_meshes(&ctx, &root, &format!("shell-{width:.0}"), first, output);
+        }
+    }
 }
 
 #[test]
@@ -113,7 +246,14 @@ fn website_ui_previews() {
                 },
             ))
         };
-        let first = render();
+        let mut first = render();
+        for _ in 0..4 {
+            let settled = render();
+            first
+                .0
+                .textures_delta
+                .append(settled.textures_delta.clone());
+        }
         let output = render();
         dump_meshes(&ctx, &root, scene, first, output);
     }
@@ -376,7 +516,7 @@ fn frame(
 ) -> (Layout, PaintedOutput) {
     let mut l = Layout {
         header: vec![],
-        tabs: [egui::Rect::NOTHING; 4],
+        tabs: [egui::Rect::NOTHING; 3],
     };
     let output = ctx.run_ui(
         egui::RawInput {
@@ -480,12 +620,7 @@ fn compact_header_fits_and_ribbon_rendering_does_not_edit_documents() {
         e.shell.badges = badges;
         let before = serde_json::to_vec(&e.session.document).unwrap();
         let mut first_footer = None;
-        for tab in [
-            RibbonTab::Home,
-            RibbonTab::ToolSettings,
-            RibbonTab::Export,
-            RibbonTab::AdvancedSettings,
-        ] {
+        for tab in [RibbonTab::Home, RibbonTab::ToolSettings, RibbonTab::Export] {
             e.shell.ribbon_tab = tab;
             frame(&ctx, &mut e, vec![], width);
             let (l, output) = frame(&ctx, &mut e, vec![], width);
@@ -502,12 +637,6 @@ fn compact_header_fits_and_ribbon_rendering_does_not_edit_documents() {
                     "Canvas",
                 ],
                 RibbonTab::Export => &["Image", "Editable project", "Printing"],
-                RibbonTab::AdvancedSettings => &[
-                    "Image recovery",
-                    "Text recognition",
-                    "Selection behavior",
-                    "Preferences",
-                ],
             };
             let footers: Vec<_> = output
                 .0
@@ -575,13 +704,6 @@ fn headless_full_workspace_ribbon_fixtures() {
             false,
         ),
         (RibbonTab::Export, false, "Export", 1280.0, false),
-        (
-            RibbonTab::AdvancedSettings,
-            false,
-            "AdvancedSettings",
-            1280.0,
-            false,
-        ),
         (RibbonTab::Home, true, "Library", 1280.0, false),
         (RibbonTab::Home, false, "HomeWide", 1920.0, false),
         (RibbonTab::Home, false, "HomeCompact", 900.0, true),
@@ -633,7 +755,14 @@ fn headless_full_workspace_ribbon_fixtures() {
                 },
             ))
         };
-        let first = render();
+        let mut first = render();
+        for _ in 0..4 {
+            let settled = render();
+            first
+                .0
+                .textures_delta
+                .append(settled.textures_delta.clone());
+        }
         let output = render();
         if let Ok(root) = std::env::var("CLIPCRAFT_HEADLESS_RIBBON_DIR") {
             dump_meshes(&ctx, &root, name, first, output);
@@ -644,7 +773,7 @@ fn headless_full_workspace_ribbon_fixtures() {
 }
 
 #[test]
-fn advanced_settings_toggles_tool_selection_and_reverts_with_one_undo() {
+fn advanced_restore_reverts_with_one_undo() {
     let ctx = egui::Context::default();
     let mut e = crate::canvas::tests::editor(&ctx);
     e.add_step([100.0, 100.0]);
@@ -659,7 +788,7 @@ fn advanced_settings_toggles_tool_selection_and_reverts_with_one_undo() {
             },
             |ui| {
                 ui.horizontal(|ui| {
-                    responses = e.advanced_controls(ui, 58.0);
+                    responses = e.restore_ribbon(ui, 58.0);
                 });
             },
         );
@@ -686,32 +815,6 @@ fn advanced_settings_toggles_tool_selection_and_reverts_with_one_undo() {
             );
         }
     };
-    let controls = render(&mut e, vec![]);
-    assert_eq!(
-        controls
-            .iter()
-            .find(|(n, _)| *n == "Grab Text")
-            .unwrap()
-            .1
-            .enabled(),
-        cfg!(windows)
-    );
-    assert!(
-        controls
-            .iter()
-            .find(|(n, _)| *n == "More Preferences")
-            .unwrap()
-            .1
-            .enabled()
-    );
-    click(&mut e, "More Preferences");
-    assert_eq!(e.shell.backstage, Some(crate::backstage::Page::Options));
-    assert_eq!(serde_json::to_vec(&e.session.document).unwrap(), original);
-    e.shell.backstage = None;
-    let initial = e.quick_controls.auto_switch_tool();
-    click(&mut e, "Switch tools");
-    assert_eq!(e.quick_controls.auto_switch_tool(), !initial);
-    assert_eq!(serde_json::to_vec(&e.session.document).unwrap(), original);
     click(&mut e, "Revert");
     assert!(e.session.document.annotations.is_empty());
     e.execute(Command::Undo);

@@ -11,7 +11,7 @@
     ],
     "Verified": [
       "Real egui key-event regression and native first/second Escape checks cover draft preservation and cancellation.",
-      "ClipCraft's Share menu clipboard output matches all 256000 fixture pixels. Snagit Share > Clipboard imports through ClipCraft with all 576000 opaque synthetic pixels unchanged."
+      "ClipCraft's Share menu clipboard output matches all 256000 fixture pixels. External clipboard imports through ClipCraft with all 576000 opaque synthetic pixels unchanged."
     ],
     "Improved": [
       "Refreshed direct Share/View reference observations and expanded the detailed UI audit to 148 controls across 12 recorded surfaces.",

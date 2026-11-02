@@ -77,6 +77,7 @@ impl Editor {
             .rev()
             .find(|a| {
                 self.session.document.object_editable(a.id)
+                    && (!self.stamps.active || a.image.as_ref().is_some_and(|b| b.is_stamp()))
                     && (self.quick_controls.auto_switch_tool()
                         || self.editing_group.is_some()
                         || Self::tool_matches(self.tool, a.kind))
@@ -256,6 +257,7 @@ impl Editor {
             }
         }
         self.paint_canvas_display(ui, display_transform);
+        self.paint_page_surrounds(ui, display_transform);
         if interactive && ui.input(|i| i.key_pressed(egui::Key::Escape)) {
             self.cancel_gesture();
             self.stamps.active = false;

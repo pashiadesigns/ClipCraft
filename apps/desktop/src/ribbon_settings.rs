@@ -167,12 +167,6 @@ impl Editor {
             );
         });
         divider(ui, height);
-        if self.session.document.guide.is_some() {
-            group(ui, "Step Guide", 142., height, |ui| {
-                self.guide_page_settings(ui)
-            });
-            divider(ui, height);
-        }
         group(ui, "Canvas", 66.0, height, |ui| {
             self.settings_grid(
                 ui,
@@ -185,6 +179,8 @@ impl Editor {
                 2,
             );
         });
+        divider(ui, height);
+        self.restore_ribbon(ui, height);
     }
     pub(super) fn settings_grid(
         &mut self,

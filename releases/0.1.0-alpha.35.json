@@ -19,6 +19,6 @@
   "limitations": [
     "Smooth round brushes support widths from 1 to 32 pixels. Brush presets and a hard-edge antialias toggle are unfinished.",
     "Erasers affect the image and objects below them in the stack. Editable projects retain original image pixels.",
-    "This unsigned Windows alpha does not claim complete Snagit interface or behavior parity."
+    "This unsigned historical alpha covers only the workflows verified in its release notes."
   ]
 }

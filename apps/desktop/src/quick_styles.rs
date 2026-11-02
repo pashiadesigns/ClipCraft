@@ -340,48 +340,52 @@ impl Editor {
                         });
                     ui.separator();
                 }
-                for (key, title, styles) in &families {
-                    let remembered = styles
-                        .iter()
-                        .find(|s| Some(s.name.as_str()) == self.quick_controls.style_choice(key))
-                        .unwrap_or(&styles[0]);
-                    ui.add_enabled_ui(enabled, |ui| {
-                        crate::split_button::show(ui, |ui| {
-                            let main = arrow_tile(ui, remembered, title, is_active(remembered));
-                            if main.clicked() {
-                                chosen = Some(remembered.clone());
-                            }
-                            crate::split_button::dropdown_for(
-                                ui,
-                                &format!("{title} variations"),
-                                &main,
-                                |ui| {
-                                    egui::Grid::new((key, "variations"))
-                                        .spacing([5.0, 5.0])
-                                        .show(ui, |ui| {
-                                            for (i, style) in styles.iter().enumerate() {
-                                                if arrow_tile(
-                                                    ui,
-                                                    style,
-                                                    &style.name,
-                                                    is_active(style),
-                                                )
-                                                .clicked()
-                                                {
-                                                    chosen = Some(style.clone());
-                                                    remember = Some(*key);
-                                                    ui.close();
+                ui.horizontal_top(|ui| {
+                    for (key, title, styles) in &families {
+                        let remembered = styles
+                            .iter()
+                            .find(|s| {
+                                Some(s.name.as_str()) == self.quick_controls.style_choice(key)
+                            })
+                            .unwrap_or(&styles[0]);
+                        ui.add_enabled_ui(enabled, |ui| {
+                            crate::split_button::show(ui, |ui| {
+                                let main = arrow_tile(ui, remembered, title, is_active(remembered));
+                                if main.clicked() {
+                                    chosen = Some(remembered.clone());
+                                }
+                                crate::split_button::dropdown_for(
+                                    ui,
+                                    &format!("{title} variations"),
+                                    &main,
+                                    |ui| {
+                                        egui::Grid::new((key, "variations"))
+                                            .spacing([5.0, 5.0])
+                                            .show(ui, |ui| {
+                                                for (i, style) in styles.iter().enumerate() {
+                                                    if arrow_tile(
+                                                        ui,
+                                                        style,
+                                                        &style.name,
+                                                        is_active(style),
+                                                    )
+                                                    .clicked()
+                                                    {
+                                                        chosen = Some(style.clone());
+                                                        remember = Some(*key);
+                                                        ui.close();
+                                                    }
+                                                    if i % 3 == 2 {
+                                                        ui.end_row();
+                                                    }
                                                 }
-                                                if i % 3 == 2 {
-                                                    ui.end_row();
-                                                }
-                                            }
-                                        });
-                                },
-                            );
-                        })
-                    });
-                }
+                                            });
+                                    },
+                                );
+                            })
+                        });
+                    }
+                });
             });
         if let Some(style) = chosen {
             self.apply_arrow_style(&style);
@@ -462,6 +466,9 @@ mod header_tests {
             .unwrap()
         };
         let curved = tile("Curved arrow").0.center();
+        let straight = tile("Straight arrow").0;
+        assert!(curved.x > straight.right());
+        assert!((curved.y - straight.center().y).abs() < 0.1);
         assert!(!tile("Curved arrow").1);
         for pressed in [true, false] {
             frame(

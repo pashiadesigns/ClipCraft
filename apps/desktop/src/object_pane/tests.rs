@@ -399,6 +399,10 @@ fn guide_pages_start_collapsed_expand_sections_and_drag_reorders_without_groupin
         vec![Event::PointerMoved(first + egui::vec2(0., 8.))],
     );
     frame(&ctx, &mut e, vec![Event::PointerMoved(second)]);
+    assert!(
+        ctx.data(|d| d.get_temp::<Rect>(egui::Id::unique("guide-tree-drag-preview")))
+            .is_some()
+    );
     frame(
         &ctx,
         &mut e,
@@ -412,4 +416,84 @@ fn guide_pages_start_collapsed_expand_sections_and_drag_reorders_without_groupin
     assert_ne!(serde_json::to_vec(&e.session.document).unwrap(), before);
     e.execute(Command::Undo);
     assert_eq!(serde_json::to_vec(&e.session.document).unwrap(), before);
+}
+
+#[test]
+fn guide_section_drag_reflows_content_and_undoes_once() {
+    let ctx = egui::Context::default();
+    crate::shell::configure(&ctx);
+    let mut e = editor(&ctx);
+    let d = capture_core::templates::build(
+        "two-steps",
+        "Guide",
+        &[],
+        capture_core::templates::Scale::Fill,
+    )
+    .unwrap();
+    let ids: Vec<_> = d
+        .guide
+        .as_ref()
+        .unwrap()
+        .sections
+        .iter()
+        .map(|s| s.id)
+        .collect();
+    e.session = capture_core::Session::new(d).unwrap();
+    e.select_only(None);
+    ctx.data_mut(|d| {
+        d.insert_temp(egui::Id::unique(("objects-page-expanded", 0usize)), true);
+        for id in &ids {
+            d.insert_temp(egui::Id::unique(("objects-section-expanded", *id)), false);
+        }
+    });
+    frame(&ctx, &mut e, vec![]);
+    let at = |id| {
+        ctx.data(|d| {
+            d.get_temp::<Rect>(egui::Id::unique(("objects-section-expanded", id)).with("rect"))
+                .unwrap()
+                .center()
+        })
+    };
+    let from = at(ids[1]);
+    let to = at(ids[2]);
+    let before = serde_json::to_vec(&e.session.document).unwrap();
+    let press = |pos, pressed| Event::PointerButton {
+        pos,
+        pressed,
+        button: PointerButton::Primary,
+        modifiers: Modifiers::NONE,
+    };
+    frame(
+        &ctx,
+        &mut e,
+        vec![Event::PointerMoved(from), press(from, true)],
+    );
+    frame(
+        &ctx,
+        &mut e,
+        vec![Event::PointerMoved(from + egui::vec2(0., 8.))],
+    );
+    frame(&ctx, &mut e, vec![Event::PointerMoved(to)]);
+    assert!(
+        ctx.data(|d| d.get_temp::<Rect>(egui::Id::unique("guide-tree-drag-preview")))
+            .is_some()
+    );
+    frame(&ctx, &mut e, vec![press(to, false)]);
+    let after = &e.session.document;
+    assert_eq!(after.guide.as_ref().unwrap().sections[2].id, ids[1]);
+    after.validate().unwrap();
+    let expected: capture_core::Document = serde_json::from_slice(&before).unwrap();
+    let expected = expected
+        .edit_guide(&capture_core::guide_sections::Action::Move {
+            id: ids[1],
+            index: 2,
+        })
+        .unwrap();
+    assert_eq!(
+        serde_json::to_vec(after).unwrap(),
+        serde_json::to_vec(&expected).unwrap()
+    );
+    e.execute(Command::Undo);
+    assert_eq!(serde_json::to_vec(&e.session.document).unwrap(), before);
+    assert!(!e.session.can_undo());
 }

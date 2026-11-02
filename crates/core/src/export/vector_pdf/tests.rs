@@ -245,6 +245,9 @@ fn horizontal_pages_translate_source_x_and_preserve_vector_content() {
         .collect::<Vec<_>>()
         .join("\n");
     assert!(content.contains("1 0 0 -1 0 550 cm"));
-    assert!(content.contains("1 0 0 -1 -948 550 cm"));
+    assert!(content.contains(&format!(
+        "1 0 0 -1 -{} 550 cm",
+        900 + crate::guide_sections::PAGE_GAP
+    )));
     assert!(content.contains(" l\n"));
 }

@@ -4,6 +4,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 
 mod pages;
+mod setup;
+pub use setup::{Alignment, NumberStyle, PageSetup, RunningText};
 #[cfg(test)]
 mod tests;
 pub use pages::{PAGE_GAP, PageLayout};
@@ -65,6 +67,13 @@ pub enum Action {
         height: u32,
         auto_overflow: bool,
     },
+    PageSetup {
+        settings: Box<PageSetup>,
+        pages: Vec<usize>,
+        scale_content: bool,
+        auto_overflow: bool,
+        distribute: bool,
+    },
     Paginate,
     Insert {
         after: Option<u64>,
@@ -88,10 +97,18 @@ pub enum Action {
         id: u64,
         index: usize,
     },
+    /// Insert at a page-local position after removing the source section.
+    Relocate {
+        id: u64,
+        page: usize,
+        index: usize,
+    },
 }
 impl Layout {
     pub fn spans(&self) -> Vec<(u64, f32, f32)> {
-        let mut positions = vec![self.top; self.page_count()];
+        let mut positions: Vec<_> = (0..self.page_count())
+            .map(|p| self.content_top(p))
+            .collect();
         self.sections
             .iter()
             .map(|s| {
@@ -187,8 +204,9 @@ impl Document {
                 let mut area = 0.0_f32;
                 for ((id, top, bottom), section) in spans.iter().zip(&layout.sections) {
                     let x = layout.page_offset(section.page)[0];
-                    let overlap = (hi[0].min(x + layout.page_width(self.width) as f32)
-                        - lo[0].max(x))
+                    let overlap = (hi[0].min(
+                        x + layout.page_size(section.page, [self.width, self.height])[0] as f32,
+                    ) - lo[0].max(x))
                     .max(0.)
                         * (hi[1].min(*bottom) - lo[1].max(*top)).max(0.);
                     if overlap > area
@@ -214,6 +232,22 @@ impl Document {
         }
     }
     pub fn edit_guide(&self, action: &Action) -> Result<Self> {
+        if let Action::PageSetup {
+            settings,
+            pages,
+            scale_content,
+            auto_overflow,
+            distribute,
+        } = action
+        {
+            return self.edit_page_setup(
+                settings,
+                pages,
+                *scale_content,
+                *auto_overflow,
+                *distribute,
+            );
+        }
         self.validate()?;
         if matches!(
             action,
@@ -273,7 +307,10 @@ impl Document {
                     SectionKind::Text | SectionKind::Blank => 160.,
                     SectionKind::Image => 360.,
                 };
-                let width = layout.page_width(next.width) as f32;
+                let page = after
+                    .and_then(|id| layout.sections.iter().find(|s| s.id == id))
+                    .map_or(0, |s| s.page);
+                let width = layout.content_width(page, next.width);
                 let mut objects = Vec::new();
                 let title = match kind {
                     SectionKind::Header => "Heading",
@@ -416,6 +453,36 @@ impl Document {
                 let section = layout.sections.remove(at);
                 layout.sections.insert(destination, section);
             }
+            Action::Relocate {
+                id,
+                page,
+                index: destination,
+            } => {
+                let at = index(id)?;
+                if page >= layout.page_count() {
+                    return Err(Error::Invalid("Invalid destination page".into()));
+                }
+                let mut section = layout.sections.remove(at);
+                let positions: Vec<_> = layout
+                    .sections
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, s)| s.page == page)
+                    .map(|(i, _)| i)
+                    .collect();
+                if destination > positions.len() {
+                    return Err(Error::Invalid("Invalid section destination".into()));
+                }
+                let insert = positions.get(destination).copied().unwrap_or_else(|| {
+                    layout
+                        .sections
+                        .iter()
+                        .position(|s| s.page > page)
+                        .unwrap_or(layout.sections.len())
+                });
+                section.page = page;
+                layout.sections.insert(insert, section);
+            }
             _ => unreachable!(),
         }
         self.finish_guide(next, layout, old_origins)
@@ -491,3 +558,5 @@ impl Document {
 
 #[cfg(test)]
 mod pages_tests;
+#[cfg(test)]
+mod setup_tests;

@@ -57,7 +57,7 @@ Automated coverage includes clipping, independent opacity, crop geometry,
 conversion, source-texture reuse, synthetic drops, click modes, page/section
 operations, saved templates, legacy backgrounds, invalid input, persistence,
 Undo, explicit PDF page boundaries and snapping popup interaction. Native
-Explorer drag/drop passed user check U1 on the preceding candidate. No new native Snagit parity
+Explorer drag/drop passed user check U1 on the preceding candidate. No new native desktop comparison
 or signing claim is made.
 
 ## Follow-up rendering corrections
@@ -81,3 +81,30 @@ Follow-up qualification: 622 Rust tests, formatting and Clippy pass. The focused
 1920×1080 frame benchmark reuses all source/shadow textures across nine warm
 zoom/drag frames in 0.33–1.23 ms total (unoptimized headless CPU test on the
 development PC). This excludes native presentation and is not a GPU FPS claim.
+
+
+## Page controls review batch (local, publication paused)
+
+User approved the page-plus design and existing Library trash icon, with section
++ and ellipsis buttons aligned at the same boundary. Canvas action buttons now
+use a shared screen-space collision rule: colliding buttons are hidden and their
+hit targets removed, and return as soon as spacing permits. Wider page gutters
+provide room at ordinary zoom. Project format 29 records the gap; older 48-pixel
+gutters migrate in memory, preserving each page's dimensions and pixels, locks
+and original file. The overall multi-page canvas is wider; PDF/printed pages keep
+their original dimensions. Oversize migrations retain the valid old layout.
+
+Objects rows show a drag preview and insertion line for page and same-page
+section reorder. Section content reflows through the core command and one Undo
+restores it. Delete confirmation is compact. Choose Image remains accessible at
+partial viewport edges, uses a compact button on small frames, and remains drawn
+during object previews. More Tools uses shared tool icons and left-aligned labels.
+Themed scrollbars reserve space instead of covering property rows/ribbon captions;
+fixed editor strips keep their rails stable across preview-mode toggles.
+
+Automated qualification covers collision thresholds, partial frame visibility,
+section drag/Undo, legacy migration/page pixels, narrow and wide production UI,
+vector PDF, retained image performance and prior unchanged rendering fixtures.
+The user-confirmed page arrow behavior and U1 pass are retained. Native U2 and
+this batch's final layout review remain pending. GitHub/publication and signing
+remain paused; this batch is a local review candidate, not a public release.

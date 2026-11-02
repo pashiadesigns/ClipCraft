@@ -1,6 +1,10 @@
 //! ClipCraft branding. Window and in-app marks share the user-supplied vector source.
 use crate::egui;
 use std::sync::{Arc, LazyLock};
+#[cfg(windows)]
+mod windows;
+#[cfg(windows)]
+pub(super) use windows::{prepare_controller_window, sync_window_icons};
 
 const PNG: &[u8] = include_bytes!("../assets/brand/clipcraft-256.png");
 static PIXELS: LazyLock<image::RgbaImage> = LazyLock::new(|| {

@@ -28,3 +28,7 @@
 *.p12
 *.key
 *.pem
+
+/Launch ClipCraft Startup Test.cmd
+!/docs/licensing.md
+!/docs/installing.md

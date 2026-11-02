@@ -371,7 +371,8 @@ impl Editor {
             if ui
                 .add_enabled(
                     self.options.recording.is_none(),
-                    egui::Button::new("Save shortcuts").min_size(egui::vec2(134.0, 34.0)),
+                    crate::controls::dialog_button("Save shortcuts", true)
+                        .min_size(egui::vec2(134., crate::controls::DIALOG_ACTION_HEIGHT)),
                 )
                 .clicked()
             {

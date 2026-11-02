@@ -40,12 +40,13 @@ impl Document {
     }
 
     fn display_list_limited(&self, patch_pixel_limit: u64) -> Result<DisplayList> {
-        let visible: Vec<_> = self
+        let mut visible: Vec<_> = self
             .annotations
             .iter()
             .filter(|a| self.object_visible(a.id))
             .cloned()
             .collect();
+        visible.extend(self.page_furniture());
         layers_from_base(self.base_image()?, &visible, patch_pixel_limit)
     }
 }

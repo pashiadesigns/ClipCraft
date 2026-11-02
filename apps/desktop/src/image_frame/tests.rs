@@ -62,6 +62,111 @@ fn image() -> Annotation {
 }
 
 #[test]
+fn choose_image_stays_visible_at_viewport_edge_and_low_zoom_until_buttons_collide() {
+    let ctx = egui::Context::default();
+    crate::shell::configure(&ctx);
+    let mut e = crate::canvas::tests::editor(&ctx);
+    let template = capture_core::templates::build(
+        "two-steps",
+        "Guide",
+        &[],
+        capture_core::templates::Scale::Fill,
+    )
+    .unwrap();
+    let mut a = template
+        .annotations
+        .iter()
+        .find(|a| a.image.as_ref().is_some_and(|b| b.is_placeholder()))
+        .unwrap()
+        .clone();
+    a.id = 1;
+    a.start = [100., 80.];
+    a.end = [300., 240.];
+    let mut doc = Document::blank(600, 400).unwrap();
+    doc.annotations.push(a);
+    doc.promote_features();
+    e.session = Session::new(doc).unwrap();
+    for scale in [0.1, 0.25, 0.5, 1., 2., 8., 16.] {
+        let t = crate::canvas_view::Transform {
+            image: egui::Rect::from_min_size(
+                egui::pos2(-100. * scale + 10., -80. * scale + 10.),
+                egui::vec2(600., 400.) * scale,
+            ),
+            viewport: egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(180., 160.)),
+            scale,
+            zoom: scale,
+        };
+        let buttons = e.placeholder_buttons(t);
+        let expected = egui::Rect::from_center_size(
+            t.screen_point([200., 160.]),
+            egui::vec2(110., 28.) * scale,
+        );
+        assert_eq!(
+            buttons.len(),
+            usize::from(expected.intersects(t.viewport)),
+            "{scale}"
+        );
+        if let Some((_, rect)) = buttons.first() {
+            assert_eq!(*rect, expected);
+        }
+    }
+    let t = crate::canvas_view::Transform {
+        image: egui::Rect::from_min_size(egui::pos2(-50., 0.), egui::vec2(600., 400.)),
+        viewport: egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(180., 400.)),
+        scale: 1.,
+        zoom: 1.,
+    };
+    assert_eq!(
+        e.placeholder_buttons(t).len(),
+        1,
+        "partly obscured frame remains accessible"
+    );
+    let mut second = e.session.document.annotations[0].clone();
+    second.id = 2;
+    e.session.document.annotations.push(second);
+    assert!(
+        e.placeholder_buttons(t).is_empty(),
+        "overlapping image actions hide together"
+    );
+    e.session.document.annotations[1].start[1] += 200.;
+    e.session.document.annotations[1].end[1] += 200.;
+    assert_eq!(
+        e.placeholder_buttons(t).len(),
+        2,
+        "both actions reappear without a zoom-mode reset"
+    );
+    e.session.document.annotations.truncate(1);
+    let t = crate::canvas_view::Transform {
+        image: t.image.translate(egui::vec2(-130., 0.)),
+        viewport: egui::Rect::from_min_max(egui::pos2(50., 0.), egui::pos2(180., 400.)),
+        ..t
+    };
+    let out = PaintedOutput(ctx.run_ui(
+        egui::RawInput {
+            screen_rect: Some(egui::Rect::from_min_size(
+                egui::Pos2::ZERO,
+                egui::vec2(500., 500.),
+            )),
+            events: vec![egui::Event::PointerMoved(egui::pos2(20., 160.))],
+            ..Default::default()
+        },
+        |ui| {
+            assert!(
+                !e.image_frame_buttons_hovered(ui, t),
+                "clipped part must not intercept workspace clicks"
+            );
+            e.show_image_frame_buttons(ui, t);
+        },
+    ));
+    let label = out
+        .shapes
+        .iter()
+        .find(|s| matches!(&s.shape,egui::Shape::Text(text) if text.galley.text()=="Choose Image"))
+        .unwrap();
+    assert!(t.viewport.contains_rect(label.clip_rect));
+}
+
+#[test]
 fn canvas_zoom_buttons_and_ctrl_pan_preserve_frame_and_undo_once() {
     let ctx = egui::Context::default();
     crate::shell::configure(&ctx);

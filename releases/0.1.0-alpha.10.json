@@ -21,7 +21,7 @@
   },
   "limitations": [
     "Screen capture, global hotkeys, rich text styles and complete reference-interface parity remain unfinished.",
-    "This is an original ClipCraft exact-color workflow; detailed Snagit picker parity is not claimed. Interactive palette conversion and all keyboard interactions remain under review.",
+    "This is an original ClipCraft exact-color workflow; broader color-picker interactions remain under review. Interactive palette conversion and all keyboard interactions remain under review.",
     "The default opaque drawing-tool color picker still uses its existing control; this popup covers text, callout fill/outline and New Image RGBA controls.",
     "Native Save As/export-dialog inspection remains blocked separately. Existing-path saves, shared PNG exports and native clipboard comparisons are verified."
   ]

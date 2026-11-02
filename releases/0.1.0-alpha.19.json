@@ -17,7 +17,7 @@
   },
   "limitations": [
     "Print units, DPI metadata and resampling choices remain planned.",
-    "ClipCraft keeps resized objects editable; Snagit requires a flattening confirmation. That separate workflow is still planned.",
+    "ClipCraft keeps resized objects editable; A separate flattening-confirmation workflow was still planned at this historical release.",
     "Temporary status badges make the panel wider than the reference. Full pixel-level UI parity is not claimed."
   ]
 }

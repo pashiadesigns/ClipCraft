@@ -1,6 +1,6 @@
 # ClipCraft feature backlog
 
-Updated: 2026-11-01
+Updated: 2026-11-02
 
 Preview.2 remains the immutable unsigned release. Internal security review is published. Microsoft Artifact Signing setup is paused by the maintainer until a later build; the Basic account remains created, individual verification incomplete, and no signed build or installer exists. Automation remains paused; no broader development restart.
 
@@ -44,7 +44,7 @@ Generated from roadmap.json. Edit that source and run node scripts/build.mjs; do
 | FILE-001: Flattened PNG export | Files | Shipped | Delivered |
 | SHIP-001: Portable Windows alpha download | Distribution | Shipped | Delivered |
 | FILE-005: Remember image and export folders | Files | Shipped | Delivered |
-| REF-001: Direct Snagit workflow comparison | Reference | In progress | After the essentials |
+| REF-001: Workflow usability research | Reference | Deferred | Later |
 | EDIT-013: Pen, line, and highlighter | Editing | Shipped | Delivered |
 | EDIT-014: Additional shapes and annotation styles | Editing | In progress | Next |
 | EDIT-015: Pixel selection, fill, and Magic Wand | Editing | In progress | Next |
@@ -248,6 +248,7 @@ Generated from roadmap.json. Edit that source and run node scripts/build.mjs; do
 | EDIT-087: External image drops into shape frames | Editing | Needs verification | Next |
 | EDIT-088: Multiple pages for templates and step guides | Editing | Needs verification | Next |
 | UX-087: Keep canvas snapping settings open while editing | Experience | Needs verification | Next |
+| UX-088: Readable canvas controls and non-overlapping scrollbars | Experience | Needs verification | Next |
 
 ## Completion checks and evidence
 
@@ -299,7 +300,7 @@ Completion: Compare each mapped screen at matching window size and DPI, verify c
 - Evidence: Alpha.23 compact280x200 New Image follows directly observed280x198 arrangement; full color-picker/default parity remains unfinished. docs/alpha23-new-image-verification.md
 - Evidence: 2026-10-30 planning refresh: alpha.29 prioritizes the observed arrow stroke defect; this unfinished provisional target is rescheduled by priority.
 - Evidence: 2026-10-30 user supplied four Arrow/Text/Callout/Shape properties screenshots. Read as user-provided visual reference only, not direct installed-app observation. Strong section bars/group dividers and Tool Properties/Objects tabs prepared; full control/behavior parity remains incomplete. docs/properties-refresh-work.md.
-- Evidence: User override2026-10-30: top-level workspace now follows DeckCraft-style quick-access header and Home/Export ribbons (UX-038), while supplied Snagit property-group reference and Tool Properties/Objects tabs remain. Do not treat the superseded Snagit top strip as remaining parity work.
+- Evidence: User override2026-10-30: top-level workspace now follows DeckCraft-style quick-access header and Home/Export ribbons (UX-038), while supplied the reference application property-group reference and Tool Properties/Objects tabs remain. Do not treat the superseded the reference application top strip as remaining parity work.
 - Original target: 0.1.0-alpha.4 — OVERDUE; scope still unfinished
 - Recorded target history: 0.1.0-alpha.4 → 0.1.0-alpha.5 → 0.1.0-alpha.6 → 0.1.0-alpha.7 → 0.1.0-alpha.8 → 0.1.0-alpha.9 → 0.1.0-alpha.10 → 0.1.0-alpha.12 → 0.1.0-alpha.13 → 0.1.0-alpha.14 → 0.1.0-alpha.20 → 0.1.0-alpha.28
 - Release not scheduled; priorities are not version promises.
@@ -537,7 +538,7 @@ Completion: Verify editing text, positioning pointers, styling, and export.
 
 **Needs verification** · Next · Updated 2026-10-31
 
-Copy All and New from Clipboard are available. Alpha.11 connects Share > Clipboard and verifies one opaque PNG transfer from Snagit. Save-and-continue, transparency interoperability and other external formats remain pending.
+Copy All and New from Clipboard are available. Alpha.11 connects Share > Clipboard and verifies one opaque PNG transfer from the reference application. Save-and-continue, transparency interoperability and other external formats remain pending.
 
 Completion: Verify clipboard image formats, transparent images, and roundtrip pixel accuracy.
 
@@ -548,7 +549,7 @@ Completion: Verify clipboard image formats, transparent images, and roundtrip pi
 - Evidence: Actual native Copy All matched all 256000 pixels and import/save/reopen; toolbar and keyboard copy preserve dirty/history state. Clipboard import produces a flattened unsaved document; Cancel preserves it. docs/native-alpha7-verification.md. Windows Save As still fails inspection even after user focus.
 - Evidence: File > New > New from Clipboard menu opens a flattened unsaved 640x400 document with no annotations/history. Edit > Copy All preserves state and matches 256000 synthetic pixels. docs/alpha8-properties-verification.md.
 - Evidence: Exact alpha.8 packaged executable reopened all saved text/callout formatting; native compact and maximized panes inspected. Optimized Copy All matched all 256000 pixels. artifacts/native-alpha8/optimized-properties-clipboard-test.log and docs/alpha8-properties-verification.md.
-- Evidence: Snagit Share > Clipboard of original demo.png imported exactly through ClipCraft: all 576000 pixels and save/reopen match. This verifies one opaque PNG fixture, not every clipboard format or alpha path. artifacts/reference/ui-refresh/clipboard-interoperability.log. Alpha.11 Share > Clipboard passed debug and exact packaged execution; all 256000 pixels match with clean document/history.
+- Evidence: the reference application Share > Clipboard of original demo.png imported exactly through ClipCraft: all 576000 pixels and save/reopen match. This verifies one opaque PNG fixture, not every clipboard format or alpha path. artifacts/reference/ui-refresh/clipboard-interoperability.log. Alpha.11 Share > Clipboard passed debug and exact packaged execution; all 256000 pixels match with clean document/history.
 - Evidence: Native optimized Share > Clipboard matched all 256000 pixels and import/save/reopen. docs/alpha11-interaction-verification.md and artifacts/native-alpha11/optimized-share-clipboard-test.log.
 - Evidence: 2026-10-30 planning refresh: prior provisional target passed while this scope remained unfinished. Target revised; no completion claim.
 - Evidence: 2026-10-30: alpha.24 delivered local history; this unfinished provisional target is revised, not marked complete.
@@ -731,7 +732,7 @@ Completion: Evaluate local OCR and verify representative text fixtures, errors, 
 - Evidence: 2026-10-31 source implemented; combined qualification underway. docs/capture-update-work.md.
 - Evidence: capture-update-preview-20261031-045849, desktop SHA256 3b7268d95db8c876c75b2cda1ed8223f003214d8e94286ae2a7fd883fbef8dda:400 tests/fmt/Clippy; seven exact optimized export/viewport fixtures, six old outputs unchanged. Real synthetic Windows OCR and offscreen cursor/countdown/recorder/confirmations qualified. Native L1–L4 pending; no full capture parity or published-release claim. docs/capture-update-work.md.
 - Evidence: 2026-10-31 user L4 semi pass: recognizer missed/misread some text. Native result flow works partially; accuracy remains unresolved. Exact failed sample not supplied; add small/light/dark synthetic OCR comparisons before claiming improvement.
-- Evidence: 2026-10-31 bounded batch checkpoint:416 tests/fmt/Clippy,9 optimized fixtures;8 prior exports unchanged. Steps first-click monitor/bottom-left controller/intro/hover/tooltips and nondestructive screenshot crop/zoom/pan/rounded frames implemented. Two local Windows OCR synthetic tests pass after2x small-image input preparation. Native comparison blocked by unresponsive Snagit Save As and Computer Use returning an8px ClipCraft strip after recovery. No desktop release; stable409-test candidate retained. docs/steps-framing-work.md; artifacts/overnight/steps-framing/qualification.json.
+- Evidence: 2026-10-31 bounded batch checkpoint:416 tests/fmt/Clippy,9 optimized fixtures;8 prior exports unchanged. Steps first-click monitor/bottom-left controller/intro/hover/tooltips and nondestructive screenshot crop/zoom/pan/rounded frames implemented. Two local Windows OCR synthetic tests pass after2x small-image input preparation. Native comparison blocked by unresponsive the reference application Save As and Computer Use returning an8px ClipCraft strip after recovery. No desktop release; stable409-test candidate retained. docs/steps-framing-work.md; artifacts/overnight/steps-framing/qualification.json.
 - Evidence: 2026-10-31 user reports L4 passed on inferred overnight-review-20261031-080551. The earlier native recognition/result-flow failure is resolved for the user sample; general OCR accuracy remains best effort.
 - Evidence: ocr-hotkeys-review-20261031-135301, SHA256 a5694a1c549292aab81cc8a8c14e240a87182433e9e1b8a81e778a4cd24dab1e:471 tests/fmt/Clippy;19 unchanged optimized comparisons. White Grab Text Results editor and compact Plain text / Copy All / Close footer; no Help. Original source-pixel estimates match bundled faces, not arbitrary installed fonts. Formatted/plain injected clipboard, UTF-8 edits, errors and compact/wide visual checks pass; installed Windows OCR recognized blue/bold synthetic text. N1 formatted transfer into a real receiving app remains pending. docs/ocr-dialog-hotkey-followup.md. Unpublished review candidate.
 - Evidence: 2026-10-31 user verification: N1 passed (Formatted and plain OCR clipboard transfer). Attributed to independent-colors-review-20261031-143229 from the current launcher at report time; binary not independently user-confirmed. This does not imply a new desktop publication.
@@ -935,21 +936,23 @@ Completion: Verify preferences migration/reopen and real native dialogs after re
 - Recorded target history: 0.1.0-alpha.5 → 0.1.0-alpha.6 → 0.1.0-alpha.7 → 0.1.0-alpha.8 → 0.1.0-alpha.9 → 0.1.0-alpha.10 → 0.1.0-alpha.12 → 0.1.0-alpha.13 → 0.1.0-alpha.14 → 0.1.0-alpha.22 → 0.1.0-alpha.25 → 0.1.0-alpha.29
 - Release: 0.1.0-preview.2
 
-### REF-001: Direct Snagit workflow comparison
+### REF-001: Workflow usability research
 
-**In progress** · After the essentials · Updated 2026-10-30
+**Deferred** · Later · Updated 2026-11-02
 
-Compare behavior and interface details against the activated reference app using original synthetic fixtures.
+Evaluate screenshot editing workflows with original synthetic fixtures and user feedback. Historical comparison research is retained as development evidence.
 
-Completion: Record direct comparisons and add newly discovered gaps to this backlog.
+Completion: Record usability findings and validate changes against ClipCraft requirements.
 
 - Evidence: Functional editor access verified through image import, multiline text entry, undo/redo, and a separate PNG save.
 - Evidence: Reference text controls and remaining formatting gaps recorded. Broader workflow comparisons and ClipCraft parity remain incomplete.
 - Evidence: 2026-10-30 planning refresh: prior provisional target passed while this scope remained unfinished. Target revised; no completion claim.
 - Evidence: 2026-10-30 planning refresh: alpha.29 prioritizes the observed arrow stroke defect; this unfinished provisional target is rescheduled by priority.
+- Evidence: 2026-11-02: maintainer requests independent product documentation. Editorial references updated; historical observations, dates, targets and verification limits retained.
 - Original target: 0.1.0-alpha.20 — OVERDUE; scope still unfinished
 - Recorded target history: 0.1.0-alpha.20 → 0.1.0-alpha.28
 - Release not scheduled; priorities are not version promises.
+- Deferred: Direct competitor comparison is no longer a beta release goal. Product development now follows ClipCraft requirements and user workflow testing.
 
 ### EDIT-013: Pen, line, and highlighter
 
@@ -1137,7 +1140,7 @@ Completion: Study reference behavior first; verify synthetic fixtures, determini
 - Evidence: 2026-10-30 planning refresh: unfinished scope remains pending after alpha.27 Library browsing; provisional target moved to alpha.29.
 - Evidence: 2026-10-30 planning refresh: alpha.29 prioritizes the observed arrow stroke defect; this unfinished provisional target is rescheduled by priority.
 - Evidence: User priority override2026-10-30: complete Text/Line/Shape/Obfuscate/Step/Select/Simplify and shared interactions before lesser tools. docs/core-tool-priorities.md.
-- Evidence: 2026-10-31 reference evidence correction: tool-simplify.png actually shows Callout; its filename is not inspected Simplify evidence. Official TechSmith help describes overlays/palettes/Auto Simplify; native comparison remains pending. Finite batch scope is basic editable cover shapes/image palette; advanced detection/background repair remain separate.
+- Evidence: 2026-10-31 reference evidence correction: tool-simplify.png actually shows Callout; its filename is not inspected Simplify evidence. Published reference documentation describes overlays/palettes/Auto Simplify; native comparison remains pending. Finite batch scope is basic editable cover shapes/image palette; advanced detection/background repair remain separate.
 - Evidence: 2026-10-31 basic manual cover-block/image-palette child EDIT-075 qualified with431 tests. Parent remains incomplete: automatic detection, richer palettes, Smart Move/background repair and native reference behavior. docs/simplify-work.md.
 - Evidence: 2026-10-31 follow-up: docs/editor-interactions-work.md. User passed L5/L7/L8; L6 partial identifies remaining guide zoom-in/object-drag lag. Retained screenshot textures and translation caches implemented; optimized/headless qualification pending final candidate. Automatic Simplify scoped under EDIT-077; grouping/tool keys under UX-069; image crop/focus under EDIT-078. Broader parent parity is not claimed.
 - Evidence: 2026-10-31T17:16:13.323745+00:00: editor-interactions-review-20261031-171522, SHA256 540c42927c052897cc84b883ed16a812d634307eee01814c5bf826695a4e008b.498 tests/fmt/Clippy and19 unchanged optimized export/viewport comparisons pass;73 user passes preserved. Headless production Options/Objects/Simplify/guide meshes and Simplify before/after output inspected. Native L6/O1/O2 pending; no new public desktop release. docs/editor-interactions-work.md.
@@ -1265,7 +1268,7 @@ Completion: Inspect each detailed panel and verify geometry, editable settings, 
 
 ### UX-005: Quick Styles, themes, and favorites
 
-**In progress** · Next · Updated 2026-10-30
+**In progress** · Next · Updated 2026-11-02
 
 Immediate preset application to one or many compatible selected objects; visible active-preset border; save selected object formatting as a reusable template. Cover Text/Line/Shape/Obfuscate/Step/Select/Simplify. Existing Arrow-only scope remains separately shipped.
 
@@ -1280,6 +1283,7 @@ Completion: Verify create/apply/remove styles, cross-tool favorites, and persist
 - Evidence: Alpha.28 delivers scoped original/custom arrow styles under UX-014. Themes, favorites, other tool families and exact reference selection behavior remain incomplete. docs/alpha28-arrow-styles-verification.md
 - Evidence: 2026-10-30 planning refresh: alpha.29 prioritizes the observed arrow stroke defect; this unfinished provisional target is rescheduled by priority.
 - Evidence: User priority override2026-10-30: complete Text/Line/Shape/Obfuscate/Step/Select/Simplify and shared interactions before lesser tools. docs/core-tool-priorities.md.
+- Evidence: Local follow-up places straight/curved arrow families side by side and adds six real endpoint/pattern combinations to Arrow and Line variations. Existing custom styles preserved. Broader themes/favorites scope remains separate. docs/page-polish-work.md.
 - Original target: 0.1.0-alpha.6 — OVERDUE; scope still unfinished
 - Recorded target history: 0.1.0-alpha.6 → 0.1.0-alpha.7 → 0.1.0-alpha.8 → 0.1.0-alpha.9 → 0.1.0-alpha.10 → 0.1.0-alpha.12 → 0.1.0-alpha.13 → 0.1.0-alpha.14 → 0.1.0-alpha.24 → 0.1.0-alpha.27 → 0.1.0-alpha.29
 - Release not scheduled; priorities are not version promises.
@@ -1466,7 +1470,7 @@ Completion: Verify menu navigation and accurate links/version/notices; reference
 
 **In progress** · Next · Updated 2026-10-31
 
-Steps recorder with first-click monitor selection, bottom-left controls/brief cue, editable section insertion/reflow/reorder/duplicate/delete, original-source screenshot crop/zoom/pan/rounded frames, grouped cursor/click highlight and editable header. Initial framing uses visible window bounds. Accessible control names with bounded local OCR fallback provide best-effort captions. Direct reference comparison and native context accuracy remain pending; no full Snagit parity claim.
+Steps recorder with first-click monitor selection, bottom-left controls/brief cue, editable section insertion/reflow/reorder/duplicate/delete, original-source screenshot crop/zoom/pan/rounded frames, grouped cursor/click highlight and editable header. Initial framing uses visible window bounds. Accessible control names with bounded local OCR fallback provide best-effort captions. Direct reference comparison and native context accuracy remain pending; no full the reference application parity claim.
 
 Completion: Complete CAP-011 and directly compare Steps with synthetic content in the reference app; document and resolve behavior gaps before claiming full parity. Keep Office/video sharing as separate future scope.
 
@@ -1476,12 +1480,12 @@ Completion: Complete CAP-011 and directly compare Steps with synthetic content i
 - Evidence: 2026-10-30 planning refresh: alpha.29 prioritizes the observed arrow stroke defect; this unfinished provisional target is rescheduled by priority.
 - Evidence: 2026-10-31 user explicitly elevated Steps and Capture controller after active clipboard work; docs/capture-controller-work.md. Distinct from numbered Step annotation objects.
 - Evidence: step-capture-preview-20261031-042246, desktop SHA256 26e2eb3635395e87c41d0d488cd9e58525f0f0f4812a4662f2cb052f39d26bab:384 tests/fmt/Clippy, six optimized export/viewport comparisons, five prior outputs unchanged. Original-resolution images, captions and markers remain editable; one Library item updated per step. Partial errors preserve prior work. L3 pending. docs/capture-controller-work.md.
-- Evidence: 2026-10-31 user asked how parity is established. No native Snagit Steps inspection has occurred; current evidence is supplied screenshots, official Windows release notes and synthetic ClipCraft tests. Fixed area/release timing/layout are original provisional choices. Parent corrected to in_progress; passing L3 only qualifies CAP-011. docs/capture-controller-work.md.
-- Evidence: 2026-10-31 user supplied Snagit completed-guide output, section menu and zoom controls, and confirmed rounded screenshot frames plus Restart/Cancel confirmations. These are user observations, not agent native inspection. OCR vs accessibility implementation is not inferred. Exact remaining scope/next action: docs/steps-guide-work.md.
+- Evidence: 2026-10-31 user asked how parity is established. No native the reference application Steps inspection has occurred; current evidence is supplied screenshots, official Windows release notes and synthetic ClipCraft tests. Fixed area/release timing/layout are original provisional choices. Parent corrected to in_progress; passing L3 only qualifies CAP-011. docs/capture-controller-work.md.
+- Evidence: 2026-10-31 user supplied the reference application completed-guide output, section menu and zoom controls, and confirmed rounded screenshot frames plus Restart/Cancel confirmations. These are user observations, not agent native inspection. OCR vs accessibility implementation is not inferred. Exact remaining scope/next action: docs/steps-guide-work.md.
 - Evidence: User additionally supplied between-section Add Header/Image Section/Text Section menu and draggable section-height divider. Included in docs/steps-guide-work.md; source implementation remains pending.
 - Evidence: 2026-10-31 user correction: section height handle is on its bottom divider; drag changes bottom edge with section top fixed. Subsequent sections reflow. docs/steps-guide-work.md.
 - Evidence: User L3 baseline pass plus new launch semantics: first click selects monitor without region drag, recorder bottom left,2-second dark Begin recording steps overlay, clean icons, hover highlights and tooltips. Not implemented yet.
-- Evidence: 2026-10-31 bounded batch checkpoint:416 tests/fmt/Clippy,9 optimized fixtures;8 prior exports unchanged. Steps first-click monitor/bottom-left controller/intro/hover/tooltips and nondestructive screenshot crop/zoom/pan/rounded frames implemented. Two local Windows OCR synthetic tests pass after2x small-image input preparation. Native comparison blocked by unresponsive Snagit Save As and Computer Use returning an8px ClipCraft strip after recovery. No desktop release; stable409-test candidate retained. docs/steps-framing-work.md; artifacts/overnight/steps-framing/qualification.json.
+- Evidence: 2026-10-31 bounded batch checkpoint:416 tests/fmt/Clippy,9 optimized fixtures;8 prior exports unchanged. Steps first-click monitor/bottom-left controller/intro/hover/tooltips and nondestructive screenshot crop/zoom/pan/rounded frames implemented. Two local Windows OCR synthetic tests pass after2x small-image input preparation. Native comparison blocked by unresponsive the reference application Save As and Computer Use returning an8px ClipCraft strip after recovery. No desktop release; stable409-test candidate retained. docs/steps-framing-work.md; artifacts/overnight/steps-framing/qualification.json.
 - Evidence: 2026-10-31 guide-sections checkpoint:423 tests/fmt/Clippy,10 optimized fixture comparisons;8 older outputs unchanged. Real egui bottom-drag and + insertion tests, portable schema11 sections, image source/lock preservation and atomic Undo. docs/guide-sections-work.md; artifacts/overnight/guide-sections/qualification.json. Not published or natively verified.
 - Evidence: 2026-10-31 captured cursor and editable click-circle now share a persistent group. Guide section duplication remaps group IDs; native user workflow still pending.454 tests/16 optimized comparisons. Auto relevant-window framing, semantic captions and header metadata remain incomplete.
 - Evidence: overnight-review-20261031-080551:466 tests/fmt/Clippy,19 optimized image comparisons;8 legacy exports unchanged. New context/header fixture preserves full source pixels, crop bounds, section edits, save/reopen/Undo; injected pipeline verifies restart isolation and enriched Library persistence. Production UI Automation compiled but not natively exercised. docs/guide-context-work.md; artifacts/overnight/final-batch/qualification.json. CAP-007 stays in_progress pending reference/native comparison.
@@ -1509,7 +1513,7 @@ Completion: Verify editable-object and external-image paste, placement, undo/red
 - Evidence: User approved implementation order2026-10-31: active next workflow. Portable payload and atomic object placement already tested; now integrating editable bitmap objects and injected desktop transport. No OS clipboard access during background work.
 - Evidence: clipboard-paste-preview-20261031-035446, desktop SHA256 371d17c557bc6a424a20d044f229b15419c72cf276f3c665ac0e6375c94d5c8d:372 tests/fmt/Clippy, headless Image properties, five optimized export/native-viewport comparisons (four unchanged). Injected production clipboard commands, bounds, rendering, save/reopen, cache/history budget and Undo qualify. Real OS transport pending L1; no native/clipboard access. docs/clipboard-paste-work.md.
 - Evidence: 2026-10-31 user: L1/L2/L3 passed, inferred capture-update-preview-20261031-045849. Native boundary evidence is user verification, not agent desktop inspection. Release pending; new Steps launch/controller refinements tracked in docs/steps-guide-work.md.
-- Evidence: 2026-10-31 bounded batch checkpoint:416 tests/fmt/Clippy,9 optimized fixtures;8 prior exports unchanged. Steps first-click monitor/bottom-left controller/intro/hover/tooltips and nondestructive screenshot crop/zoom/pan/rounded frames implemented. Two local Windows OCR synthetic tests pass after2x small-image input preparation. Native comparison blocked by unresponsive Snagit Save As and Computer Use returning an8px ClipCraft strip after recovery. No desktop release; stable409-test candidate retained. docs/steps-framing-work.md; artifacts/overnight/steps-framing/qualification.json.
+- Evidence: 2026-10-31 bounded batch checkpoint:416 tests/fmt/Clippy,9 optimized fixtures;8 prior exports unchanged. Steps first-click monitor/bottom-left controller/intro/hover/tooltips and nondestructive screenshot crop/zoom/pan/rounded frames implemented. Two local Windows OCR synthetic tests pass after2x small-image input preparation. Native comparison blocked by unresponsive the reference application Save As and Computer Use returning an8px ClipCraft strip after recovery. No desktop release; stable409-test candidate retained. docs/steps-framing-work.md; artifacts/overnight/steps-framing/qualification.json.
 - Evidence: 2026-10-31 requested follow-up implemented with synthetic engine/pointer tests; final candidate and native review pending. docs/tray-groups-followup.md; artifacts/tray-groups/.
 - Evidence: 2026-10-31T18:02:38.954372+00:00: library-groups-review-20261031-180228, SHA256 e32b4dfb8a4d69627e4b7a8974d3793ca4adb0c321ee5fbfb9c5542e49652de0; 514 Rust tests/fmt/Clippy and19 unchanged optimized comparisons. Synthetic clipboard/Library migration, live group gestures, hidden-root capture dispatch and headless production UI verified. Native O1/O2/O3 pending. docs/tray-groups-followup.md.
 - Original target: 0.1.0-alpha.10 — OVERDUE; scope still unfinished
@@ -1588,7 +1592,7 @@ Completion: Exercise palette and numeric modes, keyboard dismissal without losin
 - Evidence: 2026-10-30: alpha.24 delivered local history; this unfinished provisional target is revised, not marked complete.
 - Evidence: 2026-10-30 planning refresh: unfinished scope remains pending after alpha.27 Library browsing; provisional target moved to alpha.29.
 - Evidence: 2026-10-30 planning refresh: alpha.29 prioritizes the observed arrow stroke defect; this unfinished provisional target is rescheduled by priority.
-- Evidence: 2026-10-30: UX-039 changes ClipCraft live palette dismissal per user requirement. This is a user-workflow fix, not newly observed Snagit parity.
+- Evidence: 2026-10-30: UX-039 changes ClipCraft live palette dismissal per user requirement. This is a user-workflow fix, not newly observed the reference application parity.
 - Original target: 0.1.0-alpha.11 — OVERDUE; scope still unfinished
 - Recorded target history: 0.1.0-alpha.11 → 0.1.0-alpha.12 → 0.1.0-alpha.13 → 0.1.0-alpha.14 → 0.1.0-alpha.20 → 0.1.0-alpha.24 → 0.1.0-alpha.27 → 0.1.0-alpha.29
 - Release not scheduled; priorities are not version promises.
@@ -1675,7 +1679,7 @@ Completion: Verify toggle/menu/shortcut, high-zoom threshold, panned pixel align
 
 - Evidence: View > Pixel Grid and Ctrl+G directly recorded in artifacts/reference/ui-refresh/view-menu.txt; installed behavior still awaits comparison.
 - Evidence: Native View/Ctrl+G toggles,800% grid, hidden400%, panned1600%, Resize draft guard and3072 unchanged clipboard pixels verified. Engine-independent overlay and UI regression preserve saved state and history. docs/alpha18-pixel-grid-verification.md.
-- Evidence: Installed Snagit26.4.0.12714: Ctrl+G grid appears at600% and disappears at500% after Ctrl+-. Local reference screenshots in artifacts/reference/ui-refresh/alpha18/. Reminder blocker resolved through the parent editor accessibility tree.
+- Evidence: Installed Reference application version 26.4.0.12714: Ctrl+G grid appears at600% and disappears at500% after Ctrl+-. Local reference screenshots in artifacts/reference/ui-refresh/alpha18/. Reminder blocker resolved through the parent editor accessibility tree.
 - Evidence: Exact optimized alpha.18 Ready/menu/800% grid and3072 native clipboard pixels pass. artifacts/native-alpha18/optimized/.
 - Release: 0.1.0-alpha.18
 - Depends on: UX-011
@@ -2533,7 +2537,7 @@ Completion: Verify all eight faces in engine/inline rendering, real visible diff
 
 **Shipped** · Next · Updated 2026-10-31
 
-First tab is Tool Properties; object selection list lives in Objects. Full-width section bars, stronger dividers and grouped color/size/text controls follow user-supplied Snagit screenshots with ClipCraft branding. Missing options remain tracked separately.
+First tab is Tool Properties; object selection list lives in Objects. Full-width section bars, stronger dividers and grouped color/size/text controls follow user-supplied the reference application screenshots with ClipCraft branding. Missing options remain tracked separately.
 
 Completion: Verify tab switching, same/multiple object selection, properties editing, narrow-pane scroll, inline text and unchanged document when simply browsing.
 
@@ -3399,12 +3403,12 @@ Completion: Synthetic overlap/stitch/termination/error tests, editable result re
 
 Basic click/drag recorder with Pause/Resume/Finish and per-step Library retention. User L3 baseline passed on400-test candidate. First-click monitor selection, bottom-left recorder, fading cue, hover/tooltips and editable guide refinements are qualified headlessly in later checkpoints; new native behavior remains pending.
 
-Completion: Pass L3 against the exact candidate, preserving recorded steps on error and across reopen. This scoped child does not complete parent CAP-007 or prove Snagit parity.
+Completion: Pass L3 against the exact candidate, preserving recorded steps on error and across reopen. This scoped child does not complete parent CAP-007 or prove the reference application parity.
 
 - Evidence: step-capture-preview-20261031-042246; SHA256 26e2eb3635395e87c41d0d488cd9e58525f0f0f4812a4662f2cb052f39d26bab.384 Rust tests and six optimized fixture comparisons pass; native input/capture has not been exercised. docs/capture-controller-work.md.
 - Evidence: capture-update-preview-20261031-045849, desktop SHA256 3b7268d95db8c876c75b2cda1ed8223f003214d8e94286ae2a7fd883fbef8dda:400 tests/fmt/Clippy; seven exact optimized export/viewport fixtures, six old outputs unchanged. Real synthetic Windows OCR and offscreen cursor/countdown/recorder/confirmations qualified. Native L1–L4 pending; no full capture parity or published-release claim. docs/capture-update-work.md.
 - Evidence: 2026-10-31 user: L1/L2/L3 passed, inferred capture-update-preview-20261031-045849. Native boundary evidence is user verification, not agent desktop inspection. Release pending; new Steps launch/controller refinements tracked in docs/steps-guide-work.md.
-- Evidence: 2026-10-31 bounded batch checkpoint:416 tests/fmt/Clippy,9 optimized fixtures;8 prior exports unchanged. Steps first-click monitor/bottom-left controller/intro/hover/tooltips and nondestructive screenshot crop/zoom/pan/rounded frames implemented. Two local Windows OCR synthetic tests pass after2x small-image input preparation. Native comparison blocked by unresponsive Snagit Save As and Computer Use returning an8px ClipCraft strip after recovery. No desktop release; stable409-test candidate retained. docs/steps-framing-work.md; artifacts/overnight/steps-framing/qualification.json.
+- Evidence: 2026-10-31 bounded batch checkpoint:416 tests/fmt/Clippy,9 optimized fixtures;8 prior exports unchanged. Steps first-click monitor/bottom-left controller/intro/hover/tooltips and nondestructive screenshot crop/zoom/pan/rounded frames implemented. Two local Windows OCR synthetic tests pass after2x small-image input preparation. Native comparison blocked by unresponsive the reference application Save As and Computer Use returning an8px ClipCraft strip after recovery. No desktop release; stable409-test candidate retained. docs/steps-framing-work.md; artifacts/overnight/steps-framing/qualification.json.
 - Evidence: Consolidated overnight-review-20261031-080551, SHA256 55cdf7f7404b9c41c4f675f5f64294cd73198187e48e4b2fc2c324bb37ac4bfa:466 tests,19 exact optimized fixtures,67 prior user passes retained. Unpublished morning review candidate; native Windows boundary remains. No scheduled development beyond the agreed batch.
 - Evidence: 2026-10-31T18:59:09.313125+00:00: capture-guide-fix-20261031-185742, SHA256 6bfafb0132c84e79c74fcfd921d1a74861f6c0d2ec871d5855a0ce48389be0a6; 522 tests/fmt/Clippy, 19 unchanged plus two new optimized export/viewport comparisons. Pointer tracking at 35/79/97/100/125% zoom and 100/150% DPI; post-edit guide cache/persistence, independent child state, editable capture image and image-file insertion tested. Library headless UI inspected. Native L6/O1/O2/O3 pending; public desktop alpha50 unchanged. docs/guide-library-fix.md.
 - Release not scheduled; priorities are not version promises.
@@ -4193,9 +4197,9 @@ Completion: Shape masks, crop, file-drop targeting, lock handling, one-step Undo
 
 ### EDIT-088: Multiple pages for templates and step guides
 
-**Needs verification** · Next · Updated 2026-11-01
+**Needs verification** · Next · Updated 2026-11-02
 
-Horizontal guide pages with add/copy/delete and reorder controls; collapsed page/section/object hierarchy and page drag-reordering. Section membership follows largest object-bounds overlap. Move/copy sections between pages, set dimensions and automatically distribute overflow; PDF and printing honor page boundaries.
+Horizontal guide pages with wider gutters, aligned section controls that hide on collision, compact page confirmation, visible page/section drag previews and within-page section reflow. Collapsed page/section/object hierarchy, overlap membership, section transfer, dimensions/overflow and per-page vector PDF/printing.
 
 Completion: Page and section ownership, resizing, overflow, save/reopen, atomic Undo, PDF page boundaries and production UI are qualified.
 
@@ -4203,6 +4207,9 @@ Completion: Page and section ownership, resizing, overflow, save/reopen, atomic 
 - Evidence: Core and production egui tests pass for masks, frame conversion/Undo, synthetic file drops, click modes, retained textures, pages, page menus, overflow, PDF and snapping popup. Native Explorer file drop and final review remain pending; no release claim.
 - Evidence: 2026-11-01: U1 external Explorer drops passed by user. Follow-up requested for clipped outlines/high-zoom raster lag, horizontal page layout/reordering and Objects hierarchy, largest-overlap section ownership, shared Choose Image source menu. Qualification pending; not released.
 - Evidence: 2026-11-01 follow-up: 622 Rust tests/fmt/Clippy pass. Retained frame outlines no longer clip to image bodies; rotated/shadowed screenshots reuse source and shadow textures through 1600% zoom and fractional movement. Pages display horizontally with icon/reorder controls and a collapsed page/section/object hierarchy; largest-overlap membership, shared image source menu, migration, PDF pages, persistence and Undo covered. Production egui views inspected headlessly. User-reported native lag/edge correction awaits review; preview.2 remains unchanged.
+- Evidence: 2026-11-01 page-controls batch: icons approved by user; page arrows confirmed working. Local follow-up implements wider versioned gutters with legacy migration, paired section control alignment, shared hide-on-overlap/reappear policy, row drag previews and section reorder. GitHub publication paused pending complete batch review. No new native pass claimed.
+- Evidence: Page Setup follow-up: persisted per-page PPI, mixed dimensions and scoped edits; margins, proportional scaling/reflow, overflow; running headers/footers/numbering; bleed/crop marks and physical PDF boxes/printing. One large right-aligned ribbon entry replaces Step Guide. Local review, no publication. docs/page-setup-batch-work.md.
+- Evidence: Local follow-up adds canvas rail grips for atomic within/cross-page section relocation with a source highlight, drag outline and insertion marker; Page Setup follows the approved mockup with a fixed preview across all four tabs. Native review remains pending. docs/page-polish-work.md.
 - Provisional target: 0.1.0-preview.3
 - Depends on: EDIT-086
 
@@ -4218,3 +4225,17 @@ Completion: Production popup survives an internal toggle and closes on outside c
 - Evidence: Core and production egui tests pass for masks, frame conversion/Undo, synthetic file drops, click modes, retained textures, pages, page menus, overflow, PDF and snapping popup. Native Explorer file drop and final review remain pending; no release claim.
 - Provisional target: 0.1.0-preview.3
 - Depends on: UX-076
+
+### UX-088: Readable canvas controls and non-overlapping scrollbars
+
+**Needs verification** · Next · Updated 2026-11-02
+
+Overflow-only themed scrollbars with stable allocated rails; centered, proportional Choose Image overlays clipped to the workspace and synchronized with section resize previews. Separate page rails retain collision hiding and six-dot section grips.
+
+Completion: Verify collision thresholds at changing zoom/DPI, partial-frame panning, restored/maximized sidebar and ribbon scrollbars, and existing tool selection/reorder actions.
+
+- Evidence: 2026-11-01 user-approved page-controls follow-up. Local implementation and automated qualification; no publication or native verification claim. docs/page-controls-review-work.md.
+- Evidence: Page Setup follow-up: separate page strips persist with annotations hidden; controls remain within page height. Choose Image no longer recenters or becomes an icon. Confirmation actions use a shared 26 logical px height; footer reserves scrollbar/padding. Local qualification only; native U3 review pending. docs/page-setup-batch-work.md.
+- Evidence: Local follow-up fixes user-reported overflow/placeholder regressions. Advanced replaces Tool Settings; separate Advanced Settings removed, Restore retains Revert. Page Setup pinned at ribbon right. docs/page-polish-work.md.
+- Provisional target: 0.1.0-preview.3
+- Depends on: EDIT-087, EDIT-088

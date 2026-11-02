@@ -198,7 +198,7 @@ impl Default for Shell {
     fn default() -> Self {
         Self {
             preview_ui: false,
-            badges: true,
+            badges: false,
             pixel_grid: false,
             annotations_hidden: false,
             raster_preview: false,
@@ -252,11 +252,12 @@ pub fn configure(ctx: &egui::Context) {
     style.visuals.widgets.active.bg_fill = Color32::from_rgb(65, 112, 133);
     style.visuals.widgets.open.bg_fill = Color32::from_rgb(65, 85, 96);
     style.visuals.text_edit_bg_color = Some(Color32::from_rgb(65, 71, 74));
-    // Shared scrollbars retain a zero-width floating allocation: overflow must
-    // not resize property rows or shift a live canvas gesture.
+    // Allocate a themed rail only while content overflows; never cover controls.
     style.spacing.scroll = egui::style::ScrollStyle {
+        // Allocate instantly when needed. Animated layout widths move canvas
+        // coordinates during a drag; the rail itself may still fade in.
         floating: true,
-        floating_allocated_width: 0.,
+        floating_allocated_width: 13.,
         foreground_color: false,
         bar_width: 9.,
         floating_width: 6.,
@@ -603,11 +604,21 @@ impl Editor {
                         egui::pos2(area.left(), area.bottom() - 36.0),
                         area.max,
                     );
-                    egui::ScrollArea::vertical()
+                    let _scroll = egui::ScrollArea::vertical()
+                        .scroll_bar_visibility(
+                            egui::scroll_area::ScrollBarVisibility::VisibleWhenNeeded,
+                        )
                         .auto_shrink([false, false])
                         .max_height((area.height() - 44.0 - extra).max(0.0))
                         .id_salt(("property_scroll", self.shell.property_tab as u8))
                         .show(ui, |ui| self.properties(ui));
+                    #[cfg(test)]
+                    ui.ctx().data_mut(|d| {
+                        d.insert_temp(
+                            egui::Id::unique("properties-scroll-content"),
+                            _scroll.inner_rect,
+                        )
+                    });
                     if convertible {
                         self.frame_conversion_button(
                             ui,

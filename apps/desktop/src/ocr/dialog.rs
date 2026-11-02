@@ -69,7 +69,7 @@ impl State {
                     response.on_hover_text(metadata);
                     #[cfg(test)] ctx.data_mut(|d|d.insert_temp(egui::Id::unique("ocr-plain"),rect));
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center),|ui| {
-                        let response=ui.add_sized([94.,26.],egui::Button::new("Close"));close=response.clicked();
+                        let response=ui.add_sized([94.,crate::controls::DIALOG_ACTION_HEIGHT],egui::Button::new("Close"));close=response.clicked();
                         #[cfg(test)] ctx.data_mut(|d|d.insert_temp(egui::Id::unique("ocr-close"),response.rect));
                         let enabled=self.result.as_ref().is_some_and(|r|r.as_ref().is_ok_and(|r|!r.text.trim().is_empty()));
                         let response=ui.add_enabled_ui(enabled,|ui|ui.add_sized([100.,26.],egui::Button::new("Copy All").fill(crate::shell::ACCENT))).inner;

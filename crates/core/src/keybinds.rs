@@ -119,17 +119,38 @@ impl Default for Keybinds {
         Self {
             editor: Default::default(),
             enabled: true,
-            bindings: vec![Binding {
-                action: Action::Saved,
-                chord: Chord {
-                    key: 0x43,
-                    modifiers: 3,
+            bindings: vec![
+                Binding {
+                    action: Action::Saved,
+                    chord: Chord {
+                        key: 0x2c,
+                        modifiers: 0,
+                    },
                 },
-            }],
+                Binding {
+                    action: Action::Region,
+                    chord: Chord {
+                        key: 0x7a,
+                        modifiers: 1,
+                    },
+                },
+            ],
         }
     }
 }
 impl Keybinds {
+    pub(crate) fn is_legacy_default(&self) -> bool {
+        self.enabled
+            && self.editor == crate::editor_keybinds::Keybinds::default()
+            && self.bindings
+                == [Binding {
+                    action: Action::Saved,
+                    chord: Chord {
+                        key: 0x43,
+                        modifiers: 3,
+                    },
+                }]
+    }
     pub fn get(&self, action: Action) -> Option<Chord> {
         self.bindings
             .iter()
@@ -176,6 +197,28 @@ impl Keybinds {
 mod tests {
     use super::*;
     #[test]
+    fn new_capture_defaults_and_saved_legacy_customizations_are_distinct() {
+        let defaults = Keybinds::default();
+        defaults.validate().unwrap();
+        assert_eq!(defaults.get(Action::Saved).unwrap().label(), "Print Screen");
+        assert_eq!(defaults.get(Action::Region).unwrap().label(), "Alt+F11");
+        let legacy = serde_json::json!({"version":4,"alignment":"left","distribution":"horizontal_gaps","justification":"center_middle", "keybinds":{"enabled":true,"bindings":[{"action":"saved","chord":{"key":67,"modifiers":3}}]}});
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("quick-controls.json");
+        std::fs::write(&path, serde_json::to_vec(&legacy).unwrap()).unwrap();
+        let store = crate::quick_preferences::Store::open(root.path()).unwrap();
+        let preferences = store.read().unwrap();
+        assert!(preferences.keybinds.is_legacy_default());
+        assert_eq!(
+            preferences.startup_window,
+            crate::quick_preferences::StartupWindow::Editor
+        );
+        assert_eq!(
+            serde_json::from_slice::<serde_json::Value>(&std::fs::read(path).unwrap()).unwrap(),
+            legacy
+        );
+    }
+    #[test]
     fn mode_shortcuts_override_only_selection_and_keep_saved_capture_options() {
         let saved = Settings {
             cursor: true,
@@ -209,6 +252,7 @@ mod tests {
         let store = Store::open(dir.path()).unwrap();
         assert_eq!(store.read().unwrap().keybinds, Keybinds::default());
         let mut keys = Keybinds::default();
+        keys.set(Action::Saved, None);
         keys.set(
             Action::Region,
             Some(Chord {
@@ -224,7 +268,7 @@ mod tests {
             }),
         );
         let saved = store.remember(Choice::Keybinds(keys.clone())).unwrap();
-        assert_eq!(saved.version, 6);
+        assert_eq!(saved.version, 8);
         assert_eq!(
             Store::open(dir.path()).unwrap().read().unwrap().keybinds,
             keys

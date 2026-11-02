@@ -315,7 +315,9 @@ impl Editor {
                 ui.colored_label(egui::Color32::LIGHT_RED, &p.error);
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                cancel = ui.button("Cancel").clicked();
+                cancel = ui
+                    .add(crate::controls::dialog_button("Cancel", false))
+                    .clicked();
             });
         });
         if cancel || crate::text_edit::cancel_on_escape(&modal) {

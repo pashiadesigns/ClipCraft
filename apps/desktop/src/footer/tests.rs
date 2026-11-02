@@ -86,9 +86,20 @@ fn centered_single_row_survives_widths_views_and_scrolling_messages() {
                 assert!((tabs.right() - area.right()).abs() < 0.1);
                 assert!(controls.right() < tabs.left(), "{controls:?} {tabs:?}");
                 assert!(area.expand(0.1).contains_rect(tabs));
+                for label in ["Effects", "Properties"] {
+                    let actual = ctx.data(|d| {
+                        d.get_temp::<Rect>(egui::Id::unique(("footer-tab", label)))
+                            .unwrap()
+                    });
+                    assert!(
+                        area.contains_rect(actual),
+                        "{label} painted/hit area {actual:?} must fit {area:?}"
+                    );
+                    assert!(actual.top() >= area.top(), "upper padding");
+                }
             }
             assert!(
-                controls.height() <= 38.1 && area.height() <= 38.1,
+                controls.height() <= 48.1 && area.height() <= 48.1,
                 "{area:?}"
             );
             assert!(content.height() <= 38.1, "{content:?}");
@@ -101,7 +112,11 @@ fn centered_single_row_survives_widths_views_and_scrolling_messages() {
             for _ in 0..35 {
                 frame(&ctx, &mut e, width, vec![]);
             }
-            assert!(message(&ctx).1 > 0.);
+            assert_eq!(
+                message(&ctx).1 > 0.,
+                message(&ctx).2 > 0.,
+                "scroll only overflowing text"
+            );
             assert_eq!(layout(&ctx).2, controls, "long text cannot move controls");
             let pos = message(&ctx).0.center();
             frame(&ctx, &mut e, width, vec![Event::PointerMoved(pos)]);

@@ -6,12 +6,33 @@ pub(super) enum Row<'a> {
         key: egui::Id,
         label: String,
         depth: usize,
-        page: Option<usize>,
+        target: Target,
     },
     Object(&'a Annotation),
 }
 #[derive(Clone, Copy)]
-struct PageDrag(usize);
+pub(super) enum Target {
+    Page(usize),
+    Section { id: u64, page: usize, index: usize },
+}
+impl Target {
+    fn action(self, to: Self) -> Option<Action> {
+        match (self, to) {
+            (Self::Page(page), Self::Page(index)) if page != index => {
+                Some(Action::MovePage { page, index })
+            }
+            (
+                Self::Section { id, page, .. },
+                Self::Section {
+                    id: other,
+                    page: target,
+                    index,
+                },
+            ) if page == target && id != other => Some(Action::Move { id, index }),
+            _ => None,
+        }
+    }
+}
 fn page_key(page: usize) -> egui::Id {
     egui::Id::unique(("objects-page-expanded", page))
 }
@@ -38,18 +59,28 @@ pub(super) fn rows<'a>(
             key,
             label: format!("Page {}", page + 1),
             depth: 0,
-            page: Some(page),
+            target: Target::Page(page),
         });
         if !expanded(ui, key, false) {
             continue;
         }
-        for (index, section) in guide.sections.iter().filter(|s| s.page == page).enumerate() {
+        for (index, (global_index, section)) in guide
+            .sections
+            .iter()
+            .enumerate()
+            .filter(|(_, s)| s.page == page)
+            .enumerate()
+        {
             let key = section_key(section.id);
             rows.push(Row::Header {
                 key,
                 label: format!("Section {} · {:?}", index + 1, section.kind),
                 depth: 1,
-                page: None,
+                target: Target::Section {
+                    id: section.id,
+                    page,
+                    index: global_index,
+                },
             });
             if expanded(ui, key, true) {
                 rows.extend(
@@ -77,7 +108,7 @@ pub(super) fn header(
     key: egui::Id,
     label: &str,
     depth: usize,
-    page: Option<usize>,
+    target: Target,
 ) -> Option<Action> {
     let open = expanded(ui, key, depth > 0);
     let (rect, r) = ui.allocate_exact_size(
@@ -118,23 +149,49 @@ pub(super) fn header(
     }
     #[cfg(test)]
     ui.ctx().data_mut(|d| d.insert_temp(key.with("rect"), rect));
-    if let Some(page) = page {
-        r.dnd_set_drag_payload(PageDrag(page));
-        if r.dnd_hover_payload::<PageDrag>().is_some() {
-            ui.painter().rect_stroke(
-                rect,
-                3,
-                Stroke::new(2., crate::shell::ACCENT),
-                egui::StrokeKind::Inside,
-            );
-        }
-        if let Some(from) = r.dnd_release_payload::<PageDrag>()
-            && from.0 != page
-        {
-            return Some(Action::MovePage {
-                page: from.0,
-                index: page,
-            });
+    r.dnd_set_drag_payload(target);
+    if r.dragged()
+        && let Some(pointer) = ui.input(|i| i.pointer.interact_pos())
+    {
+        ui.ctx().set_cursor_icon(egui::CursorIcon::Grabbing);
+        let ghost = egui::Rect::from_min_size(pointer + egui::vec2(12., 12.), rect.size());
+        let painter = ui.ctx().layer_painter(egui::LayerId::new(
+            egui::Order::Tooltip,
+            key.with("drag-preview"),
+        ));
+        painter.rect(
+            ghost,
+            4,
+            Color32::from_rgb(53, 77, 89),
+            Stroke::new(1., crate::shell::ACCENT),
+            egui::StrokeKind::Inside,
+        );
+        painter.text(
+            ghost.left_center() + egui::vec2(12., 0.),
+            egui::Align2::LEFT_CENTER,
+            label,
+            egui::FontId::proportional(12.),
+            Color32::WHITE,
+        );
+        #[cfg(test)]
+        ui.ctx()
+            .data_mut(|d| d.insert_temp(egui::Id::unique("guide-tree-drag-preview"), ghost));
+    }
+    if let Some(from) = r.dnd_hover_payload::<Target>()
+        && from.action(target).is_some()
+    {
+        let below = match (*from, target) {
+            (Target::Page(a), Target::Page(b)) => a < b,
+            (Target::Section { index: a, .. }, Target::Section { index: b, .. }) => a < b,
+            _ => false,
+        };
+        let y = if below { rect.bottom() } else { rect.top() };
+        ui.painter().line_segment(
+            [egui::pos2(rect.left(), y), egui::pos2(rect.right(), y)],
+            Stroke::new(3., crate::shell::ACCENT),
+        );
+        if let Some(from) = r.dnd_release_payload::<Target>() {
+            return from.action(target);
         }
     }
     None

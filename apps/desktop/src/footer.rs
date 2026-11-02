@@ -15,7 +15,7 @@ mod tests;
 impl Editor {
     pub(super) fn show_footer(&mut self, ui: &mut egui::Ui) {
         egui::Panel::bottom("status")
-            .exact_size(46.)
+            .exact_size(56.)
             .show_separator_line(!self.shell.library)
             .frame(
                 egui::Frame::new()
@@ -39,16 +39,18 @@ impl Editor {
                 // so the other controls remain centered across the whole window.
                 let side_space = if self.shell.library { 96. } else { 216. };
                 let width = measured.min((area.width() - side_space * 2.).max(1.));
-                let controls = Rect::from_center_size(area.center(), egui::vec2(width, 38.));
+                let controls = Rect::from_center_size(area.center(), egui::vec2(width, 48.));
                 let status =
                     Rect::from_min_max(area.min, egui::pos2(controls.left() - 8., area.bottom()));
                 let content = ui
                     .scope_builder(egui::UiBuilder::new().max_rect(controls), |ui| {
                         egui::ScrollArea::horizontal()
+                            .scroll_bar_visibility(
+                                egui::scroll_area::ScrollBarVisibility::VisibleWhenNeeded,
+                            )
                             .id_salt("footer-controls")
                             .auto_shrink([false, false])
                             .show(ui, |ui| {
-                                ui.spacing_mut().scroll.floating = true;
                                 ui.horizontal(|ui| self.footer_controls(ui)).response.rect
                             })
                     })
@@ -64,7 +66,7 @@ impl Editor {
                 });
                 if !self.shell.library {
                     let tabs = Rect::from_min_size(
-                        egui::pos2(area.right() - 208., area.center().y - 17.),
+                        egui::pos2(area.right() - 208., area.top() + 1.),
                         egui::vec2(208., 34.),
                     );
                     ui.scope_builder(egui::UiBuilder::new().max_rect(tabs), |ui| {

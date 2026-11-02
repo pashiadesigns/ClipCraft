@@ -10,6 +10,7 @@ pub(super) struct Controller {
     pub active: Option<Settings>,
     pub suspended: bool,
     pub restore_focus: Option<bool>,
+    pub focus_requested: bool,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Action {
@@ -188,8 +189,24 @@ impl Editor {
                 .with_min_inner_size([714., 190.])
                 .with_resizable(false)
                 .with_active(false)
-                .with_visible(!self.capture_controller.suspended),
-            |ui, _| {
+                // On Windows, establish both native icons and the shell's
+                // group icon while hidden, before its first taskbar appearance.
+                .with_visible(!cfg!(windows) && !self.capture_controller.suspended),
+            |ui, class| {
+                #[cfg(windows)]
+                if class != egui::ViewportClass::EmbeddedWindow {
+                    let shown = crate::brand::prepare_controller_window(self.hotkey_owner);
+                    let visible = !self.capture_controller.suspended;
+                    if shown != Some(visible) {
+                        ui.ctx()
+                            .send_viewport_cmd(egui::ViewportCommand::Visible(visible));
+                    }
+                }
+                #[cfg(not(windows))]
+                let _ = class;
+                if std::mem::take(&mut self.capture_controller.focus_requested) {
+                    ui.ctx().send_viewport_cmd(egui::ViewportCommand::Focus);
+                }
                 if ui.input(|i| i.viewport().close_requested()) {
                     action = Some(Action::Close);
                 }

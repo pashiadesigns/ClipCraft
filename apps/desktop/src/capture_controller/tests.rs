@@ -1,6 +1,85 @@
 use super::*;
 use crate::property_layout::tests::{PaintedOutput, dump_meshes};
 
+#[cfg(windows)]
+#[test]
+fn controller_starts_hidden_then_presents_from_its_own_viewport() {
+    // Exercise the production controller callback using egui's viewport seam.
+    // Native icon resources/properties are verified separately on owned hidden
+    // windows; this test never makes a window visible or injects OS input.
+    std::thread::spawn(|| {
+        let ctx = egui::Context::default();
+        ctx.set_embed_viewports(false);
+        egui::Context::set_immediate_viewport_renderer(move |ctx, mut viewport| {
+            assert_eq!(viewport.builder.visible, Some(false));
+            assert_eq!(viewport.builder.title.as_deref(), Some("ClipCraft Capture"));
+            assert_eq!(
+                viewport.builder.icon.as_ref().unwrap().rgba,
+                crate::brand::controller_icon().rgba
+            );
+            let mut input = egui::RawInput {
+                viewport_id: viewport.ids.this,
+                ..Default::default()
+            };
+            input.viewports.insert(
+                viewport.ids.this,
+                egui::ViewportInfo {
+                    parent: Some(viewport.ids.parent),
+                    ..Default::default()
+                },
+            );
+            let mut result = ctx.run_ui(input, |ui| (viewport.viewport_ui_cb)(ui));
+            result.textures_delta.clear();
+        });
+        let mut e = crate::canvas::tests::editor(&ctx);
+        e.lifecycle.available = true;
+        let startup = ctx.run_logic(&egui::RawInput::default(), |ctx| {
+            e.apply_startup_window(
+                ctx,
+                false,
+                capture_core::quick_preferences::StartupWindow::CaptureController,
+            );
+        });
+        let id = egui::ViewportId::from_hash_of("clipcraft-capture-controller");
+        assert!(!startup.viewport_commands.contains_key(&id));
+        assert!(e.lifecycle.hidden && e.capture_controller.focus_requested);
+        let mut result = ctx.run_ui(egui::RawInput::default(), |ui| {
+            e.show_capture_controller(ui.ctx())
+        });
+        result.textures_delta.clear();
+        let commands = &result.viewport_output[&id].commands;
+        assert!(
+            commands
+                .iter()
+                .any(|c| matches!(c, egui::ViewportCommand::Visible(true))),
+            "{commands:?}"
+        );
+        let visible = commands
+            .iter()
+            .position(|c| matches!(c, egui::ViewportCommand::Visible(true)))
+            .unwrap();
+        let focus = commands
+            .iter()
+            .position(|c| matches!(c, egui::ViewportCommand::Focus))
+            .unwrap();
+        assert!(visible < focus);
+        assert!(!e.capture_controller.focus_requested);
+        e.capture_controller.suspended = true;
+        let mut result = ctx.run_ui(egui::RawInput::default(), |ui| {
+            e.show_capture_controller(ui.ctx())
+        });
+        result.textures_delta.clear();
+        assert!(
+            result.viewport_output[&id]
+                .commands
+                .iter()
+                .any(|c| matches!(c, egui::ViewportCommand::Visible(false)))
+        );
+    })
+    .join()
+    .unwrap();
+}
+
 #[test]
 fn capture_hotkey_uses_its_saved_mode_profile_and_clipboard_adapter() {
     let ctx = egui::Context::default();

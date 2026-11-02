@@ -149,7 +149,7 @@ pub fn image_in_frame(
     a.corner_radius = 8.;
     Ok(a)
 }
-fn text(id: u64, rect: [f32; 4], content: &str, size: f32, bold: bool) -> Annotation {
+pub(crate) fn text(id: u64, rect: [f32; 4], content: &str, size: f32, bold: bool) -> Annotation {
     Annotation {
         id,
         kind: Kind::Text,

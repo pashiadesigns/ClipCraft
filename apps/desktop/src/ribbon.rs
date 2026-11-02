@@ -10,7 +10,6 @@ pub(super) enum RibbonTab {
     Home,
     ToolSettings,
     Export,
-    AdvancedSettings,
 }
 
 pub(super) fn icon(
@@ -415,7 +414,7 @@ pub(super) fn divider(ui: &mut egui::Ui, height: f32) {
 }
 
 impl Editor {
-    pub(super) fn ribbon_tabs(&mut self, ui: &mut egui::Ui) -> [Response; 4] {
+    pub(super) fn ribbon_tabs(&mut self, ui: &mut egui::Ui) -> [Response; 3] {
         crate::tabs::group(ui, |ui| {
             ui.horizontal(|ui| {
                 if crate::tabs::tab(ui, "File", false, 76.0).clicked() {
@@ -434,9 +433,8 @@ impl Editor {
 
                 [
                     (RibbonTab::Home, "Tools", 88.0),
-                    (RibbonTab::ToolSettings, "Tool Settings", 134.0),
+                    (RibbonTab::ToolSettings, "Advanced", 112.0),
                     (RibbonTab::Export, "Export", 90.0),
-                    (RibbonTab::AdvancedSettings, "Advanced Settings", 162.0),
                 ]
                 .map(|(tab, label, width)| {
                     let r = crate::tabs::tab(
@@ -544,7 +542,7 @@ impl Editor {
             });
         buttons
     }
-    pub(super) fn show_ribbon(&mut self, ui: &mut egui::Ui) -> [Response; 4] {
+    pub(super) fn show_ribbon(&mut self, ui: &mut egui::Ui) -> [Response; 3] {
         egui::Panel::top("workspace_ribbon")
             .show_separator_line(false)
             .frame(egui::Frame::new().fill(crate::shell::SURROUND))
@@ -582,7 +580,26 @@ impl Editor {
                             .inner_margin(egui::Margin::symmetric(8, 4))
                             .show(ui, |ui| {
                                 ui.set_min_width(ui.available_width());
-                                egui::ScrollArea::horizontal()
+                                let height = if self.shell.badges { 76. } else { 70. };
+                                let bounds = ui.available_rect_before_wrap();
+                                let setup = self.shell.ribbon_tab == RibbonTab::ToolSettings;
+                                let mut setup_rect = egui::Rect::from_min_max(
+                                    egui::pos2(bounds.right() - 104., bounds.top() - 1.),
+                                    egui::pos2(bounds.right() + 4., bounds.top() + height + 1.),
+                                );
+                                let scroll_width = bounds.width() - if setup { 112. } else { 0. };
+                                let scrolled = ui.scope_builder(
+                                    egui::UiBuilder::new().max_rect(egui::Rect::from_min_size(
+                                        bounds.min,
+                                        egui::vec2(scroll_width, height + 27.),
+                                    )),
+                                    |ui| {
+                                        ui.set_max_width(scroll_width);
+                                        egui::ScrollArea::horizontal()
+                                    .scroll_bar_visibility(
+                                        egui::scroll_area::ScrollBarVisibility::VisibleWhenNeeded,
+                                    )
+                                    .max_width(scroll_width)
                                     .id_salt("ribbon_overflow")
                                     .show(ui, |ui| {
                                         ui.horizontal(|ui| {
@@ -597,12 +614,34 @@ impl Editor {
                                                     });
                                                 }
                                                 RibbonTab::Export => self.export_ribbon(ui, height),
-                                                RibbonTab::AdvancedSettings => {
-                                                    self.advanced_ribbon(ui, height)
-                                                }
                                             }
                                         });
-                                    });
+                                    })
+                                    },
+                                );
+                                setup_rect.max.y = scrolled.response.rect.bottom() + 1.;
+                                let _scroll = scrolled.inner;
+                                if setup {
+                                    ui.scope_builder(
+                                        egui::UiBuilder::new().max_rect(setup_rect),
+                                        |ui| self.page_setup_ribbon(ui, setup_rect.height()),
+                                    );
+                                }
+                                #[cfg(test)]
+                                ui.ctx().data_mut(|d| {
+                                    d.insert_temp(
+                                        egui::Id::unique("ribbon-overflow-geometry"),
+                                        (
+                                            _scroll.content_size,
+                                            _scroll.inner_rect,
+                                            scrolled.response.rect,
+                                        ),
+                                    );
+                                    d.insert_temp(
+                                        egui::Id::unique("ribbon-scroll-content"),
+                                        _scroll.inner_rect,
+                                    )
+                                });
                             })
                             .response
                             .rect
@@ -612,7 +651,6 @@ impl Editor {
                     RibbonTab::Home => 0,
                     RibbonTab::ToolSettings => 1,
                     RibbonTab::Export => 2,
-                    RibbonTab::AdvancedSettings => 3,
                 }]
                 .rect;
                 ui.painter().rect_filled(
@@ -885,16 +923,13 @@ impl Editor {
             }
         });
     }
-    fn advanced_ribbon(&mut self, ui: &mut egui::Ui, height: f32) {
-        self.advanced_controls(ui, height);
-    }
-    fn advanced_controls(
+    pub(super) fn restore_ribbon(
         &mut self,
         ui: &mut egui::Ui,
         height: f32,
     ) -> Vec<(&'static str, Response)> {
         let mut responses = vec![];
-        group(ui, "Image recovery", 132.0, height, |ui| {
+        group(ui, "Restore", 132.0, height, |ui| {
             let r = command_tile(
                 ui,
                 "Revert",
@@ -911,59 +946,6 @@ impl Editor {
                     "Original image restored. Undo restores the previous image state.".into();
             }
             responses.push(("Revert", r));
-        });
-        divider(ui, height);
-        group(ui, "Text recognition", 104.0, height, |ui| {
-            let r = command_tile(
-                ui,
-                "Grab Text",
-                "Grab Text",
-                "Recognize text locally from the current image",
-                cfg!(windows) && !self.shell.library && !self.ocr.busy(),
-                false,
-                104.0,
-                height,
-            );
-            if r.clicked() {
-                self.request_ocr(ui.ctx());
-            }
-            responses.push(("Grab Text", r));
-        });
-        divider(ui, height);
-        group(ui, "Selection behavior", 164.0, height, |ui| {
-            let selected = self.quick_controls.auto_switch_tool();
-            let r = command_tile(
-                ui,
-                "Switch tools",
-                "Switch tools on selection",
-                "Automatically select the matching tool when clicking an object",
-                true,
-                selected,
-                164.0,
-                height,
-            );
-            if r.clicked() {
-                self.quick_controls.set_auto_switch_tool(!selected);
-            }
-            responses.push(("Switch tools", r));
-        });
-        divider(ui, height);
-        group(ui, "Preferences", 142.0, height, |ui| {
-            let r = command_tile(
-                ui,
-                "Options",
-                "More Preferences",
-                "General preferences and capture keybinds",
-                true,
-                false,
-                142.0,
-                height,
-            );
-            if r.clicked() && self.commit_text() {
-                self.cancel_gesture();
-                self.shell.backstage = Some(crate::backstage::Page::Options);
-            }
-            responses.push(("More Preferences", r));
         });
         responses
     }

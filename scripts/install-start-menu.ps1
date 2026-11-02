@@ -1,6 +1,6 @@
 param(
     [string]$Executable = (Join-Path $PSScriptRoot 'ClipCraft.exe'),
-    [string]$Destination = (Join-Path ([Environment]::GetFolderPath('Programs')) 'ClipCraft')
+    [string]$Destination = ([Environment]::GetFolderPath('Programs'))
 )
 $ErrorActionPreference = 'Stop'
 $exe = (Resolve-Path -LiteralPath $Executable).Path

@@ -25,7 +25,7 @@
   "limitations": [
     "Per-corner radii, additional shape families, advanced stroke presets and pen pressure remain unfinished.",
     "Step markers currently use circles and automatic text contrast; alternative shapes and independent text color remain planned.",
-    "Use alpha.29 or newer for projects containing these new tools or corner radii. Full Snagit interface and behavioral parity are not claimed.",
+    "Use alpha.29 or newer for projects containing these new tools or corner radii. Verification covers only the workflows described in these release notes.",
     "This is an unsigned Windows x64 alpha. Custom shortcuts, scrolling capture and persistent capture preferences remain planned."
   ]
 }

@@ -72,10 +72,24 @@ pub(super) fn print(
                 SetBrushOrgEx(dc, 0, 0, std::ptr::null_mut());
                 for page in pages {
                     let [x, y, w, h] = page.source;
-                    let rgb = capture_core::export::opaque(
-                        &image::imageops::crop_imm(pixels, x, y, w, h).to_image(),
-                        options.background,
-                    );
+                    let configured = page.setup.is_some();
+                    let image = if configured {
+                        page.print_pixels(document).map_err(|e| e.to_string())?
+                    } else {
+                        image::imageops::crop_imm(pixels, x, y, w, h).to_image()
+                    };
+                    let rgb = capture_core::export::opaque(&image, options.background);
+                    let (w, h) = rgb.dimensions();
+                    let paper = [
+                        GetDeviceCaps(dc, PHYSICALWIDTH as i32) as f64 * 72. / dpi[0] as f64,
+                        GetDeviceCaps(dc, PHYSICALHEIGHT as i32) as f64 * 72. / dpi[1] as f64,
+                    ];
+                    if configured
+                        && (page.media_size[0] > paper[0] + 1.
+                            || page.media_size[1] > paper[1] + 1.)
+                    {
+                        return Err("The selected printer paper is smaller than Page Setup output. Choose larger paper or change orientation; ClipCraft keeps the configured physical size.".into());
+                    }
                     let bgra: Vec<u8> =
                         rgb.pixels().flat_map(|p| [p[2], p[1], p[0], 255]).collect();
                     let bitmap = BITMAPINFO {
@@ -93,7 +107,20 @@ pub(super) fn print(
                     if StartPage(dc) <= 0 {
                         return Err("The printer could not start a page.".into());
                     }
-                    let [x, y, w, h] = page.destination;
+                    let [x, y, w, h] = if configured {
+                        [
+                            (paper[0] - page.media_size[0]) * 0.5
+                                - GetDeviceCaps(dc, PHYSICALOFFSETX as i32) as f64 * 72.
+                                    / dpi[0] as f64,
+                            (paper[1] - page.media_size[1]) * 0.5
+                                - GetDeviceCaps(dc, PHYSICALOFFSETY as i32) as f64 * 72.
+                                    / dpi[1] as f64,
+                            page.media_size[0],
+                            page.media_size[1],
+                        ]
+                    } else {
+                        page.destination
+                    };
                     let result = StretchDIBits(
                         dc,
                         (x * dpi[0] as f64 / 72.).round() as i32,
