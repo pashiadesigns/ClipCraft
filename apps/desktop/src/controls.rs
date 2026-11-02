@@ -146,6 +146,16 @@ pub(super) fn slider(ui: &mut egui::Ui, slider: egui::Slider<'_>) -> egui::Respo
     .inner
 }
 
+pub(crate) const DIALOG_ACTION_HEIGHT: f32 = 26.;
+pub(super) fn dialog_button(label: &str, primary: bool) -> egui::Button<'_> {
+    let b = egui::Button::new(label).min_size(egui::vec2(82., DIALOG_ACTION_HEIGHT));
+    if primary {
+        b.fill(crate::shell::ACCENT)
+    } else {
+        b
+    }
+}
+
 /// Footer order is primary then secondary, aligned to the dialog's right edge.
 pub(super) fn dialog_actions(
     ui: &mut egui::Ui,
@@ -156,11 +166,11 @@ pub(super) fn dialog_actions(
 ) -> (bool, bool) {
     ui.add_space(8.);
     ui.allocate_ui_with_layout(
-        egui::vec2(ui.available_width(), 26.),
+        egui::vec2(ui.available_width(), DIALOG_ACTION_HEIGHT),
         egui::Layout::right_to_left(egui::Align::Center),
         |ui| {
             let cancel = ui
-                .add_sized([82., 26.], egui::Button::new(secondary))
+                .add_sized([82., DIALOG_ACTION_HEIGHT], egui::Button::new(secondary))
                 .clicked();
             let color = if destructive {
                 egui::Color32::from_rgb(177, 43, 49)
@@ -171,7 +181,7 @@ pub(super) fn dialog_actions(
                 .add_enabled(
                     enabled,
                     egui::Button::new(primary)
-                        .min_size(egui::vec2(82., 26.))
+                        .min_size(egui::vec2(82., DIALOG_ACTION_HEIGHT))
                         .fill(color),
                 )
                 .clicked();
@@ -184,6 +194,27 @@ pub(super) fn dialog_actions(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn confirmation_actions_keep_26_logical_pixels_at_all_ui_scales() {
+        for scale in [1., 1.25, 1.5, 2.] {
+            let ctx = egui::Context::default();
+            crate::shell::configure(&ctx);
+            ctx.set_pixels_per_point(scale);
+            for _ in 0..2 {
+                let out = ctx.run_ui(egui::RawInput::default(), |ui| {
+                    for label in ["Apply", "Cancel", "Close", "Save and continue", "Print…"] {
+                        let r = ui.add(dialog_button(label, label != "Cancel"));
+                        assert!(
+                            (r.rect.height() - DIALOG_ACTION_HEIGHT).abs() < 0.01,
+                            "{label} {scale} {:?}",
+                            r.rect
+                        );
+                    }
+                });
+                let _ = crate::property_layout::tests::PaintedOutput(out);
+            }
+        }
+    }
     #[test]
     fn property_toggle_labels_precede_small_handles_and_support_pointer_keyboard_and_disabled_state()
      {

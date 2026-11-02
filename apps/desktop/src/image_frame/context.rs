@@ -29,10 +29,7 @@ impl Editor {
                     .iter()
                     .rev()
                     .find(|a| {
-                        a.kind == Kind::Image
-                            && a.image
-                                .as_ref()
-                                .is_some_and(|b| !b.is_cursor() && b.vector().is_none())
+                        (a.is_shape() || a.is_image_frame())
                             && self.session.document.object_editable(a.id)
                             && a.hit_test(transform.image_point(p), 2. / transform.scale)
                     })
@@ -63,6 +60,13 @@ impl Editor {
         };
         let mut action = None;
         response.context_menu(|ui| {
+            if !a.is_image_frame() {
+                if ui.button("Convert to image frame").clicked() {
+                    action = Some("Convert to image frame");
+                    ui.close();
+                }
+                return;
+            }
             ui.menu_button("Replace Image", |ui| {
                 for label in ["From File…", "From Clipboard", "From Library…"] {
                     if ui.button(label).clicked() {
@@ -77,6 +81,7 @@ impl Editor {
                 ("Crop Image", !empty),
                 ("Reset Crop", !empty),
                 ("Copy Image", !empty),
+                ("Convert to basic shape", true),
                 ("Delete Frame", true),
             ] {
                 if ui.add_enabled(enabled, egui::Button::new(label)).clicked() {
@@ -85,7 +90,40 @@ impl Editor {
                 }
             }
         });
+        self.frame_action(ui, id, action);
+    }
+    pub(super) fn choose_frame_source(
+        &mut self,
+        ui: &mut egui::Ui,
+        response: &egui::Response,
+        id: u64,
+    ) {
+        let mut action = None;
+        egui::Popup::menu(response).show(|ui| {
+            for label in ["From File…", "From Clipboard", "From Library…"] {
+                if ui.button(label).clicked() {
+                    action = Some(label);
+                    ui.close();
+                }
+            }
+        });
+        self.frame_action(ui, id, action);
+    }
+    fn frame_action(&mut self, ui: &mut egui::Ui, id: u64, action: Option<&str>) {
+        let Some(a) = self
+            .session
+            .document
+            .annotations
+            .iter()
+            .find(|a| a.id == id)
+            .cloned()
+        else {
+            return;
+        };
         match action {
+            Some("Convert to image frame") | Some("Convert to basic shape") => {
+                self.convert_selected_frame(action == Some("Convert to image frame"));
+            }
             Some("From File…") => {
                 ui.ctx()
                     .data_mut(|d| d.insert_temp(egui::Id::unique("replace-frame-image"), id));
@@ -154,11 +192,14 @@ impl Editor {
             .document
             .annotations
             .iter()
-            .find(|a| {
-                a.id == id && a.kind == Kind::Image && self.session.document.object_editable(id)
-            })
+            .find(|a| a.id == id && a.is_image_frame() && self.session.document.object_editable(id))
             .ok_or("Image frame is no longer editable.")?;
         let mut a = old.clone();
+        let bitmap = if a.is_shape() {
+            Arc::new(bitmap.with_frame_opacity(a.image_opacity()))
+        } else {
+            bitmap
+        };
         let (lo, hi) = a.body_bounds();
         a.image = templates::image_in_frame(
             bitmap,
@@ -274,7 +315,9 @@ impl Editor {
                 ui.colored_label(egui::Color32::LIGHT_RED, &p.error);
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                cancel = ui.button("Cancel").clicked();
+                cancel = ui
+                    .add(crate::controls::dialog_button("Cancel", false))
+                    .clicked();
             });
         });
         if cancel || crate::text_edit::cancel_on_escape(&modal) {

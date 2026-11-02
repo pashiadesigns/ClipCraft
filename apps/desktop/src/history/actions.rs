@@ -76,7 +76,7 @@ fn details(store: &capture_core::history::History, e: &Entry) -> Vec<(&'static s
         ("Project file", path.display().to_string()),
     ]
 }
-pub(super) fn icon(ui: &egui::Ui, center: egui::Pos2, name: &str, color: egui::Color32) {
+pub(crate) fn icon(ui: &egui::Ui, center: egui::Pos2, name: &str, color: egui::Color32) {
     match name {
         "Text" => {
             ui.painter().text(
@@ -383,7 +383,7 @@ impl Editor {
             if dialog.action == Action::Details {
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     cancel = ui
-                        .add(egui::Button::new("Close").fill(crate::shell::ACCENT))
+                        .add(crate::controls::dialog_button("Close", true))
                         .clicked();
                 });
             } else {

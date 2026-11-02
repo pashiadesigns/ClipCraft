@@ -21,7 +21,9 @@ pub(super) fn show(ui: &mut egui::Ui, annotation: &mut Annotation) {
             annotation.fill = Some(fill);
         }
         crate::property_layout::swatch(ui, "Outline", &mut outline);
-        crate::text_properties::color_swatch(ui, &mut annotation.text, annotation.color);
+        if !annotation.is_image_frame() {
+            crate::text_properties::color_swatch(ui, &mut annotation.text, annotation.color);
+        }
     });
     crate::property_layout::divider(ui);
     crate::property_layout::slider(
@@ -29,7 +31,15 @@ pub(super) fn show(ui: &mut egui::Ui, annotation: &mut Annotation) {
         "Thickness",
         egui::Slider::new(&mut annotation.width, 1..=32),
     );
-    crate::property_layout::slider(ui, "Opacity", egui::Slider::new(&mut outline[3], 0..=255));
+    crate::property_layout::slider(
+        ui,
+        if annotation.is_image_frame() {
+            "Outline opacity"
+        } else {
+            "Opacity"
+        },
+        egui::Slider::new(&mut outline[3], 0..=255),
+    );
     if let Some(fill) = &mut annotation.fill {
         crate::property_layout::slider(
             ui,

@@ -13,7 +13,7 @@ use std::{
 };
 
 pub const MAX_PIXELS: u64 = 25_000_000;
-pub const MAX_PROJECT_VERSION: u32 = 26;
+pub const MAX_PROJECT_VERSION: u32 = 30;
 mod arrow;
 pub mod bitmap;
 pub mod callout;
@@ -283,6 +283,30 @@ impl Document {
     /// Promote documents that use newer editable annotation properties.
     /// Old applications reject these projects instead of silently losing rules.
     pub fn promote_features(&mut self) {
+        if self
+            .guide
+            .as_ref()
+            .and_then(|g| g.pages.as_ref())
+            .is_some_and(|p| !p.setup.is_empty())
+        {
+            self.version = self.version.max(30);
+        }
+        if self
+            .guide
+            .as_ref()
+            .and_then(|g| g.pages.as_ref())
+            .is_some_and(|p| p.horizontal)
+        {
+            self.version = self.version.max(29);
+        }
+        if self.guide.as_ref().is_some_and(|g| g.pages.is_some())
+            || self
+                .annotations
+                .iter()
+                .any(|a| a.is_shape() && a.image.is_some())
+        {
+            self.version = self.version.max(27);
+        }
         if self.guide.as_ref().is_some_and(|g| {
             g.sections
                 .iter()
@@ -547,7 +571,22 @@ impl Document {
                 ));
             }
             match (annotation.kind, &annotation.image) {
-                (Kind::Image, Some(bitmap)) if self.version >= 8 => {
+                (_, Some(bitmap))
+                    if (annotation.kind == Kind::Image && self.version >= 8)
+                        || (annotation.is_shape() && self.version >= 27) =>
+                {
+                    if annotation.is_shape()
+                        && (annotation.text.is_some() || bitmap.is_cursor() || bitmap.is_stamp())
+                    {
+                        return Err(Error::Invalid(
+                            "Shape frames contain an image instead of text".into(),
+                        ));
+                    }
+                    if bitmap.has_frame_opacity() && (!annotation.is_shape() || self.version < 27) {
+                        return Err(Error::Invalid(
+                            "Separate image opacity requires a shape frame".into(),
+                        ));
+                    }
                     bitmap.validate_cursor()?;
                     bitmap.validate_view()?;
                     if bitmap.is_placeholder() && self.version < 25 {
@@ -678,15 +717,25 @@ impl Document {
             if !valid_path {
                 return Err(Error::Invalid("Strokes need 2-8192 points; polygons need 3-64; other objects cannot carry paths".into()));
             }
+            let bleed = self
+                .guide
+                .as_ref()
+                .and_then(|g| g.pages.as_ref())
+                .map_or(0., |p| {
+                    p.setup
+                        .iter()
+                        .map(|s| (s.bleed * s.ppi / 72.) as f32)
+                        .fold(0., f32::max)
+                });
             for point in [annotation.start, annotation.end]
                 .iter()
                 .chain(&annotation.points)
             {
                 if !point.iter().all(|n| n.is_finite())
-                    || point[0] < 0.0
-                    || point[1] < 0.0
-                    || point[0] > self.width as f32
-                    || point[1] > self.height as f32
+                    || point[0] < -bleed
+                    || point[1] < -bleed
+                    || point[0] > self.width as f32 + bleed
+                    || point[1] > self.height as f32 + bleed
                 {
                     return Err(Error::Invalid(
                         "Annotation coordinates are outside the image".into(),
@@ -735,6 +784,9 @@ impl Document {
         {
             render_annotation(&mut image, annotation);
         }
+        for a in self.page_furniture() {
+            render_annotation(&mut image, &a);
+        }
         Ok(image)
     }
 
@@ -757,6 +809,28 @@ impl Document {
             original.width = width;
             original.height = height;
             original.base_image()?;
+        }
+        // Earlier page previews stacked pages vertically. Upgrade their editor
+        // layout in memory, preserving object locks and the original file.
+        // If the horizontal extent exceeds the existing canvas limit, keep the
+        // valid original layout accessible instead of refusing to open it.
+        if doc
+            .guide
+            .as_ref()
+            .and_then(|g| g.pages.as_ref())
+            .is_some_and(|p| !p.horizontal || p.gap != guide_sections::PAGE_GAP)
+        {
+            let mut editable = doc.clone();
+            for state in editable.object_states.values_mut() {
+                state.locked = false;
+            }
+            if let Ok(mut horizontal) =
+                editable.edit_guide(&guide_sections::Action::MovePage { page: 0, index: 0 })
+            {
+                horizontal.object_states = doc.object_states.clone();
+                horizontal.validate()?;
+                return Ok(horizontal);
+            }
         }
         Ok(doc)
     }
@@ -832,6 +906,10 @@ fn render_annotation(image: &mut RgbaImage, a: &Annotation) {
 }
 
 fn render_annotation_ink(image: &mut RgbaImage, a: &Annotation) {
+    if a.is_shape() && a.image.is_some() {
+        display::render_rotated(image, a);
+        return;
+    }
     if a.analysis.is_some() {
         return;
     }

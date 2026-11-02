@@ -191,14 +191,17 @@ impl Editor {
             ui.separator();
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 cancel |= ui
-                    .add_sized([80.0, 24.0], egui::Button::new("Cancel"))
+                    .add_sized(
+                        [80.0, crate::controls::DIALOG_ACTION_HEIGHT],
+                        egui::Button::new("Cancel"),
+                    )
                     .clicked();
                 if ui
                     .add_enabled(
                         spec.as_ref().is_ok_and(|size| *size != draft.original),
                         egui::Button::new("OK")
                             .fill(crate::shell::ACCENT)
-                            .min_size(egui::vec2(80.0, 24.0)),
+                            .min_size(egui::vec2(80.0, crate::controls::DIALOG_ACTION_HEIGHT)),
                     )
                     .clicked()
                 {

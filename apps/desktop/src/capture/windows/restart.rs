@@ -3,6 +3,7 @@ use super::*;
 struct Dialog {
     result: Option<bool>,
     restart: bool,
+    dpi: i32,
 }
 unsafe extern "system" fn procedure(
     hwnd: HWND,
@@ -35,7 +36,12 @@ unsafe extern "system" fn procedure(
                     let mut ps = PAINTSTRUCT::default();
                     let dc = BeginPaint(hwnd, &mut ps);
                     if !dc.is_null() {
+                        let saved = SaveDC(dc);
+                        SetMapMode(dc, MM_ANISOTROPIC);
+                        SetWindowExtEx(dc, 96, 96, null_mut());
+                        SetViewportExtEx(dc, (*pointer).dpi, (*pointer).dpi, null_mut());
                         paint(dc, (*pointer).restart);
+                        RestoreDC(dc, saved);
                     }
                     EndPaint(hwnd, &ps);
                     return 0;
@@ -43,13 +49,33 @@ unsafe extern "system" fn procedure(
                 WM_DRAWITEM => {
                     let item =
                         &*(lparam as *const windows_sys::Win32::UI::Controls::DRAWITEMSTRUCT);
+                    let saved = SaveDC(item.hDC);
+                    SetMapMode(item.hDC, MM_ANISOTROPIC);
+                    SetWindowExtEx(
+                        item.hDC,
+                        104,
+                        crate::controls::DIALOG_ACTION_HEIGHT as i32,
+                        null_mut(),
+                    );
+                    SetViewportExtEx(
+                        item.hDC,
+                        item.rcItem.right - item.rcItem.left,
+                        item.rcItem.bottom - item.rcItem.top,
+                        null_mut(),
+                    );
                     button(
                         item.hDC,
-                        item.rcItem,
+                        RECT {
+                            left: 0,
+                            top: 0,
+                            right: 104,
+                            bottom: crate::controls::DIALOG_ACTION_HEIGHT as i32,
+                        },
                         item.CtlID == 2,
                         item.itemState & 0x10 != 0,
                         (*pointer).restart,
                     );
+                    RestoreDC(item.hDC, saved);
                     return 1;
                 }
                 _ => {}
@@ -101,17 +127,20 @@ pub(super) fn confirm(owner: HWND, restarting: bool) -> Result<bool, String> {
             MonitorFromWindow(owner, MONITOR_DEFAULTTONEAREST),
             &mut info,
         );
+        let dpi = windows_sys::Win32::UI::HiDpi::GetDpiForWindow(owner).max(96) as i32;
+        let px = |n: i32| (n * dpi + 48) / 96;
         let x = area.left.clamp(
             info.rcWork.left,
-            (info.rcWork.right - 460).max(info.rcWork.left),
+            (info.rcWork.right - px(460)).max(info.rcWork.left),
         );
         let y = area.bottom.clamp(
             info.rcWork.top,
-            (info.rcWork.bottom - 160).max(info.rcWork.top),
+            (info.rcWork.bottom - px(160)).max(info.rcWork.top),
         );
         let mut state = Box::new(Dialog {
             result: None,
             restart: restarting,
+            dpi,
         });
         let hwnd = CreateWindowExW(
             WS_EX_TOPMOST | WS_EX_TOOLWINDOW,
@@ -120,8 +149,8 @@ pub(super) fn confirm(owner: HWND, restarting: bool) -> Result<bool, String> {
             WS_POPUP | WS_CLIPCHILDREN,
             x,
             y,
-            460,
-            160,
+            px(460),
+            px(160),
             owner,
             null_mut(),
             GetModuleHandleW(null()),
@@ -139,10 +168,10 @@ pub(super) fn confirm(owner: HWND, restarting: bool) -> Result<bool, String> {
             w!("BUTTON"),
             w!("Resume"),
             WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_OWNERDRAW as u32,
-            222,
-            112,
-            104,
-            32,
+            px(222),
+            px(112),
+            px(104),
+            px(crate::controls::DIALOG_ACTION_HEIGHT as i32),
             hwnd,
             1usize as HMENU,
             GetModuleHandleW(null()),
@@ -157,10 +186,10 @@ pub(super) fn confirm(owner: HWND, restarting: bool) -> Result<bool, String> {
                 w!("Delete")
             },
             WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_OWNERDRAW as u32,
-            338,
-            112,
-            104,
-            32,
+            px(338),
+            px(112),
+            px(104),
+            px(crate::controls::DIALOG_ACTION_HEIGHT as i32),
             hwnd,
             2usize as HMENU,
             GetModuleHandleW(null()),

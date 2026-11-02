@@ -17,6 +17,6 @@
   "limitations": [
     "These commands transform the whole image and flatten editable objects after confirmation. Selected-object rotation and flips remain unfinished.",
     "Custom image angles, grouping, interactive crop and full reference UI parity remain unfinished.",
-    "Unsigned Windows x64 alpha. Testing uses original synthetic fixtures; full Snagit behavioral parity is not claimed."
+    "Unsigned Windows x64 alpha. Testing uses original synthetic fixtures; coverage is limited to the recorded workflows."
   ]
 }

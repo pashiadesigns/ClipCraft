@@ -36,6 +36,6 @@
     "PDF text uses vector outlines and is not searchable text. Screenshots, shadows and pixel effects remain raster. Editable project fonts are referenced rather than embedded.",
     "Editable projects retain source pixels; share flattened exports when redacting. Recovery retains at most three earlier versions per Library item under a separate 256 MB budget and cannot recover revisions discarded by older builds.",
     "Projects using Blank sections require this release or newer (project format 26); earlier releases reject that newer format.",
-    "Headless and user checks cover the recorded workflows, not complete Snagit parity or an enterprise security certification. No native desktop takeover, print job or OS clipboard access was used in the final automated qualification."
+    "Headless and user checks cover the recorded workflows, not every Windows configuration or an enterprise security certification. No native desktop takeover, print job or OS clipboard access was used in the final automated qualification."
   ]
 }

@@ -292,14 +292,37 @@ impl Editor {
                         .push_id(("more-tool", id), |ui| {
                             ui.horizontal(|ui| {
                                 let response = ui.add(
-                                    egui::Button::new(if id == ToolId::Crop {
-                                        "Crop / Cut"
-                                    } else {
-                                        tool.name
-                                    })
-                                    .frame(false)
-                                    .min_size(egui::vec2(150.0, 22.0))
-                                    .sense(egui::Sense::click_and_drag()),
+                                    egui::Button::new("")
+                                        .frame(false)
+                                        .min_size(egui::vec2(170.0, 26.0))
+                                        .sense(egui::Sense::click_and_drag()),
+                                );
+                                let label = if id == ToolId::Crop {
+                                    "Crop / Cut"
+                                } else {
+                                    tool.name
+                                };
+                                response.widget_info(|| {
+                                    egui::WidgetInfo::labeled(egui::Role::Button, true, label)
+                                });
+                                crate::ribbon::draw_icon(
+                                    ui.painter(),
+                                    egui::pos2(
+                                        response.rect.left() + 14.,
+                                        response.rect.center().y,
+                                    ),
+                                    tool.name,
+                                    ui.visuals().text_color(),
+                                );
+                                ui.painter().text(
+                                    egui::pos2(
+                                        response.rect.left() + 32.,
+                                        response.rect.center().y,
+                                    ),
+                                    egui::Align2::LEFT_CENTER,
+                                    label,
+                                    egui::FontId::proportional(13.),
+                                    ui.visuals().text_color(),
                                 );
                                 badge(ui, self.shell.badges, tool.feature);
                                 response

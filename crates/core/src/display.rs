@@ -8,6 +8,7 @@ pub mod effect_patch;
 pub mod vector;
 mod viewport;
 pub use viewport::Viewport;
+pub(crate) use viewport::body_path as frame_body_path;
 pub use viewport::render_annotation_preview;
 pub(crate) use viewport::{render_rotated, render_vector};
 
@@ -39,12 +40,13 @@ impl Document {
     }
 
     fn display_list_limited(&self, patch_pixel_limit: u64) -> Result<DisplayList> {
-        let visible: Vec<_> = self
+        let mut visible: Vec<_> = self
             .annotations
             .iter()
             .filter(|a| self.object_visible(a.id))
             .cloned()
             .collect();
+        visible.extend(self.page_furniture());
         layers_from_base(self.base_image()?, &visible, patch_pixel_limit)
     }
 }

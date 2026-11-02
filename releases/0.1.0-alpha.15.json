@@ -16,7 +16,7 @@
     ]
   },
   "limitations": [
-    "This is ClipCraft's independent revert behavior. Snagit's detailed revert semantics still need direct comparison, so that broader roadmap item remains Needs verification.",
+    "This is ClipCraft's independent revert behavior. Broader revert workflows still need verification, so that broader roadmap item remains Needs verification.",
     "Undo history lasts for the current session. Saving a reverted project and reopening it preserves the original image but does not retain removed objects as persistent history.",
     "Pixel grid, snapping, crop/resize, library history and full reference interface parity remain unfinished. Native Save As inspection is still blocked."
   ]

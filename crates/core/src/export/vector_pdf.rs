@@ -305,7 +305,22 @@ pub(super) fn encode(document: &Document, options: &Options) -> Result<Vec<u8>> 
     let mut pdf = Pdf::default();
     pdf.add(b"<< /Type /Catalog /Pages 2 0 R >>".to_vec());
     pdf.add(vec![]);
-    let bounds = Rect::new(0., 0., document.width as f64, document.height as f64);
+    let bleed = document
+        .guide
+        .as_ref()
+        .and_then(|g| g.pages.as_ref())
+        .map_or(0., |p| {
+            p.setup
+                .iter()
+                .map(|s| s.bleed * s.ppi / 72.)
+                .fold(0., f64::max)
+        });
+    let bounds = Rect::new(
+        -bleed,
+        -bleed,
+        document.width as f64 + bleed,
+        document.height as f64 + bleed,
+    );
     let mut future: Vec<_> = list
         .layers
         .iter()
@@ -360,8 +375,8 @@ pub(super) fn encode(document: &Document, options: &Options) -> Result<Vec<u8>> 
                     hi[1] as f64 + reach,
                 )
                 .intersect(bounds);
-                let raster = a.kind == crate::Kind::Image
-                    && !a.image.as_ref().is_some_and(|b| b.vector().is_some());
+                let raster =
+                    a.image.is_some() && !a.image.as_ref().is_some_and(|b| b.vector().is_some());
                 if raster || future.iter().any(|p| p.intersect(r).area() > 0.) {
                     let x = r.x0.floor().max(0.) as i32;
                     let y = r.y0.floor().max(0.) as i32;
@@ -373,17 +388,41 @@ pub(super) fn encode(document: &Document, options: &Options) -> Result<Vec<u8>> 
                     let mut pixels = RgbaImage::new(w, h);
                     let mut a = a.clone();
                     a.shadow = None;
-                    crate::display::render_vector(
-                        &mut pixels,
-                        &a,
-                        crate::display::Viewport {
-                            size: [w, h],
-                            origin: [x as f64, y as f64],
-                            scale: 1.,
-                        },
-                    );
+                    let shape_frame = a.is_shape()
+                        && a.is_image_frame()
+                        && !future.iter().any(|p| p.intersect(r).area() > 0.);
+                    if shape_frame {
+                        let mut shell = a.clone();
+                        shell.image = None;
+                        shell.color[3] = 0;
+                        vector(&mut pdf, &mut content, &shell, bounds)?;
+                        crate::bitmap::render(
+                            &mut pixels,
+                            &a,
+                            crate::display::Viewport {
+                                size: [w, h],
+                                origin: [x as f64, y as f64],
+                                scale: 1.,
+                            },
+                        );
+                    } else {
+                        crate::display::render_vector(
+                            &mut pixels,
+                            &a,
+                            crate::display::Viewport {
+                                size: [w, h],
+                                origin: [x as f64, y as f64],
+                                scale: 1.,
+                            },
+                        );
+                    }
                     erase(&mut pixels, [x, y], &future);
                     image(&mut pdf, &mut content, &pixels, [x, y])?;
+                    if shape_frame {
+                        a.image = None;
+                        a.fill = None;
+                        vector(&mut pdf, &mut content, &a, bounds)?;
+                    }
                 } else {
                     vector(&mut pdf, &mut content, &a, bounds)?;
                 }
@@ -392,21 +431,72 @@ pub(super) fn encode(document: &Document, options: &Options) -> Result<Vec<u8>> 
     }
     let drawing = pdf.form(&content, bounds, false)?;
     let mut kids = vec![];
-    for page in options.page.pages([document.width, document.height])? {
+    for page in options.page.document_pages(document)? {
+        let media = page.media_size;
+        let bleed = page.setup.as_ref().map_or(0., |s| s.bleed);
         let [dx, dy, dw, dh] = page.destination;
         let scale = dw / page.source[2] as f64;
-        let page_content = format!(
-            "q {} {} {} rg 0 0 {} {} re f\n{dx} {} {dw} {dh} re W n\n{scale} 0 0 -{scale} {dx} {} cm\n/{drawing} Do Q\n",
+        let tx = dx - page.source[0] as f64 * scale;
+        let mut page_content = format!(
+            "q {} {} {} rg 0 0 {} {} re f\n{dx} {} {dw} {dh} re W n\n{scale} 0 0 -{scale} {tx} {} cm\n/{drawing} Do Q\n",
             options.background[0] as f64 / 255.,
             options.background[1] as f64 / 255.,
             options.background[2] as f64 / 255.,
-            options.page.size[0],
-            options.page.size[1],
-            options.page.size[1] - dy - dh,
-            options.page.size[1] - dy + page.source[1] as f64 * scale
+            media[0],
+            media[1],
+            media[1] - dy - dh,
+            media[1] - dy + page.source[1] as f64 * scale
         );
+        let mut boxes = String::new();
+        if let Some(s) = &page.setup {
+            // Bleed exposes actual neighboring artwork, rather than stretching edge pixels.
+            page_content = page_content.replacen(
+                &format!("{dx} {} {dw} {dh} re W n", media[1] - dy - dh),
+                &format!(
+                    "{} {} {} {} re W n",
+                    dx - bleed,
+                    media[1] - dy - dh - bleed,
+                    dw + bleed * 2.,
+                    dh + bleed * 2.
+                ),
+                1,
+            );
+            boxes = format!(
+                " /TrimBox [{dx} {dy} {} {}] /BleedBox [{} {} {} {}]",
+                dx + dw,
+                dy + dh,
+                dx - bleed,
+                dy - bleed,
+                dx + dw + bleed,
+                dy + dh + bleed
+            );
+            if s.crop_marks {
+                page_content.push_str(&format!("q 0 G {} w\n", s.mark_weight));
+                for x in [dx, dx + dw] {
+                    for (y, dir) in [(dy, -1.), (dy + dh, 1.)] {
+                        let _ = writeln!(
+                            page_content,
+                            "{x} {} m {x} {} l S",
+                            y + dir * s.mark_offset,
+                            y + dir * (s.mark_offset + s.mark_length)
+                        );
+                    }
+                }
+                for y in [dy, dy + dh] {
+                    for (x, dir) in [(dx, -1.), (dx + dw, 1.)] {
+                        let _ = writeln!(
+                            page_content,
+                            "{} {y} m {} {y} l S",
+                            x + dir * s.mark_offset,
+                            x + dir * (s.mark_offset + s.mark_length)
+                        );
+                    }
+                }
+                page_content.push_str("Q\n");
+            }
+        }
         let stream = pdf.stream("", page_content.as_bytes())?;
-        let id=pdf.add(format!("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {} {}] /Resources {} /Contents {stream} 0 R >>",options.page.size[0],options.page.size[1],pdf.resources()).into_bytes());
+        let id=pdf.add(format!("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {} {}]{boxes} /Resources {} /Contents {stream} 0 R >>",media[0],media[1],pdf.resources()).into_bytes());
         kids.push(format!("{id} 0 R"));
     }
     pdf.objects[1] = format!(

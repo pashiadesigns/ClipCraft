@@ -4,6 +4,8 @@ use capture_core::{
     guide_sections::{Action, SectionKind},
 };
 
+mod pages;
+mod reorder;
 #[cfg(test)]
 mod tests;
 
@@ -19,42 +21,103 @@ pub(super) struct SectionDrag {
 struct Controls {
     id: u64,
     top: f32,
+    left: f32,
+    right: f32,
     bottom: f32,
     resize: egui::Rect,
     add: egui::Rect,
     menu: egui::Rect,
+    grips: [egui::Rect; 2],
 }
 fn controls(document: &Document, transform: Transform) -> Vec<Controls> {
     let Some(layout) = &document.guide else {
         return vec![];
     };
-    let left = transform.image.left();
-    let right = transform.image.right();
-    let center = (left + right) * 0.5;
     layout
         .spans()
         .into_iter()
         .map(|(id, top, bottom)| {
+            let section = layout.sections.iter().find(|s| s.id == id).unwrap();
+            let origin = layout.page_offset(section.page);
+            let left = transform.screen_point(origin).x;
+            let right = left
+                + layout.page_size(section.page, [document.width, document.height])[0] as f32
+                    * transform.scale;
+            let center = (left + right) * 0.5;
             let y = transform.screen_point([0., bottom])[1];
+            let page_rect = pages::page_rect(document, section.page, transform);
+            let cy = y.clamp(
+                page_rect.top() + 12.,
+                (page_rect.bottom() - 12.).max(page_rect.top() + 12.),
+            );
+            let rail = pages::rail_width(document, transform);
             Controls {
+                left,
+                right,
                 id,
                 top,
                 bottom,
+                grips: [left - rail * 0.5, right + rail * 0.5].map(|x| {
+                    egui::Rect::from_center_size(
+                        egui::pos2(x, transform.screen_point([0., (top + bottom) * 0.5]).y),
+                        egui::vec2(22., 24.),
+                    )
+                }),
                 resize: egui::Rect::from_center_size(egui::pos2(center, y), egui::vec2(40., 14.)),
-                add: egui::Rect::from_center_size(egui::pos2(left - 18., y), egui::vec2(24., 24.)),
+                add: egui::Rect::from_center_size(
+                    egui::pos2(left - rail * 0.5, cy),
+                    egui::vec2(24., 24.),
+                ),
                 menu: egui::Rect::from_center_size(
-                    egui::pos2(right + 18., transform.screen_point([0., top + 16.])[1]),
+                    egui::pos2(right + rail * 0.5, cy),
                     egui::vec2(24., 24.),
                 ),
             }
         })
         .collect()
 }
+pub(super) fn visible_buttons(document: &Document, transform: Transform) -> Vec<egui::Rect> {
+    let mut rects = pages::button_rects(document, transform);
+    rects.extend(
+        controls(document, transform)
+            .iter()
+            .flat_map(|c| [c.add, c.menu]),
+    );
+    // The optional insert-at-start action must not displace a section's aligned pair.
+    if let Some(top) = top_add(document, transform).filter(|top| {
+        rects
+            .iter()
+            .all(|r| !r.expand(2.).intersects(top.expand(2.)))
+    }) {
+        rects.push(top);
+    }
+    // Grips yield to page/section commands in short sections; they must not
+    // make an otherwise usable Add Page or section menu disappear.
+    for grip in controls(document, transform).iter().flat_map(|c| c.grips) {
+        if rects
+            .iter()
+            .all(|r| !r.expand(2.).intersects(grip.expand(2.)))
+        {
+            rects.push(grip);
+        }
+    }
+    rects.retain(|r| r.width() + 4. <= pages::rail_width(document, transform));
+    let visible = crate::canvas_buttons::visible(&rects);
+    rects
+        .into_iter()
+        .zip(visible)
+        .filter_map(|(r, shown)| shown.then_some(r))
+        .collect()
+}
 fn top_add(document: &Document, transform: Transform) -> Option<egui::Rect> {
-    let top = document.guide.as_ref()?.top;
-    let x = transform.image.left() - 18.;
+    document.guide.as_ref()?;
+    let page = pages::page_rect(document, 0, transform);
+    let x = page.left() - pages::rail_width(document, transform) * 0.5;
     Some(egui::Rect::from_center_size(
-        egui::pos2(x, transform.screen_point([0., top]).y),
+        egui::pos2(
+            x,
+            (page.top() + 90.).min((page.bottom() - 12.).max(page.top() + 12.)),
+        ),
         egui::vec2(24., 24.),
     ))
 }
@@ -70,6 +133,9 @@ impl Editor {
         transform
     }
     pub(super) fn guide_controls_hovered(&self, ui: &egui::Ui, transform: Transform) -> bool {
+        if reorder::active(ui.ctx()) {
+            return true;
+        }
         if self.guide_drag.is_some() {
             return true;
         }
@@ -84,10 +150,12 @@ impl Editor {
             }
         })
         .is_some_and(|p| {
-            top_add(&self.session.document, transform).is_some_and(|r| r.contains(p))
+            visible_buttons(&self.session.document, transform)
+                .iter()
+                .any(|r| transform.viewport.contains_rect(*r) && r.contains(p))
                 || controls(&self.session.document, transform)
                     .iter()
-                    .any(|c| [c.resize, c.add, c.menu].iter().any(|r| r.contains(p)))
+                    .any(|c| c.resize.contains(p))
         })
     }
     fn apply_section(&mut self, action: Action, transform: Transform) {
@@ -151,15 +219,31 @@ impl Editor {
         {
             return;
         }
+        let visible = visible_buttons(&self.session.document, transform);
+        if self.show_section_reorder(ui, transform, &visible) {
+            return;
+        }
+        self.show_page_controls(ui, transform, &visible);
         let document = self
             .guide_drag
             .as_ref()
             .map_or(&self.session.document, |d| &d.preview);
         let rows = controls(document, transform);
+        let layout = document
+            .guide
+            .clone()
+            .unwrap_or(capture_core::guide_sections::Layout {
+                pages: None,
+                template: None,
+                top: 0.,
+                sections: vec![],
+            });
         let viewport = transform.viewport;
         let mut action = None;
         let mut image_after = None;
-        if let Some(rect) = top_add(document, transform).filter(|r| viewport.contains_rect(*r)) {
+        if let Some(rect) = top_add(document, transform)
+            .filter(|r| viewport.contains_rect(*r) && visible.contains(r))
+        {
             let add = ui
                 .put(rect, egui::Button::new("+"))
                 .on_hover_text("Insert a section at the beginning");
@@ -187,8 +271,8 @@ impl Editor {
                 let painter = ui.painter().with_clip_rect(viewport);
                 painter.line_segment(
                     [
-                        egui::pos2(transform.image.left().max(viewport.left()), line_y),
-                        egui::pos2(transform.image.right().min(viewport.right()), line_y),
+                        egui::pos2(c.left.max(viewport.left()), line_y),
+                        egui::pos2(c.right.min(viewport.right()), line_y),
                     ],
                     egui::Stroke::new(1., egui::Color32::from_gray(145)),
                 );
@@ -223,7 +307,7 @@ impl Editor {
                         height: c.bottom - c.top,
                     });
                 }
-                if viewport.contains_rect(c.add) {
+                if viewport.contains_rect(c.add) && visible.contains(&c.add) {
                     let add = ui
                         .put(c.add, egui::Button::new("+"))
                         .on_hover_text("Insert a section below");
@@ -257,7 +341,7 @@ impl Editor {
                     });
                 }
             }
-            if viewport.contains_rect(c.menu) {
+            if viewport.contains_rect(c.menu) && visible.contains(&c.menu) {
                 let menu = ui
                     .put(c.menu, egui::Button::new(""))
                     .on_hover_text("Section actions");
@@ -272,8 +356,31 @@ impl Editor {
                     );
                 }
                 egui::Popup::menu(&menu).show(|ui| {
+                    let section = &layout.sections[index];
+                    if layout.page_count() > 1 {
+                        for (label, copy) in [("Move to", false), ("Copy to", true)] {
+                            ui.menu_button(label, |ui| {
+                                for page in 0..layout.page_count() {
+                                    if page != section.page
+                                        && ui.button(format!("Page {}", page + 1)).clicked()
+                                    {
+                                        action = Some(Action::SectionPage {
+                                            id: c.id,
+                                            page,
+                                            copy,
+                                        });
+                                        ui.close();
+                                    }
+                                }
+                            });
+                        }
+                        ui.separator();
+                    }
                     if ui
-                        .add_enabled(index > 0, egui::Button::new("Move Up"))
+                        .add_enabled(
+                            index > 0 && layout.sections[index - 1].page == section.page,
+                            egui::Button::new("Move Up"),
+                        )
                         .clicked()
                     {
                         action = Some(Action::Move {
@@ -287,7 +394,11 @@ impl Editor {
                         ui.close();
                     }
                     if ui
-                        .add_enabled(index + 1 < rows.len(), egui::Button::new("Move Down"))
+                        .add_enabled(
+                            index + 1 < rows.len()
+                                && layout.sections[index + 1].page == section.page,
+                            egui::Button::new("Move Down"),
+                        )
                         .clicked()
                     {
                         action = Some(Action::Move {

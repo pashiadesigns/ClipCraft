@@ -4,32 +4,36 @@
 
 ClipCraft is a local Windows screenshot capture and annotation editor written in Rust.
 It includes an editable document engine, desktop application, and command-line tools.
-This is preview software; release notes identify tested behavior and open checks.
+ClipCraft is in public beta; release notes identify tested behavior and remaining checks.
 
 ## Downloads
 
-Open the [GitHub Releases page](https://github.com/pashiadesigns/ClipCraft/releases) for Windows x64 portable ZIPs. Extract the
-whole archive and run `ClipCraft.exe`; no ClipCraft account is required. These
-previews are **unsigned**. Signed Windows installers are planned separately.
+Open the [GitHub Releases page](https://github.com/pashiadesigns/ClipCraft/releases) for the **0.2.0-beta.1** Windows x64 installer, portable ZIP and source archives.
+The installer creates separate Editor and Capture Controller Start menu entries.
+For portable use, extract the whole ZIP and run `ClipCraft.exe`. No ClipCraft account
+is required. Both downloads are **unsigned**; signing remains planned.
+See [installation and removal](docs/installing.md).
 Organizations can build from source or review the checksums, dependency inventory,
 and GitHub build attestations before deployment.
 
 ## Features
 
 - Region, window and monitor capture; configurable hotkeys and tray behavior.
-- Steps recording and editable guides; local OCR through Windows APIs.
+- Steps recording and editable guides with horizontal pages and section reordering; local OCR through Windows APIs.
 - Text, arrows, lines, shapes, callouts, numbered/lettered steps, pen and highlighter.
 - Blur, pixelate, redact, eraser, simplification, groups and image-frame cropping.
 - Local Library, range/drag selection, bulk operations, file details and imported image stamps.
 - Original vector starter stamps with independently editable palette colors.
 - PNG/JPEG/PDF export and a Windows print-dialog workflow.
+- Page Setup: physical dimensions, resolution, margins, headers/footers, page numbering, bleed and crop marks.
 - Editable image templates, empty guide sections and reusable local layouts.
-- Image-frame replacement from files, clipboard or Library thumbnails; bounded Library version recovery.
+- Shapes convert to image frames, with file drops, cropping and replacement from files, clipboard or Library thumbnails.
+- Bounded Library version recovery and reusable template management.
 
 Video and All-in-One capture are not implemented. PDF preserves vector paths and
 outlined text; screenshots and pixel effects remain raster. PDF text is not searchable.
 Installed fonts in editable projects are referenced, not embedded; missing
-families use a bundled fallback. Preview releases are not an enterprise certification.
+families use a bundled fallback. Beta releases are not an enterprise certification.
 The source branch can include local review changes newer than the latest release;
 use the release notes for the exact download's capabilities. General SVG/EPS stamp
 import is not implemented yet.
@@ -72,5 +76,9 @@ attachments rather than Git objects.
 
 ClipCraft uses original branding and implementation, with documented MIT-licensed
 DesignCraft adaptations. Original ClipCraft code is [Apache-2.0 licensed](LICENSE).
-It is independent of TechSmith and Snagit. Third-party
+Third-party
 code and fonts retain their own licenses; see `licenses/` and release notices.
+
+Fresh profiles open the Capture Controller, with development badges disabled. Print Screen
+starts capture with saved settings, and Alt+F11 captures a region. Existing saved
+preferences are preserved. See [licensing and provenance](docs/licensing.md).

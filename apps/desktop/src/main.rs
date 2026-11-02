@@ -7,6 +7,7 @@ use std::sync::mpsc::{Receiver, TryRecvError};
 mod backstage;
 mod brand;
 mod canvas;
+mod canvas_buttons;
 mod canvas_cursor;
 mod canvas_display;
 mod canvas_expansion;
@@ -46,6 +47,8 @@ mod object_templates;
 mod obscure_properties;
 mod ocr;
 mod options;
+mod page_setup;
+mod page_setup_fields;
 mod pixel_grid;
 mod pixel_selection;
 mod preview_ui;
@@ -260,11 +263,14 @@ impl Editor {
         let hotkey_owner = hotkey::owner(cc);
         let quick_controls = quick_controls::QuickControls::new();
         let keys = quick_controls.keybinds();
-        let (global_capture, global_capture_status) =
-            match hotkey::CaptureHotkey::start(cc.egui_ctx.clone(), hotkey_owner, &keys) {
-                Ok(hotkey) => (Some(hotkey), options::status(&keys)),
-                Err(error) => (None, error),
-            };
+        let (global_capture, global_capture_status) = match hotkey::CaptureHotkey::start_available(
+            cc.egui_ctx.clone(),
+            hotkey_owner,
+            &keys,
+        ) {
+            Ok((hotkey, status)) => (Some(hotkey), status),
+            Err(error) => (None, error),
+        };
         let mut editor = Self {
             lifecycle: lifecycle::Lifecycle::new(cc.egui_ctx.clone()),
             editing_group: None,
@@ -774,12 +780,17 @@ impl Editor {
             ui.label("Exporting a PNG does not save the editable project.");
             ui.add_space(12.0);
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                cancel = ui.button("Cancel").clicked();
-                if ui.button("Discard changes").clicked() {
+                cancel = ui
+                    .add(crate::controls::dialog_button("Cancel", false))
+                    .clicked();
+                if ui
+                    .add(crate::controls::dialog_button("Discard changes", false))
+                    .clicked()
+                {
                     proceed = true;
                 }
                 if ui
-                    .add(egui::Button::new("Save and continue").fill(crate::shell::ACCENT))
+                    .add(crate::controls::dialog_button("Save and continue", true))
                     .clicked()
                     && self.save(false)
                 {
@@ -868,6 +879,7 @@ impl eframe::App for Editor {
         self.show_resize(&ctx);
         self.show_resize_canvas(&ctx);
         self.show_export(&ctx, Some(_frame));
+        self.show_page_setup(&ctx);
         self.show_image_transform(&ctx);
         self.editor_keybind_input(&ctx);
         self.pixel_selection_shortcuts(&ctx);
@@ -1000,6 +1012,8 @@ impl eframe::App for Editor {
         self.poll_library_import();
         self.show_history_dialog(&ctx);
         self.show_capture_controller(&ctx);
+        #[cfg(windows)]
+        brand::sync_window_icons(self.hotkey_owner);
         self.show_ocr(&ctx);
         chrome::resize_edges(&ctx);
         let title = self.window_title();

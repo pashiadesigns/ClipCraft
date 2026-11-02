@@ -15,6 +15,7 @@
 !/docs/security-review-2026-11-01.md
 !/docs/github-releases.md
 !/docs/designcraft-reuse-audit.md
+!/docs/shape-frames-guide-pages-work.md
 **/.openai/
 **/node_modules/
 **/__pycache__/
@@ -27,3 +28,7 @@
 *.p12
 *.key
 *.pem
+
+/Launch ClipCraft Startup Test.cmd
+!/docs/licensing.md
+!/docs/installing.md

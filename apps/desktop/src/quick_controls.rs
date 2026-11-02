@@ -1780,7 +1780,7 @@ mod tests {
         assert_eq!(next.color, preset.color);
         assert_eq!(next.fill, preset.fill);
         let loaded = Store::open(directory.path()).unwrap();
-        assert_eq!(loaded.read().unwrap().version, 4);
+        assert_eq!(loaded.read().unwrap().version, 8);
         let mut restarted = crate::canvas::tests::editor(&ctx);
         restarted.quick_controls = QuickControls {
             prefs: loaded.read().unwrap(),

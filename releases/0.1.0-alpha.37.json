@@ -19,6 +19,6 @@
   "limitations": [
     "This release selects rectangular pixels. Ellipse, polygon, lasso, inverse selection, Magic Wand, selection-constrained Fill and moving selected pixel content remain unfinished.",
     "Moving the rectangle changes the selection only. Pixel edits flatten annotations after review; Undo restores them. Undo exits the transient selection mode.",
-    "This unsigned Windows alpha does not claim complete Snagit behavior or interface parity."
+    "This unsigned historical alpha covers only the workflows verified in its release notes."
   ]
 }

@@ -131,6 +131,18 @@ pub(crate) fn render_vector(image: &mut RgbaImage, a: &Annotation, viewport: Vie
     if a.analysis.is_some() {
         return;
     }
+    if a.is_shape() && a.image.is_some() {
+        let mut shell = a.clone();
+        shell.image = None;
+        shell.text = None;
+        shell.color[3] = 0;
+        render_vector(image, &shell, viewport);
+        crate::bitmap::render(image, a, viewport);
+        shell.color = a.color;
+        shell.fill = None;
+        render_vector(image, &shell, viewport);
+        return;
+    }
     if a.kind == Kind::Image && !a.image.as_ref().is_some_and(|b| b.vector().is_some()) {
         crate::bitmap::render(image, a, viewport);
         return;
@@ -333,7 +345,7 @@ fn polygon(points: &[[f32; 2]], closed: bool) -> BezPath {
 
 // Keep the shared callout's pointer placement and radius limits, but express
 // its four rounded body corners as curves rather than a fixed-resolution mesh.
-fn body_path(a: &Annotation) -> BezPath {
+pub(crate) fn body_path(a: &Annotation) -> BezPath {
     let (min, max) = a.body_bounds();
     let corners = [min, [max[0], min[1]], max, [min[0], max[1]]];
     let points = if a.kind == Kind::Callout {

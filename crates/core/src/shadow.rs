@@ -136,7 +136,7 @@ fn cache_bytes((a, patch): &(Annotation, Patch)) -> usize {
         + a.text.as_ref().map_or(0, |text| text.content.len())
 }
 
-pub(crate) fn patch(a: &Annotation) -> Option<Patch> {
+pub fn patch(a: &Annotation) -> Option<Patch> {
     bounds(a)?;
     validate_patch(a).ok()?;
     let anchor = a.body_bounds().0.map(f32::floor);

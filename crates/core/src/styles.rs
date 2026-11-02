@@ -60,7 +60,7 @@ impl ArrowStyle {
     }
 }
 pub fn presets() -> Vec<ArrowStyle> {
-    [
+    let mut result: Vec<_> = [
         ("Coral", [240, 85, 55, 255], 3),
         ("Lime", [135, 196, 105, 255], 3),
         ("Ocean", [38, 155, 194, 255], 3),
@@ -78,6 +78,46 @@ pub fn presets() -> Vec<ArrowStyle> {
         color,
         width,
     })
+    .collect();
+    result.extend(connector_presets(Kind::Arrow));
+    result
+}
+/// Geometry variations shared by arrow and line style galleries.
+pub fn connector_presets(kind: Kind) -> Vec<ArrowStyle> {
+    use crate::line_style::{Endpoint as E, Pattern as P, Style};
+    [
+        ("Circle dashed circle", E::Circle, E::Circle, P::Dashed),
+        ("Circle to arrow", E::Circle, E::Triangle, P::Solid),
+        ("Double arrow", E::OpenArrow, E::OpenArrow, P::Solid),
+        ("Square dotted diamond", E::Square, E::Diamond, P::Dotted),
+        ("Bar dash-dot arrow", E::Bar, E::Stealth, P::DashDot),
+        (
+            "Diamond long-dash circle",
+            E::Diamond,
+            E::Circle,
+            P::LongDash,
+        ),
+    ]
+    .into_iter()
+    .enumerate()
+    .map(|(i, (name, start, end, pattern))| ArrowStyle {
+        name: name.into(),
+        color: [
+            [38, 155, 194, 255],
+            [240, 85, 55, 255],
+            [135, 196, 105, 255],
+        ][i % 3],
+        width: 3,
+        shadow: None,
+        line_style: Some(Style {
+            start,
+            end,
+            pattern,
+            start_size: 4.,
+            end_size: 4.,
+            ..Style::for_kind(kind)
+        }),
+    })
     .collect()
 }
 pub fn curved_presets() -> Vec<ArrowStyle> {
@@ -88,7 +128,9 @@ pub fn curved_presets() -> Vec<ArrowStyle> {
             style.line_style = Some(crate::line_style::Style {
                 curve: crate::line_style::Curve::Circular,
                 bend: 0.25,
-                ..crate::line_style::Style::for_kind(Kind::Arrow)
+                ..style
+                    .line_style
+                    .unwrap_or(crate::line_style::Style::for_kind(Kind::Arrow))
             });
             style
         })

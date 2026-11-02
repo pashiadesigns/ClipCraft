@@ -38,7 +38,7 @@
         "PDF text uses vector outlines and is not searchable text. Screenshots, shadows and pixel effects remain raster. Editable project fonts are referenced rather than embedded.",
         "Editable projects retain source pixels; share flattened exports when redacting. Recovery retains at most three earlier versions per Library item under a separate 256 MB budget and cannot recover revisions discarded by older builds.",
         "Projects using Blank sections require this release or newer (project format 26); earlier releases reject that newer format.",
-        "Headless and user checks cover the recorded workflows, not complete Snagit parity or an enterprise security certification. No native desktop takeover, print job or OS clipboard access was used in the final automated qualification."
+        "Headless and user checks cover the recorded workflows, not every Windows configuration or an enterprise security certification. No native desktop takeover, print job or OS clipboard access was used in the final automated qualification."
       ],
       "asset": {
         "file": "clipcraft-0.1.0-preview.2-windows-x64.zip",
@@ -361,7 +361,7 @@
         "Alignment uses selected object bounds, including callout pointers. Key-object/page alignment, persistent groups and group rotation remain unfinished.",
         "Text entry still uses the existing dialog. Inline centered text and shape text, reusable templates beyond arrows, crisp vector zoom, editable autosave and toolbar ordering remain priority work.",
         "Middle-button panning passes input tests but still needs a physical held-middle-button drag check. It has no Ready claim.",
-        "This unsigned Windows alpha does not claim complete Snagit UI or behavior parity."
+        "This unsigned historical alpha covers only the workflows verified in its release notes."
       ],
       "asset": {
         "file": "clipcraft-0.1.0-alpha.41-windows-x64.zip",
@@ -395,7 +395,7 @@
         "Middle-mouse panning is implemented and passes egui input tests; physical middle-drag verification remains pending. It has no Ready claim yet.",
         "Mixed-type selections can move together; shared formatting requires one object type. Persistent groups, group resizing/rotation and reusable presets beyond arrows remain unfinished.",
         "Remembered contextual alignment/distribution buttons, inline centered text, crisp vector zoom, continuous editable autosave and draggable toolbar ordering are priority follow-ups.",
-        "This unsigned Windows alpha does not claim complete Snagit UI or behavior parity."
+        "This unsigned historical alpha covers only the workflows verified in its release notes."
       ],
       "asset": {
         "file": "clipcraft-0.1.0-alpha.40-windows-x64.zip",
@@ -425,7 +425,7 @@
       "limitations": [
         "Straight edges only. Torn, wave, zigzag and reference preset matching remain unfinished.",
         "Cutting an image with editable objects flattens them after review; Undo restores editability. The drag preview stays anchored to the original image until commit.",
-        "This unsigned Windows alpha does not claim complete Snagit behavior or interface parity."
+        "This unsigned historical alpha covers only the workflows verified in its release notes."
       ],
       "asset": {
         "file": "clipcraft-0.1.0-alpha.39-windows-x64.zip",
@@ -454,7 +454,7 @@
       "limitations": [
         "This release selects rectangular pixels. Ellipse, polygon, lasso, inverse selection, Magic Wand, selection-constrained Fill and moving selected pixel content remain unfinished.",
         "Moving the rectangle changes the selection only. Pixel edits flatten annotations after review; Undo restores them. Undo exits the transient selection mode.",
-        "This unsigned Windows alpha does not claim complete Snagit behavior or interface parity."
+        "This unsigned historical alpha covers only the workflows verified in its release notes."
       ],
       "asset": {
         "file": "clipcraft-0.1.0-alpha.37-windows-x64.zip",
@@ -483,7 +483,7 @@
       "limitations": [
         "Fill operates on four-connected regions of the complete image. Selection masks, global replacement and antialiased fill remain unfinished.",
         "Applying fill to annotations flattens them after review; Undo restores editability. Editable projects retain the original image.",
-        "This unsigned Windows alpha does not claim complete Snagit behavior or interface parity."
+        "This unsigned historical alpha covers only the workflows verified in its release notes."
       ],
       "asset": {
         "file": "clipcraft-0.1.0-alpha.36-windows-x64.zip",
@@ -512,7 +512,7 @@
       "limitations": [
         "Smooth round brushes support widths from 1 to 32 pixels. Brush presets and a hard-edge antialias toggle are unfinished.",
         "Erasers affect the image and objects below them in the stack. Editable projects retain original image pixels.",
-        "This unsigned Windows alpha does not claim complete Snagit interface or behavior parity."
+        "This unsigned historical alpha covers only the workflows verified in its release notes."
       ],
       "asset": {
         "file": "clipcraft-0.1.0-alpha.35-windows-x64.zip",
@@ -541,7 +541,7 @@
       "limitations": [
         "Visual effects are not a secure-redaction guarantee. Editable projects retain original pixels; use solid Redact and flattened export when appropriate.",
         "Only rectangular effect regions are implemented. Ellipse regions, effect Quick Styles and Smart Redact remain unfinished.",
-        "This unsigned Windows alpha does not claim complete Snagit behavior or interface parity."
+        "This unsigned historical alpha covers only the workflows verified in its release notes."
       ],
       "asset": {
         "file": "clipcraft-0.1.0-alpha.34-windows-x64.zip",
@@ -568,7 +568,7 @@
       "limitations": [
         "Applying crop flattens the complete composite. Undo restores the previous editable objects; non-destructive off-canvas object editing remains unfinished.",
         "Trim, crop aspect presets, numeric crop entry, object rotation and grouping remain planned.",
-        "Unsigned Windows x64 alpha. Full Snagit UI/behavior parity is not claimed."
+        "Unsigned Windows x64 alpha. Verification covers only the workflows described in these release notes."
       ],
       "asset": {
         "file": "clipcraft-0.1.0-alpha.33-windows-x64.zip",
@@ -595,7 +595,7 @@
       "limitations": [
         "These commands transform the whole image and flatten editable objects after confirmation. Selected-object rotation and flips remain unfinished.",
         "Custom image angles, grouping, interactive crop and full reference UI parity remain unfinished.",
-        "Unsigned Windows x64 alpha. Testing uses original synthetic fixtures; full Snagit behavioral parity is not claimed."
+        "Unsigned Windows x64 alpha. Testing uses original synthetic fixtures; coverage is limited to the recorded workflows."
       ],
       "asset": {
         "file": "clipcraft-0.1.0-alpha.32-windows-x64.zip",
@@ -688,7 +688,7 @@
       "limitations": [
         "Per-corner radii, additional shape families, advanced stroke presets and pen pressure remain unfinished.",
         "Step markers currently use circles and automatic text contrast; alternative shapes and independent text color remain planned.",
-        "Use alpha.29 or newer for projects containing these new tools or corner radii. Full Snagit interface and behavioral parity are not claimed.",
+        "Use alpha.29 or newer for projects containing these new tools or corner radii. Verification covers only the workflows described in these release notes.",
         "This is an unsigned Windows x64 alpha. Custom shortcuts, scrolling capture and persistent capture preferences remain planned."
       ],
       "asset": {
@@ -992,7 +992,7 @@
       },
       "limitations": [
         "Print units, DPI metadata and resampling choices remain planned.",
-        "ClipCraft keeps resized objects editable; Snagit requires a flattening confirmation. That separate workflow is still planned.",
+        "ClipCraft keeps resized objects editable; A separate flattening-confirmation workflow was still planned at this historical release.",
         "Temporary status badges make the panel wider than the reference. Full pixel-level UI parity is not claimed."
       ],
       "asset": {
@@ -1105,7 +1105,7 @@
         ]
       },
       "limitations": [
-        "This is ClipCraft's independent revert behavior. Snagit's detailed revert semantics still need direct comparison, so that broader roadmap item remains Needs verification.",
+        "This is ClipCraft's independent revert behavior. Broader revert workflows still need verification, so that broader roadmap item remains Needs verification.",
         "Undo history lasts for the current session. Saving a reverted project and reopening it preserves the original image but does not retain removed objects as persistent history.",
         "Pixel grid, snapping, crop/resize, library history and full reference interface parity remain unfinished. Native Save As inspection is still blocked."
       ],
@@ -1136,7 +1136,7 @@
         ]
       },
       "limitations": [
-        "Pixel grid, canvas snapping, workspace backgrounds and persistent view preferences remain planned. Zoom choices are an original implementation; exact Snagit zoom behavior is not yet qualified.",
+        "Pixel grid, canvas snapping, workspace backgrounds and persistent view preferences remain planned. Zoom choices are an original implementation; additional zoom interactions remain under review.",
         "Space+drag and pointer-centered Ctrl+wheel have headless input coverage; broader native mouse, touchpad and mixed-DPI migration testing remains unfinished.",
         "Window, scrolling and video capture, advanced editing and full reference interface parity remain unfinished. Native Save As inspection is still blocked."
       ],
@@ -1224,7 +1224,7 @@
         ],
         "Verified": [
           "Real egui key-event regression and native first/second Escape checks cover draft preservation and cancellation.",
-          "ClipCraft's Share menu clipboard output matches all 256000 fixture pixels. Snagit Share > Clipboard imports through ClipCraft with all 576000 opaque synthetic pixels unchanged."
+          "ClipCraft's Share menu clipboard output matches all 256000 fixture pixels. External clipboard imports through ClipCraft with all 576000 opaque synthetic pixels unchanged."
         ],
         "Improved": [
           "Refreshed direct Share/View reference observations and expanded the detailed UI audit to 148 controls across 12 recorded surfaces.",
@@ -1266,7 +1266,7 @@
       },
       "limitations": [
         "Screen capture, global hotkeys, rich text styles and complete reference-interface parity remain unfinished.",
-        "This is an original ClipCraft exact-color workflow; detailed Snagit picker parity is not claimed. Interactive palette conversion and all keyboard interactions remain under review.",
+        "This is an original ClipCraft exact-color workflow; broader color-picker interactions remain under review. Interactive palette conversion and all keyboard interactions remain under review.",
         "The default opaque drawing-tool color picker still uses its existing control; this popup covers text, callout fill/outline and New Image RGBA controls.",
         "Native Save As/export-dialog inspection remains blocked separately. Existing-path saves, shared PNG exports and native clipboard comparisons are verified."
       ],

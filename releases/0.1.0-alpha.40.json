@@ -24,6 +24,6 @@
     "Middle-mouse panning is implemented and passes egui input tests; physical middle-drag verification remains pending. It has no Ready claim yet.",
     "Mixed-type selections can move together; shared formatting requires one object type. Persistent groups, group resizing/rotation and reusable presets beyond arrows remain unfinished.",
     "Remembered contextual alignment/distribution buttons, inline centered text, crisp vector zoom, continuous editable autosave and draggable toolbar ordering are priority follow-ups.",
-    "This unsigned Windows alpha does not claim complete Snagit UI or behavior parity."
+    "This unsigned historical alpha covers only the workflows verified in its release notes."
   ]
 }

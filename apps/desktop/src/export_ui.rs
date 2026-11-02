@@ -131,7 +131,13 @@ impl Editor {
                     });
                 }
                 let paged = d.print || d.options.format == Format::Pdf;
-                if paged {
+                if paged
+                    && d.document
+                        .guide
+                        .as_ref()
+                        .and_then(|g| g.pages.as_ref())
+                        .is_none_or(|p| p.setup.is_empty())
+                {
                     ui.horizontal(|ui| {
                         ui.label("Paper");
                         for (label, size) in [("Letter", [612., 792.]), ("A4", [595.276, 841.89])] {
@@ -166,20 +172,19 @@ impl Editor {
                         egui::TextureOptions::LINEAR,
                     )
                 });
-                let pages = d.options.page.pages([d.pixels.width(), d.pixels.height()]);
+                let pages = d.options.page.document_pages(&d.document);
                 let (rect, _) =
                     ui.allocate_exact_size(egui::vec2(520., 300.), egui::Sense::hover());
                 if paged {
                     if let Ok(pages) = &pages {
                         d.page = d.page.min(pages.len() - 1);
                         let p = &pages[d.page];
-                        let scale =
-                            (480. / d.options.page.size[0]).min(280. / d.options.page.size[1]);
+                        let scale = (480. / p.media_size[0]).min(280. / p.media_size[1]);
                         let paper = egui::Rect::from_center_size(
                             rect.center(),
                             egui::vec2(
-                                (d.options.page.size[0] * scale) as f32,
-                                (d.options.page.size[1] * scale) as f32,
+                                (p.media_size[0] * scale) as f32,
+                                (p.media_size[1] * scale) as f32,
                             ),
                         );
                         ui.painter().rect_filled(paper, 0., egui::Color32::WHITE);
@@ -201,9 +206,12 @@ impl Editor {
                             texture.id(),
                             image,
                             egui::Rect::from_min_max(
-                                egui::pos2(0., p.source[1] as f32 / d.pixels.height() as f32),
                                 egui::pos2(
-                                    1.,
+                                    p.source[0] as f32 / d.pixels.width() as f32,
+                                    p.source[1] as f32 / d.pixels.height() as f32,
+                                ),
+                                egui::pos2(
+                                    (p.source[0] + p.source[2]) as f32 / d.pixels.width() as f32,
                                     (p.source[1] + p.source[3]) as f32 / d.pixels.height() as f32,
                                 ),
                             ),
@@ -260,11 +268,13 @@ impl Editor {
                 }
                 d.after.controls(ui);
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    cancel = ui.button("Close").clicked();
+                    cancel = ui
+                        .add(crate::controls::dialog_button("Close", false))
+                        .clicked();
                     print = ui
                         .add_enabled(
                             pages.is_ok(),
-                            egui::Button::new("Print…").fill(if d.print {
+                            crate::controls::dialog_button("Print…", false).fill(if d.print {
                                 crate::shell::ACCENT
                             } else {
                                 ui.visuals().widgets.inactive.bg_fill
@@ -273,7 +283,7 @@ impl Editor {
                         .on_hover_text("Choose a printer and confirm in the Windows print dialog.")
                         .clicked();
                     save = ui
-                        .add(egui::Button::new("Save").fill(crate::shell::ACCENT))
+                        .add(crate::controls::dialog_button("Save", true))
                         .clicked();
                 });
             });
@@ -336,7 +346,7 @@ impl Editor {
                         });
                 match owner
                     .ok_or("Cannot access editor window.".into())
-                    .and_then(|owner| windows::print(owner, &d.pixels, &d.options))
+                    .and_then(|owner| windows::print(owner, &d.pixels, &d.document, &d.options))
                 {
                     Ok(true) => {
                         self.status = "Print job sent.".into();

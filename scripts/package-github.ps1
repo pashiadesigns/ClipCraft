@@ -49,9 +49,9 @@ Copy-Item -LiteralPath scripts/install-start-menu.ps1 -Destination $package
 Copy-Item -LiteralPath $notesPath -Destination (Join-Path $package 'release-notes.json')
 $packageDocs = Join-Path $package 'docs'
 New-Item -ItemType Directory -Path $packageDocs -Force | Out-Null
-Copy-Item -LiteralPath docs/building.md,docs/security-model.md,docs/github-releases.md -Destination $packageDocs
+Copy-Item -LiteralPath docs/building.md,docs/security-model.md,docs/github-releases.md,docs/installing.md,docs/licensing.md -Destination $packageDocs
 @"
-ClipCraft $Version - unsigned Windows x64 preview
+ClipCraft $Version - unsigned Windows x64 beta
 
 Extract the entire ZIP and run ClipCraft.exe. No ClipCraft account is required.
 Optional: run install-start-menu.ps1 for separate Editor and Capture Controller
@@ -59,7 +59,8 @@ Start menu shortcuts with their own icons.
 Open example.capture.json for a synthetic editable document. Use the File menu
 for exports, printing and options. See release-notes.md for pending checks.
 
-The ZIP contains portable executables; it is not a signed Windows installer.
+The ZIP contains portable executables. An unsigned per-user setup EXE is also
+available on the same GitHub release. See docs/installing.md.
 Library/settings are stored in your Windows user profile by default. See
 docs/security-model.md for data handling and docs/github-releases.md for
 checksums, source commit and build attestation verification.
@@ -74,6 +75,14 @@ $packageHashes = Get-ChildItem -LiteralPath $package -Recurse -File | Sort-Objec
 $packageHashes | Set-Content -LiteralPath (Join-Path $package 'PACKAGE-SHA256SUMS.txt') -Encoding utf8
 $zip = Join-Path $public "clipcraft-$Version-windows-x64.zip"
 Compress-Archive -Path (Join-Path $package '*') -DestinationPath $zip -CompressionLevel Optimal
+$installer = Join-Path $public "clipcraft-$Version-windows-x64-setup.exe"
+& $pwsh -NoProfile -File scripts/build-installer.ps1 -Package $package -Output $installer -Version $Version
+if ($LASTEXITCODE -ne 0) { throw 'Installer build failed.' }
+if ($env:GITHUB_ACTIONS -eq 'true') {
+    & $pwsh -NoProfile -File scripts/test-installer.ps1 -Package $package -Installer $installer -Version $Version
+    if ($LASTEXITCODE -ne 0) { throw 'Installer lifecycle checks failed.' }
+    Copy-Item -LiteralPath artifacts/installer-test/result.json -Destination (Join-Path $public 'installer-checks.json')
+}
 Copy-Item -LiteralPath (Join-Path $package 'sbom.spdx.json'),(Join-Path $package 'build-info.json'),(Join-Path $package 'release-notes.md') -Destination $public
 $publicHashes = Get-ChildItem -LiteralPath $public -File | Sort-Object Name | ForEach-Object {
     (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant() + '  ' + $_.Name

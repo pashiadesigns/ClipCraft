@@ -143,9 +143,11 @@ fn section_duplication_remaps_group_identity_and_removal_prunes_membership() {
         );
     }
     d.guide = Some(Layout {
+        pages: None,
         template: None,
         top: 20.,
         sections: vec![Section {
+            page: 0,
             id: 1,
             kind: SectionKind::Image,
             height: 200.,

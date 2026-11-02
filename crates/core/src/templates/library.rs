@@ -27,8 +27,14 @@ impl Library {
                     .as_ref()
                     .is_some_and(|b| !b.is_stamp() && !b.is_cursor())
                 {
+                    let placeholder = placeholder()?;
+                    let placeholder = if a.is_shape() {
+                        Arc::new(placeholder.with_frame_opacity(a.image_opacity()))
+                    } else {
+                        placeholder
+                    };
                     a.image = image_in_frame(
-                        placeholder()?,
+                        placeholder,
                         a.id,
                         [
                             a.start[0],
@@ -46,9 +52,11 @@ impl Library {
             guide.template = Some("local".into());
         } else {
             d.guide = Some(Layout {
+                pages: None,
                 template: Some("local".into()),
                 top: 0.,
                 sections: vec![Section {
+                    page: 0,
                     id: 1,
                     kind: SectionKind::Image,
                     height: d.height as f32,
@@ -88,8 +96,13 @@ pub fn instantiate(
             && let Some(b) = images.next()
         {
             // Saved frame geometry belongs to the layout; only its source/crop changes.
+            let bitmap = if a.is_shape() {
+                Arc::new(b.with_frame_opacity(a.image_opacity()))
+            } else {
+                b.clone()
+            };
             let fitted = image_in_frame(
-                b.clone(),
+                bitmap,
                 a.id,
                 [
                     a.start[0],
@@ -99,6 +112,20 @@ pub fn instantiate(
                 ],
                 scale,
             )?;
+            if a.kind == Kind::Polygon {
+                let (lo, hi) = a.body_bounds();
+                a.points = a
+                    .points
+                    .iter()
+                    .map(|p| {
+                        [0, 1].map(|i| {
+                            fitted.start[i]
+                                + (p[i] - lo[i]) / (hi[i] - lo[i])
+                                    * (fitted.end[i] - fitted.start[i])
+                        })
+                    })
+                    .collect();
+            }
             a.image = fitted.image;
             a.start = fitted.start;
             a.end = fitted.end;
@@ -126,6 +153,52 @@ pub fn instantiate(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn saved_paged_polygon_frames_keep_mask_opacity_and_fit_geometry() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut store = Library::open(dir.path()).unwrap();
+        let mut source = build("two-steps", "Frame layout", &[], Scale::Fill).unwrap();
+        for a in &mut source.annotations {
+            if a.is_image_frame() {
+                a.kind = Kind::Polygon;
+                a.corner_radius = 0.;
+                a.points = crate::polygon::outline(a.start, a.end, 6);
+                a.image = Some(Arc::new(a.image.as_ref().unwrap().with_frame_opacity(170)));
+            }
+        }
+        source.promote_features();
+        source = source
+            .edit_guide(&crate::guide_sections::Action::PageSize {
+                width: 900,
+                height: 550,
+                auto_overflow: true,
+            })
+            .unwrap();
+        let entry = store.save(&source, "Paged mask layout", true).unwrap();
+        let saved = store.0.load(&entry.id).unwrap();
+        let bitmap = Arc::new(
+            Bitmap::new(Arc::new(
+                crate::RasterImage::from_image(&image::RgbaImage::from_pixel(
+                    80,
+                    180,
+                    image::Rgba([50, 150, 200, 255]),
+                ))
+                .unwrap(),
+            ))
+            .unwrap(),
+        );
+        let document = instantiate(&saved, "Filled pages", &[bitmap], Scale::Fit).unwrap();
+        let a = document
+            .annotations
+            .iter()
+            .find(|a| a.is_image_frame() && !a.image.as_ref().unwrap().is_placeholder())
+            .unwrap();
+        assert_eq!(a.kind, Kind::Polygon);
+        assert_eq!(a.image_opacity(), 170);
+        assert_eq!(a.body_bounds(), (a.start, a.end));
+        assert_eq!(document.guide.as_ref().unwrap().page_count(), 2);
+        document.validate().unwrap();
+    }
     #[test]
     fn saved_layout_is_independent_portable_and_reusable() {
         let dir = tempfile::tempdir().unwrap();

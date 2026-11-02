@@ -1,4 +1,4 @@
-mod actions;
+pub(super) mod actions;
 pub(crate) mod autosave;
 mod import;
 mod library;
@@ -351,6 +351,7 @@ impl Editor {
         }
         let mut open = None;
         egui::ScrollArea::horizontal()
+            .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::VisibleWhenNeeded)
             .id_salt("recent_scroll")
             .show(ui, |ui| {
                 ui.horizontal(|ui| {

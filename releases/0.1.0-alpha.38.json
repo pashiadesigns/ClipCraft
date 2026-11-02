@@ -19,6 +19,6 @@
   "limitations": [
     "Straight edges only. Torn, wave, zigzag and reference preset matching remain unfinished.",
     "Cutting an image with editable objects flattens them after review; Undo restores editability. The drag preview stays anchored to the original image until commit.",
-    "This unsigned Windows alpha does not claim complete Snagit behavior or interface parity."
+    "This unsigned historical alpha covers only the workflows verified in its release notes."
   ]
 }

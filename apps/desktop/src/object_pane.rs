@@ -1,5 +1,6 @@
 use crate::{Annotation, Command, Editor, Kind, egui};
 use egui::{Color32, Rect, Stroke};
+mod guide_tree;
 #[cfg(test)]
 mod tests;
 
@@ -137,6 +138,16 @@ fn color_name(c: [u8; 4]) -> &'static str {
     }
 }
 fn label(a: &Annotation) -> String {
+    if a.is_shape() && a.is_image_frame() {
+        return format!(
+            "{} image frame",
+            match a.kind {
+                Kind::Ellipse => "Ellipse",
+                Kind::Polygon => "Polygon",
+                _ => "Rectangle",
+            }
+        );
+    }
     match a.kind {
         Kind::Image => {
             if let Some(b) = a.image.as_ref().filter(|b| b.is_stamp()) {
@@ -318,7 +329,22 @@ impl Editor {
             }
         }
         let mut seen = std::collections::BTreeSet::new();
-        for a in rows {
+        let rows = guide_tree::rows(ui, &self.session.document, rows);
+        for row in rows {
+            let a = match row {
+                guide_tree::Row::Object(a) => a,
+                guide_tree::Row::Header {
+                    key,
+                    label,
+                    depth,
+                    target,
+                } => {
+                    if let Some(action) = guide_tree::header(ui, key, &label, depth, target) {
+                        command = Some(Command::Guide { action });
+                    }
+                    continue;
+                }
+            };
             if let Some(group) = a.group {
                 let key = egui::Id::unique(("object-group-expanded", group));
                 let automatic = objects
@@ -446,10 +472,13 @@ impl Editor {
             }
             ui.push_id(("object-row", a.id), |ui| {
                 let state = self.session.document.object_state(a.id);
-                let (rect, response) = ui.allocate_exact_size(
+                let (mut rect, response) = ui.allocate_exact_size(
                     egui::vec2(ui.available_width(), 29.),
                     egui::Sense::click_and_drag(),
                 );
+                if self.session.document.guide.is_some() {
+                    rect.min.x += 24.;
+                }
                 let selected = self.is_selected(a.id);
                 if selected || response.hovered() {
                     ui.painter().rect_filled(

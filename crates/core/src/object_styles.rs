@@ -498,6 +498,18 @@ pub fn groups(kind: Kind) -> Vec<PresetGroup> {
         .into_iter()
         .map(|(id, label, kind, rounded)| {
             let mut styles = presets(kind);
+            if kind == Kind::Line {
+                let base = styles[0].clone();
+                styles.extend(crate::styles::connector_presets(kind).into_iter().map(|s| {
+                    ObjectStyle {
+                        name: s.name,
+                        color: s.color,
+                        width: s.width,
+                        line_style: s.line_style,
+                        ..base.clone()
+                    }
+                }));
+            }
             for style in &mut styles {
                 style.highlighter_rect = id == "highlighter_rectangle";
                 if rounded {

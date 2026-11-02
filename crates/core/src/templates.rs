@@ -149,7 +149,7 @@ pub fn image_in_frame(
     a.corner_radius = 8.;
     Ok(a)
 }
-fn text(id: u64, rect: [f32; 4], content: &str, size: f32, bold: bool) -> Annotation {
+pub(crate) fn text(id: u64, rect: [f32; 4], content: &str, size: f32, bold: bool) -> Annotation {
     Annotation {
         id,
         kind: Kind::Text,
@@ -226,6 +226,7 @@ pub fn build(id: &str, title: &str, images: &[Arc<Bitmap>], scale: Scale) -> Res
         ),
     ];
     sections.push(Section {
+        page: 0,
         id: 1,
         kind: SectionKind::Header,
         height: 144.,
@@ -329,6 +330,7 @@ pub fn build(id: &str, title: &str, images: &[Arc<Bitmap>], scale: Scale) -> Res
             }
         }
         sections.push(Section {
+            page: 0,
             id: row as u64 + 2,
             kind: SectionKind::Image,
             height: t.row_height,
@@ -347,6 +349,7 @@ pub fn build(id: &str, title: &str, images: &[Arc<Bitmap>], scale: Scale) -> Res
         ),
     );
     sections.push(Section {
+        page: 0,
         id: rows as u64 + 2,
         kind: SectionKind::Text,
         height: 64.,
@@ -354,6 +357,7 @@ pub fn build(id: &str, title: &str, images: &[Arc<Bitmap>], scale: Scale) -> Res
         marker: None,
     });
     d.guide = Some(Layout {
+        pages: None,
         template: Some(t.id.into()),
         top: 0.,
         sections,

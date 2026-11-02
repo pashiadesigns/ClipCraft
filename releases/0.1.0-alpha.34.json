@@ -19,6 +19,6 @@
   "limitations": [
     "Visual effects are not a secure-redaction guarantee. Editable projects retain original pixels; use solid Redact and flattened export when appropriate.",
     "Only rectangular effect regions are implemented. Ellipse regions, effect Quick Styles and Smart Redact remain unfinished.",
-    "This unsigned Windows alpha does not claim complete Snagit behavior or interface parity."
+    "This unsigned historical alpha covers only the workflows verified in its release notes."
   ]
 }

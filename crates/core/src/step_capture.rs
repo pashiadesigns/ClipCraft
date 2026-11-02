@@ -253,6 +253,7 @@ impl Guide {
         if self.header.is_some() {
             d.annotations = self.header_objects(canvas)?;
             sections.push(crate::guide_sections::Section {
+                page: 0,
                 id: 1000,
                 kind: crate::guide_sections::SectionKind::Header,
                 height: 112.,
@@ -378,6 +379,7 @@ impl Guide {
             };
             d.annotations.insert(first_object + 1, circle);
             sections.push(crate::guide_sections::Section {
+                page: 0,
                 id: index as u64 + 1,
                 kind: crate::guide_sections::SectionKind::Image,
                 height: (displayed[1] + HEADER + MARGIN) as f32,
@@ -387,6 +389,7 @@ impl Guide {
             top += displayed[1] + HEADER + MARGIN;
         }
         d.guide = Some(crate::guide_sections::Layout {
+            pages: None,
             template: None,
             top: MARGIN as f32,
             sections,

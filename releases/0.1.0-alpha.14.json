@@ -19,7 +19,7 @@
     ]
   },
   "limitations": [
-    "Pixel grid, canvas snapping, workspace backgrounds and persistent view preferences remain planned. Zoom choices are an original implementation; exact Snagit zoom behavior is not yet qualified.",
+    "Pixel grid, canvas snapping, workspace backgrounds and persistent view preferences remain planned. Zoom choices are an original implementation; additional zoom interactions remain under review.",
     "Space+drag and pointer-centered Ctrl+wheel have headless input coverage; broader native mouse, touchpad and mixed-DPI migration testing remains unfinished.",
     "Window, scrolling and video capture, advanced editing and full reference interface parity remain unfinished. Native Save As inspection is still blocked."
   ]

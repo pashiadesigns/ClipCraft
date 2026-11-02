@@ -100,9 +100,9 @@ impl Editor {
             ui.horizontal(|ui| {
                 crate::shell::badge(ui,self.shell.badges,"FILE-010");
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center),|ui| {
-                if ui.add_sized([78.0,24.0],egui::Button::new("Cancel")).clicked() {cancel=true;}
+                if ui.add_sized([78.0,crate::controls::DIALOG_ACTION_HEIGHT],egui::Button::new("Cancel")).clicked() {cancel=true;}
                 if ui
-                    .add_enabled(spec.is_ok(), egui::Button::new("Create").min_size(egui::vec2(78.0,24.0)).fill(egui::Color32::from_rgb(0,118,181)))
+                    .add_enabled(spec.is_ok(), egui::Button::new("Create").min_size(egui::vec2(78.0,crate::controls::DIALOG_ACTION_HEIGHT)).fill(egui::Color32::from_rgb(0,118,181)))
                     .on_hover_text("Create an unsaved image. Up to 25 megapixels; each side at most 32,768 px.")
                     .clicked()
                 {

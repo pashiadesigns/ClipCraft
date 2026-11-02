@@ -19,6 +19,6 @@
   "limitations": [
     "Fill operates on four-connected regions of the complete image. Selection masks, global replacement and antialiased fill remain unfinished.",
     "Applying fill to annotations flattens them after review; Undo restores editability. Editable projects retain the original image.",
-    "This unsigned Windows alpha does not claim complete Snagit behavior or interface parity."
+    "This unsigned historical alpha covers only the workflows verified in its release notes."
   ]
 }

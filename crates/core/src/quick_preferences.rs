@@ -44,16 +44,20 @@ impl Justification {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum StartupWindow {
-    #[default]
     Editor,
+    #[default]
     CaptureController,
+}
+// Preferences written before startup selection existed retain their old behavior.
+fn legacy_startup_window() -> StartupWindow {
+    StartupWindow::Editor
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Preferences {
     #[serde(default = "snapping_default")]
     pub close_to_tray: bool,
-    #[serde(default)]
+    #[serde(default = "legacy_startup_window")]
     pub startup_window: StartupWindow,
     #[serde(default)]
     pub keybinds: crate::keybinds::Keybinds,
@@ -95,9 +99,9 @@ fn default_canvas_tool() -> crate::toolbar::ToolId {
 impl Default for Preferences {
     fn default() -> Self {
         Self {
-            version: 4,
+            version: 8,
             close_to_tray: true,
-            startup_window: StartupWindow::Editor,
+            startup_window: StartupWindow::CaptureController,
             keybinds: Default::default(),
             capture: Default::default(),
             capture_profiles: Vec::new(),
@@ -262,7 +266,9 @@ impl Preferences {
                 && (!self.close_to_tray || self.startup_window != StartupWindow::Editor))
             || (self.version < 7
                 && self.keybinds.editor != crate::editor_keybinds::Keybinds::default())
-            || (self.version < 6 && self.keybinds != crate::keybinds::Keybinds::default())
+            || (self.version < 6
+                && self.keybinds != crate::keybinds::Keybinds::default()
+                && !self.keybinds.is_legacy_default())
             || (self.version < 5 && self.capture != crate::capture_options::Settings::default())
             || (self.version < 4
                 && (!self.favorite_tools.is_empty() || self.canvas_tool != default_canvas_tool()))
@@ -453,12 +459,13 @@ mod tests {
         );
         store.remember(Choice::Keybinds(keys.clone())).unwrap();
         let loaded = Store::open(temp.path()).unwrap().read().unwrap();
-        assert_eq!(loaded.version, 7);
+        assert_eq!(loaded.version, 8);
         assert_eq!(loaded.keybinds, keys);
         assert_eq!(loaded.keybinds.bindings, capture);
         assert_eq!(loaded.favorite_tools, crate::toolbar::default_favorites());
         let mut legacy = serde_json::to_value(&loaded).unwrap();
         legacy["version"] = 6.into();
+        legacy["startup_window"] = serde_json::json!("editor");
         legacy["keybinds"].as_object_mut().unwrap().remove("editor");
         legacy["favorite_tools"] = serde_json::json!([]);
         let restored: Preferences = serde_json::from_value(legacy).unwrap();
@@ -480,7 +487,7 @@ mod tests {
         b.remember(Choice::DrawingStyle(text.clone())).unwrap();
         a.remember(Choice::ResetToolbar).unwrap();
         let loaded = b.read().unwrap();
-        assert_eq!(loaded.version, 4);
+        assert_eq!(loaded.version, 8);
         assert_eq!(loaded.drawing_styles, [rectangle.clone(), text]);
         let path = temp.path().join("quick-controls.json");
         let bytes = fs::read(&path).unwrap();
@@ -611,7 +618,7 @@ mod lifecycle_tests {
         let store = Store::open(root.path()).unwrap();
         let original = store.read().unwrap();
         assert!(original.close_to_tray);
-        assert_eq!(original.startup_window, StartupWindow::Editor);
+        assert_eq!(original.startup_window, StartupWindow::CaptureController);
         let mut legacy = serde_json::to_value(&original).unwrap();
         legacy.as_object_mut().unwrap().remove("close_to_tray");
         legacy.as_object_mut().unwrap().remove("startup_window");
@@ -620,11 +627,11 @@ mod lifecycle_tests {
         assert!(migrated.close_to_tray);
         store.remember(Choice::CloseToTray(false)).unwrap();
         store
-            .remember(Choice::StartupWindow(StartupWindow::CaptureController))
+            .remember(Choice::StartupWindow(StartupWindow::Editor))
             .unwrap();
         let next = Store::open(root.path()).unwrap().read().unwrap();
         assert!(!next.close_to_tray);
-        assert_eq!(next.startup_window, StartupWindow::CaptureController);
+        assert_eq!(next.startup_window, StartupWindow::Editor);
         assert_eq!(next.version, 8);
         assert_eq!(next.keybinds, original.keybinds);
         assert_eq!(next.favorite_tools, original.favorite_tools);
