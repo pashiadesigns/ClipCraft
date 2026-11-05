@@ -6,10 +6,13 @@ on:
         description: Existing draft or public release to qualify
         required: true
         default: v1.0.0-beta.1
-permissions:
-  contents: read
+permissions: {}
 jobs:
   installer:
+    # GitHub restricts draft-release downloads to tokens with repository write access.
+    # The workflow only reads release assets; it never publishes or changes them.
+    permissions:
+      contents: write
     runs-on: windows-2025
     timeout-minutes: 15
     steps:
