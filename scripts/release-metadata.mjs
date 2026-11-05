@@ -44,10 +44,12 @@ export function writeMetadata(root, metadataPath, packageRoot, version) {
     cargo_lock_sha256:sha256(readFileSync(resolve(root,'Cargo.lock'))),authenticode_signed:false};
   const assets=[
     {name:'ClipCraft bundled Ubuntu fonts',version:'bundled',license:'Ubuntu-font-1.0',source:'crates/core/assets/fonts; licenses/text-fonts/Ubuntu-*'},
+    {name:'ClipCraft bundled Noto Emoji font',version:'Google Fonts',license:'OFL-1.1',source:'licenses/text-fonts/NotoEmoji-PROVENANCE.txt'},
     {name:'ClipCraft bundled Hack fonts',version:'bundled',license:'MIT AND Bitstream-Vera',source:'crates/core/assets/fonts; licenses/text-fonts/Hack-LICENSE.md'},
     {name:'epaint bundled font assets',version:metadata.packages.find(p=>p.name==='epaint_default_fonts')?.version||'bundled',license:'OFL-1.1 AND Ubuntu-font-1.0 AND MIT AND Bitstream-Vera',source:'epaint_default_fonts/fonts; embedded license texts in THIRD-PARTY-NOTICES.txt'},
     {name:'DesignCraft adapted geometry and rendering helpers',version:'ea08e4c2ba290f092063c99d70c4bdd5afc45887',license:'MIT',source:'licenses/designcraft/PROVENANCE.txt'},
-    {name:'NSIS installer engine (setup EXE only)',version:'3.13',license:'Zlib',source:'licenses/nsis/PROVENANCE.txt; zlib compressor, standard installer stub'}];
+    {name:'Lucide UI icons',version:'4b203ec9b6002fd74fd5dadc8612220e64289305',license:'ISC AND MIT',source:'licenses/lucide/PROVENANCE.txt'},
+    {name:'WiX MSI dialogs and build tools',version:'3.14.1',license:'MS-RL',source:'licenses/wix/PROVENANCE.txt; upstream source and archive digest'}];
   const sbom=dependencyInventory(metadata,readFileSync(resolve(root,'Cargo.lock'),'utf8'),info,assets);
   writeFileSync(resolve(packageRoot,'sbom.spdx.json'),JSON.stringify(sbom,null,2)+'\n');
   writeFileSync(resolve(packageRoot,'build-info.json'),JSON.stringify(info,null,2)+'\n');
@@ -71,10 +73,10 @@ export function writeMetadata(root, metadataPath, packageRoot, version) {
     for(const path of [...licenseFiles].sort()){if(!existsSync(path))throw new Error(`Missing dependency notice: ${pkg.name}`);notices.push(`--- ${relative(dir,path)} ---\n`+readFileSync(path,'utf8'));}
     if(!licenseFiles.size)notices.push('No standalone notice in the registry package. Consult the declared license and upstream source.\n');
   }
-  for(const dir of ['licenses/designcraft','licenses/text-fonts','licenses/nsis'])for(const name of readdirSync(resolve(root,dir)).sort())notices.push(`\n===== ${dir}/${name} =====\n`+readFileSync(resolve(root,dir,name),'utf8'));
+  for(const dir of ['licenses/designcraft','licenses/text-fonts','licenses/wix','licenses/lucide'])for(const name of readdirSync(resolve(root,dir)).sort())notices.push(`\n===== ${dir}/${name} =====\n`+readFileSync(resolve(root,dir,name),'utf8'));
   writeFileSync(resolve(packageRoot,'THIRD-PARTY-NOTICES.txt'),notices.join('\n'));
   const notes=JSON.parse(readFileSync(resolve(root,'releases',version+'.json'),'utf8').replace(/^\uFEFF/,''));
-  const markdown=[`# ${notes.title}`,notes.summary,'**Unsigned Windows x64 beta. Choose the setup EXE or portable ZIP below.**',...Object.entries(notes.changes).flatMap(([title,items])=>['## '+title,...items.map(s=>'- '+s)]),'## Limitations',...notes.limitations.map(s=>'- '+s),`Source commit: ${commit}`,'Setup EXE: installs for the current user, with separate Editor and Capture Controller shortcuts. Portable ZIP: extract all files and run ClipCraft.exe. Source code archives are linked below. See SECURITY.md and docs/installing.md.'];
+  const markdown=[`# ${notes.title}`,notes.summary,'**Unsigned Windows x64 beta. Choose the MSI installer or portable ZIP below.**',...Object.entries(notes.changes).flatMap(([title,items])=>['## '+title,...items.map(s=>'- '+s)]),'## Known limitations',...notes.limitations.map(s=>'- '+s),`Source commit: ${commit}`,'MSI: installs for the current user, with one ClipCraft shortcut and image/video project associations. Portable ZIP: extract all files and run ClipCraft.exe. No personal projects, recordings, settings or Library entries are included. Source archives are linked below. See docs/installing.md for storage locations.'];
   writeFileSync(resolve(packageRoot,'release-notes.md'),markdown.join('\n\n')+'\n');
   return info;
 }

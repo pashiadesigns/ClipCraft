@@ -21,6 +21,23 @@ impl Session {
         self.tracker.as_mut().unwrap().down(point, button);
         Ok(first)
     }
+    pub fn activity(&self, point: [i32; 2]) -> Option<Gesture> {
+        if self.paused || self.finished {
+            return None;
+        }
+        let a = self.area?;
+        let x = point[0] as i64 - a.origin[0] as i64;
+        let y = point[1] as i64 - a.origin[1] as i64;
+        if x < 0 || y < 0 || x >= a.size[0] as i64 || y >= a.size[1] as i64 {
+            return None;
+        }
+        let p = [x as u32, y as u32];
+        Some(Gesture {
+            start: p,
+            end: p,
+            button: Button::Left,
+        })
+    }
     pub fn up(&mut self, point: [i32; 2], button: Button) -> Option<Gesture> {
         self.tracker.as_mut()?.up(point, button)
     }
@@ -44,7 +61,7 @@ impl Session {
 }
 
 pub(super) fn controller_position(work: [i32; 4]) -> [i32; 2] {
-    [work[0] + 12, (work[3] - 52 - 12).max(work[1])]
+    [work[0] + (work[2] - work[0] - 368) / 2, work[1] + 12]
 }
 
 #[cfg(test)]
@@ -80,6 +97,6 @@ mod tests {
         s.finish();
         assert!(!s.down([-1900, -380], Button::Left, left).unwrap());
         assert_eq!(s.area, Some(right));
-        assert_eq!(controller_position([-1920, -400, 0, 640]), [-1908, 576]);
+        assert_eq!(controller_position([-1920, -400, 0, 640]), [-1144, -388]);
     }
 }

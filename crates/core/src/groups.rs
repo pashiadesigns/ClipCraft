@@ -71,32 +71,10 @@ impl Document {
                 *counts.entry(g).or_insert(0) += 1;
             }
         }
-        if (!counts.is_empty() && self.version < 16)
-            || counts.iter().any(|(id, n)| {
-                *id == 0
-                    || (*n < 2
-                        && !self
-                            .annotations
-                            .iter()
-                            .any(|a| a.group == Some(*id) && a.analysis.is_some()))
-            })
-        {
+        if counts.iter().any(|(id, n)| *id == 0 || *n < 2) {
             return Err(Error::Invalid(
-                "Groups require version16, nonzero identifiers and at least two members".into(),
+                "Groups need nonzero identifiers and at least two members".into(),
             ));
-        }
-        for group in counts.keys() {
-            if self
-                .annotations
-                .iter()
-                .filter(|a| a.group == Some(*group) && a.analysis.is_some())
-                .count()
-                > 1
-            {
-                return Err(Error::Invalid(
-                    "A Simplify group has only one analysis area".into(),
-                ));
-            }
         }
         Ok(())
     }
@@ -108,12 +86,10 @@ impl Document {
             }
         }
         for a in &mut self.annotations {
-            if a.analysis.is_none() && a.group.is_some_and(|g| counts[&g] < 2) {
+            if a.group.is_some_and(|g| counts[&g] < 2) {
                 a.group = None;
             }
         }
-        self.annotations
-            .retain(|a| a.analysis.is_none() || a.group.is_some());
     }
     pub(crate) fn group_objects(&mut self, ids: &[u64], ungroup: bool) -> Result<bool> {
         if ids.is_empty()
@@ -164,10 +140,6 @@ impl Document {
                 a.group = next;
             }
         }
-        // Ungrouping or combining analysis groups bakes their current blocks
-        // into ordinary editable shapes; the invisible analysis areas disappear.
-        self.annotations
-            .retain(|a| !ids.contains(&a.id) || a.analysis.is_none());
         self.prune_groups();
         Ok(true)
     }
@@ -188,11 +160,7 @@ pub(crate) fn freshen(objects: &mut [Annotation], target: &Document) -> Result<(
         .unwrap_or(0);
     let mut mapping = BTreeMap::new();
     for (id, n) in counts {
-        if n >= 2
-            || objects
-                .iter()
-                .any(|a| a.group == Some(id) && a.analysis.is_some())
-        {
+        if n >= 2 {
             next = next
                 .checked_add(1)
                 .ok_or_else(|| Error::Invalid("Group identifiers exhausted".into()))?;
@@ -205,7 +173,7 @@ pub(crate) fn freshen(objects: &mut [Annotation], target: &Document) -> Result<(
     Ok(())
 }
 pub fn bounds(objects: &[Annotation]) -> Result<([f32; 2], [f32; 2])> {
-    if objects.len() < 2 && !objects.iter().any(|a| a.analysis.is_some()) {
+    if objects.len() < 2 {
         return Err(Error::Invalid("Select two or more objects".into()));
     }
     let mut low = [f32::INFINITY; 2];
@@ -253,6 +221,7 @@ pub fn scaled(objects: &[Annotation], anchor: [f32; 2], scale: f32) -> Result<Ve
                 typo.spacing *= scale;
             }
             t.size_points *= scale;
+            crate::text::rich::scale_runs(t, scale);
             t.padding *= scale;
             if let Some(o) = &mut t.outline {
                 o.width *= scale;

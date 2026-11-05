@@ -4,10 +4,10 @@ use capture_core::{Document, Session, bitmap::Bitmap};
 use std::sync::Arc;
 
 #[test]
-fn vector_stamp_colors_are_visible_and_passive_without_image_crop_controls() {
+fn vector_icon_colors_are_visible_and_passive_without_image_crop_controls() {
     let ctx = egui::Context::default();
     crate::shell::configure(&ctx);
-    let mut a = capture_core::stamps::builtin::find("builtin-five-color")
+    let mut a = capture_core::icon_library::builtin::find("builtin-five-color")
         .unwrap()
         .payload()
         .unwrap()
@@ -29,7 +29,7 @@ fn vector_stamp_colors_are_visible_and_passive_without_image_crop_controls() {
     let first = frame(&mut a);
     let output = frame(&mut a);
     for text in [
-        "Vector stamp",
+        "Vector icon",
         "Color 1",
         "Color 2",
         "Color 3",
@@ -41,7 +41,7 @@ fn vector_stamp_colors_are_visible_and_passive_without_image_crop_controls() {
     assert!(crate::color_widgets::tests::text_rect(&output.shapes, "Crop image").is_none());
     assert_eq!(a, original);
     if let Ok(dir) = std::env::var("CLIPCRAFT_HEADLESS_LIBRARY_DIR") {
-        dump_meshes(&ctx, &dir, "vector-stamp-properties", first, output);
+        dump_meshes(&ctx, &dir, "vector-icon-properties", first, output);
     }
 }
 
@@ -311,7 +311,7 @@ fn compact_image_properties_do_not_change_passive_values() {
             },
             |ui| {
                 ui.set_width(262.);
-                property_layout::annotation_properties(ui, &mut a, false, [640, 400]);
+                property_layout::annotation_properties(ui, &mut a, [640, 400]);
             },
         ))
     };

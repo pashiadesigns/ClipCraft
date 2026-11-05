@@ -663,7 +663,7 @@ dependencies = [
 
 [[package]]
 name = "capture-cli"
-version = "0.2.0"
+version = "1.0.0-beta.1"
 dependencies = [
  "capture-core",
  "clap",
@@ -673,12 +673,13 @@ dependencies = [
 
 [[package]]
 name = "capture-core"
-version = "0.2.0"
+version = "1.0.0-beta.1"
 dependencies = [
  "ab_glyph",
  "base64",
  "epaint_default_fonts",
  "flate2",
+ "harfrust",
  "image",
  "imageproc",
  "serde",
@@ -686,12 +687,13 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.21",
  "ttf-parser",
+ "unicode-segmentation",
  "vello_cpu",
 ]
 
 [[package]]
 name = "capture-desktop"
-version = "0.2.0"
+version = "1.0.0-beta.1"
 dependencies = [
  "arboard",
  "capture-core",
@@ -704,7 +706,9 @@ dependencies = [
  "serde",
  "serde_json",
  "tempfile",
+ "vello_cpu",
  "windows",
+ "windows-core",
  "windows-sys 0.61.2",
 ]
 

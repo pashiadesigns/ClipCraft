@@ -13,11 +13,11 @@ pub struct Bitmap {
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     placeholder: bool,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-    stamp: bool,
+    icon: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    stamp_name: Option<String>,
+    icon_name: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    vector: Option<Arc<crate::stamps::vector::VectorStamp>>,
+    vector: Option<Arc<crate::icon_library::vector::VectorIcon>>,
     /// Presence identifies a captured cursor. Indices preserve Windows XOR
     /// pixels so an I-beam still inverts the background after it is moved.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -34,10 +34,11 @@ pub struct Bitmap {
 
 impl PartialEq for Bitmap {
     fn eq(&self, other: &Self) -> bool {
-        (Arc::ptr_eq(&self.raster, &other.raster) || self.raster == other.raster)
-            && self.stamp == other.stamp
+        (Arc::ptr_eq(&self.raster, &other.raster)
+            || (!self.raster.png.is_empty() && self.raster == other.raster))
+            && self.icon == other.icon
             && self.placeholder == other.placeholder
-            && self.stamp_name == other.stamp_name
+            && self.icon_name == other.icon_name
             && self.vector == other.vector
             && self.cursor_invert == other.cursor_invert
             && self.view == other.view
@@ -47,8 +48,84 @@ impl PartialEq for Bitmap {
 }
 
 impl Bitmap {
+    /// Remove source pixels whose transformed location is outside the output.
+    /// Work happens once at crop commit; moves continue sharing cached pixels.
+    pub(crate) fn trimmed_to(&self, a: &mut Annotation, rect: [f32; 4]) -> Result<Self> {
+        let mut pixels = (**self.pixels()?).clone();
+        let (lo, hi) = a.body_bounds();
+        let view = self.view().rect;
+        let size = self.size();
+        let rotation = a.rotation();
+        for (x, y, p) in pixels.enumerate_pixels_mut() {
+            let source = [
+                (x as f32 + 0.5) / size[0] as f32,
+                (y as f32 + 0.5) / size[1] as f32,
+            ];
+            let local =
+                [0, 1].map(|i| lo[i] + (source[i] - view[i]) / view[i + 2] * (hi[i] - lo[i]));
+            let world = rotation.point(local);
+            if (0..2).any(|i| world[i] < rect[i] || world[i] >= rect[i] + rect[i + 2]) {
+                *p = image::Rgba([0; 4]);
+            }
+        }
+        let mut next = self.clone();
+        if let Some(indices) = &mut next.cursor_invert {
+            indices.retain(|n| {
+                let source = [(*n % size[0]) as f32 + 0.5, (*n / size[0]) as f32 + 0.5];
+                let world = rotation.point([0, 1].map(|i| {
+                    lo[i] + (source[i] / size[i] as f32 - view[i]) / view[i + 2] * (hi[i] - lo[i])
+                }));
+                (0..2).all(|i| world[i] >= rect[i] && world[i] < rect[i] + rect[i + 2])
+            });
+        }
+        if a.kind == Kind::Image
+            && a.rotation_degrees == 0.
+            && !a.mirror_x
+            && self.view().rect == [0., 0., 1., 1.]
+            && !self.is_cursor()
+        {
+            let min = [0, 1].map(|i| {
+                ((rect[i] - lo[i]) / (hi[i] - lo[i]) * size[i] as f32)
+                    .floor()
+                    .clamp(0., size[i] as f32) as u32
+            });
+            let max = [0, 1].map(|i| {
+                ((rect[i] + rect[i + 2] - lo[i]) / (hi[i] - lo[i]) * size[i] as f32)
+                    .ceil()
+                    .clamp(0., size[i] as f32) as u32
+            });
+            if (0..2).all(|i| max[i] > min[i]) {
+                pixels = image::imageops::crop_imm(
+                    &pixels,
+                    min[0],
+                    min[1],
+                    max[0] - min[0],
+                    max[1] - min[1],
+                )
+                .to_image();
+                a.start = [0, 1].map(|i| lo[i] + min[i] as f32 / size[i] as f32 * (hi[i] - lo[i]));
+                a.end = [0, 1].map(|i| lo[i] + max[i] as f32 / size[i] as f32 * (hi[i] - lo[i]));
+                a.corner_radius = a.corner_radius.min(a.max_corner_radius());
+                next.focus = None;
+            }
+        }
+        next.raster = Arc::new(RasterImage::from_image(&pixels)?);
+        next.decoded = OnceLock::new();
+        next.opaque = OnceLock::new();
+        Ok(next)
+    }
     pub fn frame_opacity(&self) -> u8 {
         self.frame_opacity.unwrap_or(255)
+    }
+    /// Video frames with opaque pixels share one silhouette across time.
+    pub(crate) fn opaque_transient(&self) -> bool {
+        self.raster.png.is_empty()
+            && !self.placeholder
+            && self.vector.is_none()
+            && !self.is_cursor()
+            && self
+                .pixels()
+                .is_ok_and(|p| *self.opaque.get_or_init(|| p.pixels().all(|p| p[3] == 255)))
     }
     pub fn with_frame_opacity(&self, value: u8) -> Self {
         let mut next = self.clone();
@@ -65,15 +142,15 @@ impl Bitmap {
         self.placeholder = true;
         self
     }
-    pub fn vector(&self) -> Option<&crate::stamps::vector::VectorStamp> {
+    pub fn vector(&self) -> Option<&crate::icon_library::vector::VectorIcon> {
         self.vector.as_deref()
     }
-    pub fn from_vector(vector: crate::stamps::vector::VectorStamp) -> Result<Self> {
+    pub fn from_vector(vector: crate::icon_library::vector::VectorIcon) -> Result<Self> {
         vector.validate()?;
         let mut value = Self::new(Arc::new(RasterImage::from_image(&RgbaImage::new(
             128, 128,
         ))?))?
-        .into_stamp();
+        .into_icon();
         value.vector = Some(Arc::new(vector));
         let a = Arc::new(value.clone()).annotation(1);
         let pixels = crate::display::render_annotation_preview(
@@ -89,19 +166,19 @@ impl Bitmap {
         value.opaque = OnceLock::new();
         Ok(value)
     }
-    pub fn stamp_name(&self) -> Option<&str> {
-        self.stamp_name.as_deref()
+    pub fn icon_name(&self) -> Option<&str> {
+        self.icon_name.as_deref()
     }
-    pub fn named_stamp(mut self, name: &str) -> Self {
-        self.stamp = true;
-        self.stamp_name = Some(name.chars().filter(|c| !c.is_control()).take(120).collect());
+    pub fn named_icon(mut self, name: &str) -> Self {
+        self.icon = true;
+        self.icon_name = Some(name.chars().filter(|c| !c.is_control()).take(120).collect());
         self
     }
-    pub fn is_stamp(&self) -> bool {
-        self.stamp
+    pub fn is_icon(&self) -> bool {
+        self.icon
     }
-    pub fn into_stamp(mut self) -> Self {
-        self.stamp = true;
+    pub fn into_icon(mut self) -> Self {
+        self.icon = true;
         self
     }
     pub fn view(&self) -> crate::image_frame::ImageView {
@@ -125,18 +202,18 @@ impl Bitmap {
         self.view.is_some()
     }
     pub(crate) fn validate_view(&self) -> Result<()> {
-        if self.placeholder && (self.stamp || self.is_cursor()) {
+        if self.placeholder && (self.icon || self.is_cursor()) {
             return Err(Error::Invalid("Invalid image placeholder".into()));
         }
-        if self.stamp_name.as_ref().is_some_and(|n| {
-            !self.stamp || n.chars().count() > 120 || n.chars().any(char::is_control)
+        if self.icon_name.as_ref().is_some_and(|n| {
+            !self.icon || n.chars().count() > 120 || n.chars().any(char::is_control)
         }) {
-            return Err(Error::Invalid("Invalid stamp name".into()));
+            return Err(Error::Invalid("Invalid icon name".into()));
         }
         if let Some(vector) = &self.vector {
             vector.validate()?;
-            if !self.stamp || self.is_cursor() || self.view.is_some() || self.size() != [128, 128] {
-                return Err(Error::Invalid("Invalid vector stamp properties".into()));
+            if !self.icon || self.is_cursor() || self.view.is_some() || self.size() != [128, 128] {
+                return Err(Error::Invalid("Invalid vector icon properties".into()));
             }
         }
         if self
@@ -166,18 +243,40 @@ impl Bitmap {
             .png
             .len()
             .saturating_add(w as usize * h as usize * 4)
-            .saturating_add(self.stamp_name.as_ref().map_or(0, String::len))
+            .saturating_add(self.icon_name.as_ref().map_or(0, String::len))
             .saturating_add(self.cursor_invert.as_ref().map_or(0, |v| v.len() * 4))
             .saturating_add(self.vector.as_ref().map_or(0, |v| {
                 v.paths.iter().map(|p| p.data.len()).sum::<usize>() + v.colors.len() * 4
             }))
     }
+    /// Render-only video sample. Never attach this transient bitmap to a saved document.
+    /// The decoded pixels are shared; no PNG encoding or decoding happens per frame.
+    pub fn transient(pixels: Arc<RgbaImage>) -> Result<Self> {
+        crate::validate_dimensions(pixels.width(), pixels.height())?;
+        Ok(Self {
+            raster: Arc::new(RasterImage {
+                width: pixels.width(),
+                height: pixels.height(),
+                png: String::new(),
+            }),
+            placeholder: false,
+            icon: false,
+            icon_name: None,
+            vector: None,
+            cursor_invert: None,
+            view: None,
+            focus: None,
+            frame_opacity: None,
+            decoded: OnceLock::from(Ok(pixels)),
+            opaque: OnceLock::new(),
+        })
+    }
     pub fn new(raster: Arc<RasterImage>) -> Result<Self> {
         let value = Self {
             raster,
             placeholder: false,
-            stamp: false,
-            stamp_name: None,
+            icon: false,
+            icon_name: None,
             vector: None,
             cursor_invert: None,
             view: None,
@@ -198,7 +297,7 @@ impl Bitmap {
     pub fn has_inversion(&self) -> bool {
         self.cursor_invert.as_ref().is_some_and(|v| !v.is_empty())
     }
-    pub(crate) fn inverted(&self, index: u32) -> bool {
+    pub fn inverted(&self, index: u32) -> bool {
         self.cursor_invert
             .as_ref()
             .is_some_and(|v| v.binary_search(&index).is_ok())
@@ -251,10 +350,13 @@ impl Bitmap {
             step_outline: None,
             line_style: None,
             shadow: None,
-            analysis: None,
+
+            focus: None,
+
             highlighter_rect: false,
             group: None,
             rotation_degrees: 0.0,
+            mirror_x: false,
             id,
             kind: Kind::Image,
             start: [0.0; 2],
@@ -299,9 +401,74 @@ fn render_impl(target: &mut RgbaImage, a: &Annotation, view: Viewport, fast: boo
     if right <= left || bottom <= top {
         return;
     }
+    // An unscaled, pixel-aligned image has no interpolation to perform. This is
+    // also the common final video-layer composite. Keep the general sampler for
+    // fractional placements, shaped masks, rotation and cursor XOR semantics.
+    let crop = bitmap.view().rect;
+    let origin = [screen(min[0], 0), screen(min[1], 1)];
+    let source_origin = [
+        crop[0] * source.width() as f32,
+        crop[1] * source.height() as f32,
+    ];
     if fast
-        && !matches!(a.kind, Kind::Ellipse | Kind::Polygon)
+        && view.scale == 1.
+        && a.rotation_degrees == 0.
+        && !a.mirror_x
+        && matches!(a.kind, Kind::Image | Kind::Rectangle)
+        && a.corner_radius == 0.
+        && !bitmap.is_cursor()
+        && extent
+            == [
+                source.width() as f32 * crop[2],
+                source.height() as f32 * crop[3],
+            ]
+        && origin.iter().all(|n| n.fract() == 0.)
+        && source_origin.iter().all(|n| n.fract() == 0.)
+    {
+        let left = left.max(origin[0].max(0.) as u32);
+        let top = top.max(origin[1].max(0.) as u32);
+        let right = right.min((origin[0] + f64::from(extent[0])).max(0.) as u32);
+        let bottom = bottom.min((origin[1] + f64::from(extent[1])).max(0.) as u32);
+        if right <= left || bottom <= top {
+            return;
+        }
+        let opacity = a.image_opacity();
+        for y in top..bottom {
+            let sy = (y as f64 - origin[1] + f64::from(source_origin[1])) as u32;
+            let sx = (left as f64 - origin[0] + f64::from(source_origin[0])) as u32;
+            if sy >= source.height() || sx + right - left > source.width() {
+                break;
+            }
+            let from = ((sy * source.width() + sx) * 4) as usize;
+            let to = ((y * target.width() + left) * 4) as usize;
+            let length = ((right - left) * 4) as usize;
+            let src = &source.as_raw()[from..from + length];
+            let dst = &mut target.as_mut()[to..to + length];
+            if opacity == 255 && src.as_chunks::<4>().0.iter().all(|p| p[3] == 255) {
+                dst.copy_from_slice(src);
+            } else {
+                let row = src.as_chunks::<4>().0;
+                let Some(first) = row.iter().position(|p| p[3] != 0) else {
+                    continue;
+                };
+                let last = row.iter().rposition(|p| p[3] != 0).unwrap() + 1;
+                for (dst, src) in dst.as_chunks_mut::<4>().0[first..last]
+                    .iter_mut()
+                    .zip(&row[first..last])
+                {
+                    let mut rgba = *src;
+                    rgba[3] = (f64::from(rgba[3]) * f64::from(opacity) / 255.).round() as u8;
+                    let mut pixel = image::Rgba(*dst);
+                    crate::text::composite(&mut pixel, rgba);
+                    *dst = pixel.0;
+                }
+            }
+        }
+        return;
+    }
+    if fast
         && a.rotation_degrees == 0.0
+        && !a.mirror_x
         && !bitmap.is_cursor()
         && *bitmap
             .opaque
@@ -331,10 +498,13 @@ fn render_impl(target: &mut RgbaImage, a: &Annotation, view: Viewport, fast: boo
                     view.origin[0] + (x as f64 + offset[0]) / view.scale - center[0],
                     view.origin[1] + (y as f64 + offset[1]) / view.scale - center[1],
                 ];
-                let local = [
+                let mut local = [
                     world[0] * cos - world[1] * sin + center[0] - min[0] as f64,
                     world[0] * sin + world[1] * cos + center[1] - min[1] as f64,
                 ];
+                if a.mirror_x {
+                    local[0] = extent[0] as f64 - local[0];
+                }
                 if local[0] < 0.0
                     || local[1] < 0.0
                     || local[0] >= extent[0] as f64
@@ -444,16 +614,17 @@ fn render_upright_opaque(
             let alpha = (sum[3] * f64::from(a.image_opacity()))
                 .round()
                 .clamp(0., 255.) as u8;
-            let coverage = if a.corner_radius > 0. {
-                let local = [
-                    view.origin[0] + (f64::from(left + index as u32) + 0.5) / view.scale
-                        - f64::from(min[0]),
-                    view.origin[1] + (f64::from(y) + 0.5) / view.scale - f64::from(min[1]),
-                ];
-                crate::image_frame::coverage(a, local, extent, view.scale)
-            } else {
-                1.
-            };
+            let coverage =
+                if a.corner_radius > 0. || matches!(a.kind, Kind::Ellipse | Kind::Polygon) {
+                    let local = [
+                        view.origin[0] + (f64::from(left + index as u32) + 0.5) / view.scale
+                            - f64::from(min[0]),
+                        view.origin[1] + (f64::from(y) + 0.5) / view.scale - f64::from(min[1]),
+                    ];
+                    crate::image_frame::coverage(a, local, extent, view.scale)
+                } else {
+                    1.
+                };
             crate::text::composite(
                 target.get_pixel_mut(left + index as u32, y),
                 [

@@ -14,6 +14,16 @@ pub(super) fn move_with_candidates(
             .annotations
             .iter()
             .filter(|a| document.object_visible(a.id) && !objects.iter().any(|o| o.id == a.id))
+            .filter(|a| {
+                document.video.as_ref().is_none_or(|p| {
+                    p.objects.get(&a.id).is_some_and(|t| {
+                        t.active(p.cursor)
+                            && !p.layer_hidden(capture_core::video::links::Layer::Annotation(
+                                t.track,
+                            ))
+                    })
+                })
+            })
             .collect();
         if let Some((recent, limit)) = candidates {
             visible.sort_by_key(|a| {

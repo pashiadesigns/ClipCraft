@@ -140,7 +140,7 @@ impl Editor {
             .sense(egui::Sense::hover())
             .pivot(egui::Align2::CENTER_BOTTOM)
             .fixed_pos(anchor.center_top() - egui::vec2(0.0, 4.0));
-        let modal=egui::Modal::new(egui::Id::unique("resize_image"))
+        let modal=crate::controls::Modal::new(egui::Id::unique("resize_image"))
             .area(area)
             .backdrop_color(egui::Color32::TRANSPARENT)
             .show(ctx,|ui| {
@@ -158,7 +158,7 @@ impl Editor {
                         for name in ["Inches", "Centimeters"] {
                             ui.horizontal(|ui| {
                                 ui.add_enabled(false, egui::Button::selectable(false,name)).on_disabled_hover_text("Print units and DPI are planned.");
-                                crate::shell::badge(ui,self.shell.badges,"EDIT-028");
+
                             });
                         }
                         ui.selectable_value(&mut units,Units::Percent,"Percent");
@@ -171,11 +171,11 @@ impl Editor {
                 egui::Grid::new("resize_dimensions").show(ui,|ui| {
                     let suffix=if draft.units==Units::Pixels {"px"} else {"%"};
                     let label=ui.label("Width:");
-                    let input=ui.add(egui::TextEdit::singleline(&mut draft.width).desired_width(86.0).min_size(egui::vec2(86.0,20.0)).align(egui::Align2::RIGHT_CENTER)).labelled_by(label.id);crate::controls::focus_once(&input,&mut draft.focus_pending);if input.changed(){draft.link(true);}
+                    let input=ui.add(crate::unicode_input::TextEdit::singleline(&mut draft.width).desired_width(86.0).min_size(egui::vec2(86.0,20.0)).align(egui::Align2::RIGHT_CENTER)).labelled_by(label.id);crate::controls::focus_once(&input,&mut draft.focus_pending);if input.changed(){draft.link(true);}
                     ui.label(suffix);
                     ui.end_row();
                     let label=ui.label("Height:");
-                    if ui.add(egui::TextEdit::singleline(&mut draft.height).desired_width(86.0).min_size(egui::vec2(86.0,20.0)).align(egui::Align2::RIGHT_CENTER)).labelled_by(label.id).changed() {draft.link(false);}
+                    if ui.add(crate::unicode_input::TextEdit::singleline(&mut draft.height).desired_width(86.0).min_size(egui::vec2(86.0,20.0)).align(egui::Align2::RIGHT_CENTER)).labelled_by(label.id).changed() {draft.link(false);}
                     ui.label(suffix);
                     ui.end_row();
                 });
@@ -187,14 +187,14 @@ impl Editor {
                 let center=advanced.rect.right_center()-egui::vec2(7.0,0.0);
                 let direction=if draft.advanced {-1.0} else {1.0};
                 ui.painter().add(egui::Shape::convex_polygon(vec![center+egui::vec2(-3.0,-2.0*direction),center+egui::vec2(3.0,-2.0*direction),center+egui::vec2(0.0,2.0*direction)],ui.visuals().text_color(),egui::Stroke::NONE));
-                crate::shell::badge(ui,self.shell.badges,"EDIT-028");
+
             });
             if draft.advanced {
                 ui.add_enabled_ui(false,|ui| {
                     ui.horizontal(|ui| {
                         ui.label("Resolution:");
                         let mut planned_resolution="96".to_owned();
-                        ui.add(egui::TextEdit::singleline(&mut planned_resolution).desired_width(65.0));
+                        ui.add(crate::unicode_input::TextEdit::singleline(&mut planned_resolution).desired_width(65.0));
                         ui.label("dpi");
                     });
                     crate::controls::toggle(ui, &mut true, "Use resampling");
@@ -207,7 +207,6 @@ impl Editor {
             let (submit,closed)=crate::controls::dialog_actions(ui,"Apply","Cancel",spec.as_ref().is_ok_and(|size|*size!=draft.original),false);
             if submit {apply=spec.ok();}
             cancel |= closed;
-            if self.shell.badges { ui.horizontal(|ui| {ui.small("Image size");crate::shell::badge(ui,true,"EDIT-027");}); }
         });
         // Closing a nested units popup must not cancel the enclosing draft.
         cancel |= modal.is_top_modal
@@ -250,20 +249,12 @@ impl Editor {
     fn show_resize_confirmation(&mut self, ctx: &egui::Context, size: [u32; 2]) {
         let mut confirm = false;
         let mut cancel = false;
-        let modal =
-            egui::Modal::new(egui::Id::unique("resize_flatten_confirmation")).show(ctx, |ui| {
+        let modal = crate::controls::Modal::new(egui::Id::unique("resize_flatten_confirmation"))
+            .show(ctx, |ui| {
                 ui.set_width(406.0);
                 ui.vertical_centered(|ui| {
                     ui.heading("Flatten Objects");
                 });
-                let close = egui::Rect::from_min_size(
-                    ui.min_rect().right_top() - egui::vec2(22.0, 0.0),
-                    egui::vec2(22.0, 22.0),
-                );
-                cancel |= ui
-                    .put(close, egui::Button::new("×").frame(false))
-                    .on_hover_text("Cancel resize")
-                    .clicked();
                 ui.separator();
                 ui.add_space(8.0);
                 ui.horizontal(|ui| {
@@ -291,7 +282,6 @@ impl Editor {
                 ui.add_space(8.0);
                 ui.separator();
                 ui.horizontal(|ui| {
-                    crate::shell::badge(ui, self.shell.badges, "EDIT-029");
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         cancel |= ui
                             .add_sized(

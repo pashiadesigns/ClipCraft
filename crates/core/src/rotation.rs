@@ -9,6 +9,7 @@ use crate::{Error, Result};
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Rotation {
     pub center: [f32; 2],
+    pub mirror_x: bool,
     /// Clockwise degrees in image coordinates, where Y points downward.
     pub degrees: f32,
 }
@@ -31,11 +32,17 @@ impl Rotation {
         }
         Ok(Self {
             center,
+            mirror_x: false,
             degrees: normalized(degrees),
         })
     }
 
     pub fn point(self, point: [f32; 2]) -> [f32; 2] {
+        let point = if self.mirror_x {
+            [2. * self.center[0] - point[0], point[1]]
+        } else {
+            point
+        };
         // Exact identity avoids moving coordinates merely by storing a zero angle.
         if self.degrees == 0.0 {
             return point;
@@ -49,11 +56,17 @@ impl Rotation {
     }
 
     pub fn inverse_point(self, point: [f32; 2]) -> [f32; 2] {
-        Self {
+        let point = Self {
             degrees: -self.degrees,
+            mirror_x: false,
             ..self
         }
-        .point(point)
+        .point(point);
+        if self.mirror_x {
+            [2. * self.center[0] - point[0], point[1]]
+        } else {
+            point
+        }
     }
 
     pub fn bounds(self, min: [f32; 2], max: [f32; 2]) -> ([f32; 2], [f32; 2]) {
@@ -115,7 +128,10 @@ pub struct RotationGesture {
 
 impl RotationGesture {
     pub fn begin(original: Rotation, pointer: [f32; 2]) -> Result<Self> {
-        let original = Rotation::new(original.center, original.degrees)?;
+        let original = Rotation {
+            mirror_x: original.mirror_x,
+            ..Rotation::new(original.center, original.degrees)?
+        };
         let angle = pointer_angle(original.center, pointer)?
             .ok_or_else(|| Error::Invalid("Start rotation away from the object center".into()))?;
         Ok(Self {
@@ -135,7 +151,10 @@ impl RotationGesture {
         } else {
             self.delta
         };
-        self.preview = Rotation::new(self.original.center, self.original.degrees + delta)?;
+        self.preview = Rotation {
+            mirror_x: self.original.mirror_x,
+            ..Rotation::new(self.original.center, self.original.degrees + delta)?
+        };
         Ok(self.preview)
     }
     pub fn preview(&self) -> Rotation {
@@ -156,21 +175,22 @@ fn pointer_angle(center: [f32; 2], p: [f32; 2]) -> Result<Option<f32>> {
 
 impl crate::Annotation {
     pub fn can_rotate(&self) -> bool {
-        self.analysis.is_none()
-            && !matches!(
-                self.kind,
-                crate::Kind::Blur | crate::Kind::Pixelate | crate::Kind::Eraser
-            )
+        !matches!(
+            self.kind,
+            crate::Kind::Blur | crate::Kind::Pixelate | crate::Kind::Eraser
+        )
     }
     pub fn rotation(&self) -> Rotation {
         if matches!(self.kind, crate::Kind::Line | crate::Kind::Arrow) {
             return Rotation {
+                mirror_x: self.mirror_x,
                 center: [0, 1].map(|i| (self.start[i] + self.end[i]) * 0.5),
                 degrees: self.rotation_degrees,
             };
         }
         let (min, max) = self.body_bounds();
         Rotation {
+            mirror_x: self.mirror_x,
             center: [0, 1].map(|i| (min[i] + max[i]) * 0.5),
             degrees: self.rotation_degrees,
         }
@@ -201,6 +221,7 @@ impl crate::Annotation {
         let rotation = self.rotation();
         let mut local = self.clone();
         local.rotation_degrees = 0.0;
+        local.mirror_x = false;
         let resized =
             local.resized_with_modifiers(handle, rotation.inverse_point(point), canvas, mods)?;
         let new_center = resized.rotation().center;
@@ -209,6 +230,7 @@ impl crate::Annotation {
         let mut values = crate::canvas_expansion::translated(&[resized], delta)?;
         let mut resized = values.remove(0);
         resized.rotation_degrees = self.rotation_degrees;
+        resized.mirror_x = self.mirror_x;
         Ok(resized)
     }
 }
@@ -226,7 +248,7 @@ impl crate::Document {
             return Ok(false);
         }
         *target = rotated;
-        candidate.version = candidate.version.max(3);
+        candidate.version = crate::MAX_PROJECT_VERSION;
         candidate.validate()?;
         *self = candidate;
         Ok(true)
@@ -349,7 +371,7 @@ mod tests {
             assert_eq!(rotated.text, object.text);
             assert_eq!(rotated.callout, object.callout);
             assert_eq!(session.document.source_png, "");
-            assert_eq!(session.document.version, 3);
+            assert_eq!(session.document.version, crate::MAX_PROJECT_VERSION);
             let output = session.document.render().unwrap();
             let display = session
                 .document
@@ -375,7 +397,7 @@ mod tests {
             assert_eq!(session.document.render().unwrap(), output);
             session.execute(crate::Command::RevertOriginal).unwrap();
             assert!(session.document.annotations.is_empty());
-            assert_eq!(session.document.version, 1);
+            assert_eq!(session.document.version, crate::MAX_PROJECT_VERSION);
         }
     }
 
@@ -414,7 +436,7 @@ mod tests {
         close(resized.rotation().point(resized.body_bounds().0), opposite);
         assert_eq!(resized.text, a.text);
         let mut check = crate::Document::blank(640, 400).unwrap();
-        check.version = 3;
+        check.version = crate::MAX_PROJECT_VERSION;
         check.annotations.push(resized);
         check.validate().unwrap();
     }
@@ -458,9 +480,10 @@ mod tests {
         assert!(session.can_redo());
         assert!(!session.can_undo());
         let mut invalid = session.document.clone();
+        invalid.version = 2;
         invalid.annotations[0].rotation_degrees = 45.0;
         assert!(invalid.validate().is_err());
-        invalid.version = 3;
+        invalid.version = crate::MAX_PROJECT_VERSION;
         invalid.annotations[0].text = None;
         for kind in [
             crate::Kind::Blur,

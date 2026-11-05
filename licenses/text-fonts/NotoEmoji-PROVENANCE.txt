@@ -1,0 +1,6 @@
+Unmodified Noto Emoji variable font from Google Fonts.
+Source: https://raw.githubusercontent.com/google/fonts/8b0a1d0f5983c89bc2b93f1b5fb55f9e252744b5/ofl/notoemoji/NotoEmoji%5Bwght%5D.ttf
+Commit: 8b0a1d0f5983c89bc2b93f1b5fb55f9e252744b5
+SHA256: de6c18832938afc99caf132b39d6a30a19bac7f2e812e28db2535b4608d27551
+License: SIL Open Font License 1.1, see NotoEmoji-OFL.txt.
+Used at its default weight for portable monochrome emoji outlines.

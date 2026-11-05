@@ -1,5 +1,5 @@
 //! One row: left confirmations, centered document controls, right properties tabs.
-use crate::{Editor, egui, readiness, shell};
+use crate::{Editor, egui, shell};
 use egui::{Color32, Rect};
 
 #[derive(Clone, Default)]
@@ -28,16 +28,18 @@ impl Editor {
             )
             .show(ui, |ui| {
                 let area = ui.available_rect_before_wrap();
-                let key = ui
-                    .scope_id()
-                    .with(("footer-control-width", self.shell.library));
+                let key = ui.scope_id().with((
+                    "footer-control-width",
+                    self.shell.library,
+                    self.is_video(),
+                ));
                 let measured = ui.ctx().data(|d| d.get_temp::<f32>(key)).unwrap_or(630.);
                 // Keep equal space on both sides. Small windows can scroll the
                 // controls horizontally, without adding another footer row.
                 // Effects/Properties retain their right-hand anchor and never
                 // enter the scrolling center group. Reserve matching left space
                 // so the other controls remain centered across the whole window.
-                let side_space = if self.shell.library { 96. } else { 216. };
+                let side_space = 96.;
                 let width = measured.min((area.width() - side_space * 2.).max(1.));
                 let controls = Rect::from_center_size(area.center(), egui::vec2(width, 48.));
                 let status =
@@ -64,18 +66,6 @@ impl Editor {
                     ui.set_clip_rect(status.intersect(ui.clip_rect()));
                     self.footer_confirmation(ui);
                 });
-                if !self.shell.library {
-                    let tabs = Rect::from_min_size(
-                        egui::pos2(area.right() - 208., area.top() + 1.),
-                        egui::vec2(208., 34.),
-                    );
-                    ui.scope_builder(egui::UiBuilder::new().max_rect(tabs), |ui| {
-                        self.footer_property_tabs(ui);
-                    });
-                    #[cfg(test)]
-                    ui.ctx()
-                        .data_mut(|d| d.insert_temp(egui::Id::unique("footer-tabs"), tabs));
-                }
                 #[cfg(test)]
                 ui.ctx().data_mut(|d| {
                     d.insert_temp(
@@ -151,27 +141,35 @@ impl Editor {
 
     fn footer_controls(&mut self, ui: &mut egui::Ui) {
         ui.set_min_height(34.);
+        if self.is_video() && !self.shell.library {
+            self.video_footer_controls(ui);
+            return;
+        }
         if !self.shell.library {
-            let recent = ui
-                .button(if self.history.recent && !self.shell.preview_ui {
-                    "Hide Recent"
-                } else {
-                    "Show Recent"
-                })
-                .on_hover_text(readiness::badge("LIB-001").detail);
+            let recent_label = if self.history.recent && !self.shell.preview_ui {
+                "Hide Recent Clips"
+            } else {
+                "Show Recent Clips"
+            };
+            let recent = icon_caption_button(ui, recent_label, recent_label)
+                .on_hover_text("Show or hide recent clips");
             #[cfg(test)]
             ui.ctx()
                 .data_mut(|d| d.insert_temp(egui::Id::unique("footer-recent"), recent.rect));
             if recent.clicked() {
-                self.history.recent = self.shell.preview_ui || !self.history.recent;
+                self.set_recent_visible(self.shell.preview_ui || !self.history.recent);
                 self.shell.preview_ui = false;
                 if self.history.recent {
                     self.history.refresh();
                 }
             }
-            shell::badge(ui, self.shell.badges, "LIB-008");
-            let annotations = ui.button(if self.shell.annotations_hidden { "Show annotations" } else { "Hide annotations" })
-                .on_hover_text("Compare the underlying image. This view toggle does not change saved objects or exported images.");
+
+            let annotations_label = if self.shell.annotations_hidden {
+                "Show annotations"
+            } else {
+                "Hide annotations"
+            };
+            let annotations=icon_caption_button(ui,annotations_label,"").on_hover_text(format!("{annotations_label} · compare the underlying image without changing saved objects or exports."));
             #[cfg(test)]
             ui.ctx().data_mut(|d| {
                 d.insert_temp(egui::Id::unique("footer-annotations"), annotations.rect)
@@ -179,12 +177,9 @@ impl Editor {
             if annotations.clicked() {
                 self.toggle_annotations();
             }
-            ui.add_enabled(false, egui::Button::new("Tags"))
-                .on_hover_text("Quick-add image tags — planned");
         }
         if self.shell.library {
             self.library_zoom(ui);
-            shell::badge(ui, self.shell.badges, "LIB-009");
         } else {
             self.bottom_zoom_controls(ui);
             let dimensions = ui
@@ -198,38 +193,40 @@ impl Editor {
                 self.begin_resize();
             }
         }
-        crate::controls::toggle(ui, &mut self.shell.badges, "Badges")
-            .on_hover_text("Temporary development labels; never included in exported images.");
-        if self.shell.library {
-            ui.add_enabled(false, egui::Button::new("Export"));
-            shell::badge(ui, self.shell.badges, "FILE-006");
-        }
     }
+}
 
-    fn footer_property_tabs(&mut self, ui: &mut egui::Ui) {
-        crate::tabs::group(ui, |ui| {
-            ui.horizontal(|ui| {
-                for (label, effects, width) in [("Effects", true, 88.), ("Properties", false, 110.)]
-                {
-                    let response = crate::tabs::tab(
-                        ui,
-                        label,
-                        self.shell.properties
-                            && !self.shell.preview_ui
-                            && self.shell.effects == effects,
-                        width,
-                    );
-                    #[cfg(test)]
-                    ui.ctx().data_mut(|d| {
-                        d.insert_temp(egui::Id::unique(("footer-tab", label)), response.rect)
-                    });
-                    if response.clicked() {
-                        self.shell.preview_ui = false;
-                        self.shell.properties = true;
-                        self.shell.effects = effects;
-                    }
-                }
-            })
-        });
+fn icon_caption_button(ui: &mut egui::Ui, icon: &str, label: &str) -> egui::Response {
+    let font = egui::FontId::proportional(12.);
+    let text = ui
+        .painter()
+        .layout_no_wrap(label.into(), font, ui.visuals().text_color());
+    let width = if label.is_empty() {
+        28.
+    } else {
+        text.size().x + 34.
+    };
+    let response = ui.add_sized([width, 26.], egui::Button::new(""));
+    response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, ui.is_enabled(), icon));
+    let center = response.rect.center();
+    let icon_center = if label.is_empty() {
+        center
+    } else {
+        egui::pos2(response.rect.left() + 15., center.y)
+    };
+    crate::icons::draw_scaled(
+        ui.painter(),
+        egui::Rect::from_center_size(icon_center, egui::vec2(20., 20.)),
+        icon,
+        ui.visuals().text_color(),
+        0.75,
+    );
+    if !label.is_empty() {
+        ui.painter().galley(
+            egui::pos2(response.rect.left() + 28., center.y - text.size().y * 0.5),
+            text,
+            ui.visuals().text_color(),
+        );
     }
+    response
 }

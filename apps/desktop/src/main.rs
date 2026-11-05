@@ -13,8 +13,8 @@ mod canvas_display;
 mod canvas_expansion;
 mod canvas_view;
 mod capture;
-mod capture_controller;
 mod chrome;
+mod clip;
 mod clipboard;
 mod clipboard_edit;
 mod color_widgets;
@@ -24,9 +24,13 @@ mod crop;
 mod cut_out;
 mod editor_keybinds;
 mod export_ui;
-mod fill_tool;
+mod ui_glyphs;
+mod unicode_input;
+
 mod flatten;
 mod footer;
+mod gesture_input;
+mod group_feedback;
 mod group_transform;
 mod guide_display;
 mod guide_sections;
@@ -34,10 +38,12 @@ mod history;
 mod hotkey;
 mod icons;
 mod image_frame;
+mod image_properties;
 mod image_transform;
 mod launch;
 mod lifecycle;
 mod line_properties;
+mod motion;
 mod move_tool;
 mod multi_select;
 mod new_image;
@@ -49,26 +55,34 @@ mod ocr;
 mod options;
 mod page_setup;
 mod page_setup_fields;
+mod panel_ui;
 mod pixel_grid;
-mod pixel_selection;
+mod privacy_review;
+mod project_sessions;
+mod rich_text;
+mod single_instance;
+mod spelling;
+mod storage_locations;
+mod text_clipboard;
+
+mod focus_properties;
+mod icon_library;
+mod presets;
 mod preview_ui;
 mod property_layout;
 mod property_preview;
 mod quick_controls;
-mod quick_styles;
-mod readiness;
 mod redact_placement;
 mod resize_canvas;
 mod resize_image;
+mod reusable_presets;
 mod ribbon;
 mod ribbon_settings;
 mod shadow_properties;
 mod shape_properties;
 mod shell;
 mod shortcuts;
-mod simplify;
 mod split_button;
-mod stamps;
 mod step_tool;
 mod stroke_input;
 mod style_tile;
@@ -86,18 +100,23 @@ const CAPTURE_ENABLED: bool = cfg!(windows);
 
 fn main() -> eframe::Result {
     let launch = launch::Request::read();
-    if let Some(window) = launch.window
-        && tray::activate(window)
-    {
-        return Ok(());
-    }
-    let show_editor = launch.startup(quick_controls::QuickControls::new().startup_window())
-        == capture_core::quick_preferences::StartupWindow::Editor;
+    #[cfg(windows)]
+    let _owner = match single_instance::enter(&launch) {
+        Ok(Some(owner)) => owner,
+        Ok(None) => return Ok(()),
+        Err(message) => {
+            rfd::MessageDialog::new()
+                .set_title("ClipCraft")
+                .set_description(message)
+                .show();
+            return Ok(());
+        }
+    };
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_icon(brand::icon())
             .with_decorations(false)
-            .with_visible(show_editor)
+            .with_visible(true)
             .with_inner_size([981.0, 687.0])
             .with_maximized(true)
             .with_min_inner_size([880.0, 580.0]),
@@ -109,14 +128,16 @@ fn main() -> eframe::Result {
         Box::new(|cc| Ok(Box::new(Editor::new(cc)))),
     )
 }
+mod video_editor;
 struct Editor {
+    video: video_editor::State,
+    group_feedback: Option<group_feedback::Feedback>,
+    project_sessions: project_sessions::Sessions,
     lifecycle: lifecycle::Lifecycle,
     editing_group: Option<u64>,
-    simplify_palette: Vec<[u8; 4]>,
-    simplify_auto: bool,
-    simplify_detail: u8,
+
     quick_controls: quick_controls::QuickControls,
-    quick_styles: quick_styles::QuickStyles,
+    presets: presets::Presets,
     history: history::HistoryPanel,
     autosave: history::autosave::Autosave,
     shell: shell::Shell,
@@ -140,12 +161,11 @@ struct Editor {
     resize_canvas: Option<resize_canvas::ResizeCanvas>,
     export_dialog: Option<export_ui::Dialog>,
     export_preferences: export_ui::Preferences,
-    stamps: stamps::Panel,
+    icon_library: icon_library::Panel,
     image_transform: Option<capture_core::ImageTransform>,
     crop: Option<crop::Crop>,
     cut_out: Option<cut_out::CutOut>,
-    fill_tool: fill_tool::FillTool,
-    pixel_selection: Option<pixel_selection::PixelSelection>,
+
     color: [u8; 3],
     width: u32,
     drag_start: Option<[f32; 2]>,
@@ -167,8 +187,10 @@ struct Editor {
     allow_close: bool,
     last_title: String,
     capture_requested: bool,
-    capture_controller: capture_controller::Controller,
+    clip: clip::State,
     ocr: ocr::State,
+    privacy_review: privacy_review::State,
+    rich_text: rich_text::State,
     capture_result: Option<Receiver<capture::CaptureResult>>,
     global_capture: Option<hotkey::CaptureHotkey>,
     global_capture_status: String,
@@ -176,15 +198,30 @@ struct Editor {
     options: options::Options,
 }
 enum FileAction {
+    VideoLoaded {
+        session: Session,
+        path: PathBuf,
+    },
+    OpenPath(PathBuf),
     New,
     CreateCanvas(new_image::CanvasSpec),
     FromClipboard(Session),
-    Template { session: Session, title: String },
-    HistorySnapshot { session: Session, id: String },
+    Template {
+        session: Session,
+        title: String,
+    },
+    HistorySnapshot {
+        session: Session,
+        id: String,
+    },
     Open,
     Close,
     Capture,
     StartCapture(capture_core::capture_options::Settings),
+    StartVideo(
+        capture_core::capture_options::Settings,
+        capture::VideoRequest,
+    ),
 }
 impl Editor {
     fn window_title(&self) -> String {
@@ -221,13 +258,12 @@ impl Editor {
             .file
             .and_then(|arg| {
                 let path = std::path::absolute(&arg).unwrap_or(arg);
-                let is_project = path
-                    .extension()
-                    .is_some_and(|extension| extension == "json");
-                let result = if is_project {
-                    Document::load(&path)
+                let is_project = capture_core::project_file::is_image_project(&path)
+                    || capture_core::project_file::is_video_project(&path);
+                let result = if video_editor::supported(&path) {
+                    video_editor::load(&path).map_err(capture_core::Error::Invalid)
                 } else {
-                    Document::open_image(&path)
+                    capture_core::project_file::open(&path)
                 };
                 match result {
                     Ok(document) => {
@@ -272,13 +308,14 @@ impl Editor {
             Err(error) => (None, error),
         };
         let mut editor = Self {
+            group_feedback: None,
+            project_sessions: Default::default(),
+            video: Default::default(),
             lifecycle: lifecycle::Lifecycle::new(cc.egui_ctx.clone()),
             editing_group: None,
-            simplify_palette: vec![],
-            simplify_auto: true,
-            simplify_detail: 50,
+
             quick_controls,
-            quick_styles: quick_styles::QuickStyles::new(),
+            presets: presets::Presets::new(),
             history: history::HistoryPanel::new(),
             autosave: Default::default(),
             shell: shell::Shell::default(),
@@ -307,12 +344,12 @@ impl Editor {
             resize_canvas: None,
             export_dialog: None,
             export_preferences: Default::default(),
-            stamps: Default::default(),
+            icon_library: Default::default(),
             image_transform: None,
             crop: None,
-            pixel_selection: None,
+
             cut_out: None,
-            fill_tool: fill_tool::FillTool::default(),
+
             color: [239, 85, 55],
             width: 3,
             drag_start: None,
@@ -334,8 +371,10 @@ impl Editor {
             allow_close: false,
             last_title: String::new(),
             capture_requested: false,
-            capture_controller: Default::default(),
+            clip: Default::default(),
             ocr: Default::default(),
+            privacy_review: Default::default(),
+            rich_text: Default::default(),
             capture_result: None,
             global_capture,
             global_capture_status,
@@ -345,13 +384,34 @@ impl Editor {
         if let Some((label, origin)) = startup_history {
             editor.record_history(&label, origin);
         }
+        editor.reset_document_tools();
         editor.restore_drawing_defaults(editor.tool);
         editor
     }
     fn execute(&mut self, command: Command) {
+        let command = self.placement_command(command);
+        let motion_changes = self.changed_placement_motion(&command);
+        let live_video = matches!(&command,Command::Video{project} if self.session.document.video.as_ref().is_some_and(|old|old.same_clock(project)));
+        if !live_video {
+            self.video.pause();
+        }
+        let grouping = if let Command::GroupObjects { ids } = &command {
+            Some((
+                ids.clone(),
+                self.session
+                    .document
+                    .annotations
+                    .iter()
+                    .map(|a| a.group)
+                    .collect::<Vec<_>>(),
+            ))
+        } else {
+            None
+        };
         let remembered_ids: Vec<_> = match &command {
             Command::Add { annotation } | Command::Update { annotation } => vec![annotation.id],
             Command::AddMany { annotations }
+            | Command::AddTimed { annotations, .. }
             | Command::UpdateMany { annotations }
             | Command::MoveAndExpand { annotations, .. } => {
                 annotations.iter().map(|a| a.id).collect()
@@ -367,6 +427,25 @@ impl Editor {
         };
         match self.session.execute(command) {
             Ok(()) => {
+                for a in &motion_changes {
+                    self.remember_placement_template(a);
+                }
+                if let Some((ids, previous)) = grouping
+                    && previous
+                        != self
+                            .session
+                            .document
+                            .annotations
+                            .iter()
+                            .map(|a| a.group)
+                            .collect::<Vec<_>>()
+                {
+                    self.group_feedback = Some(group_feedback::Feedback {
+                        ids,
+                        started: std::time::Instant::now(),
+                    });
+                    self.status = "Objects grouped.".into();
+                }
                 for id in remembered_ids {
                     if let Some(annotation) = self
                         .session
@@ -401,6 +480,12 @@ impl Editor {
                         .any(|a| a.id == *id)
                 });
                 self.needs_render = true;
+                if live_video
+                    && let (Some(tx), Some(p)) =
+                        (&self.video.audio_updates, &self.session.document.video)
+                {
+                    let _ = tx.send(p.clone());
+                }
                 if history_action.is_some() {
                     self.sync_step_sequence();
                 }
@@ -421,25 +506,34 @@ impl Editor {
         self.suspend_global_capture();
         if let Some(path) = rfd::FileDialog::new()
             .set_directory(self.dialog_directory())
-            .add_filter("Images and projects", &["png", "jpg", "jpeg", "json"])
+            .add_filter(
+                "Images, videos and ClipCraft projects",
+                &["iclip", "vclip", "mp4", "png", "jpg", "jpeg"],
+            )
+            .add_filter("Image clips", &["iclip"])
+            .add_filter("JSON project source", &["json"])
             .pick_file()
         {
-            let is_project = path.extension().is_some_and(|x| x == "json");
-            let document = if is_project {
-                Document::load(&path)
-            } else {
-                Document::open_image(&path)
-            };
+            self.open_path(path);
+        }
+    }
+    fn open_path(&mut self, path: PathBuf) {
+        if video_editor::supported(&path) {
+            self.open_video(path);
+            return;
+        }
+        {
+            let is_project = capture_core::project_file::is_image_project(&path)
+                || capture_core::project_file::is_video_project(&path);
+            let document = capture_core::project_file::open(&path);
             match document.and_then(if is_project {
                 Session::new
             } else {
                 Session::unsaved
             }) {
                 Ok(session) => {
-                    self.session = session;
-                    self.quick_controls.snap_recent.clear();
-                    self.stamps.reset_document();
-                    self.view = canvas_view::CanvasView::default();
+                    self.switch_session(session, None, Some(&path));
+                    self.reset_document_tools();
                     self.remember_dialog_folder(
                         capture_core::quick_preferences::Folder::Open,
                         &path,
@@ -449,43 +543,66 @@ impl Editor {
                         .unwrap_or_default()
                         .to_string_lossy()
                         .into_owned();
-                    self.path = if is_project { Some(path) } else { None };
                     self.select_only(None);
                     self.needs_render = true;
                     self.drag_start = None;
                     self.status = "Image opened. Drag on the canvas to annotate.".into();
                     self.shell.return_to_editor();
-                    self.record_history(
-                        &history_label,
-                        if is_project {
-                            capture_core::history::Origin::Project
-                        } else {
-                            capture_core::history::Origin::Image
-                        },
-                    );
+                    if let Some(id) = self.history.active.clone() {
+                        self.autosave.reset(
+                            &self.session.document,
+                            self.history.entry(&id),
+                            &history_label,
+                            capture_core::history::Origin::Project,
+                        );
+                    } else {
+                        self.record_history(
+                            &history_label,
+                            if is_project {
+                                capture_core::history::Origin::Project
+                            } else {
+                                capture_core::history::Origin::Image
+                            },
+                        );
+                    }
                 }
                 Err(e) => self.status = e.to_string(),
             }
         }
     }
     fn save(&mut self, save_as: bool) -> bool {
+        if self.is_video() {
+            return self.save_video(save_as);
+        }
         if !self.commit_text() {
             return false;
         }
-        let path = self.path.clone().filter(|_| !save_as).or_else(|| {
-            self.suspend_global_capture();
-            let dialog = rfd::FileDialog::new()
-                .set_directory(self.dialog_folder(capture_core::quick_preferences::Folder::Project))
-                .set_file_name(
-                    self.path
-                        .as_ref()
-                        .and_then(|p| p.file_name())
-                        .map(|n| n.to_string_lossy().into_owned())
-                        .unwrap_or_else(|| "capture.capture.json".into()),
-                )
-                .add_filter("Editable capture", &["json"]);
-            dialog.save_file()
-        });
+        let path = self
+            .path
+            .clone()
+            .filter(|p| {
+                !save_as
+                    && p.extension()
+                        .is_some_and(|e| e.eq_ignore_ascii_case("iclip"))
+            })
+            .or_else(|| {
+                self.suspend_global_capture();
+                let dialog = rfd::FileDialog::new()
+                    .set_directory(
+                        self.dialog_folder(capture_core::quick_preferences::Folder::Project),
+                    )
+                    .set_file_name(
+                        self.path
+                            .as_ref()
+                            .map(|p| capture_core::project_file::image_path(p))
+                            .and_then(|p| p.file_name().map(|n| n.to_string_lossy().into_owned()))
+                            .unwrap_or_else(|| "capture.iclip".into()),
+                    )
+                    .add_filter("ClipCraft image clip", &["iclip"]);
+                dialog
+                    .save_file()
+                    .map(|p| capture_core::project_file::image_path(&p))
+            });
         if let Some(path) = path {
             match self.session.save(&path) {
                 Ok(()) => {
@@ -503,6 +620,10 @@ impl Editor {
         false
     }
     fn export(&mut self) {
+        if self.is_video() {
+            self.export_video();
+            return;
+        }
         self.begin_export(false);
     }
 
@@ -511,6 +632,13 @@ impl Editor {
     }
 
     fn copy_all_with(&mut self, write: impl FnOnce(&Document) -> Result<(), String>) {
+        if self.is_video() {
+            match self.video_frame_document().and_then(|d| write(&d)) {
+                Ok(()) => self.status = "Video frame copied.".into(),
+                Err(e) => self.status = e,
+            }
+            return;
+        }
         if !self.commit_text() {
             return;
         }
@@ -535,6 +663,7 @@ impl Editor {
 
     fn editor_shortcuts_idle(&self) -> bool {
         self.export_dialog.is_none()
+            && !self.clip.video_dialog
             && !self.history_dialog_open()
             && self.shell.backstage.is_none()
             && self.pending.is_none()
@@ -548,6 +677,8 @@ impl Editor {
             && !self.cut_out.as_ref().is_some_and(|cut| cut.busy())
             && self.capture_result.is_none()
             && !self.ocr.is_open()
+            && !self.privacy_review.open
+            && !self.rich_text.open
             && self.group_drag.is_none()
             && self.marquee.is_none()
             && self.step_placement.is_none()
@@ -592,7 +723,7 @@ impl Editor {
 
     fn request_action(&mut self, action: FileAction, ctx: &egui::Context) {
         if matches!(action, FileAction::Capture) {
-            self.show_controller_window(ctx);
+            self.show_clip(ctx);
             return;
         }
         if matches!(action, FileAction::New) {
@@ -619,6 +750,8 @@ impl Editor {
             && self.export_dialog.is_none()
             && !self.history_dialog_open()
             && !self.ocr.is_open()
+            && !self.privacy_review.open
+            && !self.rich_text.open
             && !self.ocr.busy()
             && self.pending.is_none()
             && self.autosave.action.is_none()
@@ -645,6 +778,7 @@ impl Editor {
 
     fn perform_action(&mut self, action: FileAction, ctx: &egui::Context) {
         match action {
+            FileAction::VideoLoaded { session, path } => self.accept_video(session, path),
             FileAction::New => self.new_image = Some(new_image::NewImage::default()),
             FileAction::CreateCanvas(spec) => {
                 let result = Document::canvas(spec.width, spec.height, spec.color)
@@ -656,9 +790,8 @@ impl Editor {
                         return;
                     }
                 };
-                self.session = session;
-                self.quick_controls.snap_recent.clear();
-                self.stamps.reset_document();
+                self.switch_session(session, None, None);
+                self.reset_document_tools();
                 self.view = canvas_view::CanvasView::default();
                 self.path = None;
                 self.select_only(None);
@@ -672,10 +805,10 @@ impl Editor {
                 self.record_history("New canvas", capture_core::history::Origin::Canvas);
             }
             FileAction::Open => self.open(),
+            FileAction::OpenPath(path) => self.open_path(path),
             FileAction::Template { session, title } => {
-                self.session = session;
-                self.quick_controls.snap_recent.clear();
-                self.stamps.reset_document();
+                self.switch_session(session, None, None);
+                self.reset_document_tools();
                 self.view = Default::default();
                 self.path = None;
                 self.select_only(None);
@@ -687,9 +820,8 @@ impl Editor {
                 self.record_history(&title, capture_core::history::Origin::Canvas);
             }
             FileAction::FromClipboard(session) => {
-                self.session = session;
-                self.quick_controls.snap_recent.clear();
-                self.stamps.reset_document();
+                self.switch_session(session, None, None);
+                self.reset_document_tools();
                 self.view = canvas_view::CanvasView::default();
                 self.path = None;
                 self.select_only(None);
@@ -700,9 +832,8 @@ impl Editor {
                 self.record_history("Clipboard image", capture_core::history::Origin::Clipboard);
             }
             FileAction::HistorySnapshot { session, id } => {
-                self.session = session;
-                self.quick_controls.snap_recent.clear();
-                self.stamps.reset_document();
+                self.switch_session(session, Some(&id), None);
+                self.reset_document_tools();
                 let entry = self.history.entry(&id);
                 self.autosave.reset(
                     &self.session.document,
@@ -711,30 +842,32 @@ impl Editor {
                     capture_core::history::Origin::Project,
                 );
                 self.history.active = Some(id);
-                self.view = canvas_view::CanvasView::default();
-                self.path = None;
                 self.select_only(None);
                 self.drag_start = None;
                 self.needs_render = true;
                 self.shell.return_to_editor();
                 self.status = "Library image opened. Changes save here automatically.".into();
             }
-            FileAction::Capture => self.open_capture_controller(),
-            FileAction::StartCapture(settings) => {
-                match settings.request(capture_core::capture_options::Mode::Image) {
-                    Ok(settings) => {
-                        self.capture_controller.suspended = true;
-                        ctx.send_viewport_cmd_to(
-                            egui::ViewportId::from_hash_of("clipcraft-capture-controller"),
-                            egui::ViewportCommand::Visible(false),
-                        );
-                        self.capture_controller.active = Some(settings);
-                        self.capture_requested = CAPTURE_ENABLED;
-                        ctx.request_repaint_of(egui::ViewportId::ROOT);
-                    }
-                    Err(e) => self.status = e.to_string(),
+            FileAction::Capture => self.open_clip(),
+            FileAction::StartVideo(settings, request) => {
+                if let Err(e) = request.options.validate() {
+                    self.status = e.to_string();
+                    return;
                 }
+                self.clip.pending_video = Some(request);
+                self.clip.active = Some(settings);
+                self.capture_requested = CAPTURE_ENABLED;
+                ctx.request_repaint_of(egui::ViewportId::ROOT);
             }
+            FileAction::StartCapture(settings) => match settings.request() {
+                Ok(settings) => {
+                    self.clip.pending_video = None;
+                    self.clip.active = Some(settings);
+                    self.capture_requested = CAPTURE_ENABLED;
+                    ctx.request_repaint_of(egui::ViewportId::ROOT);
+                }
+                Err(e) => self.status = e.to_string(),
+            },
             FileAction::Close => {
                 self.allow_close = true;
                 ctx.send_viewport_cmd(egui::ViewportCommand::Close);
@@ -743,6 +876,21 @@ impl Editor {
     }
 
     fn receive_capture(&mut self) {
+        let mode = self
+            .clip
+            .scroll_mode
+            .as_ref()
+            .and_then(|rx| rx.try_iter().last());
+        if let Some(automatic) = mode {
+            let mut settings = self
+                .quick_controls
+                .capture_for(capture_core::capture_options::Selection::Scrolling);
+            settings.scroll_automatic = automatic;
+            self.quick_controls.remember_capture(settings);
+            if let Some(active) = &mut self.clip.active {
+                active.scroll_automatic = automatic;
+            }
+        }
         let Some(receiver) = &self.capture_result else {
             return;
         };
@@ -754,10 +902,23 @@ impl Editor {
             }
         };
         self.capture_result = None;
-        let settings = self.capture_controller.active.take().unwrap_or_default();
-        self.capture_controller.suspended = false;
-        self.capture_controller.restore_focus =
-            Some(settings.preview && matches!(&result, Ok(Some(_))));
+        if let Some(automatic) = self
+            .clip
+            .scroll_mode
+            .take()
+            .and_then(|rx| rx.try_iter().last())
+        {
+            let mut settings = self
+                .quick_controls
+                .capture_for(capture_core::capture_options::Selection::Scrolling);
+            settings.scroll_automatic = automatic;
+            self.quick_controls.remember_capture(settings);
+            if let Some(active) = &mut self.clip.active {
+                active.scroll_automatic = automatic;
+            }
+        }
+        let settings = self.clip.active.take().unwrap_or_default();
+        self.clip.restore_focus = Some(!matches!(&result, Ok(Some(_))) || settings.preview);
         match result {
             Ok(Some(captured)) => {
                 self.accept_capture_result(captured, settings, clipboard::copy);
@@ -773,32 +934,33 @@ impl Editor {
         }
         let mut proceed = false;
         let mut cancel = false;
-        egui::Modal::new(egui::Id::unique("unsaved_changes")).show(ctx, |ui| {
-            ui.heading("Keep your changes");
-            ui.label("Automatic Library saving could not finish. Your document is still open.");
-            ui.label("Save an editable project to keep your annotations.");
-            ui.label("Exporting a PNG does not save the editable project.");
-            ui.add_space(12.0);
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                cancel = ui
-                    .add(crate::controls::dialog_button("Cancel", false))
-                    .clicked();
-                if ui
-                    .add(crate::controls::dialog_button("Discard changes", false))
-                    .clicked()
-                {
-                    proceed = true;
-                }
-                if ui
-                    .add(crate::controls::dialog_button("Save and continue", true))
-                    .clicked()
-                    && self.save(false)
-                {
-                    proceed = true;
-                }
+        let modal =
+            crate::controls::Modal::new(egui::Id::unique("unsaved_changes")).show(ctx, |ui| {
+                ui.heading("Keep your changes");
+                ui.label("Automatic Library saving could not finish. Your document is still open.");
+                ui.label("Save an editable project to keep your annotations.");
+                ui.label("Exporting a PNG does not save the editable project.");
+                ui.add_space(12.0);
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    cancel = ui
+                        .add(crate::controls::dialog_button("Cancel", false))
+                        .clicked();
+                    if ui
+                        .add(crate::controls::dialog_button("Discard changes", false))
+                        .clicked()
+                    {
+                        proceed = true;
+                    }
+                    if ui
+                        .add(crate::controls::dialog_button("Save and continue", true))
+                        .clicked()
+                        && self.save(false)
+                    {
+                        proceed = true;
+                    }
+                });
             });
-        });
-        if cancel || ctx.input_mut(|i| i.key_pressed(egui::Key::Escape)) {
+        if cancel || modal.should_close() || ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
             self.pending = None;
         } else if proceed && let Some(action) = self.pending.take() {
             self.perform_action(action, ctx);
@@ -812,25 +974,38 @@ impl eframe::App for Editor {
             self.capture_requested = false;
             self.status = format!(
                 "{} capture… Escape or right-click cancels selection.",
-                self.capture_controller
+                self.clip
                     .active
                     .as_ref()
                     .map(|s| s.selection.label())
                     .unwrap_or("Region")
             );
+            let (mode_tx, mode_rx) = std::sync::mpsc::channel();
+            self.clip.scroll_mode = Some(mode_rx);
             self.capture_result = Some(capture::start(
                 frame,
                 ctx.clone(),
-                self.capture_controller.active.clone().unwrap_or_default(),
+                self.clip.active.clone().unwrap_or_default(),
                 self.history.root(),
+                mode_tx,
+                self.clip.pending_video.take(),
             ));
             ctx.request_repaint_after(std::time::Duration::from_millis(100));
         }
     }
 
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        if ui.input(|i| i.pointer.primary_pressed()) {
+            self.session.begin_gesture();
+        }
+        if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+            self.session.cancel_edit_gesture();
+            self.needs_render = true;
+        }
+        self.video_tick(ui.ctx());
         chrome::record_ui_geometry(ui);
         let ctx = ui.ctx().clone();
+        controls::prepare_dialog_keys(&ctx);
         self.finish_text_on_outside_click(&ctx);
         self.prepare_property_input(&ctx);
         self.process_keybind_input(&ctx);
@@ -879,10 +1054,14 @@ impl eframe::App for Editor {
         self.show_resize(&ctx);
         self.show_resize_canvas(&ctx);
         self.show_export(&ctx, Some(_frame));
+        self.show_video_export(&ctx);
+        self.show_still_frame(&ctx);
+        self.show_effects_workstation(&ctx);
+        self.show_voiceover_recorder(&ctx);
         self.show_page_setup(&ctx);
         self.show_image_transform(&ctx);
         self.editor_keybind_input(&ctx);
-        self.pixel_selection_shortcuts(&ctx);
+
         self.shared_format_shortcuts(&ctx);
         self.clipboard_shortcuts(&ctx);
         self.pixel_grid_shortcut(&ctx);
@@ -930,7 +1109,7 @@ impl eframe::App for Editor {
                 self.request_action(FileAction::Open, &ctx);
             }
             let canvas_owns_input = self.pending.is_none()
-                && !self.shell.annotations_hidden
+                && (!self.shell.annotations_hidden || self.is_video())
                 && self.template_picker.is_none()
                 && self.new_image.is_none()
                 && self.text_draft.is_none()
@@ -951,7 +1130,7 @@ impl eframe::App for Editor {
                 self.execute(command);
             }
             if self.text_draft.is_none()
-                && !self.shell.annotations_hidden
+                && (!self.shell.annotations_hidden || self.is_video())
                 && self.shell.canvas_enabled()
                 && !ctx.egui_wants_keyboard_input()
             {
@@ -963,7 +1142,7 @@ impl eframe::App for Editor {
                     self.view.apply(action, None);
                     ctx.request_repaint();
                 }
-                if self.selected.is_some() {
+                if self.selected.is_some() || self.has_video_selection() {
                     if ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Delete)) {
                         self.delete_selection();
                     } else {
@@ -987,9 +1166,7 @@ impl eframe::App for Editor {
                         }
                     }
                 }
-                if self.pixel_selection.is_none()
-                    && !self.fill_tool.active
-                    && self.cut_out.is_none()
+                if self.cut_out.is_none()
                     && self.crop.is_none()
                     && ctx.input_mut(|i| {
                         shortcuts::consume_exact(i, egui::Modifiers::COMMAND, egui::Key::A)
@@ -1009,13 +1186,20 @@ impl eframe::App for Editor {
             self.close_editor_window(&ctx);
         }
         self.confirm_unsaved(&ctx);
+        self.video_capture_dialog(&ctx);
         self.poll_library_import();
         self.show_history_dialog(&ctx);
-        self.show_capture_controller(&ctx);
+        self.presets.reusable.show(&ctx);
         #[cfg(windows)]
         brand::sync_window_icons(self.hotkey_owner);
         self.show_ocr(&ctx);
+        self.show_privacy_review(&ctx);
+        self.show_rich_text(&ctx);
+        if ctx.input(|i| !i.pointer.primary_down() || !i.focused) {
+            self.session.finish_gesture();
+        }
         chrome::resize_edges(&ctx);
+        gesture_input::latch_cursor(&ctx);
         let title = self.window_title();
         if title != self.last_title {
             ctx.send_viewport_cmd(egui::ViewportCommand::Title(title.clone()));

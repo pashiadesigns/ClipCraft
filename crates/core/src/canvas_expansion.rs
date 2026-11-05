@@ -11,6 +11,7 @@ pub struct MovePlan {
     base: Option<[u32; 4]>,
     pub annotations: Vec<Annotation>,
     original_dimensions: [u32; 2],
+    moved_ids: BTreeSet<u64>,
 }
 
 /// Translation without clamping. Only a validated MovePlan may enter a document.
@@ -49,6 +50,9 @@ impl Document {
     /// Reconcile remaining annotation bounds after edits/deletion, without
     /// touching explicitly sized canvas or guessing provenance in old files.
     pub(crate) fn fit_automatic_canvas(&mut self) -> Result<()> {
+        if self.video.is_some() || !self.canvas_behavior.dynamic_expansion {
+            return Ok(());
+        }
         if self.auto_canvas_base.is_some()
             || self
                 .annotations
@@ -97,6 +101,13 @@ impl Document {
             }
         }
         for a in &candidate.annotations {
+            if self.video.is_some()
+                || !self.canvas_behavior.dynamic_expansion
+                || self.canvas_behavior.held.contains(&a.id)
+                || self.guide.as_ref().is_some_and(|g| g.pages.is_some())
+            {
+                continue;
+            }
             let (mut lo, mut hi) = a.bounds();
             if let Some((shadow_lo, shadow_hi)) = crate::shadow::bounds(a) {
                 for axis in 0..2 {
@@ -114,7 +125,7 @@ impl Document {
                 | crate::Kind::Rectangle
                 | crate::Kind::Ellipse
                 | crate::Kind::Polygon
-                | crate::Kind::Callout => a.width as f32 * 0.5 + 1.0,
+                | crate::Kind::Callout => crate::line_style::stroke_reach(a) + 1.0,
                 _ => 0.0,
             };
             for axis in 0..2 {
@@ -147,12 +158,17 @@ impl Document {
             (shifted_base != [0, 0, dimensions[0], dimensions[1]]).then_some(shifted_base);
         candidate.auto_canvas_base = automatic;
         if automatic.is_some() {
-            candidate.version = candidate.version.max(4);
+            candidate.version = crate::MAX_PROJECT_VERSION;
         }
         candidate.width = dimensions[0];
         candidate.height = dimensions[1];
         candidate.annotations = translated(&candidate.annotations, offset.map(|v| v as f32))?;
+        candidate.canvas_behavior.allow_overflow |=
+            self.guide.as_ref().is_some_and(|g| g.pages.is_some());
         candidate.promote_features();
+        if let Some(v) = &mut candidate.video {
+            v.sync(&candidate.annotations);
+        }
         candidate.validate()?;
         Ok(MovePlan {
             dimensions,
@@ -160,6 +176,7 @@ impl Document {
             annotations: candidate.annotations,
             original_dimensions: [self.width, self.height],
             base: automatic,
+            moved_ids: ids,
         })
     }
 }
@@ -202,17 +219,23 @@ impl MovePlan {
                 &self.padded_base(document)?,
             )?));
             result.source_size = Some(document.source_size.unwrap_or(self.original_dimensions));
-            result.version = result.version.max(2);
+            result.version = crate::MAX_PROJECT_VERSION;
         }
         result.width = self.dimensions[0];
         result.height = self.dimensions[1];
         result.annotations = self.annotations.clone();
+        result.canvas_behavior.allow_overflow |=
+            result.guide.as_ref().is_some_and(|g| g.pages.is_some());
+        result.committed_object_moves(&self.moved_ids);
         if let Some(guide) = &mut result.guide {
             guide.top += self.offset[1] as f32;
         }
         result.auto_canvas_base = self.base;
         if self.base.is_some() {
-            result.version = result.version.max(4);
+            result.version = crate::MAX_PROJECT_VERSION;
+        }
+        if let Some(v) = &mut result.video {
+            v.sync(&result.annotations);
         }
         result.validate()?;
         Ok(result)

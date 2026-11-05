@@ -6,6 +6,8 @@ pub(super) struct CutOut {
     origin: Option<u32>,
     band: Option<[u32; 2]>,
     review: bool,
+    all_pages: bool,
+    page: usize,
 }
 impl CutOut {
     pub(super) fn cursor(&self) -> egui::CursorIcon {
@@ -33,7 +35,7 @@ impl CutOut {
 impl Editor {
     pub(super) fn begin_cut_out(&mut self) {
         self.cancel_gesture();
-        self.fill_tool.active = false;
+
         self.select_only(None);
         self.tool = None;
         self.cut_out = Some(CutOut {
@@ -41,6 +43,8 @@ impl Editor {
             origin: None,
             band: None,
             review: false,
+            all_pages: false,
+            page: 0,
         });
         self.status="Cut Out: drag across a horizontal strip. The joined image previews live; release applies or reviews flattening.".into();
     }
@@ -49,11 +53,28 @@ impl Editor {
             return;
         };
         let Some([start, end]) = cut.band else { return };
-        let result = self.session.execute(Command::CutOut {
-            axis: cut.axis,
-            start,
-            end,
-        });
+        let command = if self
+            .session
+            .document
+            .guide
+            .as_ref()
+            .is_some_and(|g| g.pages.is_some())
+        {
+            Command::CutOutPages {
+                axis: cut.axis,
+                start,
+                end,
+                page: cut.page,
+                all_pages: cut.all_pages,
+            }
+        } else {
+            Command::CutOut {
+                axis: cut.axis,
+                start,
+                end,
+            }
+        };
+        let result = self.session.execute(command);
         match result {
             Ok(()) => {
                 self.select_only(None);
@@ -74,9 +95,9 @@ impl Editor {
         crate::property_layout::section_help(
             ui,
             "Cut Out Properties",
-            "Drag in either direction. The remaining sides join live. Release keeps one edit; images with objects require flattening review. Undo restores editability; original pixels remain in the project. Torn, wave and zigzag edges and reference preset matching are planned.",
+            "Drag a strip on the page to cut. Choose only that page or the same strip across all pages. Cut pages become images; other pages stay editable. Page Setup headers and footers remain live. Undo restores the original layout and objects.",
         );
-        crate::shell::badge(ui, self.shell.badges, "EDIT-044");
+
         let Some(cut) = self.cut_out.as_mut() else {
             return;
         };
@@ -88,8 +109,17 @@ impl Editor {
         if previous != cut.axis {
             cut.reset();
         }
+        if crate::controls::toggle(ui, &mut cut.all_pages, "Cut across all pages").changed() {
+            cut.reset();
+        }
+        ui.label(if cut.all_pages {
+            "Cut across all pages"
+        } else {
+            "Cut out only selected page"
+        });
+        ui.small("Start dragging on the page you want to cut.");
         ui.label("Straight edge");
-        let size = [self.session.document.width, self.session.document.height];
+        let (_, size) = page_geometry(&self.session.document, cut.page);
         if let Some([start, end]) = cut.band {
             if let Ok(new) = cut.axis.output_size(size, start, end) {
                 ui.label(format!(
@@ -106,8 +136,8 @@ impl Editor {
         if cut.review {
             ui.separator();
             ui.label(format!(
-                "This merges {} editable objects into the image.",
-                self.session.document.annotations.len()
+                "This merges objects on {} into images. Other pages and live headers/footers remain editable.",
+                if cut.all_pages { "all pages".into() } else { format!("page {}",cut.page + 1) }
             ));
             apply = ui.button("Flatten and cut out").clicked();
             if ui.button("Cancel cut out").clicked() {
@@ -116,7 +146,7 @@ impl Editor {
             }
         }
         ui.separator();
-        crate::shell::badge(ui, self.shell.badges, "EDIT-016");
+
         if apply {
             self.apply_cut_out();
         }
@@ -130,17 +160,12 @@ impl Editor {
         interactive: bool,
         texture: egui::TextureId,
     ) {
-        let size = [self.session.document.width, self.session.document.height];
+        let document = &self.session.document;
         let Some(cut) = self.cut_out.as_mut() else {
             return;
         };
         let axis = cut.axis.dimension();
         let visible = transform.image.intersect(transform.viewport);
-        let coordinate = |p: egui::Pos2| {
-            transform.image_point(p)[axis]
-                .round()
-                .clamp(0.0, size[axis] as f32) as u32
-        };
         let mut apply = false;
         if interactive {
             if ui.input(|i| !i.focused || i.key_pressed(egui::Key::Escape)) {
@@ -154,12 +179,20 @@ impl Editor {
                         .input(|i| i.pointer.press_origin())
                         .filter(|p| visible.contains(*p))
                 {
-                    cut.origin = Some(coordinate(pos));
+                    let point = transform.image_point(pos);
+                    cut.page = document.guide.as_ref().map_or(0, |g| g.page_at(point));
+                    let (offset, size) = page_geometry(document, cut.page);
+                    if (0..2)
+                        .all(|i| point[i] >= offset[i] && point[i] <= offset[i] + size[i] as f32)
+                    {
+                        cut.origin = Some(coordinate(transform, pos, offset, size, axis));
+                    }
                 }
                 if let Some(origin) = cut.origin
                     && let Some(pos) = response.interact_pointer_pos()
                 {
-                    let end = coordinate(pos);
+                    let (offset, size) = page_geometry(document, cut.page);
+                    let end = coordinate(transform, pos, offset, size, axis);
                     cut.band = Some([origin.min(end), origin.max(end)]);
                     ui.ctx().request_repaint();
                 }
@@ -167,31 +200,82 @@ impl Editor {
                     && cut.origin.take().is_some()
                 {
                     if let Some([start, end]) = cut.band
-                        && cut.axis.output_size(size, start, end).is_ok()
+                        && cut
+                            .axis
+                            .output_size(page_geometry(document, cut.page).1, start, end)
+                            .is_ok()
                     {
-                        cut.review = !self.session.document.annotations.is_empty();
-                        apply = !cut.review;
+                        let validation = if document
+                            .guide
+                            .as_ref()
+                            .is_some_and(|g| g.pages.is_some())
+                        {
+                            document
+                                .cut_out_page_layout(cut.axis, start, end, cut.page, cut.all_pages)
+                                .map(|_| ())
+                        } else {
+                            Ok(())
+                        };
+                        if let Err(error) = validation {
+                            self.status = error.to_string();
+                            cut.reset();
+                        } else {
+                            cut.review = !document.annotations.is_empty();
+                            apply = !cut.review;
+                        }
                     } else {
                         cut.reset();
                     }
                 }
             }
         }
-        if let Some([start, end]) = cut.band
-            && let Ok(new) = cut.axis.output_size(size, start, end)
-        {
+        if let Some([start, end]) = cut.band {
             // Preview uses two slices of the already rendered texture, without
             // raster encodes or history writes on pointer movement. Coordinates
             // remain anchored to the original image throughout the gesture.
-            paint_joined_preview(ui, transform, texture, size, new, cut.axis, [start, end]);
+            let count = document.guide.as_ref().map_or(1, |g| g.page_count());
+            for page in 0..count {
+                if !cut.all_pages && page != cut.page {
+                    continue;
+                }
+                let (offset, size) = page_geometry(document, page);
+                if let Ok(new) = cut.axis.output_size(size, start, end) {
+                    let image = egui::Rect::from_min_size(
+                        transform.screen_point(offset),
+                        egui::vec2(size[0] as f32, size[1] as f32) * transform.scale,
+                    );
+                    let uv = egui::Rect::from_min_max(
+                        egui::pos2(
+                            offset[0] / document.width as f32,
+                            offset[1] / document.height as f32,
+                        ),
+                        egui::pos2(
+                            (offset[0] + size[0] as f32) / document.width as f32,
+                            (offset[1] + size[1] as f32) / document.height as f32,
+                        ),
+                    );
+                    paint_joined_preview(
+                        ui,
+                        Transform { image, ..transform },
+                        (texture, uv),
+                        size,
+                        new,
+                        cut.axis,
+                        [start, end],
+                    );
+                }
+            }
         } else if response.hovered()
             && let Some(pos) = response.hover_pos()
         {
-            let n = coordinate(pos) as f32;
-            let mut a = [0.0, 0.0];
-            let mut b = [size[0] as f32, size[1] as f32];
-            a[axis] = n;
-            b[axis] = n;
+            let point = transform.image_point(pos);
+            let page = document.guide.as_ref().map_or(0, |g| g.page_at(point));
+            let (offset, size) = page_geometry(document, page);
+            let n = coordinate(transform, pos, offset, size, axis) as f32;
+            let mut a = offset;
+            let mut b = [offset[0] + size[0] as f32, offset[1] + size[1] as f32];
+            a[axis] += n;
+            b[axis] = a[axis];
             ui.painter().with_clip_rect(visible).line_segment(
                 [transform.screen_point(a), transform.screen_point(b)],
                 egui::Stroke::new(1.0, egui::Color32::LIGHT_BLUE),
@@ -207,7 +291,7 @@ impl Editor {
 fn paint_joined_preview(
     ui: &mut egui::Ui,
     transform: Transform,
-    texture: egui::TextureId,
+    (texture, source_uv): (egui::TextureId, egui::Rect),
     size: [u32; 2],
     new: [u32; 2],
     axis: CutAxis,
@@ -256,7 +340,10 @@ fn paint_joined_preview(
         p.image(
             texture,
             dest,
-            egui::Rect::from_min_max(egui::pos2(uvlo[0], uvlo[1]), egui::pos2(uvhi[0], uvhi[1])),
+            egui::Rect::from_min_max(
+                source_uv.min + egui::vec2(uvlo[0], uvlo[1]) * source_uv.size(),
+                source_uv.min + egui::vec2(uvhi[0], uvhi[1]) * source_uv.size(),
+            ),
             egui::Color32::WHITE,
         );
     }
@@ -268,6 +355,28 @@ fn paint_joined_preview(
         [transform.screen_point(a), transform.screen_point(b)],
         egui::Stroke::new(1.0, egui::Color32::LIGHT_BLUE),
     );
+}
+
+fn page_geometry(document: &crate::Document, page: usize) -> ([f32; 2], [u32; 2]) {
+    let size = [document.width, document.height];
+    document
+        .guide
+        .as_ref()
+        .filter(|g| g.pages.is_some())
+        .map_or(([0.; 2], size), |g| {
+            (g.page_offset(page), g.page_size(page, size))
+        })
+}
+fn coordinate(
+    transform: Transform,
+    p: egui::Pos2,
+    offset: [f32; 2],
+    size: [u32; 2],
+    axis: usize,
+) -> u32 {
+    (transform.image_point(p)[axis] - offset[axis])
+        .round()
+        .clamp(0., size[axis] as f32) as u32
 }
 
 #[cfg(test)]

@@ -9,33 +9,7 @@ pub(super) fn show(ui: &mut egui::Ui, a: &mut Annotation) {
     let before = style;
     ui.horizontal(|ui| {
         endpoint(ui, "Start", &mut style.start);
-        let response = egui::ComboBox::from_id_salt("line-pattern")
-            .width(96.)
-            .selected_text(" ")
-            .show_ui(ui, |ui| {
-                for pattern in Pattern::ALL {
-                    let r = ui.selectable_value(
-                        &mut style.pattern,
-                        pattern,
-                        format!("           {}", pattern.label()),
-                    );
-                    paint_pattern(
-                        ui,
-                        r.rect.with_max_x(r.rect.left() + 49.).shrink(6.),
-                        pattern,
-                    );
-                }
-            })
-            .response
-            .on_hover_text(format!("Line pattern: {}", style.pattern.label()));
-        paint_pattern(
-            ui,
-            response
-                .rect
-                .with_max_x(response.rect.right() - 20.)
-                .shrink(6.),
-            style.pattern,
-        );
+        pattern_picker(ui, &mut style.pattern);
         endpoint(ui, "End", &mut style.end);
     });
     ui.add_enabled_ui(style.start.sized(), |ui| {
@@ -68,6 +42,47 @@ pub(super) fn show(ui: &mut egui::Ui, a: &mut Annotation) {
         }
         a.line_style = Some(style);
     }
+}
+
+pub(super) fn outline(ui: &mut egui::Ui, a: &mut Annotation) {
+    let mut pattern = a.line_style.map_or(Pattern::Solid, |s| s.pattern);
+    let before = pattern;
+    ui.horizontal(|ui| {
+        property_layout::field_label(ui, "Outline style", 24.);
+        pattern_picker(ui, &mut pattern);
+    });
+    if pattern != before {
+        a.line_style = (pattern != Pattern::Solid).then_some(Style {
+            pattern,
+            ..Style::for_kind(a.kind)
+        });
+    }
+}
+fn pattern_picker(ui: &mut egui::Ui, pattern: &mut Pattern) {
+    let response = egui::ComboBox::from_id_salt("line-pattern")
+        .width(96.)
+        .selected_text(" ")
+        .show_ui(ui, |ui| {
+            for choice in Pattern::ALL {
+                let r =
+                    ui.selectable_value(pattern, choice, format!("           {}", choice.label()));
+                paint_pattern(
+                    ui,
+                    r.rect.with_max_x(r.rect.left() + 49.).shrink(6.),
+                    choice,
+                );
+            }
+        })
+        .response
+        .on_hover_text(format!("Line pattern: {}", pattern.label()));
+    paint_pattern(
+        ui,
+        response
+            .rect
+            .with_max_x(response.rect.right() - 20.)
+            .shrink(6.),
+        *pattern,
+    );
 }
 
 fn endpoint(ui: &mut egui::Ui, label: &str, value: &mut Endpoint) {
@@ -119,10 +134,13 @@ pub(super) fn sample(kind: Endpoint, start: bool) -> Annotation {
         color: [255; 4],
         width: 3,
         corner_radius: 0.,
-        analysis: None,
+
+        focus: None,
+
         highlighter_rect: false,
         group: None,
         rotation_degrees: 0.,
+        mirror_x: false,
         fill: None,
         text: None,
         points: vec![],
@@ -196,6 +214,19 @@ pub(super) fn preview(
 }
 fn paint_pattern(ui: &egui::Ui, rect: egui::Rect, pattern: Pattern) {
     let stroke = egui::Stroke::new(2.0, ui.visuals().text_color());
+    if pattern == Pattern::Wavy {
+        let points = (0..=48)
+            .map(|i| {
+                let t = i as f32 / 48.;
+                egui::pos2(
+                    rect.left() + t * rect.width(),
+                    rect.center().y + (t * std::f32::consts::TAU * 3.).sin() * 2.,
+                )
+            })
+            .collect();
+        ui.painter().add(egui::Shape::line(points, stroke));
+        return;
+    }
     let dash = pattern.dashes(1.5);
     if dash.is_empty() {
         ui.painter()

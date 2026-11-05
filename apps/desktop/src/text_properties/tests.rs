@@ -25,7 +25,6 @@ fn fixture(ctx: &egui::Context) -> Editor {
     e.select_only(Some(a.id));
     e.click_selection(Some(b.id), true);
     e.tool = Some(crate::Kind::Text);
-    e.shell.badges = false;
     e
 }
 fn frame(ctx: &egui::Context, e: &mut Editor, events: Vec<Event>) -> PaintedOutput {
@@ -75,7 +74,7 @@ fn text_button_pos(ctx: &egui::Context, label: &str) -> Pos2 {
 }
 
 #[test]
-fn text_outline_toggle_and_slider_preview_batch_and_inline_ink_without_extra_undo() {
+fn text_outline_width_and_slider_preview_batch_and_inline_ink_without_extra_undo() {
     let ctx = egui::Context::default();
     crate::shell::configure(&ctx);
     let mut e = fixture(&ctx);
@@ -84,7 +83,7 @@ fn text_outline_toggle_and_slider_preview_batch_and_inline_ink_without_extra_und
     frame(&ctx, &mut e, vec![]);
     let toggle = ctx
         .data(|d| {
-            d.get_temp::<Rect>(egui::Id::unique("text-outline-toggle"))
+            d.get_temp::<Rect>(egui::Id::unique("text-outline-size"))
                 .unwrap()
         })
         .center();
@@ -96,7 +95,10 @@ fn text_outline_toggle_and_slider_preview_batch_and_inline_ink_without_extra_und
             .iter()
             .all(|a| a.text.as_ref().unwrap().outline.is_some())
     );
-    assert_eq!(e.session.document.version, 12);
+    assert_eq!(
+        e.session.document.version,
+        capture_core::MAX_PROJECT_VERSION
+    );
     e.execute(crate::Command::Undo);
     assert_eq!(e.session.document.annotations, original);
     assert!(!e.session.can_undo());
@@ -329,10 +331,9 @@ fn object_text_entry_routes_to_text_properties_and_back_commits_one_edit() {
             .clone();
         a.rotation_degrees = 27.0;
         a.text.get_or_insert_with(Default::default).bold = false;
-        e.session.document.version = 3;
+        e.session.document.version = capture_core::MAX_PROJECT_VERSION;
         e.session.document.annotations = vec![a.clone()];
         e.tool = Some(kind);
-        e.shell.badges = false;
         e.select_only(Some(a.id));
         e.shell.property_tab = PropertyTab::Objects;
         e.begin_text_edit();
@@ -424,10 +425,7 @@ fn regular_text_resize_fit_can_be_chosen_from_actual_properties_popup() {
     e.select_only(Some(id));
     frame(&ctx, &mut e, vec![]);
     let output = frame(&ctx, &mut e, vec![]);
-    let advanced = crate::color_widgets::tests::text_rect(&output.shapes, "Advanced")
-        .unwrap()
-        .center();
-    click(&ctx, &mut e, advanced);
+    assert!(crate::color_widgets::tests::text_rect(&output.shapes, "Advanced").is_none());
     let output = frame(&ctx, &mut e, vec![]);
     let combo = crate::color_widgets::tests::text_rect(
         &output.shapes,

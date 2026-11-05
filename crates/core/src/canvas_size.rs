@@ -159,7 +159,7 @@ impl Document {
         }
         self.raster = Some(raster);
         self.auto_canvas_base = None;
-        self.version = self.version.max(2);
+        self.version = crate::MAX_PROJECT_VERSION;
         Ok(())
     }
 }

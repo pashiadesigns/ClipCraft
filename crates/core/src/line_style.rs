@@ -66,15 +66,26 @@ pub enum Pattern {
     DashDot,
     LongDash,
     DashDotDot,
+    Wavy,
+}
+/// Conservative outline reach shared by viewport, shadows and canvas expansion.
+pub fn stroke_reach(a: &Annotation) -> f32 {
+    a.width as f32
+        * if a.line_style.is_some_and(|s| s.pattern == Pattern::Wavy) {
+            1.0
+        } else {
+            0.5
+        }
 }
 impl Pattern {
-    pub const ALL: [Self; 6] = [
+    pub const ALL: [Self; 7] = [
         Self::Solid,
         Self::Dashed,
         Self::Dotted,
         Self::DashDot,
         Self::LongDash,
         Self::DashDotDot,
+        Self::Wavy,
     ];
     pub fn label(self) -> &'static str {
         match self {
@@ -84,11 +95,12 @@ impl Pattern {
             Self::DashDot => "Dash-dot",
             Self::LongDash => "Long dash",
             Self::DashDotDot => "Dash-dot-dot",
+            Self::Wavy => "Wavy",
         }
     }
     pub fn dashes(self, width: f64) -> Vec<f64> {
         let units: &[f64] = match self {
-            Self::Solid => &[],
+            Self::Solid | Self::Wavy => &[],
             Self::Dashed => &[4., 3.],
             Self::Dotted => &[1., 2.],
             Self::DashDot => &[5., 2., 1., 2.],
@@ -96,6 +108,44 @@ impl Pattern {
             Self::DashDotDot => &[5., 2., 1., 2., 1., 2.],
         };
         units.iter().map(|n| n * width.max(1.)).collect()
+    }
+
+    /// Bounded, deterministic vector waves. Preserve corners, closure and tips;
+    /// the fill and line endpoints retain their original geometry.
+    pub fn path(self, path: &BezPath, width: f64) -> BezPath {
+        if self != Self::Wavy {
+            return path.clone();
+        }
+        let mut out = BezPath::new();
+        let mut last = None;
+        for seg in path.segments() {
+            let start = seg.start();
+            if last != Some(start) {
+                out.move_to(start);
+            }
+            let length = seg.arclen(0.1);
+            let cycles = (length / (width * 8.).max(12.)).round().clamp(1., 128.);
+            let samples = (cycles as usize * 12).clamp(12, 1536);
+            let amplitude = (width * 0.45).min(length * 0.06);
+            for i in 1..=samples {
+                let t = i as f64 / samples as f64;
+                let point = seg.eval(t);
+                let tangent = seg.eval((t + 0.0001).min(1.)) - seg.eval((t - 0.0001).max(0.));
+                let offset = if i == samples || tangent.hypot() < 1e-9 {
+                    Vec2::ZERO
+                } else {
+                    Vec2::new(-tangent.y, tangent.x) / tangent.hypot()
+                        * (std::f64::consts::TAU * cycles * t).sin()
+                        * amplitude
+                };
+                out.line_to(point + offset);
+            }
+            last = Some(seg.end());
+        }
+        if matches!(path.elements().last(), Some(PathEl::ClosePath)) {
+            out.close_path();
+        }
+        out
     }
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -106,8 +156,12 @@ pub enum Curve {
     Bezier,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
 pub struct Style {
+    /// Transient playback sampling only; never stored in editable projects.
+    #[serde(skip)]
+    pub reveal: Option<f64>,
+    #[serde(skip)]
+    pub reveal_from_end: bool,
     pub start: Endpoint,
     pub end: Endpoint,
     pub start_size: f32,
@@ -118,8 +172,32 @@ pub struct Style {
     pub bend: f32,
 }
 impl Style {
+    pub fn validate_for(self, kind: Kind) -> Result<()> {
+        self.validate()?;
+        if matches!(
+            kind,
+            Kind::Line | Kind::Arrow | Kind::Pen | Kind::Highlighter
+        ) {
+            return Ok(());
+        }
+        if matches!(
+            kind,
+            Kind::Rectangle | Kind::Ellipse | Kind::Polygon | Kind::Callout
+        ) && (Self {
+            pattern: Pattern::Solid,
+            ..self
+        }) == Self::for_kind(kind)
+        {
+            return Ok(());
+        }
+        Err(Error::Invalid(
+            "Line settings require Lines; shape outlines support patterns only".into(),
+        ))
+    }
     pub fn for_kind(kind: Kind) -> Self {
         Self {
+            reveal: None,
+            reveal_from_end: false,
             start: Endpoint::Round,
             end: if kind == Kind::Arrow {
                 Endpoint::OpenArrow
@@ -159,6 +237,7 @@ pub struct Head {
     pub path: BezPath,
     pub outline: Option<f64>,
 }
+
 pub struct Geometry {
     pub shaft: BezPath,
     pub full_shaft: BezPath,
@@ -299,7 +378,41 @@ fn shaft(a: &Annotation, style: Style) -> BezPath {
 }
 pub fn geometry(a: &Annotation) -> Geometry {
     let style = a.line_style.unwrap_or_else(|| Style::for_kind(a.kind));
-    let full = shaft(a, style);
+    let mut full = shaft(a, style);
+    if let Some(progress) = style.reveal {
+        let length = full.segments().map(|s| s.arclen(1e-3)).sum::<f64>();
+        let mut remaining = length * progress.clamp(0., 1.);
+        let mut skip = if style.reveal_from_end {
+            length - remaining
+        } else {
+            0.
+        };
+        let mut partial = BezPath::new();
+        for segment in full.segments() {
+            if remaining <= 0. {
+                break;
+            }
+            let length = segment.arclen(1e-3);
+            if skip >= length {
+                skip -= length;
+                continue;
+            }
+            let start = segment.inv_arclen(skip, 1e-3);
+            let end = segment.inv_arclen((skip + remaining).min(length), 1e-3);
+            let segment = segment.subsegment(start..end);
+            if partial.is_empty() {
+                partial.move_to(segment.start());
+            }
+            match segment {
+                PathSeg::Line(l) => partial.line_to(l.p1),
+                PathSeg::Quad(q) => partial.quad_to(q.p1, q.p2),
+                PathSeg::Cubic(c) => partial.curve_to(c.p1, c.p2, c.p3),
+            }
+            remaining -= length - skip;
+            skip = 0.;
+        }
+        full = partial;
+    }
     if a.line_style.is_none() {
         let heads = if a.kind == Kind::Arrow {
             a.arrow_head()
@@ -376,8 +489,8 @@ pub fn geometry(a: &Annotation) -> Geometry {
         }
     }
     Geometry {
-        shaft: path,
-        full_shaft: full,
+        shaft: style.pattern.path(&path, a.width.into()),
+        full_shaft: style.pattern.path(&full, a.width.into()),
         heads,
     }
 }

@@ -46,7 +46,7 @@ impl State {
                                 ui.visuals_mut().selection.bg_fill=egui::Color32::from_rgb(160,205,245);
                                 ui.visuals_mut().selection.stroke=egui::Stroke::new(1.,egui::Color32::from_rgb(10,50,100));
                                 egui::ScrollArea::vertical().auto_shrink([false,false]).max_height(page_height).show(ui,|ui| {
-                                    let response=ui.add(egui::TextEdit::multiline(&mut result.text).id(egui::Id::unique("ocr-editor")).frame(egui::Frame::NONE)
+                                    let response=ui.add(crate::unicode_input::TextEdit::multiline(&mut result.text).id(egui::Id::unique("ocr-editor")).frame(egui::Frame::NONE)
                                         .desired_width(f32::INFINITY).desired_rows(1).hint_text("No text was found in this image.").layouter(&mut layouter));
                                     crate::controls::focus_once(&response,&mut self.focus_pending);
                                     if response.changed() {result.spans=snapshot.edited_spans(&result.text);self.copy_status=None;}

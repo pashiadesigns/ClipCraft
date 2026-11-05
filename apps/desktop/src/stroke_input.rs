@@ -15,8 +15,7 @@ impl Editor {
             .data_mut(|d| d.get_temp::<Wheel>(id).unwrap_or_default());
         let active = enabled
             && hovered
-            && !self.stamps.active
-            && !self.fill_tool.active
+            && !self.icon_library.active
             && matches!(
                 self.tool,
                 Some(Kind::Pen | Kind::Highlighter | Kind::Eraser | Kind::Line | Kind::Arrow)
@@ -37,10 +36,8 @@ impl Editor {
                 {
                     state.consumed = active
                         && input.focused
-                        && modifiers.alt
-                        && !modifiers.ctrl
-                        && !modifiers.command
-                        && !modifiers.shift;
+                        && self
+                            .gesture_matches(crate::gesture_input::Gesture::StrokeSize, *modifiers);
                     if state.consumed {
                         state.remainder += delta.y
                             * match unit {

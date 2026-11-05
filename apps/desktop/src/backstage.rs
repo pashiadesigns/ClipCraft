@@ -91,8 +91,9 @@ impl Editor {
                 });
             });
         egui::CentralPanel::default().frame(egui::Frame::new()
-            .fill(Color32::from_rgb(50,50,50)).inner_margin(egui::Margin { left:40, right:6, top:24, bottom:16 }))
+            .fill(if page==Page::Options {Color32::from_rgb(56,62,65)} else {Color32::from_rgb(50,50,50)}).inner_margin(egui::Margin { left:40, right:6, top:24, bottom:16 }))
             .show(ui, |ui| {
+                if page==Page::Options {self.show_options(ui);return;}
                 egui::ScrollArea::vertical().id_salt("file_page_scroll").auto_shrink([false, false]).show(ui, |ui| {
                     if page != Page::Options { ui.set_max_width(ui.available_width().min(1180.0)); }
                     ui.horizontal(|ui| {
@@ -164,7 +165,7 @@ impl Editor {
         ui.heading("Recent");
         if ui
             .add(
-                egui::TextEdit::singleline(&mut self.shell.recent_query)
+                crate::unicode_input::TextEdit::singleline(&mut self.shell.recent_query)
                     .hint_text("Search for an image")
                     .desired_width(240.),
             )
@@ -225,7 +226,6 @@ impl Editor {
         }
         ui.label(&self.global_capture_status);
         ui.add_space(18.0);
-        ui.label("Development labels apply only to the scope in each tooltip. Overdue labels preserve missed targets. Hide them using Badges on the bottom bar or File → Options.");
         ui.add_enabled(
             false,
             egui::Button::new("Full help and tutorials — planned"),
@@ -403,7 +403,7 @@ mod tests {
             .is_some()
         );
         assert!(
-            crate::color_widgets::tests::text_rect(&out.shapes, "Show more templates").is_none()
+            crate::color_widgets::tests::text_rect(&out.shapes, "Show more templates").is_some()
         );
         let recent = text_rect(&out, "Recent");
         let search = text_rect(&out, "Search for an image");
@@ -455,7 +455,7 @@ mod tests {
         let mut e = crate::canvas::tests::editor(&ctx);
         e.history = crate::history::HistoryPanel::isolated(root.path());
         e.shell.backstage = Some(Page::Open);
-        let badges = |out: &PaintedOutput| {
+        let overlays = |out: &PaintedOutput| {
             out.shapes
                 .iter()
                 .filter_map(|s| {
@@ -469,7 +469,7 @@ mod tests {
         };
         let first = frame(&ctx, &mut e, 1280., vec![]);
         let output = frame(&ctx, &mut e, 1280., vec![]);
-        let row = badges(&output);
+        let row = overlays(&output);
         assert_eq!(row.len(), 10);
         assert!(row.iter().all(|p| p.y == row[0].y));
         assert!(row.windows(2).all(|p| (p[1].x - p[0].x - 88.).abs() < 0.1));
@@ -479,10 +479,10 @@ mod tests {
         }
         click(&ctx, &mut e, show);
         let output = frame(&ctx, &mut e, 1280., vec![]);
-        assert_eq!(badges(&output).len(), 20);
+        assert_eq!(overlays(&output).len(), 20);
         click(&ctx, &mut e, text_rect(&output, "Show more"));
         let output = frame(&ctx, &mut e, 1280., vec![]);
-        assert_eq!(badges(&output).len(), 23);
+        assert_eq!(overlays(&output).len(), 23);
         assert!(crate::color_widgets::tests::text_rect(&output.shapes, "Show more").is_none());
         e.open_file_workspace();
         assert_eq!(e.shell.recent_limit, 10);
@@ -616,7 +616,18 @@ mod tests {
                 let before = e.session.document.clone();
                 let first = frame(&ctx, &mut e, width, vec![]);
                 let output = frame(&ctx, &mut e, width, vec![]);
-                assert!(text_rect(&output, "ClipCraft").max.x < width);
+                assert!(
+                    text_rect(
+                        &output,
+                        if page == Page::Options {
+                            "Settings"
+                        } else {
+                            "ClipCraft"
+                        }
+                    )
+                    .max
+                    .x < width
+                );
                 assert_eq!(
                     serde_json::to_value(&before).unwrap(),
                     serde_json::to_value(&e.session.document).unwrap()

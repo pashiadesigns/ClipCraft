@@ -141,7 +141,7 @@ impl Annotation {
             return crate::ellipse::hit_test(self, point, tolerance);
         }
         if self.kind == Kind::Callout
-            || (matches!(self.kind, Kind::Rectangle | Kind::Simplify) && self.corner_radius > 0.0)
+            || (matches!(self.kind, Kind::Rectangle) && self.corner_radius > 0.0)
         {
             return crate::callout::hit_test(self, point, tolerance);
         }
@@ -200,7 +200,7 @@ impl Annotation {
 
     /// A corner can cross its opposite corner. Arrow endpoints retain meaning.
     pub fn resized(&self, handle: Handle, point: [f32; 2], canvas: [u32; 2]) -> Result<Self> {
-        if self.rotation_degrees != 0.0 {
+        if self.rotation_degrees != 0.0 || self.mirror_x {
             return self.resize_rotated(handle, point, canvas, Default::default());
         }
         if matches!(
@@ -294,7 +294,7 @@ impl Annotation {
         }
         resized.corner_radius = resized.corner_radius.min(resized.max_corner_radius());
         if let Some(style) = &resized.callout {
-            style.validate(&resized, canvas)?;
+            style.validate(&resized, canvas, true)?;
         }
         Ok(resized)
     }
@@ -361,10 +361,13 @@ mod tests {
             step_outline: None,
             line_style: None,
             shadow: None,
-            analysis: None,
+
+            focus: None,
+
             highlighter_rect: false,
             group: None,
             rotation_degrees: 0.0,
+            mirror_x: false,
             id: 1,
             kind,
             start: [10.0, 20.0],
@@ -389,10 +392,13 @@ mod tests {
             step_outline: None,
             line_style: None,
             shadow: None,
-            analysis: None,
+
+            focus: None,
+
             highlighter_rect: false,
             group: None,
             rotation_degrees: 0.0,
+            mirror_x: false,
             id: 2,
             ..arrow.clone()
         });

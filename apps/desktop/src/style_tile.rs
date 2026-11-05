@@ -2,11 +2,35 @@
 use crate::{Kind, egui};
 use capture_core::object_styles::ObjectStyle;
 
+/// Keep tiles at their readable native size; use extra pane width for columns.
+pub(super) fn columns(width: f32, dropdown: bool) -> usize {
+    ((width + 5.) / (82. + if dropdown { 22. } else { 0. } + 5.))
+        .floor()
+        .clamp(1., 3.) as usize
+}
+
 pub(super) fn tile(
     ui: &mut egui::Ui,
     style: &ObjectStyle,
     label: &str,
     active: bool,
+) -> egui::Response {
+    paint_tile(ui, style, label, active, false)
+}
+pub(super) fn split_tile(
+    ui: &mut egui::Ui,
+    style: &ObjectStyle,
+    label: &str,
+    active: bool,
+) -> egui::Response {
+    paint_tile(ui, style, label, active, true)
+}
+fn paint_tile(
+    ui: &mut egui::Ui,
+    style: &ObjectStyle,
+    label: &str,
+    active: bool,
+    enclosed: bool,
 ) -> egui::Response {
     let (rect, response) = ui.allocate_exact_size(egui::vec2(82.0, 52.0), egui::Sense::click());
     #[cfg(test)]
@@ -32,14 +56,6 @@ pub(super) fn tile(
             egui::Color32::from_rgb(42, 47, 50)
         },
     );
-    if active {
-        ui.painter().rect_stroke(
-            rect,
-            3,
-            egui::Stroke::new(2.0, egui::Color32::from_rgb(38, 155, 194)),
-            egui::StrokeKind::Inside,
-        );
-    }
     let c = |v: [u8; 4]| egui::Color32::from_rgba_unmultiplied(v[0], v[1], v[2], v[3]);
     let color = c(style.color).gamma_multiply(if ui.is_enabled() { 1.0 } else { 0.4 });
     let r =
@@ -48,11 +64,73 @@ pub(super) fn tile(
     let fill = style.fill.map(c).unwrap_or(egui::Color32::TRANSPARENT);
     let p = ui.painter();
     match style.kind {
-        Kind::Simplify => {
+        _ if style.focus.is_some() => {
+            let effect = style.focus.unwrap();
+            let outer = egui::Rect::from_center_size(r.center(), egui::vec2(64., 28.));
             p.rect_filled(
-                r,
-                if style.corner_radius > 0. { 6 } else { 0 },
-                c(style.color),
+                outer,
+                2.,
+                egui::Color32::from_gray((175. * (1. - effect.darken)) as u8),
+            );
+            for row in 0..3 {
+                p.line_segment(
+                    [
+                        outer.left_top() + egui::vec2(3., 5. + row as f32 * 8.),
+                        outer.right_top() + egui::vec2(-3., 5. + row as f32 * 8.),
+                    ],
+                    egui::Stroke::new(
+                        if effect.blur > 0. { 3.5 } else { 1. },
+                        egui::Color32::from_gray((220. * (1. - effect.darken)) as u8),
+                    ),
+                );
+            }
+            if style.kind == Kind::Ellipse {
+                p.circle_filled(r.center(), 11., egui::Color32::from_gray(235));
+                p.circle_stroke(r.center(), 11., stroke);
+            } else {
+                p.rect(
+                    r,
+                    if style.corner_radius > 0. { 5 } else { 0 },
+                    egui::Color32::from_gray(235),
+                    stroke,
+                    egui::StrokeKind::Inside,
+                );
+            }
+            p.line_segment(
+                [
+                    r.center() - egui::vec2(8., 0.),
+                    r.center() + egui::vec2(8., 0.),
+                ],
+                egui::Stroke::new(1., egui::Color32::from_gray(80)),
+            );
+        }
+        Kind::Eraser => {
+            let radius = (style.width as f32 * 0.375 + 2.).clamp(2.5, 15.);
+            let center = r.center();
+            // Clip checker squares to the circular footprint, retaining vector previews.
+            for row in -4..4 {
+                for col in -4..4 {
+                    let lo = center + egui::vec2(col as f32 * 4., row as f32 * 4.);
+                    let square = egui::Rect::from_min_size(lo, egui::vec2(4., 4.));
+                    let circle = (0..64)
+                        .map(|i| {
+                            let angle = i as f32 * std::f32::consts::TAU / 64.;
+                            center + egui::vec2(angle.cos(), angle.sin()) * radius
+                        })
+                        .collect();
+                    p.with_clip_rect(square.intersect(ui.clip_rect())).add(
+                        egui::Shape::convex_polygon(
+                            circle,
+                            egui::Color32::from_gray(if (row + col) % 2 == 0 { 215 } else { 150 }),
+                            egui::Stroke::NONE,
+                        ),
+                    );
+                }
+            }
+            p.circle_stroke(
+                center,
+                radius,
+                egui::Stroke::new(1., egui::Color32::from_gray(235)),
             );
         }
         Kind::Blur | Kind::Pixelate => {
@@ -115,11 +193,61 @@ pub(super) fn tile(
                 stroke,
             ));
         }
-        Kind::Highlighter if style.highlighter_rect => {
-            p.rect_filled(r.shrink2(egui::vec2(0., 6.)), 0, color);
+        Kind::Pen => {
+            let points = (0..=64)
+                .map(|i| {
+                    let t = i as f32 / 64.;
+                    egui::pos2(
+                        r.left() - 10. + t * 54.,
+                        r.center().y + 5. * (t * std::f32::consts::TAU * 3.).sin() - t * 3.,
+                    )
+                })
+                .collect();
+            p.add(egui::Shape::line(
+                points,
+                egui::Stroke::new(stroke.width.min(3.), color),
+            ));
         }
-        Kind::Pen | Kind::Highlighter => {
-            p.line_segment([r.left_bottom(), r.right_top()], stroke);
+        Kind::Highlighter => {
+            let at = |x, y| r.center() + egui::vec2(x, y);
+            p.rect_filled(
+                egui::Rect::from_center_size(r.center(), egui::vec2(62., 30.)),
+                2.,
+                egui::Color32::from_gray(245),
+            );
+            p.text(
+                r.center(),
+                egui::Align2::CENTER_CENTER,
+                "Abc",
+                egui::FontId::proportional(22.),
+                egui::Color32::from_gray(25),
+            );
+            let ink = egui::Color32::from_rgba_unmultiplied(
+                style.color[0],
+                style.color[1],
+                style.color[2],
+                110,
+            );
+            if style.highlighter_rect {
+                p.rect_filled(
+                    egui::Rect::from_center_size(r.center(), egui::vec2(49., 23.)),
+                    0.,
+                    ink,
+                );
+            } else {
+                for (left, right, y) in [(-27., 23., -5.), (-21., 28., 1.), (-25., 20., 7.)] {
+                    p.add(egui::Shape::convex_polygon(
+                        vec![
+                            at(left, y - 3.),
+                            at(right - 3., y - 6.),
+                            at(right, y),
+                            at(left + 2., y + 3.),
+                        ],
+                        ink,
+                        egui::Stroke::NONE,
+                    ));
+                }
+            }
         }
         Kind::Arrow | Kind::Line => {
             let mut a =
@@ -155,32 +283,34 @@ pub(super) fn tile(
             );
         }
         Kind::Callout => {
-            let (body, outline) = style.callout_colors().unwrap_or(([255; 4], style.color));
-            let stroke = egui::Stroke::new(stroke.width, c(outline));
-            p.rect(
-                r.shrink2(egui::vec2(0.0, 3.0)),
-                if style.corner_radius > 0.0 { 5 } else { 0 },
-                c(body),
-                stroke,
-                egui::StrokeKind::Inside,
+            if let Some(texture) = callout_thumbnail(ui.ctx(), style) {
+                p.image(
+                    texture.id(),
+                    egui::Rect::from_center_size(r.center(), egui::vec2(58., 32.)),
+                    egui::Rect::from_min_max(egui::Pos2::ZERO, egui::pos2(1., 1.)),
+                    egui::Color32::WHITE,
+                );
+            }
+        }
+        Kind::Redact => {
+            p.rect_filled(
+                egui::Rect::from_center_size(r.center(), egui::vec2(62., 26.)),
+                0.,
+                egui::Color32::BLACK,
             );
-            p.line_segment(
-                [
-                    r.center_bottom() - egui::vec2(0.0, 3.0),
-                    r.left_bottom() + egui::vec2(7.0, 3.0),
-                ],
-                stroke,
+            p.text(
+                r.center(),
+                egui::Align2::CENTER_CENTER,
+                "Redact",
+                egui::FontId::proportional(13.),
+                egui::Color32::from_gray(210),
             );
         }
         _ => {
             p.text(
                 r.center(),
                 egui::Align2::CENTER_CENTER,
-                if style.kind == Kind::Redact {
-                    "Cover".into()
-                } else {
-                    style.width.to_string()
-                },
+                style.width.to_string(),
                 egui::FontId::proportional(16.0),
                 ui.visuals().text_color(),
             );
@@ -194,9 +324,55 @@ pub(super) fn tile(
         egui::FontId::proportional(9.0),
         ui.visuals().text_color(),
     );
+    if active && !enclosed {
+        p.rect_stroke(
+            rect,
+            3,
+            egui::Stroke::new(2., egui::Color32::from_rgb(38, 155, 194)),
+            egui::StrokeKind::Inside,
+        );
+    }
     response.on_hover_text(format!(
         "{label}\nClick to apply to the selection and use for new objects."
     ))
+}
+
+// Use the production callout renderer, including its triangular tail and rounding.
+fn callout_thumbnail(ctx: &egui::Context, style: &ObjectStyle) -> Option<egui::TextureHandle> {
+    let key = egui::Id::unique(("callout-style-preview", serde_json::to_string(style).ok()?));
+    if let Some(t) = ctx.data(|d| d.get_temp::<egui::TextureHandle>(key)) {
+        return Some(t);
+    }
+    let mut a = crate::line_properties::sample(capture_core::line_style::Endpoint::Flat, false);
+    a.kind = Kind::Callout;
+    a.start = [12., 6.];
+    a.end = [104., 46.];
+    a.width = style.width.min(5);
+    a.color = style.color;
+    a.line_style = style.line_style;
+    a.text = Some(capture_core::text::TextStyle {
+        content: "Text".into(),
+        ..Default::default()
+    });
+    a.corner_radius = if style.corner_radius > 0. { 10. } else { 0. };
+    a.shadow = None;
+    let (fill, outline) = style.callout_colors()?;
+    a.callout = Some(capture_core::callout::CalloutStyle {
+        fill,
+        outline,
+        pointer: [36., 62.],
+        padding: 0.,
+    });
+    let mut doc = capture_core::Document::canvas(116, 64, [0; 4]).ok()?;
+    doc.annotations.push(a);
+    let pixels = doc.render().ok()?;
+    let t = ctx.load_texture(
+        "Callout style",
+        egui::ColorImage::from_rgba_unmultiplied([116, 64], pixels.as_raw()),
+        egui::TextureOptions::LINEAR,
+    );
+    ctx.data_mut(|d| d.insert_temp(key, t.clone()));
+    Some(t)
 }
 
 // Fixed synthetic content only, shared with the document effect renderer. Cache
@@ -241,10 +417,13 @@ fn effect_sample(kind: Kind, width: u32) -> capture_core::Result<image::RgbaImag
         points: vec![],
         corner_radius: 0.0,
         fill: None,
-        analysis: None,
+
+        focus: None,
+
         highlighter_rect: false,
         group: None,
         rotation_degrees: 0.0,
+        mirror_x: false,
         image: None,
         step_outline: None,
         line_style: None,
@@ -262,6 +441,20 @@ fn effect_sample(kind: Kind, width: u32) -> capture_core::Result<image::RgbaImag
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn callout_previews_render_valid_callouts_and_reuse_textures() {
+        let ctx = egui::Context::default();
+        for group in capture_core::object_styles::groups(Kind::Callout)
+            .into_iter()
+            .filter(|g| g.styles[0].kind == Kind::Callout)
+        {
+            for style in group.styles {
+                let t = callout_thumbnail(&ctx, &style)
+                    .expect("callout must render, including its tail");
+                assert_eq!(t.id(), callout_thumbnail(&ctx, &style).unwrap().id());
+            }
+        }
+    }
     #[test]
     fn synthetic_intensity_previews_are_distinct_cached_and_rendered_from_real_effects() {
         let ctx = egui::Context::default();

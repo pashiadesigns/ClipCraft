@@ -142,10 +142,10 @@ fn outline_commands_styles_painter_clipboard_and_resize_preserve_editable_state(
         annotations: painted,
     })
     .unwrap();
-    assert_eq!(s.document.version, 12);
+    assert_eq!(s.document.version, crate::MAX_PROJECT_VERSION);
     let payload =
         crate::clipboard_payload::ObjectPayload::capture(&s.document, &[source.id]).unwrap();
-    assert_eq!(payload.document_version, 12);
+    assert_eq!(payload.document_version, crate::MAX_PROJECT_VERSION);
     payload.validate().unwrap();
     let pasted = payload
         .place(&Document::blank(640, 400).unwrap(), [300., 200.])

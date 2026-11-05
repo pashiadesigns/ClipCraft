@@ -27,7 +27,7 @@ impl Editor {
                 ("Duplicate template", Action::Duplicate),
                 ("Delete template…", Action::Delete),
             ] {
-                if ui.button(label).clicked() {
+                if crate::controls::menu_action(ui, label).clicked() {
                     ui.ctx().data_mut(|d| {
                         d.insert_temp(
                             key(),
@@ -47,11 +47,9 @@ impl Editor {
     }
     fn apply_template_edit(&mut self, d: &Edit) -> Result<(), String> {
         let root = self
-            .history
-            .root()
+            .template_root()
             .ok_or("Local templates are unavailable.")?;
-        let mut store = templates::library::Library::open(&root.join("templates"))
-            .map_err(|e| e.to_string())?;
+        let mut store = templates::library::Library::open(&root).map_err(|e| e.to_string())?;
         match d.action {
             Action::Rename => store
                 .0
@@ -76,7 +74,7 @@ impl Editor {
         let mut submit = d.action == Action::Duplicate;
         let mut cancel = false;
         if !submit {
-            let modal = egui::Modal::new(key()).show(ctx, |ui| {
+            let modal = crate::controls::Modal::new(key()).show(ctx, |ui| {
                 ui.set_width(380.);
                 ui.heading(if d.action == Action::Rename {
                     "Rename template"
@@ -86,7 +84,7 @@ impl Editor {
                 if d.action == Action::Rename {
                     ui.label("Name");
                     let r = ui.add(
-                        egui::TextEdit::singleline(&mut d.name)
+                        crate::unicode_input::TextEdit::singleline(&mut d.name)
                             .desired_width(f32::INFINITY)
                             .char_limit(120),
                     );

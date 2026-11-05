@@ -50,7 +50,7 @@ fn crop_handles_keep_pixel_scale_reveal_source_anchor_zoom_and_undo() {
     s.save(&file).unwrap();
     let loaded = crate::Document::load(&file).unwrap();
     assert_eq!(loaded.annotations, [cropped]);
-    assert_eq!(loaded.version, 19);
+    assert_eq!(loaded.version, crate::MAX_PROJECT_VERSION);
     s.execute(crate::Command::Undo).unwrap();
     assert_eq!(s.document.render().unwrap(), original);
     let mut bad = s.document.clone();
@@ -92,7 +92,7 @@ fn cropped_rounded_frame_retains_source_undo_clipboard_and_saved_pixels() {
             annotation: edited.clone(),
         })
         .unwrap();
-    assert_eq!(session.document.version, 10);
+    assert_eq!(session.document.version, crate::MAX_PROJECT_VERSION);
     assert!(Arc::ptr_eq(
         bitmap.pixels().unwrap(),
         edited.image.as_ref().unwrap().pixels().unwrap()
@@ -127,7 +127,7 @@ fn cropped_rounded_frame_retains_source_undo_clipboard_and_saved_pixels() {
     let loaded = Document::load(&path).unwrap();
     assert_eq!(loaded.render().unwrap(), framed);
     let payload = ObjectPayload::capture(&loaded, &[1]).unwrap();
-    assert_eq!(payload.document_version, 10);
+    assert_eq!(payload.document_version, crate::MAX_PROJECT_VERSION);
     payload.validate().unwrap();
     let mut old = loaded.clone();
     old.version = 9;

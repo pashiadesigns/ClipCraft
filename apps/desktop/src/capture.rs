@@ -2,10 +2,21 @@
 use capture_core::Document;
 use std::sync::mpsc::{self, Receiver};
 
+#[derive(Clone)]
+pub struct VideoRequest {
+    pub destination: std::path::PathBuf,
+    pub options: capture_core::video::Options,
+}
+pub struct VideoOutput {
+    pub path: std::path::PathBuf,
+    pub preview: bool,
+    pub open_folder: bool,
+    pub seconds: u64,
+}
 pub struct Captured {
     pub document: Document,
     pub warning: String,
-    pub recognized: Option<Result<crate::ocr::Recognized, String>>,
+    pub video: Option<VideoOutput>,
     pub retained: Option<capture_core::history::Entry>,
 }
 impl From<Document> for Captured {
@@ -13,8 +24,8 @@ impl From<Document> for Captured {
         Self {
             document,
             warning: String::new(),
-            recognized: None,
             retained: None,
+            video: None,
         }
     }
 }
@@ -25,6 +36,8 @@ pub fn start(
     ctx: eframe::egui::Context,
     settings: capture_core::capture_options::Settings,
     history_root: Option<std::path::PathBuf>,
+    scroll_mode: mpsc::Sender<bool>,
+    video: Option<VideoRequest>,
 ) -> Receiver<CaptureResult> {
     let (sender, receiver) = mpsc::channel();
     #[cfg(windows)]
@@ -38,24 +51,10 @@ pub fn start(
             }
         });
         std::thread::spawn(move || {
-            let grab_text =
-                settings.selection == capture_core::capture_options::Selection::GrabText;
             let result = owner
                 .ok_or_else(|| "Cannot access the editor window for capture.".to_string())
-                .and_then(|owner| windows::select_image(owner, settings, history_root))
-                .map(|result| {
-                    result.map(|mut captured| {
-                        if grab_text {
-                            captured.recognized = Some(
-                                captured
-                                    .document
-                                    .render()
-                                    .map_err(|e| e.to_string())
-                                    .and_then(|pixels| crate::ocr::recognize(&pixels)),
-                            );
-                        }
-                        captured
-                    })
+                .and_then(|owner| {
+                    windows::select_image(owner, settings, history_root, scroll_mode, video)
                 });
             let _ = sender.send(result);
             ctx.request_repaint();
@@ -63,7 +62,7 @@ pub fn start(
     }
     #[cfg(not(windows))]
     {
-        let _ = (frame, ctx, settings, history_root);
+        let _ = (frame, ctx, settings, history_root, scroll_mode, video);
         let _ = sender.send(Err(
             "Screen capture is currently available on Windows.".into()
         ));
@@ -145,7 +144,7 @@ mod delay;
 #[cfg(any(windows, test))]
 mod step_pipeline;
 #[cfg(windows)]
-mod windows;
+pub(crate) mod windows;
 
 #[cfg(any(windows, test))]
 pub(super) fn repaint_selection(

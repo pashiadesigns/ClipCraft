@@ -128,8 +128,8 @@ impl Editor {
                 Err(e) => c.error = e.to_string(),
             }
         }
-        if let Some(root) = self.history.root() {
-            match templates::library::Library::open(&root.join("templates")) {
+        if let Some(root) = self.template_root() {
+            match templates::library::Library::open(&root) {
                 Ok(store) => {
                     for entry in store.0.entries() {
                         match store.0.load(&entry.id) {
@@ -212,32 +212,38 @@ impl Editor {
             if limit < catalog.choices.len() && ui.button("Show more templates").clicked() {
                 ui.ctx().data_mut(|d| d.insert_temp(key, limit + 6));
             }
-            if ui.button("Save current layout as template…").clicked() && self.commit_text() {
-                self.commit_property_preview();
-                let mut picker = Picker::new(vec![]);
-                picker.save = Some(SaveDraft {
-                    name: "My template".into(),
-                    empty_images: true,
-                    snapshot: Arc::new(self.session.document.clone()),
-                    focus: true,
-                });
-                self.template_picker = Some(picker);
+            if ui.button("Save current layout as template…").clicked() {
+                self.begin_save_template();
             }
         });
         if !catalog.error.is_empty() {
             ui.colored_label(egui::Color32::LIGHT_RED, &catalog.error);
         }
     }
+    pub(super) fn begin_save_template(&mut self) {
+        if !self.commit_text() {
+            return;
+        }
+        self.commit_property_preview();
+        let mut picker = Picker::new(vec![]);
+        picker.save = Some(SaveDraft {
+            name: "My template".into(),
+            empty_images: true,
+            snapshot: Arc::new(self.session.document.clone()),
+            focus: true,
+        });
+        self.template_picker = Some(picker);
+    }
     fn show_save_template(&mut self, ctx: &egui::Context, mut picker: Picker) {
         let d = picker.save.as_mut().unwrap();
         let mut save = false;
         let mut cancel = false;
-        let modal=egui::Modal::new(egui::Id::unique("save-local-template")).show(ctx,|ui|{
+        let modal=crate::controls::Modal::new(egui::Id::unique("save-local-template")).show(ctx,|ui|{
             ui.set_width(400.);ui.heading("Save as Template");ui.label("Name");
-            let input=ui.add(egui::TextEdit::singleline(&mut d.name).char_limit(120).desired_width(f32::INFINITY));
+            let input=ui.add(crate::unicode_input::TextEdit::singleline(&mut d.name).char_limit(120).desired_width(f32::INFINITY));
             crate::controls::focus_once(&input,&mut d.focus);
             crate::controls::toggle(ui,&mut d.empty_images,"Replace photos with empty frames");
-            crate::property_layout::section_help(ui,"Local template","Saves an independent editable copy on this PC. Text, shapes, stamps and layout are preserved. Creating an image from this template never changes the saved template or original project.");
+            crate::property_layout::section_help(ui,"Local template","Saves an independent editable copy on this PC. Text, shapes, icons and layout are preserved. Creating an image from this template never changes the saved template or original project.");
             if !picker.error.is_empty(){ui.colored_label(egui::Color32::LIGHT_RED,&picker.error);}
             (save,cancel)=crate::controls::dialog_actions(ui,"Save","Cancel",!d.name.trim().is_empty(),false);
         });
@@ -246,11 +252,10 @@ impl Editor {
         }
         if save {
             let result = self
-                .history
-                .root()
+                .template_root()
                 .ok_or_else(|| "Local storage is unavailable.".to_string())
                 .and_then(|root| {
-                    templates::library::Library::open(&root.join("templates"))
+                    templates::library::Library::open(&root)
                         .and_then(|mut store| store.save(&d.snapshot, &d.name, d.empty_images))
                         .map_err(|e| e.to_string())
                 });
@@ -286,7 +291,7 @@ impl Editor {
         let mut cancel = false;
         let mut load = false;
         let mut reorder = None;
-        let modal = egui::Modal::new(egui::Id::unique("image-from-template")).show(ctx, |ui| {
+        let modal = crate::controls::Modal::new(egui::Id::unique("image-from-template")).show(ctx, |ui| {
             ui.set_width(730.);
             crate::property_layout::section_help(ui, "Create Image from Template", "Choose a layout, optionally choose images, and Create. Empty frames have a Choose Image button. Save your current layout as a reusable local template from File. Sections use the same outside controls as Step guides. Fit keeps the whole image; Fill crops nondestructively to cover its frame.");
             ui.horizontal(|ui| {
@@ -294,7 +299,7 @@ impl Editor {
                 egui::ComboBox::from_id_salt("template-category")
                     .selected_text(if d.category.is_empty() { "All" } else { &d.category })
                     .show_ui(ui, |ui| {
-                        for name in ["All", "Steps", "Comparison", "Overview", "Timeline", "My templates"] {
+                        for name in ["All", "Steps", "Comparison", "Overview", "Timeline", "Business", "My templates"] {
                             ui.selectable_value(&mut d.category, if name == "All" { String::new() } else { name.into() }, name);
                         }
                     });
@@ -326,7 +331,7 @@ impl Editor {
             ui.separator();
             ui.horizontal(|ui| {
                 ui.label("Title");
-                let input=ui.add(egui::TextEdit::singleline(&mut d.title).desired_width(450.).char_limit(120));crate::controls::focus_once(&input,&mut d.focus_pending);
+                let input=ui.add(crate::unicode_input::TextEdit::singleline(&mut d.title).desired_width(450.).char_limit(120));crate::controls::focus_once(&input,&mut d.focus_pending);
             });
             ui.horizontal(|ui| {
                 load = ui.button("Choose images…").clicked();
@@ -578,8 +583,14 @@ mod tests {
         assert!(e.template_picker.is_none());
         assert_eq!(serde_json::to_vec(&e.session.document).unwrap(), before);
         let catalog = e.template_catalog(&ctx);
-        assert_eq!(catalog.choices[6].label, "Saved team layout");
-        assert_eq!(catalog.choices[6].category, "My templates");
+        assert_eq!(
+            catalog.choices[templates::ALL.len()].label,
+            "Saved team layout"
+        );
+        assert_eq!(
+            catalog.choices[templates::ALL.len()].category,
+            "My templates"
+        );
     }
     #[test]
     fn gallery_creates_editable_template_and_replacing_a_frame_is_one_undo() {
@@ -783,9 +794,12 @@ mod tests {
         );
         assert_eq!(serde_json::to_vec(&e.session.document).unwrap(), before);
         let catalog = e.template_catalog(&ctx);
-        assert_eq!(catalog.choices.len(), 7);
-        assert_eq!(catalog.choices[6].label, "Team procedure");
-        assert_eq!(catalog.choices[6].slots, 2);
+        assert_eq!(catalog.choices.len(), templates::ALL.len() + 1);
+        assert_eq!(
+            catalog.choices[templates::ALL.len()].label,
+            "Team procedure"
+        );
+        assert_eq!(catalog.choices[templates::ALL.len()].slots, 2);
         if let Ok(dir) = std::env::var("CLIPCRAFT_HEADLESS_TEMPLATE_DIR") {
             e.refresh_canvas_display(&ctx);
             let canvas = |e: &mut Editor| {

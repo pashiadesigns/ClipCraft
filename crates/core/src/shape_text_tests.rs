@@ -24,10 +24,13 @@ fn centered_defaults_preserve_legacy_omitted_alignment_and_independent_shape_col
             step_outline: None,
             line_style: None,
             shadow: None,
-            analysis: None,
+
+            focus: None,
+
             highlighter_rect: false,
             group: None,
             rotation_degrees: 0.0,
+            mirror_x: false,
             id: 1,
             kind,
             start: [20.0, 20.0],

@@ -8,7 +8,9 @@ export function auditFile(name, bytes) {
   if (/(^|\/)(?:artifacts|target|downloads|node_modules|\.codex|\.openai|\.git)(\/|$)/i.test(path)
       || /(^|\/)(?:\.env(?:\..*)?|STATUS\.md|AGENTS\.md|Launch ClipCraft Test\.cmd)$/i.test(path)
       || /\.(?:exe|dll|zip|pfx|p12|key|pem|pdb)$/i.test(path)
-      || /(^|\/)release-assets\//i.test(path)) errors.push('private/generated path');
+      || /(^|\/)release-assets\//i.test(path)
+      || /(^|\/)docs\/(?:manual-verification|.*-work\.|.*-plan\.)/i.test(path)
+      || /(^|\/)sites\//i.test(path)) errors.push('private/generated path');
   if (bytes.length > 20 * 1024 * 1024) errors.push('unexpected source file size');
   if (!/\.(?:png|jpg|jpeg|ico|res|ttf|otf|woff2?)$/i.test(path)) {
     const text = bytes.toString('utf8');
@@ -26,7 +28,7 @@ export function sourceFiles(root = process.cwd()) {
 export function audit(root = process.cwd()) {
   const files=sourceFiles(root);
   if (!files.length) throw new Error('No tracked source to audit');
-  for (const required of ['Cargo.toml','Cargo.lock','rust-toolchain.toml','LICENSE','apps/desktop/build.rs','apps/desktop/assets/brand/clipcraft.res','crates/core/src/lib.rs','sites/capture-workbench/roadmap.json','sites/capture-workbench/release-data.json']) {
+  for (const required of ['Cargo.toml','Cargo.lock','rust-toolchain.toml','LICENSE','apps/desktop/build.rs','apps/desktop/assets/brand/clipcraft.res','crates/core/src/lib.rs']) {
     if (!files.includes(required)) throw new Error(`Required public build input is missing: ${required}`);
   }
   const findings=[];

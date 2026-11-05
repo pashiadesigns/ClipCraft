@@ -7,15 +7,14 @@ use crate::property_layout::tests::{PaintedOutput, dump_meshes};
 fn render_blue_surround_design_preview() {
     let root = std::env::var("CLIPCRAFT_RIBBON_DESIGN_DIR").expect("Preview output directory");
     for (connected, tab, name) in [
-        (false, RibbonTab::Home, "Current-Home"),
-        (true, RibbonTab::Home, "Proposed-Home"),
-        (true, RibbonTab::ToolSettings, "Proposed-ToolSettings"),
+        (false, RibbonTab::Insert, "Current-Home"),
+        (true, RibbonTab::Insert, "Proposed-Home"),
+        (true, RibbonTab::Formatting, "Proposed-ToolSettings"),
     ] {
         let ctx = egui::Context::default();
         crate::shell::configure(&ctx);
         ctx.style_mut_of(egui::Theme::Dark, |s| s.animation_time = 0.0);
         let mut e = crate::canvas::tests::editor(&ctx);
-        e.shell.badges = false;
         e.shell.ribbon_tab = tab;
         e.add_step([120.0, 120.0]);
         let mut render = || {
@@ -55,8 +54,8 @@ fn render_blue_surround_design_preview() {
                                             ui.horizontal(|ui| {
                                                 ui.spacing_mut().item_spacing.x = 3.0;
                                                 match tab {
-                                                    RibbonTab::Home => e.home_ribbon(ui, 58.0),
-                                                    _ => e.tool_settings_ribbon(ui, 70.0),
+                                                    RibbonTab::Insert => e.insert_ribbon(ui, 58.0),
+                                                    _ => e.formatting_ribbon(ui, 70.0),
                                                 }
                                             });
                                         })
@@ -65,7 +64,8 @@ fn render_blue_surround_design_preview() {
                                 })
                                 .inner;
                             if connected {
-                                let active = tabs[if tab == RibbonTab::Home { 0 } else { 1 }].rect;
+                                let active =
+                                    tabs[if tab == RibbonTab::Insert { 0 } else { 1 }].rect;
                                 // One uninterrupted blue neck meets the rounded outline.
                                 // A single panel avoids a separator through the join.
                                 ui.painter().rect_filled(

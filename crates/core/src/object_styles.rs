@@ -12,6 +12,22 @@ pub const MAX_TEMPLATES: usize = 96;
 /// Copy supported presentation roles, never labels, identity, geometry or rotation.
 /// A field unsupported by the target is ignored; compatible fields still apply.
 pub fn paint_format(source: &Annotation, target: &Annotation) -> Result<Annotation> {
+    if source.focus.is_some() || target.focus.is_some() {
+        let mut result = target.clone();
+        // Format painting transfers shared stroke roles without turning a
+        // transparent focus window into a filled shape (or vice versa).
+        result.color = source.color;
+        result.width = if target.focus.is_some() {
+            source.width
+        } else {
+            source.width.max(1)
+        };
+        result.line_style = source.line_style;
+        if source.focus.is_some() && target.focus.is_some() {
+            result.focus = source.focus;
+        }
+        return Ok(result);
+    }
     if source.kind == Kind::Image {
         let mut result = target.clone();
         result.shadow = source.shadow;
@@ -22,10 +38,7 @@ pub fn paint_format(source: &Annotation, target: &Annotation) -> Result<Annotati
         let mut style = source_style;
         style.kind = target.kind;
         style.highlighter_rect = target.highlighter_rect;
-        if !matches!(
-            target.kind,
-            Kind::Rectangle | Kind::Callout | Kind::Simplify
-        ) {
+        if !matches!(target.kind, Kind::Rectangle | Kind::Callout) {
             style.corner_radius = 0.0;
         }
         return style.apply(target);
@@ -78,7 +91,7 @@ pub fn paint_format(source: &Annotation, target: &Annotation) -> Result<Annotati
         Some(Some(c.fill))
     } else if is_shape(source.kind) {
         Some(source.fill)
-    } else if matches!(source.kind, Kind::Step | Kind::Simplify) {
+    } else if matches!(source.kind, Kind::Step) {
         Some(Some(source.color))
     } else {
         None
@@ -88,17 +101,13 @@ pub fn paint_format(source: &Annotation, target: &Annotation) -> Result<Annotati
             c.fill = fill.unwrap_or([0; 4]);
         } else if is_shape(result.kind) {
             result.fill = fill;
-        } else if matches!(result.kind, Kind::Step | Kind::Simplify) {
+        } else if matches!(result.kind, Kind::Step) {
             result.color = fill.unwrap_or([0; 4]);
         }
     }
-    if matches!(
-        source.kind,
-        Kind::Rectangle | Kind::Callout | Kind::Simplify
-    ) && matches!(
-        target.kind,
-        Kind::Rectangle | Kind::Callout | Kind::Simplify
-    ) {
+    if matches!(source.kind, Kind::Rectangle | Kind::Callout)
+        && matches!(target.kind, Kind::Rectangle | Kind::Callout)
+    {
         result.corner_radius = source.corner_radius.min(result.max_corner_radius());
     }
     if let Some(text) = &source.text {
@@ -158,6 +167,11 @@ pub struct TextFormat {
 }
 impl TextFormat {
     fn from_text(t: &TextStyle) -> Self {
+        // Rich formatting lives in runs. Repeated markers must inherit the
+        // displayed label style, not the obsolete base style underneath it.
+        let mut effective = t.clone();
+        crate::text::rich::format_at(t, 0).apply(&mut effective);
+        let t = &effective;
         Self {
             typography: t.typography,
             font: t.font,
@@ -176,6 +190,7 @@ impl TextFormat {
         }
     }
     fn apply(&self, t: &mut TextStyle) {
+        t.rich = None;
         t.typography = self.typography;
         t.font = self.font;
         t.size_points = self.size_points;
@@ -210,6 +225,8 @@ pub struct CalloutFormat {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ObjectStyle {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub focus: Option<crate::focus::Focus>,
     #[serde(default, skip_serializing_if = "crate::text::is_false")]
     pub highlighter_rect: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -229,7 +246,9 @@ pub struct ObjectStyle {
 }
 impl ObjectStyle {
     pub fn same_variant(&self, other: &Self) -> bool {
-        self.kind == other.kind && self.highlighter_rect == other.highlighter_rect
+        self.focus.is_some() == other.focus.is_some()
+            && self.kind == other.kind
+            && self.highlighter_rect == other.highlighter_rect
     }
     pub fn text_font(&self) -> Option<TextFont> {
         self.text.as_ref().map(|t| t.font)
@@ -246,14 +265,17 @@ impl ObjectStyle {
     }
     pub fn accepts(&self, kind: Kind) -> bool {
         kind == self.kind
-            || (is_shape(kind) && is_shape(self.kind))
-            || (matches!(kind, Kind::Blur | Kind::Pixelate)
-                && matches!(self.kind, Kind::Blur | Kind::Pixelate))
+            || ((is_shape(kind) || kind == Kind::Callout)
+                && (is_shape(self.kind) || self.kind == Kind::Callout))
+            || (matches!(kind, Kind::Pen | Kind::Highlighter)
+                && matches!(self.kind, Kind::Pen | Kind::Highlighter))
+            || (matches!(kind, Kind::Blur | Kind::Pixelate | Kind::Redact)
+                && matches!(self.kind, Kind::Blur | Kind::Pixelate | Kind::Redact))
     }
     /// Category changes preserve the bounding box, label and identity. Only
     /// explicit shape-family changes replace the outline geometry. Blur and
     /// Pixelate can exchange intensity presets without changing their region;
-    /// opaque Redact is deliberately outside that family.
+    /// choosing Redact explicitly changes the region to an opaque cover.
     pub fn apply_compatible(&self, original: &Annotation) -> Result<Annotation> {
         if original.kind == self.kind {
             return self.apply(original);
@@ -264,8 +286,31 @@ impl ObjectStyle {
         let mut converted = original.clone();
         converted.kind = self.kind;
         converted.corner_radius = 0.0;
+        if self.kind == Kind::Callout {
+            if converted.image.is_some() {
+                return Err(Error::Invalid(
+                    "Convert the image frame to a shape before applying a callout style.".into(),
+                ));
+            }
+            let (_, hi) = converted.body_bounds();
+            converted.callout = Some(crate::callout::CalloutStyle::for_box(
+                converted.start,
+                converted.end,
+                hi.map(|v| v.ceil().max(1.) as u32),
+            ));
+            converted.text.get_or_insert_with(TextStyle::default);
+        } else {
+            converted.callout = None;
+        }
+        converted.highlighter_rect = false;
         converted.points = if self.kind == Kind::Polygon {
             crate::polygon::outline(converted.start, converted.end, 5)
+        } else if matches!(self.kind, Kind::Pen | Kind::Highlighter) {
+            if original.points.len() >= 2 {
+                original.points.clone()
+            } else {
+                vec![converted.start, converted.end]
+            }
         } else {
             vec![]
         };
@@ -290,6 +335,7 @@ impl ObjectStyle {
         }
         let result = Self {
             name,
+            focus: a.focus,
             highlighter_rect: a.highlighter_rect,
             step_outline: a.step_outline.clone(),
             line_style: a.line_style,
@@ -310,18 +356,16 @@ impl ObjectStyle {
         Ok(result)
     }
     pub fn validate(&self) -> Result<()> {
+        if let Some(focus) = self.focus {
+            focus.validate(self.kind)?;
+        }
         if self.highlighter_rect && self.kind != Kind::Highlighter {
             return Err(Error::Invalid(
                 "Rectangle highlighting requires a Highlighter".into(),
             ));
         }
         if let Some(style) = self.line_style {
-            style.validate()?;
-            if !matches!(self.kind, Kind::Arrow | Kind::Line) {
-                return Err(Error::Invalid(
-                    "Line settings require a line or arrow".into(),
-                ));
-            }
+            style.validate_for(self.kind)?;
         }
         if let Some(shadow) = self.shadow {
             shadow.validate()?;
@@ -336,7 +380,8 @@ impl ObjectStyle {
             || self.name.is_empty()
             || self.name.chars().count() > 40
             || self.name.chars().any(char::is_control)
-            || !(1..=32).contains(&self.width)
+            || (self.width == 0 && self.focus.is_none())
+            || self.width > 32
         {
             return Err(Error::Invalid(
                 "Template needs a name of 1–40 characters and width/intensity of 1–32.".into(),
@@ -344,8 +389,7 @@ impl ObjectStyle {
         }
         if !self.corner_radius.is_finite()
             || !(0.0..=16384.0).contains(&self.corner_radius)
-            || (self.corner_radius != 0.0
-                && !matches!(self.kind, Kind::Rectangle | Kind::Callout | Kind::Simplify))
+            || (self.corner_radius != 0.0 && !matches!(self.kind, Kind::Rectangle | Kind::Callout))
             || (self.fill.is_some()
                 && !matches!(self.kind, Kind::Rectangle | Kind::Ellipse | Kind::Polygon))
             || (self.text.is_none() && matches!(self.kind, Kind::Text | Kind::Callout | Kind::Step))
@@ -399,6 +443,7 @@ impl ObjectStyle {
                 vec![min, max]
             };
         }
+        result.focus = self.focus;
         result.highlighter_rect = self.highlighter_rect;
         result.color = self.color;
         result.width = self.width;
@@ -451,47 +496,41 @@ pub struct PresetGroup {
 /// Only categories backed by implemented geometry are offered. Custom styles
 /// remain separate and are never overwritten by a catalog refresh.
 pub fn groups(kind: Kind) -> Vec<PresetGroup> {
-    let definitions: Vec<(&str, &str, Kind, bool)> = if is_shape(kind) {
+    let definitions: Vec<(&str, &str, Kind, bool)> = if is_shape(kind) || kind == Kind::Callout {
         vec![
             ("shape_rectangle", "Rectangle", Kind::Rectangle, false),
             ("shape_rounded", "Rounded rectangle", Kind::Rectangle, true),
             ("shape_ellipse", "Circle / ellipse", Kind::Ellipse, false),
             ("shape_other", "Other shapes", Kind::Polygon, false),
+            ("callout_box", "Callout", Kind::Callout, false),
+            ("callout_rounded", "Rounded callout", Kind::Callout, true),
         ]
     } else {
         match kind {
-            Kind::Simplify => vec![
-                ("simplify_block", "Block", kind, false),
-                ("simplify_rounded", "Rounded block", kind, true),
-            ],
             Kind::Text => vec![
                 ("text_sans", "Text", kind, false),
                 ("text_mono", "Monospace", kind, false),
             ],
-            Kind::Callout => vec![
-                ("callout_box", "Callout", kind, false),
-                ("callout_rounded", "Rounded callout", kind, true),
-            ],
             Kind::Line => vec![("line", "Line", kind, false)],
-            Kind::Step => vec![("step", "Step", kind, false)],
-            Kind::Blur | Kind::Pixelate => vec![
+            Kind::Step => vec![("step", "Steps", kind, false)],
+            Kind::Blur | Kind::Pixelate | Kind::Redact => vec![
+                ("redact", "Redact", Kind::Redact, false),
                 ("blur", "Blur", Kind::Blur, false),
                 ("pixelate", "Pixelate", Kind::Pixelate, false),
             ],
-            Kind::Redact => vec![("redact", "Redact", kind, false)],
             Kind::Arrow => vec![("arrow", "Straight arrow", kind, false)],
-            Kind::Pen => vec![("pen", "Pen", kind, false)],
-            Kind::Highlighter => vec![
-                ("highlighter", "Pen", kind, false),
+            Kind::Pen | Kind::Highlighter => vec![
+                ("pen", "Pen", Kind::Pen, false),
+                ("highlighter", "Highlighter", Kind::Highlighter, false),
                 (
                     "highlighter_rectangle",
-                    "Highlighter rectangle",
-                    kind,
+                    "Highlighter box",
+                    Kind::Highlighter,
                     false,
                 ),
             ],
             Kind::Eraser => vec![("eraser", "Eraser", kind, false)],
-            _ => unreachable!(),
+            _ => vec![],
         }
     };
     definitions
@@ -539,6 +578,11 @@ pub fn groups(kind: Kind) -> Vec<PresetGroup> {
 /// Original presets for currently implemented annotation types. Effects offer
 /// intensity choices instead of misleading color tiles. Redact stays opaque.
 pub fn presets(kind: Kind) -> Vec<ObjectStyle> {
+    // Raster images and vector icons carry their own source/palette. They do
+    // not participate in drawing-style presets, including in video projects.
+    if kind == Kind::Image {
+        return vec![];
+    }
     let colors = [
         ("Coral", [240, 85, 55, 255]),
         ("Lime", [135, 196, 105, 255]),
@@ -564,24 +608,38 @@ pub fn presets(kind: Kind) -> Vec<ObjectStyle> {
         outline: None,
     });
     let effect = matches!(kind, Kind::Blur | Kind::Pixelate);
-    colors
+    let mut result: Vec<ObjectStyle> = colors
         .into_iter()
         .enumerate()
         .take(if kind == Kind::Redact { 1 } else { 6 })
         .map(|(i, (name, mut color))| {
+            let name = if kind == Kind::Highlighter && i == 0 {
+                color = [255, 255, 0, 255];
+                "Yellow"
+            } else {
+                name
+            };
             if kind == Kind::Highlighter {
                 color[3] = 80;
             }
             if kind == Kind::Redact {
                 color = [0, 0, 0, 255];
             }
-            let width = if effect { [2, 4, 8, 12, 20, 32][i] } else { 3 };
+            let width = match kind {
+                Kind::Blur => [4, 2, 8, 12, 20, 32][i],
+                Kind::Pixelate => [8, 2, 4, 12, 20, 32][i],
+                Kind::Eraser => [2, 4, 8, 16, 24, 32][i],
+                _ => 3,
+            };
             ObjectStyle {
+                focus: None,
                 highlighter_rect: false,
                 step_outline: None,
                 line_style: None,
                 shadow: None,
-                name: if effect {
+                name: if kind == Kind::Eraser {
+                    format!("{width} px")
+                } else if effect {
                     format!("Intensity {width}")
                 } else if kind == Kind::Redact {
                     "Opaque black".into()
@@ -601,7 +659,41 @@ pub fn presets(kind: Kind) -> Vec<ObjectStyle> {
                 }),
             }
         })
-        .collect()
+        .collect();
+    if matches!(kind, Kind::Callout | Kind::Text | Kind::Rectangle) {
+        for (name, accent, paper) in [
+            ("Note", [24, 118, 156, 255], [232, 246, 251, 255]),
+            ("Tip", [35, 128, 79, 255], [234, 247, 237, 255]),
+            ("Caution", [148, 99, 0, 255], [255, 246, 209, 255]),
+            ("Required", [170, 52, 55, 255], [255, 235, 236, 255]),
+            ("Optional", [95, 103, 110, 255], [240, 242, 244, 255]),
+            ("Do", [24, 139, 78, 255], [235, 250, 240, 255]),
+            ("Don't", [183, 43, 52, 255], [255, 235, 237, 255]),
+        ] {
+            let mut style = result[0].clone();
+            style.name = name.into();
+            style.color = accent;
+            style.width = 2;
+            style.corner_radius = if kind == Kind::Text { 0. } else { 8. };
+            if kind == Kind::Text
+                && let Some(t) = style.text.as_mut()
+            {
+                t.color = Some([35, 42, 46, 255]);
+                t.size_points = 16.;
+                t.bold = true;
+                t.padding = 8.;
+            }
+            if let Some(c) = style.callout.as_mut() {
+                c.fill = paper;
+                c.outline = accent;
+                c.padding = 10.;
+            } else if kind == Kind::Rectangle {
+                style.fill = Some(paper);
+            }
+            result.push(style);
+        }
+    }
+    result
 }
 
 #[derive(Serialize, Deserialize)]
@@ -745,13 +837,13 @@ mod tests {
                 assert!(!session.can_undo());
                 let mut redact = original[0].clone();
                 redact.kind = Kind::Redact;
-                assert!(!style.accepts(Kind::Redact));
+                assert!(style.accepts(Kind::Redact));
                 assert!(
                     style
                         .compatible_command(&[original[0].clone(), redact])
-                        .is_err()
+                        .is_ok()
                 );
-                assert!(!presets(Kind::Redact)[0].accepts(kind));
+                assert!(presets(Kind::Redact)[0].accepts(kind));
                 assert_eq!(session.document.annotations, original);
             }
         }
@@ -837,7 +929,14 @@ mod tests {
                 if let Some(existing) = keys.insert(group.id, group.styles.clone()) {
                     // The same effect families are reachable from either tool;
                     // shared preference keys must mean identical choices.
-                    assert!(matches!(kind, Kind::Blur | Kind::Pixelate));
+                    assert!(matches!(
+                        kind,
+                        Kind::Blur
+                            | Kind::Pixelate
+                            | Kind::Redact
+                            | Kind::Callout
+                            | Kind::Highlighter
+                    ));
                     assert_eq!(existing, group.styles);
                 }
                 for style in group.styles {

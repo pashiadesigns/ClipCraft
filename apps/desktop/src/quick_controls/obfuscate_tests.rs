@@ -9,7 +9,7 @@ fn blur_pixelate_family_clicks_convert_batches_remember_choices_and_saved_styles
     let mut e = crate::canvas::tests::editor(&ctx);
     let dir = tempfile::tempdir().unwrap();
     e.quick_controls.store = Some(Store::open(&dir.path().join("preferences")).unwrap());
-    e.quick_styles.templates =
+    e.presets.templates =
         Some(capture_core::object_styles::Store::open(&dir.path().join("styles")).unwrap());
     for (id, kind) in [(1, Kind::Blur), (2, Kind::Pixelate), (3, Kind::Redact)] {
         let mut object = e.new_annotation(
@@ -27,7 +27,7 @@ fn blur_pixelate_family_clicks_convert_batches_remember_choices_and_saved_styles
     e.click_selection(Some(2), true);
     let mut saved = capture_core::object_styles::presets(Kind::Pixelate)[3].clone();
     saved.name = "My effect".into();
-    e.quick_styles
+    e.presets
         .templates
         .as_mut()
         .unwrap()
@@ -86,7 +86,7 @@ fn blur_pixelate_family_clicks_convert_batches_remember_choices_and_saved_styles
     assert!(
         e.selected_objects()
             .iter()
-            .all(|a| a.kind == Kind::Blur && a.width == 2)
+            .all(|a| a.kind == Kind::Blur && a.width == 4)
     );
     assert_eq!(e.session.document.annotations[2], original[2]);
     e.execute(Command::Undo);
@@ -157,6 +157,6 @@ fn blur_pixelate_family_clicks_convert_batches_remember_choices_and_saved_styles
     assert_eq!(e.session.document.annotations, original);
     e.select_only(Some(3));
     frame(&mut e, vec![]);
-    assert!(!tile(Kind::Blur, "Blur").2 && !tile(Kind::Pixelate, "Pixelate").2);
+    assert!(tile(Kind::Blur, "Blur").2 && tile(Kind::Pixelate, "Pixelate").2);
     assert_eq!(e.session.document.annotations[2], original[2]);
 }

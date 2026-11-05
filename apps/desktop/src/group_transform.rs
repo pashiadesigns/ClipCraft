@@ -4,17 +4,7 @@ use capture_core::{
     rotation::{Rotation, RotationGesture},
 };
 pub(super) enum TransformDrag {
-    Analyze {
-        region: Box<Annotation>,
-        candidates: Vec<Annotation>,
-        fixed: [f32; 2],
-        corner: [f32; 2],
-        offset: [f32; 2],
-    },
-    Scale {
-        anchor: [f32; 2],
-        vector: [f32; 2],
-    },
+    Scale { anchor: [f32; 2], vector: [f32; 2] },
     Rotate(RotationGesture),
 }
 fn nodes(objects: &[Annotation], t: Transform) -> Option<[egui::Pos2; 5]> {
@@ -85,7 +75,11 @@ impl Editor {
         if !active
             && self.group_drag.is_none()
             && !self.view.panning
-            && !ui.input(|i| i.key_down(egui::Key::Space) || i.modifiers.alt)
+            && !ui.input(|i| {
+                i.key_down(egui::Key::Space)
+                    || self
+                        .gesture_matches(crate::gesture_input::Gesture::DuplicateDrag, i.modifiers)
+            })
             && ui.input(|i| i.pointer.button_pressed(egui::PointerButton::Primary))
             && let Some(pos) = ui.input(|i| i.pointer.interact_pos())
             && let Some(node) = self.group_transform_hit(pos, t)
@@ -103,65 +97,10 @@ impl Editor {
             } else {
                 let corners = [min, [max[0], min[1]], max, [min[0], max[1]]];
                 let anchor = corners[(node + 2) % 4];
-                if let Some(region) = originals.iter().find(|a| a.analysis.is_some()) {
-                    let group = region.group.unwrap();
-                    let image = match self.session.document.simplify_source(group) {
-                        Ok(image) => image,
-                        Err(error) => {
-                            self.status = error.to_string();
-                            return false;
-                        }
-                    };
-                    let blocks = capture_core::simplify::analyze(
-                        &image,
-                        region.analysis.as_ref().unwrap().detail,
-                    );
-                    let style = originals.iter().find(|a| a.analysis.is_none());
-                    let uniform = style.filter(|s| {
-                        originals
-                            .iter()
-                            .filter(|a| a.analysis.is_none())
-                            .all(|a| a.color == s.color)
-                    });
-                    let candidates = blocks
-                        .into_iter()
-                        .enumerate()
-                        .map(|(i, b)| {
-                            let mut a = style.cloned().unwrap_or_else(|| region.clone());
-                            a.analysis = None;
-                            a.id = self.session.next_id() + i as u64;
-                            a.start = b.start;
-                            a.end = b.end;
-                            a.color = uniform.map_or(b.color, |s| {
-                                if region
-                                    .analysis
-                                    .as_ref()
-                                    .unwrap()
-                                    .colors
-                                    .iter()
-                                    .any(|c| c[..3] == s.color[..3])
-                                {
-                                    [b.color[0], b.color[1], b.color[2], s.color[3]]
-                                } else {
-                                    s.color
-                                }
-                            });
-                            a.corner_radius = a.corner_radius.min(a.max_corner_radius());
-                            a
-                        })
-                        .collect();
-                    TransformDrag::Analyze {
-                        region: Box::new(region.clone()),
-                        candidates,
-                        fixed: anchor,
-                        corner: corners[node],
-                        offset: point,
-                    }
-                } else {
-                    TransformDrag::Scale {
-                        anchor,
-                        vector: [point[0] - anchor[0], point[1] - anchor[1]],
-                    }
+
+                TransformDrag::Scale {
+                    anchor,
+                    vector: [point[0] - anchor[0], point[1] - anchor[1]],
                 }
             };
             self.group_drag = Some(crate::multi_select::GroupDrag {
@@ -178,31 +117,6 @@ impl Editor {
         if let Some(pos) = ui.input(|i| i.pointer.interact_pos()) {
             let point = t.image_point(pos);
             let next = match drag.transform.as_mut().unwrap() {
-                TransformDrag::Analyze {
-                    region,
-                    candidates,
-                    fixed,
-                    corner,
-                    offset,
-                } => {
-                    let corner = [0, 1].map(|i| {
-                        (corner[i] + point[i] - offset[i]).clamp(
-                            0.,
-                            [self.session.document.width, self.session.document.height][i] as f32,
-                        )
-                    });
-                    let lo = [0, 1].map(|i| fixed[i].min(corner[i]));
-                    let hi = [0, 1].map(|i| fixed[i].max(corner[i]).max(lo[i] + 2.));
-                    if region.body_bounds() == (lo, hi) {
-                        Ok(drag.originals.clone())
-                    } else {
-                        Ok(capture_core::simplify::regenerate(
-                            region,
-                            candidates,
-                            (lo, hi),
-                        ))
-                    }
-                }
                 TransformDrag::Scale { anchor, vector } => {
                     let d = [point[0] - anchor[0], point[1] - anchor[1]];
                     let scale = ((d[0] * vector[0] + d[1] * vector[1])
@@ -215,9 +129,7 @@ impl Editor {
                     .and_then(|r| groups::rotated(&drag.originals, r.center, r.degrees)),
             }
             .and_then(|objects| {
-                if !matches!(drag.transform, Some(TransformDrag::Analyze { .. })) {
-                    self.session.document.plan_expanding_move(&objects, false)?;
-                }
+                self.session.document.plan_expanding_move(&objects, false)?;
                 Ok(objects)
             });
             match next {
@@ -233,21 +145,7 @@ impl Editor {
         if ui.input(|i| i.pointer.button_released(egui::PointerButton::Primary)) {
             let drag = self.group_drag.take().unwrap();
             if drag.preview != drag.originals {
-                if let Some(TransformDrag::Analyze { region, .. }) = drag.transform {
-                    let first = drag
-                        .preview
-                        .iter()
-                        .find(|a| a.analysis.is_none())
-                        .unwrap_or(&drag.preview[0])
-                        .id;
-                    self.execute(crate::Command::ReplaceSimplifyGroup {
-                        group: region.group.unwrap(),
-                        annotations: drag.preview,
-                    });
-                    self.select_only(Some(first));
-                } else {
-                    self.commit_expanding_move(drag.preview, false, t);
-                }
+                self.commit_expanding_move(drag.preview, false, t);
                 self.status = "Selection transformed. Undo restores the whole gesture.".into();
             }
             self.needs_render = true;
@@ -304,9 +202,7 @@ impl Editor {
             .input(|i| i.pointer.hover_pos())
             .and_then(|p| self.group_transform_hit(p, t))
         {
-            let text = if objects.iter().any(|a| a.analysis.is_some()) {
-                "Resize analysis area · live Simplify"
-            } else if n == 4 {
+            let text = if n == 4 {
                 "Rotate selection · Shift: 45°"
             } else {
                 "Resize selection · proportions locked"

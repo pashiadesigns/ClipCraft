@@ -7,7 +7,7 @@ use Windows input APIs. Capture/OCR/print code is in `apps/desktop/src/capture`,
 
 ## Storage and original pixels
 
-Library documents and imported stamps are stored beneath
+Library documents and imported icons are stored beneath
 `%LOCALAPPDATA%/ClipCraft/history-v1` by default. Preferences and saved colors use
 `%LOCALAPPDATA%/ClipCraft/preferences-v1`; style storage is also local. Environment
 overrides such as `CLIPCRAFT_HISTORY_DIR` and `CLIPCRAFT_PREFERENCES_DIR` isolate
@@ -20,12 +20,16 @@ from a project. Share a flattened export when concealing content, and inspect th
 export. Do not distribute the editable project as a secure redaction.
 
 Use opaque Redact for information that must be removed from the shared image;
-blur and pixelation can leave information inferable. The Library may keep up to
+blur and pixelation can leave information inferable. PNG/JPEG are flattened, and
+PDF masks covered original image/vector content before writing the replacement
+pixels for every Obfuscate mode. Optional redaction labels are decorative and do
+not enable or disable this sanitization. Canvas OCR reads the visible composite,
+including masks and crop, rather than hidden embedded originals. The Library may keep up to
 three previous revisions per item within a global 256 MiB recovery budget.
 Recovery copies, backups and editable clipboard payloads can therefore retain
 content no longer visible in the current canvas. Saved templates are editable
 documents too: replacing image frames with placeholders is not a data-sanitizing
-operation and does not clear background/original pixels, text, stamps or cursors.
+operation and does not clear background/original pixels, text, icons or cursors.
 
 ## System integration
 
@@ -50,24 +54,19 @@ not a penetration test. Dependency advisories may change after a release.
 The SPDX inventory covers the Windows build/test graph and bundled assets, not
 Windows system libraries or a certified runtime-only binary dependency inventory.
 
-Portable previews are unsigned and require no ClipCraft installer. No central
-enterprise policy service, managed updater, signed MSI, or support SLA is claimed.
+Beta packages are unsigned and require no ClipCraft installer. No central
+enterprise policy service, managed updater, signed distribution, or support SLA is claimed.
 See SECURITY.md for vulnerability reporting and the actual CI evidence for each
 tag.
 
-## Initial dependency review (2026-10-31)
+## Video privacy
 
-`cargo-audit 0.22.2` reported zero known vulnerabilities using RustSec database
-commit `2295466c4e9df26647fd67d8fa1c705ac2fc7f81`. Five unmaintained-package
-warnings remain visible: `paste 1.0.15` (RUSTSEC-2024-0436), `ttf-parser 0.25.1`
-(RUSTSEC-2026-0192), `zbus_names 4.3.5` (RUSTSEC-2026-0371), `zvariant 5.15.1`
-(RUSTSEC-2026-0370), and `zvariant_derive 5.15.1` (RUSTSEC-2026-0372).
-The scan covers the full cross-platform lockfile; the zbus/zvariant entries are
-outside the resolved Windows dependency inventory. Maintenance warnings have not
-been suppressed. Reassess replacements in a dependency-maintenance batch and
-consult the latest scan; this dated result is not a continuing guarantee.
+Find Sensitive Info analyzes still images. Video redactions do not automatically
+follow text, names or people as they move or scroll. Set their position and timing
+manually and review every frame of the exported video. A missed frame can reveal
+the original information. Focus windows are visual emphasis, not a privacy feature.
 
-The [2026-11-01 security review](security-review-2026-11-01.md) records a fresh
-dependency scan, a Defender scan of the published preview.2 package, synthetic
-input/export tests, reviewed trust boundaries and remaining work. It is an
-AI-assisted internal review, not independent security certification.
+The MSI and portable ZIP ship without a Library, recent projects, preferences or
+capture media. Both use the current user's profile. See [storage locations](installing.md).
+Raw recordings and imported originals remain editable; deleting a Library entry
+does not currently remove all separate media dependencies.

@@ -48,7 +48,11 @@ impl Editor {
                 text.content.clear();
             }
         }
-        document
+        capture_core::redaction_labels::decorate(
+            document.clone(),
+            self.shell.redaction_labels && !self.shell.raster_preview,
+        )
+        .unwrap_or(document)
     }
     pub(super) fn prepare_property_input(&mut self, ctx: &egui::Context) {
         if crate::color_widgets::eyedropper::consume_escape(ctx) {
@@ -175,13 +179,6 @@ impl Editor {
                 .find(|a| a.id == value.id)
                 .unwrap() = value.clone();
         }
-        if document
-            .annotations
-            .iter()
-            .any(|a| a.rotation_degrees != 0.0)
-        {
-            document.version = document.version.max(3);
-        }
         document.promote_features();
         if let Err(error) = document.validate() {
             self.status = error.to_string();
@@ -246,14 +243,6 @@ impl Editor {
             return drag.preview.clone();
         }
         let mut document = self.session.document.clone();
-        if let Some(drag) = &self.group_drag
-            && let Some(crate::group_transform::TransformDrag::Analyze { region, .. }) =
-                &drag.transform
-        {
-            let _ = document.replace_simplify_group(region.group.unwrap(), drag.preview.clone());
-            return document;
-        }
-
         let preview = self
             .edit_drag
             .as_ref()
@@ -311,13 +300,6 @@ impl Editor {
         if let Some(step) = &self.step_placement {
             document.annotations.push(step.clone());
         }
-        if document
-            .annotations
-            .iter()
-            .any(|a| a.rotation_degrees != 0.0)
-        {
-            document.version = document.version.max(3);
-        }
         document.promote_features();
         if let Some(plan) = self.expanding_move_plan()
             && (plan.dimensions != [self.session.document.width, self.session.document.height]
@@ -338,15 +320,18 @@ impl Editor {
             step_outline: None,
             line_style: None,
             shadow: None,
-            analysis: None,
+
+            focus: None,
+
             highlighter_rect: false,
             group: None,
             rotation_degrees: 0.0,
+            mirror_x: false,
             id: self.session.next_id(),
             kind: crate::Kind::Eraser,
             start: points[0],
             end: *points.last().unwrap(),
-            color: [0, 0, 0, self.quick_styles.alpha],
+            color: [0, 0, 0, self.presets.alpha],
             width: self.width,
             points,
             corner_radius: 0.0,
@@ -427,10 +412,13 @@ mod tests {
             step_outline: None,
             line_style: None,
             shadow: None,
-            analysis: None,
+
+            focus: None,
+
             highlighter_rect: false,
             group: None,
             rotation_degrees: 0.0,
+            mirror_x: false,
             id: 1,
             kind: Kind::Ellipse,
             start: [100.0, 100.0],
@@ -469,7 +457,7 @@ mod tests {
             e.preview_property_edit(edited);
             assert_eq!(serde_json::to_vec(&e.session.document).unwrap(), before);
             let preview = e.preview_document();
-            assert_eq!(preview.version, 3);
+            assert_eq!(preview.version, capture_core::MAX_PROJECT_VERSION);
             assert!(
                 preview
                     .annotations
@@ -480,7 +468,10 @@ mod tests {
             preview.render().unwrap();
         }
         e.commit_property_preview();
-        assert_eq!(e.session.document.version, 3);
+        assert_eq!(
+            e.session.document.version,
+            capture_core::MAX_PROJECT_VERSION
+        );
         let path = std::env::temp_dir().join(format!(
             "clipcraft-numeric-rotation-{}.json",
             std::process::id()
@@ -525,7 +516,7 @@ mod tests {
                 .all(|a| a.rotation_degrees == 0.0)
         );
         // Project4 metadata must never be downgraded by an orientation edit.
-        e.session.document.version = 4;
+        e.session.document.version = capture_core::MAX_PROJECT_VERSION;
         e.preview_property_edit(
             e.selected_annotation()
                 .unwrap()
@@ -533,7 +524,10 @@ mod tests {
                 .unwrap(),
         );
         e.commit_property_preview();
-        assert_eq!(e.session.document.version, 4);
+        assert_eq!(
+            e.session.document.version,
+            capture_core::MAX_PROJECT_VERSION
+        );
     }
 
     #[test]
@@ -613,7 +607,7 @@ mod tests {
         peer.id = 2;
         peer.rotation_degrees = 40.0;
         e.session.document.annotations.push(peer);
-        e.session.document.version = 3;
+        e.session.document.version = capture_core::MAX_PROJECT_VERSION;
         e.extra_selected.insert(2);
         let controls = render(&mut e, vec![]);
         assert!(controls[1].enabled());

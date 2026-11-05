@@ -15,6 +15,7 @@ impl Editor {
             .iter()
             .filter(|a| {
                 document.object_editable(a.id)
+                    && self.video_object_active(a.id)
                     && document.group_members(a.id).iter().all(|id| {
                         let a = document.annotations.iter().find(|a| a.id == *id).unwrap();
                         let (min, max) = a.bounds();
@@ -55,18 +56,14 @@ impl Editor {
         }
     }
     pub(super) fn move_functions(&self, ui: &mut egui::Ui) {
-        crate::property_layout::section_help(
-            ui,
-            "Tool Functions",
-            "Move selects editable objects. Groups behave as one object; hidden or locked objects are excluded. Selection does not change document history.",
-        );
+        crate::video_editor::property_design::heading(ui, "Move", "Select & arrange");
         for (icon, label) in [
             ("Move", "Click an object to select it"),
             ("Selection", "Shift-click to add or remove objects"),
             ("Shape", "Drag empty space to select enclosed objects"),
             ("Move", "Drag objects or their handles"),
             ("Arrow", "Arrow keys nudge; Shift moves 10 pixels"),
-            ("Text", "Double-click to switch to the object’s tool"),
+            ("Text", "Double-click to edit text or image content"),
         ] {
             ui.add_space(8.);
             ui.horizontal(|ui| {

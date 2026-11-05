@@ -75,7 +75,7 @@ impl ImagePayload {
         let bitmap = Arc::new(crate::bitmap::Bitmap::new(self.image)?);
         let size = bitmap.size();
         Ok(ObjectPayload {
-            document_version: 8,
+            document_version: crate::MAX_PROJECT_VERSION,
             source_canvas: size,
             objects: vec![bitmap.annotation(1)],
         })
@@ -126,11 +126,7 @@ impl ObjectPayload {
             return Err(Error::Invalid("Select existing objects to copy".into()));
         }
         let mut payload = Self {
-            document_version: match document.version {
-                4 => 3,
-                7 => 6,
-                version => version,
-            },
+            document_version: crate::MAX_PROJECT_VERSION,
             source_canvas: [document.width, document.height],
             objects: document
                 .annotations
@@ -147,7 +143,7 @@ impl ObjectPayload {
             },
         );
         for object in &mut payload.objects {
-            if object.analysis.is_none() && object.group.is_some_and(|group| counts[&group] < 2) {
+            if object.group.is_some_and(|group| counts[&group] < 2) {
                 object.group = None;
             }
         }
@@ -157,9 +153,7 @@ impl ObjectPayload {
     pub fn validate(&self) -> Result<()> {
         // Version4 only adds document-local canvas provenance, omitted on copy.
         // Version5 preserves underline/strikethrough on editable labels.
-        if !(1..=crate::MAX_PROJECT_VERSION).contains(&self.document_version)
-            || matches!(self.document_version, 4 | 7)
-        {
+        if self.document_version != crate::MAX_PROJECT_VERSION {
             return Err(Error::Invalid(
                 "Unsupported clipboard object version".into(),
             ));
@@ -273,7 +267,7 @@ mod tests {
                 center: [320.0, 200.0],
             })
             .unwrap();
-        assert_eq!(target.document.version, 3);
+        assert_eq!(target.document.version, crate::MAX_PROJECT_VERSION);
         let pasted = &target.document.annotations[1..];
         assert_eq!(
             pasted.iter().map(|a| a.id).collect::<Vec<_>>(),

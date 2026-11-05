@@ -19,10 +19,13 @@ fn fractional_reverse_redactions_cover_every_touched_pixel_in_flattened_png() {
                     step_outline: None,
                     line_style: None,
                     shadow: None,
-                    analysis: None,
+
+                    focus: None,
+
                     highlighter_rect: false,
                     group: None,
                     rotation_degrees: 0.0,
+                    mirror_x: false,
                     id: 1,
                     kind: Kind::Redact,
                     start,

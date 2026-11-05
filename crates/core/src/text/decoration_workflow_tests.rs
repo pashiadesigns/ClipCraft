@@ -27,6 +27,7 @@ fn decoration_commands_promote_only_when_used_and_roundtrip_undo_atomically() {
     }
     let mut invalid = doc.clone();
     invalid.annotations = changed.clone();
+    invalid.version = 30;
     assert!(invalid.validate().is_err());
     for command in [
         Command::Update {
@@ -38,7 +39,7 @@ fn decoration_commands_promote_only_when_used_and_roundtrip_undo_atomically() {
     ] {
         let mut s = Session::new(doc.clone()).unwrap();
         s.execute(command).unwrap();
-        assert_eq!(s.document.version, 5);
+        assert_eq!(s.document.version, crate::MAX_PROJECT_VERSION);
         let temp = tempfile::tempdir().unwrap();
         let path = temp.path().join("decorated.capture.json");
         s.save(&path).unwrap();
@@ -54,10 +55,10 @@ fn decoration_commands_promote_only_when_used_and_roundtrip_undo_atomically() {
             height: 500,
         })
         .unwrap();
-        assert_eq!(s.document.version, 5);
+        assert_eq!(s.document.version, crate::MAX_PROJECT_VERSION);
         let before = serde_json::to_vec(&s.document).unwrap();
         s.execute(Command::FlattenAll).unwrap();
-        assert_eq!(s.document.version, 2);
+        assert_eq!(s.document.version, crate::MAX_PROJECT_VERSION);
         s.execute(Command::Undo).unwrap();
         assert_eq!(serde_json::to_vec(&s.document).unwrap(), before);
     }
@@ -71,9 +72,9 @@ fn decoration_commands_promote_only_when_used_and_roundtrip_undo_atomically() {
     ] {
         let mut s = Session::new(Document::blank(640, 400).unwrap()).unwrap();
         s.execute(command).unwrap();
-        assert_eq!(s.document.version, 5);
+        assert_eq!(s.document.version, crate::MAX_PROJECT_VERSION);
         s.execute(Command::Undo).unwrap();
-        assert_eq!(s.document.version, 1);
+        assert_eq!(s.document.version, crate::MAX_PROJECT_VERSION);
         assert!(s.document.annotations.is_empty());
     }
 }
@@ -134,7 +135,7 @@ fn decoration_saved_styles_painter_and_portable_objects_preserve_labels() {
     let payload =
         crate::clipboard_payload::ObjectPayload::capture(&s.document, &[source.id]).unwrap();
     // The same painter pass now also gives the Step a compatible outline.
-    assert_eq!(payload.document_version, 6);
+    assert_eq!(payload.document_version, crate::MAX_PROJECT_VERSION);
     let payload: crate::clipboard_payload::ObjectPayload =
         serde_json::from_slice(&serde_json::to_vec(&payload).unwrap()).unwrap();
     payload.validate().unwrap();
@@ -167,7 +168,7 @@ fn decorated_text_shape_callout_and_step_export_match_viewport_without_double_in
             for rotation in [0.0, 17.0] {
                 a.rotation_degrees = rotation;
                 let mut doc = Document::from_image(RgbaImage::new(640, 400)).unwrap();
-                doc.version = 5;
+                doc.version = crate::MAX_PROJECT_VERSION;
                 doc.annotations = vec![a.clone()];
                 let plain = doc.render().unwrap();
                 for (underline, strikethrough) in [(true, false), (false, true), (true, true)] {

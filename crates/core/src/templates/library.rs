@@ -25,7 +25,7 @@ impl Library {
             for a in &mut d.annotations {
                 if a.image
                     .as_ref()
-                    .is_some_and(|b| !b.is_stamp() && !b.is_cursor())
+                    .is_some_and(|b| !b.is_icon() && !b.is_cursor())
                 {
                     let placeholder = placeholder()?;
                     let placeholder = if a.is_shape() {
@@ -143,7 +143,9 @@ pub fn instantiate(
         && let Some(text) = &mut a.text
         && !title.trim().is_empty()
     {
+        let old = text.content.clone();
         text.content = title.into();
+        crate::text::rich::rebase(text, &old, None);
     }
     d.promote_features();
     d.validate()?;

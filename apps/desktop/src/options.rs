@@ -43,6 +43,7 @@ pub(super) enum Tab {
 #[derive(Default)]
 pub(super) struct Options {
     pub tab: Tab,
+    pub category: usize,
     pub recording: Option<ShortcutAction>,
     draft: Option<Keybinds>,
     message: String,
@@ -193,223 +194,283 @@ impl Editor {
         }
     }
     pub(super) fn show_options(&mut self, ui: &mut egui::Ui) {
-        ui.heading("Options");
-        ui.add_space(12.0);
-        crate::tabs::group(ui, |ui| {
+        ui.label(crate::panel_ui::title("Settings", 22.));
+        ui.add_space(12.);
+        crate::panel_ui::rail(ui, |ui| {
             ui.horizontal(|ui| {
+                let w = (ui.available_width() - 4.) / 2.;
                 for (tab, label) in [(Tab::General, "General"), (Tab::Keybinds, "Keybinds")] {
-                    if crate::tabs::tab(ui, label, self.options.tab == tab, 128.0).clicked() {
+                    if crate::panel_ui::tab(ui, label, label, self.options.tab == tab, w, true)
+                        .clicked()
+                    {
                         self.options.tab = tab;
                         self.options.recording = None;
                     }
                 }
-            })
+            });
         });
-        ui.add_space(18.0);
-        if self.options.tab == Tab::General {
-            egui::ScrollArea::vertical().id_salt("general-options").auto_shrink([false,false]).show(ui,|ui| {
-            ui.strong("Startup & closing");
-            ui.add_space(6.);
-            let mut close = self.quick_controls.close_to_tray();
-            if crate::controls::toggle(ui, &mut close, "Close to tray").on_hover_text("Keep ClipCraft running and capture shortcuts active when its windows close. Use File > Exit or the tray menu to quit.").changed() {
-                self.save_lifecycle_option(capture_core::quick_preferences::Choice::CloseToTray(close));
-            }
-            ui.horizontal(|ui| {
-                ui.label("Open on startup");
-                let mut startup = self.quick_controls.startup_window();
-                let before = startup;
-                use capture_core::quick_preferences::StartupWindow;
-                crate::tabs::group(ui, |ui| {
-                    ui.horizontal(|ui| {
-                        for (value, label) in [
-                            (StartupWindow::Editor, "Editor"),
-                            (StartupWindow::CaptureController, "Capture controller"),
-                        ] {
-                            if crate::tabs::tab(ui, label, startup == value, 148.).clicked() {
-                                startup = value;
-                            }
-                        }
-                    })
-                });
-                if startup != before {
-                    self.save_lifecycle_option(
-                        capture_core::quick_preferences::Choice::StartupWindow(startup),
-                    );
-                }
-            });
-            if !self.lifecycle.error.is_empty() {
-                ui.colored_label(egui::Color32::LIGHT_RED, &self.lifecycle.error);
-            }
-            ui.add_space(14.);
-            ui.separator();
-            ui.add_space(6.);
-            ui.strong("Editor");
-            let mut auto = self.quick_controls.auto_switch_tool();
-            if crate::controls::toggle(
-                ui,
-                &mut auto,
-                "Automatically switch tools when selecting objects",
+        ui.add_space(12.);
+        let width = ui.available_width().min(680.);
+        let rect =
+            egui::Rect::from_min_size(ui.cursor().min, egui::vec2(width, ui.available_height()));
+        let _contents = ui.scope_builder(egui::UiBuilder::new().max_rect(rect), |ui| {
+            ui.set_width(width);
+            self.options_contents(ui);
+        });
+        #[cfg(test)]
+        ui.ctx().data_mut(|d| {
+            d.insert_temp(
+                egui::Id::unique("options-content-bounds"),
+                _contents.response.rect,
             )
-            .changed()
-            {
-                self.quick_controls.set_auto_switch_tool(auto);
-            }
-            let mut snap = self.quick_controls.snapping();
-            if crate::controls::toggle(ui, &mut snap, "Canvas snapping").changed() {
-                self.quick_controls.set_snapping(snap);
-            }
-            crate::controls::toggle(ui, &mut self.shell.badges, "Show development badges");
-            self.library_storage_settings(ui);
-            });
+        });
+    }
+    fn options_contents(&mut self, ui: &mut egui::Ui) {
+        if self.options.tab == Tab::General {
+            egui::ScrollArea::vertical()
+                .id_salt("general-options")
+                .auto_shrink([false, false])
+                .show(ui, |ui| {
+                    crate::panel_ui::heading(ui, "Startup", "Startup & closing");
+                    let mut close = self.quick_controls.close_to_tray();
+                    if crate::panel_ui::setting(
+                        ui,
+                        "Close to tray",
+                        "Keep capture shortcuts available when the window closes.",
+                        &mut close,
+                    )
+                    .changed()
+                    {
+                        self.save_lifecycle_option(
+                            capture_core::quick_preferences::Choice::CloseToTray(close),
+                        );
+                    }
+                    ui.horizontal(|ui| {
+                        ui.label("Open on startup");
+                        use capture_core::quick_preferences::{Choice, StartupWindow};
+                        let mut startup = self.quick_controls.startup_window();
+                        let before = startup;
+                        egui::ComboBox::from_id_salt("startup-window")
+                            .selected_text(if startup == StartupWindow::Editor {
+                                "Editor"
+                            } else {
+                                "Clip tab"
+                            })
+                            .show_ui(ui, |ui| {
+                                ui.selectable_value(&mut startup, StartupWindow::Editor, "Editor");
+                                ui.selectable_value(&mut startup, StartupWindow::Clip, "Clip tab");
+                            });
+                        if startup != before {
+                            self.save_lifecycle_option(Choice::StartupWindow(startup));
+                        }
+                    });
+                    ui.add_space(12.);
+                    crate::panel_ui::divider(ui);
+                    crate::panel_ui::heading(ui, "Properties", "Editor");
+                    let mut auto = self.quick_controls.auto_switch_tool();
+                    if crate::panel_ui::setting(
+                        ui,
+                        "Switch tools on selection",
+                        "Use the selected object's tool automatically.",
+                        &mut auto,
+                    )
+                    .changed()
+                    {
+                        self.quick_controls.set_auto_switch_tool(auto);
+                    }
+                    let mut snap = self.quick_controls.snapping();
+                    if crate::panel_ui::setting(
+                        ui,
+                        "Canvas snapping",
+                        "Align objects with nearby edges and centers.",
+                        &mut snap,
+                    )
+                    .changed()
+                    {
+                        self.quick_controls.set_snapping(snap);
+                    }
+                    crate::panel_ui::divider(ui);
+                    self.library_storage_settings(ui);
+                    self.storage_location_options(ui);
+                    if !self.lifecycle.error.is_empty() {
+                        ui.colored_label(egui::Color32::LIGHT_RED, &self.lifecycle.error);
+                    }
+                });
             return;
         }
         let saved = self.quick_controls.keybinds();
         let draft = self.options.draft.get_or_insert_with(|| saved.clone());
-        crate::controls::toggle(ui, &mut draft.enabled, "Enable global capture keybinds");
-        ui.label("Select a shortcut, press your combination, then Save shortcuts.");
-        ui.small("Mode shortcuts use your saved cursor, delay, clipboard and preview settings.");
-        ui.add_space(10.0);
-        let columns = [
-            (
-                "Capture",
-                Action::ALL
-                    .into_iter()
-                    .map(ShortcutAction::Capture)
-                    .collect::<Vec<_>>(),
-            ),
-            (
-                "Tools",
-                crate::shell::TOOLS
-                    .iter()
-                    .filter(|t| t.id != capture_core::toolbar::ToolId::Favorites)
-                    .map(|t| {
-                        ShortcutAction::Editor(capture_core::editor_keybinds::Action::Tool(t.id))
-                    })
-                    .collect(),
-            ),
-            (
-                "Functions",
-                capture_core::editor_keybinds::Function::ALL
-                    .into_iter()
-                    .map(|f| {
-                        ShortcutAction::Editor(capture_core::editor_keybinds::Action::Function(f))
-                    })
-                    .collect(),
-            ),
-        ];
-        let height = (ui.available_height() - 170.).clamp(130., 570.);
-        egui::ScrollArea::vertical()
-            .id_salt("shortcut_columns")
-            .auto_shrink([false, false])
-            .max_height(height)
-            .show(ui, |ui| {
-                ui.columns(3, |uis| {
-                    for (ui, (title, actions)) in uis.iter_mut().zip(columns) {
-                        ui.spacing_mut().item_spacing.y = 5.;
-                        ui.strong(title);
-                        ui.separator();
-                        for action in actions {
-                            ui.push_id(action, |ui| {
-                                ui.label(action.label());
-                                let listening = self.options.recording == Some(action);
-                                let label = if listening {
-                                    "Press keys…".into()
-                                } else {
-                                    action
-                                        .get(draft)
-                                        .map(Chord::label)
-                                        .unwrap_or_else(|| "Not assigned".into())
-                                };
-                                let (record, clear) = shortcut_field(
-                                    ui,
-                                    &label,
-                                    action.label(),
-                                    listening,
-                                    action.get(draft).is_some(),
-                                );
-                                if record.clicked() {
-                                    self.options.recording = Some(action);
-                                    self.options.message.clear();
-                                    self.options.error = false;
-                                }
-                                if clear.clicked() {
-                                    action.set(draft, None);
-                                    self.options.recording = None;
-                                }
-                                ui.add_space(8.);
-                            });
-                        }
+        crate::panel_ui::setting(
+            ui,
+            "Global capture shortcuts",
+            "Capture while working in another application.",
+            &mut draft.enabled,
+        );
+        ui.label(
+            egui::RichText::new("Select a shortcut and press your combination. Save to apply.")
+                .size(12.)
+                .color(crate::panel_ui::MUTED),
+        );
+        ui.add_space(8.);
+        crate::panel_ui::rail(ui, |ui| {
+            ui.horizontal(|ui| {
+                let w = (ui.available_width() - 8.) / 3.;
+                for (i, label) in ["Capture", "Tools", "Functions"].into_iter().enumerate() {
+                    if crate::panel_ui::tab(ui, label, label, self.options.category == i, w, true)
+                        .clicked()
+                    {
+                        self.options.category = i;
+                        self.options.recording = None;
+                    }
+                }
+            });
+        });
+        ui.add_space(10.);
+        crate::panel_ui::heading(
+            ui,
+            ["Capture", "Tools", "Functions"][self.options.category],
+            ["Capture", "Tools", "Functions"][self.options.category],
+        );
+        ui.label(egui::RichText::new(match self.options.category {0=>"Uses the cursor, start delay, clipboard and preview settings saved for each mode.",1=>"Choose an Insert tool while editing. Text fields retain their normal typing shortcuts.",_=>"Editing and view commands apply inside ClipCraft. Mouse gestures are below."}).size(12.).color(crate::panel_ui::MUTED));
+        ui.add_space(8.);
+        let actions: Vec<ShortcutAction> = match self.options.category {
+            0 => Action::ALL
+                .into_iter()
+                .map(ShortcutAction::Capture)
+                .collect(),
+            1 => crate::shell::TOOLS
+                .iter()
+                .map(|t| ShortcutAction::Editor(capture_core::editor_keybinds::Action::Tool(t.id)))
+                .collect(),
+            _ => capture_core::editor_keybinds::Function::ALL
+                .into_iter()
+                .map(|f| ShortcutAction::Editor(capture_core::editor_keybinds::Action::Function(f)))
+                .collect(),
+        };
+        let available = ui.available_rect_before_wrap();
+        let footer_height = if available.width() < 450. { 156. } else { 128. };
+        let _scroll=egui::ScrollArea::vertical().id_salt(("shortcut-category",self.options.category)).auto_shrink([false,false]).max_height((available.height()-footer_height).max(60.)).show(ui,|ui|{
+            for action in actions {
+                ui.push_id(action,|ui|{
+                    ui.horizontal(|ui|{
+                        let field=(ui.available_width()*0.43).clamp(120.,220.);
+                        let left=(ui.available_width()-field-12.).max(80.);
+                        ui.allocate_ui_with_layout(egui::vec2(left,38.),egui::Layout::left_to_right(egui::Align::Center),|ui|{ui.set_min_width(left);ui.add(egui::Label::new(crate::panel_ui::title(action.label(),13.)).wrap());});
+                        ui.allocate_ui_with_layout(egui::vec2(field,38.),egui::Layout::left_to_right(egui::Align::Center),|ui|{
+                            let listening=self.options.recording==Some(action);
+                            let label=if listening {"Press keys…".into()}else{action.get(draft).map(Chord::label).unwrap_or_else(||"Not assigned".into())};
+                            let (record,clear)=shortcut_field(ui,&label,action.label(),listening,action.get(draft).is_some());
+                            if record.clicked(){self.options.recording=Some(action);self.options.message.clear();self.options.error=false;}
+                            if clear.clicked(){action.set(draft,None);self.options.recording=None;}
+                        });
+                    });
+                    crate::panel_ui::divider(ui);
+                });
+            }
+            if self.options.category==2 {
+                crate::panel_ui::heading(ui,"Functions","Mouse gestures");
+                for gesture in capture_core::editor_keybinds::gestures::Gesture::ALL {
+                    ui.push_id(gesture,|ui| {ui.horizontal(|ui|{
+                        let field=(ui.available_width()*0.43).clamp(120.,220.);
+                        let left=(ui.available_width()-field-12.).max(80.);
+                        ui.allocate_ui_with_layout(egui::vec2(left,38.),egui::Layout::left_to_right(egui::Align::Center),|ui|{ui.set_min_width(left);ui.add(egui::Label::new(crate::panel_ui::title(gesture.label(),13.)).wrap());});
+                        let mut selected=draft.editor.gestures.get(gesture);
+                        let label=gesture_label(selected);
+                        ui.allocate_ui_with_layout(egui::vec2(field,38.),egui::Layout::left_to_right(egui::Align::Center),|ui|{
+                            ui.spacing_mut().interact_size.y=30.;
+                            ui.visuals_mut().widgets.inactive.bg_fill=egui::Color32::from_rgb(65,71,74);
+                            ui.visuals_mut().widgets.inactive.bg_stroke=egui::Stroke::new(1.,egui::Color32::from_gray(115));
+                            egui::ComboBox::from_id_salt("gesture-modifiers").width((field-22.).clamp(100.,218.)).selected_text(label).show_ui(ui,|ui|{for v in [Some(2),Some(1),Some(4),Some(3),Some(6),Some(5),None]{ui.selectable_value(&mut selected,v,gesture_label(v));}});
+                        });
+                        draft.editor.gestures.set(gesture,selected);
+                    });crate::panel_ui::divider(ui);});
+                }
+                ui.label(egui::RichText::new("Esc cancels the active tool. Shift range selection, constrained drawing, and text-entry navigation retain their standard behavior.").size(12.).color(crate::panel_ui::MUTED));
+            }
+        });
+        let dirty = *draft != saved;
+        #[cfg(test)]
+        ui.ctx().data_mut(|d| {
+            d.insert_temp(
+                egui::Id::unique("keybinds-scroll"),
+                (_scroll.inner_rect, _scroll.state.clamped_offset()),
+            )
+        });
+        let footer = egui::Rect::from_min_max(
+            egui::pos2(available.left(), available.bottom() - footer_height + 8.),
+            available.max,
+        );
+        ui.scope_builder(egui::UiBuilder::new().max_rect(footer), |ui| {
+            crate::panel_ui::divider(ui);
+            if self.options.recording.is_some() {
+                ui.horizontal_wrapped(|ui| {
+                    ui.label("Listening · Esc to cancel");
+                    if ui.button("Use Print Screen").clicked() {
+                        self.options.record(Chord {
+                            key: 0x2c,
+                            modifiers: 0,
+                        });
+                    }
+                    if ui.button("Cancel recording").clicked() {
+                        self.options.recording = None;
                     }
                 });
-            });
-        let dirty = *draft != saved;
-        if self.options.recording.is_some() {
-            ui.add_space(10.0);
-            ui.horizontal(|ui| {
-                ui.label("Listening · Esc to cancel");
+            }
+            let message = if self.options.message.is_empty() {
+                if dirty {
+                    "Unsaved changes"
+                } else {
+                    "Select a field to change its shortcut"
+                }
+            } else {
+                &self.options.message
+            };
+            ui.colored_label(
+                if self.options.error {
+                    egui::Color32::LIGHT_RED
+                } else {
+                    crate::panel_ui::MUTED
+                },
+                message,
+            );
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if ui
-                    .button("Use Print Screen")
-                    .on_hover_text(
-                        "Assign Print Screen if your keyboard or Windows intercepts the key press",
+                    .add_enabled(
+                        self.options.recording.is_none(),
+                        crate::controls::dialog_button("Save shortcuts", true)
+                            .min_size(egui::vec2(126., crate::controls::DIALOG_ACTION_HEIGHT)),
                     )
                     .clicked()
                 {
-                    self.options.record(Chord {
-                        key: 0x2c,
-                        modifiers: 0,
-                    });
+                    self.save_keybinds(ui.ctx());
                 }
-                if ui.button("Cancel recording").clicked() {
+                if ui
+                    .add_enabled(
+                        dirty,
+                        crate::controls::dialog_button("Discard changes", false),
+                    )
+                    .clicked()
+                {
+                    self.options.draft = Some(saved);
                     self.options.recording = None;
+                    self.options.message.clear();
+                }
+                if ui
+                    .add(crate::controls::dialog_button("Restore defaults", false))
+                    .clicked()
+                {
+                    self.options.draft = Some(Keybinds::default());
+                    self.options.recording = None;
+                    self.options.message = "Defaults loaded. Save shortcuts to apply.".into();
+                    self.options.error = false;
                 }
             });
-        }
-        ui.add_space(14.0);
-        ui.separator();
-        ui.add_space(8.0);
-        ui.horizontal(|ui| {
-            if ui
-                .add_enabled(
-                    self.options.recording.is_none(),
-                    crate::controls::dialog_button("Save shortcuts", true)
-                        .min_size(egui::vec2(134., crate::controls::DIALOG_ACTION_HEIGHT)),
-                )
-                .clicked()
-            {
-                self.save_keybinds(ui.ctx());
-            }
-            if ui
-                .add_enabled(dirty, egui::Button::new("Discard changes"))
-                .clicked()
-            {
-                self.options.draft = Some(saved);
-                self.options.recording = None;
-                self.options.message.clear();
-            }
-            if ui.button("Restore defaults").clicked() {
-                self.options.draft = Some(Keybinds::default());
-                self.options.recording = None;
-                self.options.message = "Default shortcuts loaded. Save shortcuts to apply.".into();
-                self.options.error = false;
-            }
-            if dirty {
-                ui.label("Unsaved changes");
-            }
-        });
-        if !self.options.message.is_empty() {
-            ui.add_space(8.0);
-            ui.colored_label(
-                if self.options.error {
-                    egui::Color32::from_rgb(255, 153, 153)
-                } else {
-                    egui::Color32::from_rgb(153, 220, 180)
-                },
-                &self.options.message,
+            ui.label(
+                egui::RichText::new(&self.global_capture_status)
+                    .size(11.)
+                    .color(crate::panel_ui::MUTED),
             );
-        }
-        ui.add_space(12.0);
-        ui.label(&self.global_capture_status);
-        ui.small("Print Screen may require turning off Windows’ screen-snipping shortcut in Settings → Accessibility → Keyboard. ClipCraft does not change Windows settings.");
+        });
     }
 }
 pub(super) fn chord(key: egui::Key, m: egui::Modifiers) -> Option<Chord> {
@@ -420,6 +481,7 @@ pub(super) fn chord(key: egui::Key, m: egui::Modifiers) -> Option<Chord> {
         Key::Minus => 0xbd,
         Key::PrintScreen => 0x2c,
         Key::Space => 0x20,
+        Key::Tab => 0x09,
         Key::Backspace => 0x08,
         Key::PageUp => 0x21,
         Key::PageDown => 0x22,
@@ -502,11 +564,28 @@ fn shortcut_field(
         ui.painter()
             .rect_filled(clear_rect, 3, egui::Color32::from_rgb(95, 103, 108));
     }
+    if assigned && !listening {
+        let text = ui.painter().layout_no_wrap(
+            label.into(),
+            egui::FontId::proportional(13.),
+            egui::Color32::WHITE,
+        );
+        ui.painter()
+            .with_clip_rect(record_rect.shrink(3.))
+            .rect_filled(
+                egui::Rect::from_center_size(
+                    record_rect.center(),
+                    text.size() + egui::vec2(12., 5.),
+                ),
+                3.,
+                crate::tabs::BACKGROUND,
+            );
+    }
     ui.painter()
         .with_clip_rect(record_rect.shrink2(egui::vec2(7., 0.)))
         .text(
-            record_rect.left_center() + egui::vec2(8., 0.),
-            egui::Align2::LEFT_CENTER,
+            record_rect.center(),
+            egui::Align2::CENTER_CENTER,
             label,
             egui::FontId::proportional(13.),
             egui::Color32::WHITE,
@@ -554,4 +633,16 @@ fn shortcut_field(
         record.on_hover_text(format!("Set {action} shortcut")),
         clear.on_hover_text(format!("Clear {action} shortcut")),
     )
+}
+
+fn gesture_label(v: Option<u8>) -> &'static str {
+    match v {
+        Some(2) => "Ctrl",
+        Some(1) => "Alt",
+        Some(4) => "Shift",
+        Some(3) => "Ctrl+Alt",
+        Some(6) => "Ctrl+Shift",
+        Some(5) => "Alt+Shift",
+        _ => "Disabled",
+    }
 }

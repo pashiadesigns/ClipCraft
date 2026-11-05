@@ -40,6 +40,8 @@ pub enum NumberStyle {
 #[serde(default, deny_unknown_fields)]
 pub struct PageSetup {
     pub size: [u32; 2],
+    pub cropped: bool,
+    pub content_shift: [f32; 2],
     pub ppi: f64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub physical_points: Option<[f64; 2]>,
@@ -65,6 +67,8 @@ impl Default for PageSetup {
     fn default() -> Self {
         Self {
             size: [816, 1056],
+            cropped: false,
+            content_shift: [0.; 2],
             ppi: 96.,
             physical_points: None,
             centimeters: false,
@@ -87,7 +91,7 @@ impl Default for PageSetup {
     }
 }
 impl PageSetup {
-    pub fn legacy(size: [u32; 2]) -> Self {
+    pub fn from_pixels(size: [u32; 2]) -> Self {
         Self {
             size,
             margins: [0.; 4],
@@ -113,6 +117,13 @@ impl PageSetup {
         self.margins.map(|n| (n * self.ppi / 72.) as f32)
     }
     pub fn validate(&self) -> Result<()> {
+        if !self
+            .content_shift
+            .iter()
+            .all(|n| n.is_finite() && n.abs() <= 1_000_000.)
+        {
+            return Err(Error::Invalid("Invalid cropped page offset".into()));
+        }
         let trim = self.trim_points();
         let error = if !self.ppi.is_finite() || !(24.0..=2400.0).contains(&self.ppi) {
             Some("Paper: set Resolution to 24–2400 PPI.")
@@ -235,11 +246,13 @@ impl Layout {
         self.pages.as_ref()?.setup.get(page)
     }
     pub fn content_top(&self, page: usize) -> f32 {
-        self.page_setup(page)
-            .map_or(self.top, |s| self.top.max(s.pixel_margins()[0]))
+        self.page_setup(page).map_or(self.top, |s| {
+            self.top.max(s.pixel_margins()[0]) - s.content_shift[1]
+        })
     }
     pub fn content_left(&self, page: usize) -> f32 {
-        self.page_setup(page).map_or(0., |s| s.pixel_margins()[2])
+        self.page_setup(page)
+            .map_or(0., |s| s.pixel_margins()[2] - s.content_shift[0])
     }
     pub fn content_bottom(&self, page: usize) -> f32 {
         self.page_size(page, [0; 2])[1] as f32
@@ -286,7 +299,7 @@ impl Document {
         let mut origins = old.section_origins();
         let p = layout.pages.as_mut().unwrap();
         if p.setup.is_empty() {
-            p.setup = vec![PageSetup::legacy(p.size); p.count];
+            p.setup = vec![PageSetup::from_pixels(p.size); p.count];
         }
         for &i in selected {
             p.setup[i] = settings.clone();
@@ -295,7 +308,7 @@ impl Document {
         let original_pages: BTreeMap<_, _> = next
             .annotations
             .iter()
-            .map(|a| (a.id, old.page_at(a.start)))
+            .map(|a| (a.id, next.object_page(a)))
             .collect();
         for page in 0..old.page_count() {
             let factor = if scale && selected.contains(&page) {

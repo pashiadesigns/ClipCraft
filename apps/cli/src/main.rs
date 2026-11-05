@@ -324,10 +324,11 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                     step_outline: None,
                     line_style: None,
                     shadow: None,
-                    analysis: None,
+                    focus: None,
                     highlighter_rect: false,
                     group: None,
                     rotation_degrees: 0.0,
+                    mirror_x: false,
                     id: 1,
                     kind: Kind::Arrow,
                     start: [680.0, 130.0],
@@ -345,10 +346,11 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                     step_outline: None,
                     line_style: None,
                     shadow: None,
-                    analysis: None,
+                    focus: None,
                     highlighter_rect: false,
                     group: None,
                     rotation_degrees: 0.0,
+                    mirror_x: false,
                     id: 2,
                     kind: Kind::Rectangle,
                     start: [250.0, 155.0],
@@ -364,7 +366,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             ] {
                 s.execute(Command::Add { annotation: a })?;
             }
-            s.document.save(&out_dir.join("demo.capture.json"))?;
+            s.document.save(&out_dir.join("demo.iclip"))?;
             s.document.export_png(&out_dir.join("demo.png"))?;
             println!(
                 "Synthetic fixture and editable project written to {}",

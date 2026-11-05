@@ -94,7 +94,7 @@ fn typography_metrics_highlight_clipping_render_and_persistence_match() {
         evidence.annotations.push(a);
     }
     evidence.promote_features();
-    assert_eq!(evidence.version, 18);
+    assert_eq!(evidence.version, crate::MAX_PROJECT_VERSION);
     evidence.validate().unwrap();
     if let Ok(root) = std::env::var("CLIPCRAFT_TYPOGRAPHY_DIR") {
         let root = std::path::Path::new(&root);
@@ -158,7 +158,7 @@ fn typography_styles_batch_clipboard_resize_undo_and_invalid_inputs() {
     assert_eq!(t.script, Script::Superscript);
     assert!(t.highlight.is_none());
     let payload = crate::clipboard_payload::ObjectPayload::capture(&s.document, &[a.id]).unwrap();
-    assert_eq!(payload.document_version, 18);
+    assert_eq!(payload.document_version, crate::MAX_PROJECT_VERSION);
     s.execute(Command::PasteObjects {
         payload,
         center: [550., 250.],

@@ -15,34 +15,32 @@ pub(super) fn crop_mode(ctx: &egui::Context, id: u64) -> bool {
 }
 
 pub(super) fn properties(ui: &mut egui::Ui, a: &mut Annotation) {
+    properties_content(ui, a, true);
+}
+pub(crate) fn properties_content(ui: &mut egui::Ui, a: &mut Annotation, headings: bool) {
     let Some(bitmap) = a.image.as_ref().filter(|b| !b.is_cursor()).cloned() else {
         return;
     };
     if let Some(before) = bitmap.vector() {
         let mut vector = before.clone();
-        property_layout::section_help(
-            ui,
-            "Vector stamp",
-            "Edit up to five colors independently. Paths stay crisp at any size; color edits apply only to this stamp and support Undo.",
-        );
-        let columns = if vector.colors.len() == 5 { 3 } else { 4 };
-        egui::Grid::new("stamp-palette")
-            .num_columns(columns)
-            .spacing(egui::vec2(8., 8.))
-            .show(ui, |ui| {
-                for (i, color) in vector.colors.iter_mut().enumerate() {
-                    property_layout::swatch(ui, &format!("Color {}", i + 1), color);
-                    if (i + 1) % columns == 0 {
-                        ui.end_row();
-                    }
-                }
-            });
+        if headings {
+            property_layout::section_help(
+                ui,
+                "Vector icon",
+                "Edit up to five colors independently. Paths stay crisp at any size; color edits apply only to this icon and support Undo.",
+            );
+        }
+        property_layout::color_row(ui, vector.colors.len(), |ui| {
+            for (i, color) in vector.colors.iter_mut().enumerate() {
+                property_layout::swatch(ui, &format!("Color {}", i + 1), color);
+            }
+        });
         if &vector != before
             && let Ok(bitmap) = capture_core::bitmap::Bitmap::from_vector(vector)
         {
             a.image = Some(std::sync::Arc::new(
-                if let Some(name) = a.image.as_ref().and_then(|b| b.stamp_name()) {
-                    bitmap.named_stamp(name)
+                if let Some(name) = a.image.as_ref().and_then(|b| b.icon_name()) {
+                    bitmap.named_icon(name)
                 } else {
                     bitmap
                 },
@@ -50,12 +48,14 @@ pub(super) fn properties(ui: &mut egui::Ui, a: &mut Annotation) {
         }
         return;
     }
-    property_layout::section_help(
-        ui,
-        "Image frame",
-        "Crop image enables edge and corner cropping; drag inside to reposition the source. The center crop handle pans the image at any time. Ctrl-drag also crops or pans. Original pixels remain intact. Reset crop restores the entire screenshot.",
-    );
-    if ui.button("Replace image…").clicked() {
+    if headings {
+        property_layout::section_help(
+            ui,
+            "Image frame",
+            "Crop image enables edge and corner cropping; drag inside to reposition the source. The center crop handle pans the image at any time. Ctrl-drag also crops or pans. Original pixels remain intact. Reset crop restores the entire screenshot.",
+        );
+    }
+    if headings && ui.button("Replace image…").clicked() {
         ui.ctx()
             .data_mut(|d| d.insert_temp(egui::Id::unique("replace-frame-image"), a.id));
     }
@@ -143,6 +143,38 @@ pub(super) fn properties(ui: &mut egui::Ui, a: &mut Annotation) {
     }
 }
 
+pub(super) fn paint_pan_handle(p: &egui::Painter, rect: egui::Rect, hovered: bool) {
+    let c = rect.center();
+    let lines = [
+        vec![
+            c + egui::vec2(-6., -10.),
+            c + egui::vec2(-6., 6.),
+            c + egui::vec2(10., 6.),
+        ],
+        vec![
+            c + egui::vec2(-10., -6.),
+            c + egui::vec2(6., -6.),
+            c + egui::vec2(6., 10.),
+        ],
+    ];
+    for line in lines {
+        p.add(egui::Shape::line(
+            line.clone(),
+            egui::Stroke::new(4., egui::Color32::from_black_alpha(150)),
+        ));
+        p.add(egui::Shape::line(
+            line,
+            egui::Stroke::new(
+                2.,
+                if hovered {
+                    crate::shell::ACCENT
+                } else {
+                    egui::Color32::from_white_alpha(210)
+                },
+            ),
+        ));
+    }
+}
 impl Editor {
     fn placeholder_buttons(
         &self,
@@ -399,37 +431,7 @@ impl Editor {
                 )
                 .on_hover_cursor(egui::CursorIcon::Grab)
                 .on_hover_text("Drag to reposition image inside its crop");
-            let p = ui.painter();
-            let c = rect.center();
-            let lines = [
-                vec![
-                    c + egui::vec2(-6., -10.),
-                    c + egui::vec2(-6., 6.),
-                    c + egui::vec2(10., 6.),
-                ],
-                vec![
-                    c + egui::vec2(-10., -6.),
-                    c + egui::vec2(6., -6.),
-                    c + egui::vec2(6., 10.),
-                ],
-            ];
-            for line in lines {
-                p.add(egui::Shape::line(
-                    line.clone(),
-                    egui::Stroke::new(4., egui::Color32::from_black_alpha(150)),
-                ));
-                p.add(egui::Shape::line(
-                    line,
-                    egui::Stroke::new(
-                        2.,
-                        if response.hovered() {
-                            crate::shell::ACCENT
-                        } else {
-                            egui::Color32::from_white_alpha(210)
-                        },
-                    ),
-                ));
-            }
+            paint_pan_handle(ui.painter(), rect, response.hovered());
             #[cfg(test)]
             ui.ctx()
                 .data_mut(|d| d.insert_temp(egui::Id::unique("image-pan-handle-rect"), rect));
@@ -467,3 +469,6 @@ impl Editor {
 
 #[cfg(test)]
 mod shape_frames_tests;
+
+#[cfg(windows)]
+pub(crate) use shape_frames::native_drop_pointer;

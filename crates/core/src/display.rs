@@ -17,6 +17,8 @@ pub(crate) use viewport::{render_rotated, render_vector};
 #[allow(clippy::large_enum_variant)]
 pub enum Layer {
     Vector(Annotation),
+    BeginClip([u32; 4]),
+    EndClip,
     Shadow(crate::shadow::Patch),
     /// Replace these pixels, including transparent pixels. Source-over drawing
     /// would incorrectly reveal older annotations beneath an eraser stroke.
@@ -40,6 +42,56 @@ impl Document {
     }
 
     fn display_list_limited(&self, patch_pixel_limit: u64) -> Result<DisplayList> {
+        if (!self.canvas_behavior.page_owners.is_empty()
+            || self.annotations.iter().any(|a| a.focus.is_some()))
+            && let Some(g) = &self.guide
+        {
+            let base = self.base_image()?;
+            let furniture = self.page_furniture();
+            let mut list = layers_from_base(base.clone(), &[], patch_pixel_limit)?;
+            for page in 0..g.page_count() {
+                let rect = self.page_rect(page).map(|n| n as u32);
+                let mut objects: Vec<_> = self
+                    .annotations
+                    .iter()
+                    .filter(|a| self.object_visible(a.id) && self.object_page(a) == page)
+                    .cloned()
+                    .collect();
+                objects.extend(
+                    furniture
+                        .iter()
+                        .filter(|a| g.page_at(a.start) == page)
+                        .cloned(),
+                );
+                let mut sub = layers_from_base(base.clone(), &objects, patch_pixel_limit)?;
+                // Effects on one cropped page must never erase another page.
+                sub.layers.retain_mut(|layer| {
+                    if let Layer::ReplacePixels { origin, pixels } = layer {
+                        let left = origin[0].max(rect[0]);
+                        let top = origin[1].max(rect[1]);
+                        let right = (origin[0] + pixels.width()).min(rect[0] + rect[2]);
+                        let bottom = (origin[1] + pixels.height()).min(rect[1] + rect[3]);
+                        if right <= left || bottom <= top {
+                            return false;
+                        }
+                        *pixels = image::imageops::crop_imm(
+                            pixels,
+                            left - origin[0],
+                            top - origin[1],
+                            right - left,
+                            bottom - top,
+                        )
+                        .to_image();
+                        *origin = [left, top];
+                    }
+                    true
+                });
+                list.layers.push(Layer::BeginClip(rect));
+                list.layers.extend(sub.layers);
+                list.layers.push(Layer::EndClip);
+            }
+            return Ok(list);
+        }
         let mut visible: Vec<_> = self
             .annotations
             .iter()
@@ -63,9 +115,6 @@ pub(crate) fn layers_from_base(
     let mut layers = Vec::with_capacity(annotations.len());
     let mut patch_pixels = 0u64;
     for (index, annotation) in annotations.iter().enumerate() {
-        if annotation.analysis.is_some() {
-            continue;
-        }
         let shadow = crate::shadow::patch(annotation);
         if let Some(image) = &mut composite {
             if crate::shadow::above_pixel_effect(annotation.kind) {
@@ -130,13 +179,17 @@ pub(crate) fn layers_from_base(
 }
 
 fn needs_pixels(annotation: &Annotation) -> bool {
-    matches!(
-        annotation.kind,
-        Kind::Blur | Kind::Pixelate | Kind::Eraser | Kind::Redact
-    )
+    annotation.focus.is_some()
+        || matches!(
+            annotation.kind,
+            Kind::Blur | Kind::Pixelate | Kind::Eraser | Kind::Redact
+        )
 }
 
 fn effect_bounds(a: &Annotation, width: u32, height: u32) -> Option<[u32; 4]> {
+    if a.focus.is_some() {
+        return Some([0, 0, width, height]);
+    }
     let (mut min, mut max) = if a.kind == Kind::Redact {
         a.bounds()
     } else {
@@ -150,7 +203,7 @@ fn effect_bounds(a: &Annotation, width: u32, height: u32) -> Option<[u32; 4]> {
             }
         }
         // Include the existing shared stroke renderer's antialias fringe.
-        let reach = a.width as f32 * 0.5 + 1.0;
+        let reach = crate::line_style::stroke_reach(a) + 1.0;
         min = min.map(|v| v - reach);
         max = max.map(|v| v + reach);
     }
@@ -183,6 +236,9 @@ mod tests {
         let mut image = list.base;
         for layer in list.layers {
             match layer {
+                Layer::BeginClip(_) | Layer::EndClip => {
+                    unreachable!("legacy replay fixture has no page clips")
+                }
                 Layer::Vector(a) => crate::render_annotation_ink(&mut image, &a),
                 Layer::Shadow(patch) => patch.paint(&mut image),
                 Layer::ReplacePixels { origin, pixels } => {

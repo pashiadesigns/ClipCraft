@@ -6,9 +6,8 @@ does not replace third-party licenses or grant rights to third-party trademarks.
 
 The distribution includes documented MIT-licensed DesignCraft geometry/rendering
 adaptations, bundled fonts under their respective licenses, and Rust dependencies
-listed in the release SPDX inventory. The setup EXE additionally uses NSIS 3.13
-with zlib compression. Its original notices and pinned download hash are in
-`licenses/nsis/`. Release packages carry `THIRD-PARTY-NOTICES.txt`.
+listed in the release SPDX inventory. The MSI uses the WiX 3.14.1 toolset and standard installer dialogs. Original
+notices, the upstream source link and pinned archive hash are in `licenses/wix/`. Release packages carry `THIRD-PARTY-NOTICES.txt`.
 
 ClipCraft's brand artwork was supplied by its maintainer. Its business stamps,
 editable starter layouts and synthetic demonstration fixtures are project assets.
@@ -17,8 +16,8 @@ competitor names in the public documentation. This is a bounded repository revie
 not a legal opinion or a guarantee about all intellectual-property claims.
 
 Public documentation describes ClipCraft's behavior and verified limits directly.
-Historical source commits and already distributed binary archives are preserved;
-editorial cleanup does not rewrite history or remove required acknowledgments.
+Historical source commits retain their required acknowledgments. Old development
+release downloads are retired when the v1 beta is published.
 
 Contributions must be original or supplied under compatible terms with provenance
 and required notices. Do not copy proprietary icons, templates, documentation or

@@ -11,12 +11,13 @@ struct Scan {
 
 impl Editor {
     pub(crate) fn library_storage_settings(&mut self, ui: &mut egui::Ui) {
-        ui.add_space(12.);
-        ui.separator();
-        crate::property_layout::section_help(
-            ui,
-            "Library storage & recovery",
-            "Capacity applies to future saves and never deletes work automatically. Previous versions are retained from this build onward: up to three per item, with a separate 256 MB total budget. Recover creates an independent copy; the current project stays intact.",
+        crate::panel_ui::heading(ui, "Library", "Library storage & recovery");
+        ui.label(
+            egui::RichText::new(
+                "Capacity applies to future saves. Existing items are never deleted automatically.",
+            )
+            .size(12.)
+            .color(crate::panel_ui::MUTED),
         );
         let Some(store) = self.history.store.as_mut() else {
             ui.label("Library is unavailable.");
@@ -34,10 +35,10 @@ impl Editor {
             used as f64 / 1_000_000.
         ));
         ui.allocate_ui_with_layout(
-            egui::vec2(460., 90.),
+            egui::vec2(ui.available_width(), 110.),
             egui::Layout::top_down(egui::Align::Min),
             |ui| {
-                ui.set_max_width(460.);
+                ui.set_min_width(ui.available_width());
                 crate::property_layout::slider(
                     ui,
                     "Item capacity",
@@ -58,7 +59,10 @@ impl Editor {
         ui.ctx().data_mut(|d| d.insert_temp(key, limits));
         let mut scan = false;
         ui.horizontal(|ui| {
-            if ui.button("Save capacity").clicked() {
+            if ui
+                .add(crate::controls::dialog_button("Save capacity", true))
+                .clicked()
+            {
                 self.history.error = store
                     .set_limits(limits)
                     .map(|_| "Library capacity saved.".into())
@@ -104,7 +108,7 @@ impl Editor {
         let result = scan.result.lock().unwrap().clone();
         let mut close = false;
         let mut restore = None;
-        let modal=egui::Modal::new(key).show(ctx,|ui|{
+        let modal=crate::controls::Modal::new(key).show(ctx,|ui|{
             ui.set_width(620.);crate::property_layout::section_help(ui,"Library check & previous versions","Check validates current projects and thumbnails without modifying them. Recover copy validates the saved revision, creates a separate Library item, and leaves the original untouched. Older builds did not retain previous revisions.");
             match &result {
                 None=>{ui.spinner();ui.label("Checking local Library…");ctx.request_repaint_after(std::time::Duration::from_millis(100));},

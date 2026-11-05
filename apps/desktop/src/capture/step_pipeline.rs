@@ -19,9 +19,24 @@ pub(super) struct Area {
     pub size: [u32; 2],
 }
 
+#[derive(Default)]
+pub(super) struct Caption {
+    pub name: Option<String>,
+    pub instruction: Option<String>,
+}
 pub(super) enum Input {
     Screen(Area),
-    Capture { gesture: Gesture, at: Instant },
+    Capture {
+        gesture: Gesture,
+        at: Instant,
+    },
+    Described {
+        gesture: Gesture,
+        at: Instant,
+        caption: mpsc::Receiver<Caption>,
+        optional: bool,
+    },
+    Undo,
     Restart,
     Cancel,
 }
@@ -109,6 +124,7 @@ fn run_writer<F: Into<capture_core::step_capture::Frame>>(
     let mut history = History::open(&root).map_err(|e| e.to_string())?;
     let mut entry: Option<Entry> = None;
     let mut latest_saved = false;
+    let mut last_typed = None;
     for input in inputs {
         if let Input::Screen(selected) = input {
             if guide.as_ref().is_some_and(|g| !g.is_empty()) {
@@ -118,6 +134,44 @@ fn run_writer<F: Into<capture_core::step_capture::Frame>>(
             }
             guide = Some(Guide::new(selected.size).map_err(|e| e.to_string())?);
             area = Some(selected);
+            continue;
+        }
+        if matches!(input, Input::Undo) {
+            last_typed = None;
+            if let Some(guide) = guide.as_mut()
+                && guide.undo_step()
+            {
+                // Save the reduced guide before removing the previous entry.
+                // A disk/capacity failure must never destroy the last durable copy.
+                latest_saved = false;
+                let old = entry.take();
+                if !guide.is_empty() {
+                    let document = guide.document().map_err(|e| e.to_string())?;
+                    match history.create(&document, "Step guide", Origin::Capture) {
+                        Ok(saved) => {
+                            entry = Some(saved);
+                            latest_saved = true;
+                        }
+                        Err(e) => {
+                            count.store(guide.len(), Ordering::Release);
+                            *failure.lock().unwrap_or_else(|e| e.into_inner()) = Some(format!(
+                                "Undo could not be saved: {e}. The previous Library copy was preserved; the updated guide will open in the editor."
+                            ));
+                            break;
+                        }
+                    }
+                }
+                if let Some(old) = old
+                    && let Err(e) = history.discard(&old)
+                {
+                    count.store(guide.len(), Ordering::Release);
+                    *failure.lock().unwrap_or_else(|e| e.into_inner()) = Some(format!(
+                        "The previous recording copy could not be removed: {e}. Review the Library before sharing."
+                    ));
+                    break;
+                }
+                count.store(guide.len(), Ordering::Release);
+            }
             continue;
         }
         if matches!(input, Input::Restart | Input::Cancel) {
@@ -138,6 +192,7 @@ fn run_writer<F: Into<capture_core::step_capture::Frame>>(
             entry = None;
             latest_saved = false;
             started = None;
+            last_typed = None;
             count.store(0, Ordering::Release);
             if matches!(input, Input::Cancel) {
                 return if let Some(warning) =
@@ -150,13 +205,37 @@ fn run_writer<F: Into<capture_core::step_capture::Frame>>(
             }
             continue;
         }
-        let Input::Capture { gesture, at } = input else {
-            unreachable!()
+        let (gesture, at, caption, optional) = match input {
+            Input::Capture { gesture, at } => (gesture, at, None, false),
+            Input::Described {
+                gesture,
+                at,
+                caption,
+                optional,
+            } => (gesture, at, Some(caption), optional),
+            _ => unreachable!(),
         };
+        let described = caption.is_some();
+        let mut caption = caption
+            .and_then(|r| r.recv_timeout(Duration::from_millis(100)).ok())
+            .unwrap_or_default();
+        if described && !optional && caption.name.is_none() && caption.instruction.is_none() {
+            caption.instruction = Some("Click the highlighted location".into());
+        }
+        if optional && caption.instruction.is_none() {
+            continue;
+        }
+        if optional && caption.instruction == last_typed {
+            continue;
+        }
+        // A transient save backlog must not finalize the guide. Skip stale
+        // screenshots rather than assigning a later screen to an earlier action.
+        if at.elapsed() > Duration::from_millis(300) {
+            *failure.lock().unwrap_or_else(|e| e.into_inner()) = Some("The PC was too busy to capture an action promptly. Recording remains open; repeat the missed action before finishing.".into());
+            continue;
+        }
+        last_typed = optional.then(|| caption.instruction.clone()).flatten();
         let result = (|| -> Result<(), String> {
-            if at.elapsed() > Duration::from_millis(300) {
-                return Err("Recording stopped: the PC was too busy to capture the next click promptly. Saved steps are preserved; repeat the last action in a new guide.".into());
-            }
             let guide = guide.as_mut().ok_or("Select a recording monitor first")?;
             let pixels = capture(
                 area.ok_or("Select a recording monitor first")?,
@@ -174,6 +253,12 @@ fn run_writer<F: Into<capture_core::step_capture::Frame>>(
                     .map_err(|e| e.to_string())?;
             }
             guide.push(pixels, gesture).map_err(|e| e.to_string())?;
+            if let Some(name) = caption.name {
+                guide.set_name(guide.len() - 1, &name);
+            }
+            if let Some(instruction) = caption.instruction {
+                guide.set_instruction(guide.len() - 1, &instruction);
+            }
             latest_saved = false;
             let document = guide.document().map_err(|e| e.to_string())?;
             let saved = if let Some(old) = &entry {
@@ -220,8 +305,9 @@ fn run_writer<F: Into<capture_core::step_capture::Frame>>(
                     return Ok(Some(crate::capture::Captured {
                         document,
                         warning: format!("{warning} Guide captions could not be saved: {e}"),
-                        recognized: None,
+
                         retained: None,
+                        video: None,
                     }));
                 }
             }
@@ -230,14 +316,91 @@ fn run_writer<F: Into<capture_core::step_capture::Frame>>(
     Ok(Some(crate::capture::Captured {
         document: guide.unwrap().document().map_err(|e| e.to_string())?,
         warning,
-        recognized: None,
+
         retained: if latest_saved { entry } else { None },
+        video: None,
     }))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn undo_removes_saved_step_and_reuses_its_number_without_capturing_controls() {
+        let root = tempfile::tempdir().unwrap();
+        let (tx, rx) = mpsc::channel();
+        for event in [
+            input(Instant::now()),
+            input(Instant::now()),
+            Input::Undo,
+            input(Instant::now()),
+        ] {
+            tx.send(event).unwrap();
+        }
+        drop(tx);
+        let count = Arc::new(AtomicUsize::new(0));
+        let mut calls = 0;
+        let result = run(
+            rx,
+            [32, 24],
+            || {
+                calls += 1;
+                Ok(image::RgbaImage::from_pixel(
+                    32,
+                    24,
+                    image::Rgba([calls * 50, 70, 80, 255]),
+                ))
+            },
+            root.path().to_owned(),
+            count.clone(),
+            Arc::new(Mutex::new(None)),
+        )
+        .unwrap()
+        .unwrap();
+        assert_eq!(calls, 3);
+        assert_eq!(count.load(Ordering::Acquire), 2);
+        let history = History::open(root.path()).unwrap();
+        assert_eq!(history.entries().len(), 1);
+        let doc = history.load(&result.retained.unwrap().id).unwrap();
+        let frames: Vec<_> = doc
+            .annotations
+            .iter()
+            .filter_map(|a| a.image.as_ref())
+            .collect();
+        assert_eq!(frames.len(), 2);
+        assert_eq!(
+            frames[0].pixels().unwrap().get_pixel(0, 0).0,
+            [50, 70, 80, 255]
+        );
+        assert_eq!(
+            frames[1].pixels().unwrap().get_pixel(0, 0).0,
+            [150, 70, 80, 255]
+        );
+        assert_eq!(doc.annotations, result.document.annotations);
+    }
+    #[test]
+    fn undo_last_step_then_finish_leaves_no_recording_entry() {
+        let root = tempfile::tempdir().unwrap();
+        let (tx, rx) = mpsc::channel();
+        tx.send(input(Instant::now())).unwrap();
+        tx.send(Input::Undo).unwrap();
+        drop(tx);
+        let count = Arc::new(AtomicUsize::new(0));
+        assert!(
+            run(
+                rx,
+                [32, 24],
+                || Ok(image::RgbaImage::new(32, 24)),
+                root.path().to_owned(),
+                count.clone(),
+                Arc::new(Mutex::new(None))
+            )
+            .unwrap()
+            .is_none()
+        );
+        assert_eq!(count.load(Ordering::Acquire), 0);
+        assert!(History::open(root.path()).unwrap().entries().is_empty());
+    }
     #[test]
     fn contextual_writer_enriches_current_session_and_reopens_exact_final_guide() {
         let dir = tempfile::tempdir().unwrap();
@@ -513,5 +676,82 @@ mod tests {
             .unwrap()
             .is_none()
         );
+    }
+
+    #[test]
+    fn a_stale_action_does_not_finish_recording_or_drop_the_next_fresh_action() {
+        let dir = tempfile::tempdir().unwrap();
+        let (tx, rx) = mpsc::channel();
+        tx.send(input(Instant::now() - Duration::from_secs(2)))
+            .unwrap();
+        tx.send(input(Instant::now())).unwrap();
+        drop(tx);
+        let count = Arc::new(AtomicUsize::new(0));
+        let mut captured = 0;
+        let result = run(
+            rx,
+            [32, 24],
+            || {
+                captured += 1;
+                Ok(image::RgbaImage::new(32, 24))
+            },
+            dir.path().to_owned(),
+            count.clone(),
+            Arc::new(Mutex::new(None)),
+        )
+        .unwrap()
+        .unwrap();
+        assert_eq!(captured, 1);
+        assert_eq!(count.load(Ordering::Acquire), 1);
+        assert!(result.warning.contains("remains open"));
+        assert!(result.retained.is_some());
+    }
+
+    #[test]
+    fn duplicate_typing_flush_is_ignored_but_typing_after_another_action_is_retained() {
+        let dir = tempfile::tempdir().unwrap();
+        let (tx, rx) = mpsc::channel();
+        let described = |optional, instruction: Option<&str>| {
+            let (caption_tx, caption) = mpsc::channel();
+            caption_tx
+                .send(Caption {
+                    name: None,
+                    instruction: instruction.map(str::to_owned),
+                })
+                .unwrap();
+            Input::Described {
+                gesture: Gesture {
+                    start: [20, 20],
+                    end: [20, 20],
+                    button: capture_core::step_capture::Button::Left,
+                },
+                at: Instant::now(),
+                caption,
+                optional,
+            }
+        };
+        for action in [
+            described(true, Some("Type Sample")),
+            described(true, Some("Type Sample")),
+            described(false, None),
+            described(true, Some("Type Sample")),
+        ] {
+            tx.send(action).unwrap();
+        }
+        drop(tx);
+        let count = Arc::new(AtomicUsize::new(0));
+        let result = run(
+            rx,
+            [32, 24],
+            || Ok(image::RgbaImage::new(32, 24)),
+            dir.path().to_owned(),
+            count.clone(),
+            Arc::new(Mutex::new(None)),
+        )
+        .unwrap()
+        .unwrap();
+        assert_eq!(count.load(Ordering::Acquire), 3);
+        let serialized = serde_json::to_string(&result.document).unwrap();
+        assert!(serialized.contains("Click the highlighted location"));
     }
 }

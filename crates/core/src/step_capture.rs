@@ -4,6 +4,7 @@ use image::RgbaImage;
 use std::{path::Path, sync::Arc};
 
 mod context;
+pub use context::label as context_label;
 pub use context::{Context, Header};
 
 pub const MAX_STEPS: usize = 64;
@@ -121,6 +122,8 @@ impl From<RgbaImage> for Frame {
     }
 }
 struct Step {
+    instruction: Option<String>,
+    bytes: usize,
     context: Context,
     cursor: Option<Annotation>,
     image: Arc<Bitmap>,
@@ -133,6 +136,30 @@ pub struct Guide {
     png_bytes: usize,
 }
 impl Guide {
+    pub fn set_instruction(&mut self, index: usize, instruction: &str) -> bool {
+        let Some(step) = self.steps.get_mut(index) else {
+            return false;
+        };
+        let text: String = instruction
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ")
+            .chars()
+            .take(512)
+            .collect();
+        if text.is_empty()
+            || (crate::text::TextStyle {
+                content: text.clone(),
+                ..Default::default()
+            })
+            .validate()
+            .is_err()
+        {
+            return false;
+        }
+        step.instruction = Some(text);
+        true
+    }
     pub fn new(size: [u32; 2]) -> Result<Self> {
         crate::validate_dimensions(size[0], size[1])?;
         Ok(Self {
@@ -144,6 +171,14 @@ impl Guide {
     }
     pub fn len(&self) -> usize {
         self.steps.len()
+    }
+    /// Removes the captured frame and cursor; the next step reuses its number.
+    pub fn undo_step(&mut self) -> bool {
+        if self.steps.pop().is_none() {
+            return false;
+        }
+        self.png_bytes = self.steps.iter().map(|s| s.bytes).sum();
+        true
     }
     pub fn is_empty(&self) -> bool {
         self.steps.is_empty()
@@ -213,6 +248,8 @@ impl Guide {
         }
         let bitmap = Arc::new(Bitmap::new(Arc::new(raster))?);
         let step = Step {
+            instruction: None,
+            bytes,
             context,
             image: bitmap,
             cursor,
@@ -309,24 +346,28 @@ impl Guide {
                 fill: None,
                 points: vec![],
                 callout: None,
-                analysis: None,
+
+                focus: None,
+
                 highlighter_rect: false,
                 group: None,
                 rotation_degrees: 0.,
+                mirror_x: false,
                 step_outline: None,
                 line_style: None,
                 shadow: None,
                 image: None,
                 text: Some(crate::text::TextStyle {
-                    content: step
-                        .context
-                        .name
-                        .as_deref()
-                        .and_then(context::label)
-                        .map_or_else(
-                            || step.gesture.label().to_owned(),
-                            |n| format!("{} \"{}\"", step.gesture.label(), n),
-                        ),
+                    content: step.instruction.clone().unwrap_or_else(|| {
+                        step.context
+                            .name
+                            .as_deref()
+                            .and_then(context::label)
+                            .map_or_else(
+                                || step.gesture.label().to_owned(),
+                                |n| format!("{} \"{}\"", step.gesture.label(), n),
+                            )
+                    }),
                     size_points: 22.,
                     bold: true,
                     horizontal: crate::text::HorizontalAlignment::Left,
@@ -357,7 +398,7 @@ impl Guide {
                 .min((top + HEADER + displayed[1]) as f32 - center[1])
                 .max(0.25);
             let circle = Annotation {
-                analysis: None,
+                focus: None,
                 highlighter_rect: false,
                 id: MAX_STEPS as u64 * 4 + index as u64 + 1,
                 kind: Kind::Ellipse,
@@ -371,6 +412,7 @@ impl Guide {
                 callout: None,
                 group: step.cursor.as_ref().map(|_| index as u64 + 1),
                 rotation_degrees: 0.,
+                mirror_x: false,
                 step_outline: None,
                 line_style: None,
                 shadow: None,
@@ -450,7 +492,7 @@ mod tests {
                 .unwrap();
         }
         let document = guide.document().unwrap();
-        assert_eq!(document.version, 19);
+        assert_eq!(document.version, crate::MAX_PROJECT_VERSION);
         assert_eq!(document.annotations.len(), 8);
         assert_eq!(document.annotations[3].text.as_ref().unwrap().content, "1");
         assert_eq!(document.annotations[7].text.as_ref().unwrap().content, "2");

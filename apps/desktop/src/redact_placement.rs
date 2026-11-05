@@ -10,6 +10,7 @@ impl Editor {
     ) -> bool {
         if self.tool != Some(Kind::Redact)
             || !interactive
+            || !ui.input(|i| i.focused)
             || self.view.panning
             || ui.input(|i| i.key_down(egui::Key::Space))
         {
@@ -19,7 +20,7 @@ impl Editor {
             .selected_annotation()
             .filter(|a| a.kind == Kind::Redact)
         {
-            self.stamps.redact = Some(a);
+            self.icon_library.redact = Some(a);
         }
         let Some(pointer) = ui.input(|i| i.pointer.interact_pos()) else {
             return false;
@@ -28,7 +29,7 @@ impl Editor {
         let visible = transform.image.intersect(transform.viewport);
         let pressed = ui.input(|i| i.pointer.primary_pressed());
         let hit = self.tool_hit(point, 7. / transform.scale);
-        if self.stamps.redact_drag.is_none()
+        if self.icon_library.redact_drag.is_none()
             && (self.edit_drag.is_some()
                 || self
                     .selected_annotation()
@@ -38,7 +39,7 @@ impl Editor {
             return false;
         }
         let mut template = self
-            .stamps
+            .icon_library
             .redact
             .clone()
             .unwrap_or_else(|| self.new_annotation(Kind::Redact, [0., 0.], [100., 28.]));
@@ -52,9 +53,9 @@ impl Editor {
         template.end = [point[0] + size[0] * 0.5, point[1] + size[1] * 0.5];
         if pressed && visible.contains(pointer) {
             self.select_only(None);
-            self.stamps.redact_drag = Some((point, template.clone()));
+            self.icon_library.redact_drag = Some((point, template.clone()));
         }
-        if let Some((origin, preview)) = &mut self.stamps.redact_drag {
+        if let Some((origin, preview)) = &mut self.icon_library.redact_drag {
             if egui::vec2(point[0] - origin[0], point[1] - origin[1]).length() * transform.scale
                 > 4.
             {
@@ -63,13 +64,16 @@ impl Editor {
             }
             *preview = template.clone();
         }
-        if (response.hovered() && visible.contains(pointer) && self.selected.is_none())
-            || self.stamps.redact_drag.is_some()
+        if (response.hovered() && visible.contains(pointer))
+            || self.icon_library.redact_drag.is_some()
         {
             let rect = egui::Rect::from_min_max(
                 transform.screen_point(template.start),
                 transform.screen_point(template.end),
             );
+            #[cfg(test)]
+            ui.ctx()
+                .data_mut(|d| d.insert_temp(egui::Id::unique("redact-hover-preview"), rect));
             ui.painter().with_clip_rect(visible).rect_filled(
                 rect,
                 template.corner_radius * transform.scale,
@@ -93,7 +97,7 @@ impl Editor {
             }
         }
         if ui.input(|i| i.pointer.primary_released())
-            && let Some((_, mut a)) = self.stamps.redact_drag.take()
+            && let Some((_, mut a)) = self.icon_library.redact_drag.take()
         {
             let canvas = [self.session.document.width, self.session.document.height];
             for (axis, limit) in canvas.into_iter().enumerate() {
@@ -105,7 +109,7 @@ impl Editor {
                 self.select_only(None);
             }
         }
-        self.selected.is_none() || self.stamps.redact_drag.is_some()
+        true
     }
 }
 
@@ -158,7 +162,16 @@ mod tests {
         edited.end = [a.start[0] + 70., a.start[1] + 22.];
         e.select_only(Some(a.id));
         e.execute(Command::Update { annotation: edited });
-        e.select_only(None);
+        frame(
+            &mut e,
+            vec![egui::Event::PointerMoved(t.screen_point([300., 80.]))],
+        );
+        let preview = ctx
+            .data(|d| d.get_temp::<egui::Rect>(egui::Id::unique("redact-hover-preview")))
+            .unwrap();
+        assert_eq!(preview.size(), egui::vec2(70., 22.) * t.scale);
+        assert_eq!(e.selected, Some(a.id));
+        assert_eq!(e.session.document.annotations.len(), 1);
         frame(
             &mut e,
             vec![
@@ -199,6 +212,6 @@ mod tests {
             }],
         );
         assert!(e.tool.is_none());
-        assert!(!e.stamps.active);
+        assert!(!e.icon_library.active);
     }
 }

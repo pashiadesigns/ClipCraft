@@ -92,13 +92,31 @@ impl Page {
             offset[0].round() as i64,
             offset[1].round() as i64,
         );
+        let cropped = document.guide.as_ref().is_some_and(|g| {
+            g.page_setup(g.page_at([self.source[0] as f32, self.source[1] as f32]))
+                .is_some_and(|s| s.cropped)
+        });
+        if cropped {
+            base.fill(0);
+            let pixels = image::imageops::crop_imm(
+                &document.render()?,
+                self.source[0],
+                self.source[1],
+                self.source[2],
+                self.source[3],
+            )
+            .to_image();
+            image::imageops::replace(&mut base, &pixels, pad.round() as i64, pad.round() as i64);
+        }
         let mut objects: Vec<_> = document
             .annotations
             .iter()
-            .filter(|a| document.object_visible(a.id))
+            .filter(|a| !cropped && document.object_visible(a.id))
             .cloned()
             .collect();
-        objects.extend(document.page_furniture());
+        if !cropped {
+            objects.extend(document.page_furniture());
+        }
         let objects = crate::canvas_expansion::translated(&objects, offset.map(|n| n as f32))?;
         let mut pixels = base;
         for a in &objects {
@@ -237,6 +255,7 @@ impl PageSettings {
 }
 #[derive(Clone, Debug)]
 pub struct Options {
+    pub redaction_labels: bool,
     pub format: Format,
     pub quality: u8,
     pub background: [u8; 3],
@@ -246,6 +265,7 @@ impl Default for Options {
     fn default() -> Self {
         Self {
             format: Format::Png,
+            redaction_labels: false,
             quality: 92,
             background: [255; 3],
             page: PageSettings::default(),
@@ -283,6 +303,8 @@ pub fn save(document: &Document, path: &Path, options: &Options) -> Result<()> {
     crate::atomic_write(path, &bytes)
 }
 pub fn encode_document(document: &Document, options: &Options) -> Result<Vec<u8>> {
+    let prepared = crate::redaction_labels::decorate(document.clone(), options.redaction_labels)?;
+    let document = &prepared;
     if options.format == Format::Pdf {
         vector_pdf::encode(document, options)
     } else {

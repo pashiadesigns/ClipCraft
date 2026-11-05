@@ -2,14 +2,14 @@ use super::*;
 
 pub const PAGE_GAP: u32 = 160;
 
-fn legacy_gap() -> u32 {
-    48
+fn default_gap() -> u32 {
+    PAGE_GAP
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct PageLayout {
-    #[serde(default = "legacy_gap")]
+    #[serde(default = "default_gap")]
     pub gap: u32,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub setup: Vec<PageSetup>,
@@ -83,13 +83,10 @@ impl Layout {
     }
     pub(super) fn validate_pages(&self, document: &Document) -> Result<()> {
         if let Some(p) = &self.pages
-            && (document.version < 27
-                || !(1..=128).contains(&p.count)
-                || (p.horizontal && document.version < 28)
-                || (p.gap != 48 && document.version < 29)
+            && (!(1..=128).contains(&p.count)
                 || !(48..=1024).contains(&p.gap)
                 || p.size.iter().any(|n| !(128..=32768).contains(n))
-                || self.top + 48. > p.size[1] as f32
+                || (self.top + 48. > p.size[1] as f32 && !document.canvas_behavior.allow_overflow)
                 || [document.width, document.height] != self.canvas_size())
         {
             return Err(Error::Invalid(
@@ -97,7 +94,7 @@ impl Layout {
             ));
         }
         if let Some(p) = &self.pages {
-            if !p.setup.is_empty() && (document.version < 30 || p.setup.len() != p.count) {
+            if !p.setup.is_empty() && p.setup.len() != p.count {
                 return Err(Error::Invalid("Invalid per-page settings".into()));
             }
             for setup in &p.setup {
@@ -113,10 +110,13 @@ impl Layout {
         }
         if self.pages.is_some() {
             for (i, (_, _, bottom)) in self.spans().iter().enumerate() {
-                if *bottom
-                    > self.page_origin(self.sections[i].page)
-                        + self.content_bottom(self.sections[i].page)
-                        + 0.01
+                if !self
+                    .page_setup(self.sections[i].page)
+                    .is_some_and(|s| s.cropped)
+                    && *bottom
+                        > self.page_origin(self.sections[i].page)
+                            + self.content_bottom(self.sections[i].page)
+                            + 0.01
                 {
                     return Err(Error::Invalid("Section exceeds its page; enable automatic overflow or increase page height".into()));
                 }
@@ -137,6 +137,9 @@ impl Layout {
                 used = 0.;
             }
             loop {
+                if self.page_setup(page).is_some_and(|s| s.cropped) {
+                    break;
+                }
                 let available = self.content_bottom(page) - self.content_top(page);
                 if self.sections[i].height <= available + 0.01
                     && used + self.sections[i].height <= available + 0.01
@@ -266,7 +269,7 @@ impl Document {
                         .annotations
                         .iter()
                         .filter(|a| !owned.contains(&a.id))
-                        .filter(|a| old_layout.page_at(a.start) == page)
+                        .filter(|a| self.object_page(a) == page)
                         .cloned()
                         .collect();
                     for mut a in free {
@@ -443,7 +446,7 @@ impl Document {
             .cloned()
             .collect();
         for a in free {
-            let page = old_layout.page_at(a.start);
+            let page = self.object_page(&a);
             let destination = match *action {
                 Action::DeletePage { page: removed } if page == removed => None,
                 Action::DeletePage { page: removed } => {
@@ -469,6 +472,28 @@ impl Document {
                 }
             } else {
                 next.annotations.retain(|n| n.id != a.id);
+            }
+        }
+        if !next.canvas_behavior.page_owners.is_empty() {
+            for owner in next.canvas_behavior.page_owners.values_mut() {
+                *owner = match *action {
+                    Action::DeletePage { page } => {
+                        if *owner > page {
+                            *owner - 1
+                        } else {
+                            *owner
+                        }
+                    }
+                    Action::AddPage { page, .. } => {
+                        if *owner > page {
+                            *owner + 1
+                        } else {
+                            *owner
+                        }
+                    }
+                    Action::MovePage { page, index } => reordered_page(*owner, page, index),
+                    _ => *owner,
+                };
             }
         }
         self.finish_guide(next, layout, old_origins)

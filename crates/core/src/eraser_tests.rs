@@ -7,10 +7,13 @@ fn eraser(opacity: u8) -> Annotation {
         step_outline: None,
         line_style: None,
         shadow: None,
-        analysis: None,
+
+        focus: None,
+
         highlighter_rect: false,
         group: None,
         rotation_degrees: 0.0,
+        mirror_x: false,
         id: 1,
         kind: Kind::Eraser,
         start: [10.0, 20.0],

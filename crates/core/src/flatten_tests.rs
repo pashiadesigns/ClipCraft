@@ -12,13 +12,13 @@ fn flatten_all_preserves_every_rendered_pixel_and_undo_restores_editable_objects
     let command: Command = serde_json::from_str(r#"{"command":"flatten_all"}"#).unwrap();
     session.execute(command).unwrap();
     assert!(session.document.annotations.is_empty());
-    assert_eq!(session.document.version, 2);
+    assert_eq!(session.document.version, crate::MAX_PROJECT_VERSION);
     assert_eq!(session.document.render().unwrap(), pixels);
     assert!(session.is_modified());
     assert_eq!(session.document.source_png, original.source_png);
     session.execute(Command::Undo).unwrap();
     assert_eq!(session.document.annotations, original.annotations);
-    assert_eq!(session.document.version, 1);
+    assert_eq!(session.document.version, crate::MAX_PROJECT_VERSION);
     assert_eq!(session.document.render().unwrap(), pixels);
     assert!(!session.is_modified());
     session.execute(Command::Redo).unwrap();
@@ -169,7 +169,7 @@ fn flattened_resize_small_sizes_and_canvas_baseline_do_not_apply_object_style_li
         height: 5,
     })
     .unwrap();
-    assert_eq!(flat.document.version, 1);
+    assert_eq!(flat.document.version, crate::MAX_PROJECT_VERSION);
     assert!(flat.document.raster.is_none());
     flat.execute(Command::ResizeImageFlattened {
         width: 40,

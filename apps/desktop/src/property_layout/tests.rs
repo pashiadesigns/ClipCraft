@@ -20,7 +20,7 @@ fn slider_rails_end_together_and_numeric_fields_keep_matching_dimensions() {
             |ui| {
                 for (label, mut value, suffix) in [
                     ("Opacity", 100., "%"),
-                    ("Text outline size", 2.5, ""),
+                    ("Text stroke size", 2.5, ""),
                     ("Corners", 4096., ""),
                     ("Spacing", -2.5, " px"),
                     ("Angle", 225., "°"),
@@ -70,7 +70,6 @@ fn endpoint_menu_and_size_slider_apply_live_to_line_batch_and_inherit() {
     crate::shell::configure(&ctx);
     ctx.style_mut_of(egui::Theme::Dark, |s| s.animation_time = 0.);
     let mut e = crate::canvas::tests::editor(&ctx);
-    e.shell.badges = false;
     e.tool = Some(Kind::Line);
     let a = e.new_annotation(Kind::Line, [100., 100.], [340., 100.]);
     let mut b = a.clone();
@@ -194,7 +193,6 @@ fn step_outline_toggle_and_width_drag_apply_live_to_batch_with_one_undo() {
     e.tool = Some(Kind::Step);
     e.select_only(Some(1));
     e.click_selection(Some(2), true);
-    e.shell.badges = false;
     frame(&ctx, &mut e, vec![]);
     let (_, out) = frame(&ctx, &mut e, vec![]);
     let checkbox = crate::color_widgets::tests::text_rect(&out.shapes, "Show outline").unwrap();
@@ -207,7 +205,10 @@ fn step_outline_toggle_and_width_drag_apply_live_to_batch_with_one_undo() {
             .iter()
             .all(|a| a.step_outline.is_some())
     );
-    assert_eq!(e.session.document.version, 6);
+    assert_eq!(
+        e.session.document.version,
+        capture_core::MAX_PROJECT_VERSION
+    );
     e.execute(capture_core::Command::Undo);
     assert_eq!(e.session.document.annotations, doc.annotations);
     assert!(!e.session.can_undo());
@@ -236,7 +237,7 @@ fn step_outline_toggle_and_width_drag_apply_live_to_batch_with_one_undo() {
     frame(&ctx, &mut e, vec![Event::PointerMoved(end)]);
     assert_eq!(e.session.document.annotations, before.annotations);
     let preview = e.preview_document();
-    assert_eq!(preview.version, 6);
+    assert_eq!(preview.version, capture_core::MAX_PROJECT_VERSION);
     for (a, b) in preview.annotations.iter().zip(&before.annotations) {
         assert!(a.step_outline.as_ref().unwrap().width > b.step_outline.as_ref().unwrap().width);
         assert_eq!(a.color, b.color);
@@ -262,7 +263,6 @@ fn step_outline_toggle_and_width_drag_apply_live_to_batch_with_one_undo() {
         painted.session = capture_core::Session::new(preview.clone()).unwrap();
         painted.tool = Some(Kind::Step);
         painted.select_only(Some(2));
-        painted.shell.badges = false;
         let (_, first) = frame(&paint_ctx, &mut painted, vec![]);
         let (_, output) = frame(&paint_ctx, &mut painted, vec![]);
         dump_meshes(&paint_ctx, &root, "StepOutline", first, output);
@@ -398,17 +398,18 @@ fn tabs_separate_object_list_from_tool_settings_without_document_changes() {
     let mut e = crate::canvas::tests::editor(&ctx);
     e.tool = Some(Kind::Step);
     e.add_step([90.0, 90.0]);
-    e.shell.badges = false;
     let before = serde_json::to_vec(&e.session.document).unwrap();
     frame(&ctx, &mut e, vec![]);
     let (tabs, output) = frame(&ctx, &mut e, vec![]);
-    assert!(texts(&output).iter().any(|s| s == "Quick Styles"));
+    assert!((tabs[0].width() - tabs[1].width()).abs() < 0.1);
+    assert!((tabs[0].right() - tabs[1].left()).abs() < 0.1);
+    assert!(texts(&output).iter().any(|s| s == "Presets"));
     assert!(!texts(&output).iter().any(|s| s == "Step 1"));
     click(&ctx, &mut e, tabs[1]);
     assert_eq!(e.shell.property_tab, PropertyTab::Objects);
     let (tabs, output) = frame(&ctx, &mut e, vec![]);
     assert!(texts(&output).iter().any(|s| s == "Step 1"));
-    assert!(!texts(&output).iter().any(|s| s == "Quick Styles"));
+    assert!(!texts(&output).iter().any(|s| s == "Presets"));
     click(&ctx, &mut e, tabs[0]);
     assert_eq!(e.shell.property_tab, PropertyTab::Tool);
     assert_eq!(e.selected, Some(1));
@@ -447,7 +448,6 @@ fn property_groups_remain_passive_and_fit_the_reference_width() {
                 .unwrap()
                 .id,
         );
-        e.shell.badges = false;
         let before = serde_json::to_vec(&e.session.document).unwrap();
         let (_, first) = frame(&ctx, &mut e, vec![]);
         let (_, output) = frame(&ctx, &mut e, vec![]);
@@ -455,8 +455,8 @@ fn property_groups_remain_passive_and_fit_the_reference_width() {
         assert!(e.property_preview.is_none());
         assert!(!e.session.can_undo());
         let labels = texts(&output);
-        assert!(labels.iter().any(|s| s == "Tool Properties"));
-        assert!(labels.iter().any(|s| s == "Quick Styles"));
+        assert!(labels.iter().any(|s| s == "Properties"));
+        assert!(labels.iter().any(|s| s == "Presets"));
         // Compare painted glyph placement, not just allocated row rectangles:
         // egui's sized labels otherwise center each title independently.
         let mut left = None;
@@ -469,7 +469,7 @@ fn property_groups_remain_passive_and_fit_the_reference_width() {
             "Shadow",
             "Rotation",
             "Curve",
-            "Text Outline",
+            "Text stroke",
             "Show outline",
             "Marker size",
         ] {
@@ -502,7 +502,6 @@ fn dump_help_panels(root: &str) {
         let ctx = egui::Context::default();
         crate::shell::configure(&ctx);
         let mut e = crate::canvas::tests::editor(&ctx);
-        e.shell.badges = false;
         e.select_only(None);
         e.choose_tool(index);
         let (_, first) = frame(&ctx, &mut e, vec![]);
@@ -514,8 +513,7 @@ fn dump_help_panels(root: &str) {
     crate::shell::configure(&ctx);
     ctx.style_mut_of(egui::Theme::Dark, |s| s.interaction.tooltip_delay = 0.0);
     let mut e = crate::canvas::tests::editor(&ctx);
-    e.shell.badges = false;
-    e.begin_pixel_selection();
+    e.tool = Some(crate::Kind::Rectangle);
     let mut first = None;
     let mut pos = None;
     for n in 0..4 {
@@ -542,9 +540,7 @@ fn dump_help_panels(root: &str) {
         );
         if n == 0 {
             pos = ctx
-                .data(|d| {
-                    d.get_temp::<Rect>(egui::Id::unique(("property-help", "Selection Properties")))
-                })
+                .data(|d| d.get_temp::<Rect>(egui::Id::unique(("property-help", "Properties"))))
                 .map(|r| r.center());
             first = Some(output);
         } else if n == 3 {
@@ -595,7 +591,6 @@ fn selected_step_size_slider_previews_batch_while_held_and_undoes_once() {
     e.tool = Some(Kind::Step);
     e.select_only(Some(1));
     e.click_selection(Some(2), true);
-    e.shell.badges = false;
     frame(&ctx, &mut e, vec![]);
     let (_, out) = frame(&ctx, &mut e, vec![]);
     fn label(s: &egui::Shape) -> Option<Rect> {

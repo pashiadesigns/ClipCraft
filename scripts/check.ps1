@@ -9,7 +9,7 @@ $artifactPath = Join-Path $projectRoot 'artifacts'
 New-Item -ItemType Directory -Path $artifactPath -Force | Out-Null
 function Get-SourceFingerprint {
     $files = Get-ChildItem -LiteralPath (Join-Path $projectRoot 'crates'),(Join-Path $projectRoot 'apps') -Recurse -File | Where-Object Extension -In '.rs','.toml'
-    $files += Get-Item -LiteralPath (Join-Path $projectRoot 'Cargo.toml'),(Join-Path $projectRoot 'Cargo.lock'),(Join-Path $projectRoot 'sites/capture-workbench/roadmap.json'),(Join-Path $projectRoot 'sites/capture-workbench/release-data.json')
+    $files += Get-Item -LiteralPath (Join-Path $projectRoot 'Cargo.toml'),(Join-Path $projectRoot 'Cargo.lock')
     return (($files | Sort-Object FullName | ForEach-Object { $_.FullName + ':' + (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash }) -join '|')
 }
 function Invoke-LocalChecks {

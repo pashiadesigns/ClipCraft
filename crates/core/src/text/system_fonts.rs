@@ -151,7 +151,7 @@ mod tests {
                 annotation: a.clone(),
             })
             .unwrap();
-        assert_eq!(session.document.version, 21);
+        assert_eq!(session.document.version, crate::MAX_PROJECT_VERSION);
         let actual = session.document.render().unwrap();
         assert_ne!(actual, bundled);
         let root = tempfile::tempdir().unwrap();

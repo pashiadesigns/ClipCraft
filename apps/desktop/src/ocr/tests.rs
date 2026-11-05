@@ -80,6 +80,7 @@ fn result_modal_preserves_lines_and_copies_text_without_canvas_clipboard_or_docu
             text: "ClipCraft local text\nSecond line 123".into(),
             language: "en-US".into(),
             scaled: false,
+            words: vec![],
             spans: vec![],
         }),
         true,
@@ -135,56 +136,6 @@ fn result_modal_preserves_lines_and_copies_text_without_canvas_clipboard_or_docu
     );
 }
 
-#[test]
-fn grab_text_capture_copies_recognized_text_only_and_preview_off_retains_image() {
-    let ctx = egui::Context::default();
-    let mut e = crate::canvas::tests::editor(&ctx);
-    let root = tempfile::tempdir().unwrap();
-    e.history = crate::history::HistoryPanel::isolated(root.path());
-    let before = serde_json::to_vec(&e.session.document).unwrap();
-    e.accept_capture_result(
-        crate::capture::Captured {
-            document: capture_core::Document::blank(40, 30).unwrap(),
-            warning: String::new(),
-            retained: None,
-            recognized: Some(Ok(Recognized {
-                text: "Recognized fixture".into(),
-                language: "en-US".into(),
-                scaled: false,
-                spans: vec![],
-            })),
-        },
-        capture_core::capture_options::Settings {
-            selection: capture_core::capture_options::Selection::GrabText,
-            preview: false,
-            clipboard: true,
-            ..Default::default()
-        },
-        |_| panic!("Grab Text must never copy image pixels"),
-    );
-    assert_eq!(serde_json::to_vec(&e.session.document).unwrap(), before);
-    assert_eq!(e.history.entries().len(), 1);
-    assert!(!e.ocr.is_open());
-    let output = PaintedOutput(ctx.run_ui(Default::default(), |_| e.show_ocr(&ctx)));
-    assert!(
-        output
-            .0
-            .platform_output
-            .commands
-            .iter()
-            .any(|c| matches!(c,egui::OutputCommand::CopyText(t) if t=="Recognized fixture"))
-    );
-    let output = PaintedOutput(ctx.run_ui(Default::default(), |_| e.show_ocr(&ctx)));
-    assert!(
-        !output
-            .0
-            .platform_output
-            .commands
-            .iter()
-            .any(|c| matches!(c, egui::OutputCommand::CopyText(_)))
-    );
-}
-
 #[cfg(windows)]
 #[test]
 #[ignore = "Opt-in local Windows OCR model; synthetic pixels only, no desktop or clipboard"]
@@ -205,10 +156,13 @@ fn native_ocr_recognizes_generated_fixture() {
         step_outline: None,
         line_style: None,
         shadow: None,
-        analysis: None,
+
+        focus: None,
+
         highlighter_rect: false,
         group: None,
         rotation_degrees: 0.,
+        mirror_x: false,
         callout: None,
         text: Some(TextStyle {
             content: "ClipCraft local text\nSecond line 123".into(),
@@ -252,6 +206,7 @@ fn styled_result() -> Recognized {
     use capture_core::text::{TextFont, TextStyle, recognition::Appearance};
     let text = "Original raster stays intact. Objects remain\neditable.".to_string();
     Recognized {
+        words: vec![],
         spans: vec![formatting::Span {
             range: 0..text.len(),
             appearance: Appearance {
@@ -376,4 +331,26 @@ fn rich_result_toggle_copy_error_and_close_use_real_controls_without_os_clipboar
         click(&mut state, "ocr-close", &mut copied, fail);
         assert!(!state.open);
     }
+}
+
+#[test]
+fn canvas_ocr_uses_visible_composite_and_selected_bounds() {
+    let ctx = egui::Context::default();
+    let mut editor = crate::canvas::tests::editor(&ctx);
+    let mut doc = capture_core::Document::canvas(80, 60, [210, 100, 40, 255]).unwrap();
+    let mut redact = editor.new_annotation(crate::Kind::Redact, [20., 10.], [60., 50.]);
+    redact.id = 1;
+    redact.color = [0, 0, 0, 255];
+    doc.annotations.push(redact);
+    editor.session = capture_core::Session::new(doc.clone()).unwrap();
+    editor.select_only(Some(1));
+    let pixels = editor.ocr_pixels().unwrap();
+    assert_eq!(pixels.dimensions(), (40, 40));
+    assert!(pixels.pixels().all(|p| p.0 == [0, 0, 0, 255]));
+    editor.select_only(None);
+    assert_eq!(editor.ocr_pixels().unwrap(), doc.render().unwrap());
+    assert_eq!(
+        serde_json::to_value(&editor.session.document).unwrap(),
+        serde_json::to_value(&doc).unwrap()
+    );
 }

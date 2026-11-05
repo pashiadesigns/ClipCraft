@@ -40,7 +40,7 @@ fn blank_sections_reflow_resize_roundtrip_and_undo_without_placeholder_objects()
     assert!(blank.objects.is_empty());
     assert!(blank.marker.is_none());
     assert_eq!(s.document.annotations.len(), before.annotations.len());
-    assert_eq!(s.document.version, 26);
+    assert_eq!(s.document.version, crate::MAX_PROJECT_VERSION);
     let mut legacy = s.document.clone();
     legacy.version = 25;
     assert!(legacy.validate().is_err());

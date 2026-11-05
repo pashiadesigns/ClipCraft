@@ -10,8 +10,7 @@ New-Item -ItemType Directory -Path $destinationPath -Force | Out-Null
 $shell = New-Object -ComObject WScript.Shell
 try {
     foreach ($entry in @(
-        @{Name='ClipCraft Editor'; Arguments='--editor'; Icon=101},
-        @{Name='ClipCraft Capture Controller'; Arguments='--capture-controller'; Icon=102}
+        @{Name='ClipCraft'; Arguments=''; Icon=101}
     )) {
         $path = Join-Path $destinationPath ($entry.Name + '.lnk')
         $shortcut = $shell.CreateShortcut($path)
@@ -24,4 +23,4 @@ try {
         [Runtime.InteropServices.Marshal]::FinalReleaseComObject($shortcut) | Out-Null
     }
 } finally { [Runtime.InteropServices.Marshal]::FinalReleaseComObject($shell) | Out-Null }
-Write-Output "Added Editor and Capture Controller shortcuts in $destinationPath"
+Write-Output "Added ClipCraft shortcut in $destinationPath"

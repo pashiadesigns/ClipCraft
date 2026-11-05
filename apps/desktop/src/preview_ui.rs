@@ -15,7 +15,7 @@ impl Editor {
             || self.shell.help
             || self.view.panning
             || self.capture_requested
-            || self.stamps.redact_drag.is_some()
+            || self.icon_library.redact_drag.is_some()
             || self.crop.as_ref().is_some_and(|c| c.dragging())
             || ctx.input(|i| i.pointer.any_down() || !i.focused)
         {
@@ -44,9 +44,7 @@ impl Editor {
     }
 
     pub(super) fn show_ui_button(&mut self, ui: &mut egui::Ui) {
-        if !self.shell.preview_ui {
-            return;
-        }
+        let hidden = self.shell.preview_ui;
         let area = egui::Rect::from_min_size(
             egui::pos2(ui.max_rect().right() - 86., ui.min_rect().center().y - 15.),
             egui::vec2(80., 30.),
@@ -55,16 +53,43 @@ impl Editor {
             .scope_builder(egui::UiBuilder::new().max_rect(area), |ui| {
                 ui.add_sized(
                     area.size(),
-                    egui::Button::new("Show UI").fill(crate::shell::ACCENT),
+                    egui::Button::new("").fill(crate::shell::ACCENT),
                 )
             })
             .inner
-            .on_hover_text("Restore the ribbon and panes · Tab");
+            .on_hover_text(if hidden {
+                "Restore the ribbon and panes · shortcut in Settings"
+            } else {
+                "Hide the ribbon and panes · shortcut in Settings"
+            });
+        crate::icons::draw_scaled(
+            ui.painter(),
+            egui::Rect::from_center_size(
+                r.rect.left_center() + egui::vec2(14., 0.),
+                egui::vec2(18., 18.),
+            ),
+            if hidden {
+                "Show annotations"
+            } else {
+                "Hide annotations"
+            },
+            egui::Color32::WHITE,
+            0.65,
+        );
+        let label = if hidden { "Show UI" } else { "Hide UI" };
+        ui.painter().text(
+            r.rect.left_center() + egui::vec2(27., 0.),
+            egui::Align2::LEFT_CENTER,
+            label,
+            egui::FontId::proportional(12.),
+            egui::Color32::WHITE,
+        );
+        r.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, label));
         #[cfg(test)]
         ui.ctx()
             .data_mut(|d| d.insert_temp(egui::Id::unique("show-ui-button"), r.rect));
         if r.clicked() {
-            self.shell.preview_ui = false;
+            self.shell.preview_ui = !hidden;
             ui.ctx().request_repaint();
         }
     }
@@ -126,12 +151,15 @@ mod tests {
                 let ctx = egui::Context::default();
                 crate::shell::configure(&ctx);
                 let mut e = crate::canvas::tests::editor(&ctx);
-                e.shell.badges = false;
                 e.shell.properties = properties;
                 e.history.recent = recent;
                 let original = serde_json::to_vec(&e.session.document).unwrap();
                 frame(&ctx, &mut e, vec![]);
                 let (_, before) = frame(&ctx, &mut e, vec![]);
+                let visible_button = ctx.data(|d| {
+                    d.get_temp::<egui::Rect>(egui::Id::unique("show-ui-button"))
+                        .unwrap()
+                });
                 frame(&ctx, &mut e, vec![tab(egui::Modifiers::NONE, false)]);
                 assert!(e.shell.preview_ui);
                 let (_, hidden) = frame(&ctx, &mut e, vec![]);
@@ -160,6 +188,7 @@ mod tests {
                     d.get_temp::<egui::Rect>(egui::Id::unique("show-ui-button"))
                         .unwrap()
                 });
+                assert_eq!(rect, visible_button);
                 assert!(rect.right() > 1250. && rect.top() < 50., "{rect:?}");
                 if properties
                     && recent
@@ -169,7 +198,6 @@ mod tests {
                     crate::shell::configure(&preview_ctx);
                     let mut preview = crate::canvas::tests::editor(&preview_ctx);
                     preview.shell.preview_ui = true;
-                    preview.shell.badges = false;
                     let first = frame(&preview_ctx, &mut preview, vec![]).0;
                     let second = frame(&preview_ctx, &mut preview, vec![]).0;
                     crate::property_layout::tests::dump_meshes(
@@ -193,6 +221,9 @@ mod tests {
                 );
                 frame(&ctx, &mut e, vec![button(false)]);
                 assert!(!e.shell.preview_ui);
+                frame(&ctx, &mut e, vec![button(true)]);
+                frame(&ctx, &mut e, vec![button(false)]);
+                assert!(e.shell.preview_ui, "the same button hides the UI again");
                 assert_eq!(serde_json::to_vec(&e.session.document).unwrap(), original);
                 assert!(!e.session.can_undo());
             }

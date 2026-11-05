@@ -20,8 +20,7 @@ impl Editor {
             return false;
         };
         let Some(group) = a.group else { return false };
-        if a.analysis.is_some()
-            || !self.session.document.object_editable(id)
+        if !self.session.document.object_editable(id)
             || (self.editing_group == Some(group) && self.selected == Some(id))
         {
             return false;
@@ -39,15 +38,20 @@ impl Editor {
     }
     pub(super) fn activate_selected_tool(&mut self) {
         if let Some(a) = self.selected_annotation() {
+            self.shell.focus.active = a.focus.is_some();
+            self.shell.focus.remember(&a);
             self.tool = (a.kind != crate::Kind::Image).then_some(a.kind);
             self.restore_drawing_defaults(self.tool);
-            self.shell.planned_tool = None;
-            self.shell.effects = false;
+
             self.shell.properties = true;
             self.sync_step_sequence();
         }
     }
     pub(super) fn select_only(&mut self, id: Option<u64>) {
+        if let Some(id) = id {
+            self.sync_video_object_selection(id);
+        }
+        self.video.zoom_selected = None;
         if !id.is_some_and(|id| {
             self.session
                 .document
@@ -108,7 +112,7 @@ impl Editor {
             .document
             .annotations
             .iter()
-            .filter(|a| self.is_selected(a.id) && self.session.document.object_editable(a.id))
+            .filter(|a| self.is_selected(a.id) && !self.session.document.object_state(a.id).locked)
             .map(|a| {
                 self.text_draft
                     .as_ref()
@@ -126,6 +130,7 @@ impl Editor {
     }
 
     pub(super) fn click_selection(&mut self, hit: Option<u64>, additive: bool) {
+        self.clear_timeline_selection();
         if !additive {
             self.select_only(hit);
             return;
@@ -176,6 +181,9 @@ impl Editor {
     }
 
     pub(super) fn delete_selection(&mut self) {
+        if self.is_video() && self.delete_video_selection() {
+            return;
+        }
         let ids = self.selected_objects().iter().map(|a| a.id).collect();
         self.execute(Command::RemoveMany { ids });
     }
@@ -215,6 +223,18 @@ impl Editor {
         let color = egui::Color32::from_rgb(189, 245, 69);
         let mut union = egui::Rect::NOTHING;
         for a in objects {
+            let transform = self
+                .session
+                .document
+                .video
+                .as_ref()
+                .and_then(|p| p.objects.get(&a.id))
+                .map_or(transform, |timing| {
+                    self.video_layer_transform(
+                        transform,
+                        capture_core::video::links::Layer::Annotation(timing.track),
+                    )
+                });
             crate::line_properties::paint_selection(painter, &a, transform, color);
             let (min, max) = a.bounds();
             let rect =

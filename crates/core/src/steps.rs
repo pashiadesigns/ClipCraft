@@ -54,12 +54,12 @@ pub fn marker(
     sequence: (u32, bool),
     canvas: [u32; 2],
 ) -> Result<Annotation> {
-    if !(24..=160).contains(&diameter)
+    if !(1..=16384).contains(&diameter)
         || !center.iter().all(|v| v.is_finite())
         || canvas.contains(&0)
     {
         return Err(Error::Invalid(
-            "Step size must be 24–160 pixels on a valid canvas".into(),
+            "Step size must be 1–16384 pixels on a valid canvas".into(),
         ));
     }
     let size = (diameter as f32)
@@ -74,10 +74,13 @@ pub fn marker(
         step_outline: None,
         line_style: None,
         shadow: None,
-        analysis: None,
+
+        focus: None,
+
         highlighter_rect: false,
         group: None,
         rotation_degrees: 0.0,
+        mirror_x: false,
         id,
         kind: Kind::Step,
         start,
@@ -108,11 +111,11 @@ pub fn next_number(document: &Document, letters: bool) -> u32 {
 pub fn resized_marker(a: &Annotation, diameter: f32, canvas: [u32; 2]) -> Result<Annotation> {
     if a.kind != Kind::Step
         || !diameter.is_finite()
-        || !(24.0..=160.0).contains(&diameter)
+        || !(1.0..=16384.0).contains(&diameter)
         || canvas.contains(&0)
     {
         return Err(Error::Invalid(
-            "Step size must be 24–160 pixels on a valid canvas".into(),
+            "Step size must be 1–16384 pixels on a valid canvas".into(),
         ));
     }
     let (min, max) = a.body_bounds();

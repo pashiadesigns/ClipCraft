@@ -8,6 +8,8 @@ use capture_core::{
 
 fn event(chord: Chord, repeat: bool) -> egui::Event {
     let key = match chord.key {
+        0x20 => egui::Key::Space,
+        0x09 => egui::Key::Tab,
         0x08 => egui::Key::Backspace,
         0xbb => egui::Key::Equals,
         0xbd => egui::Key::Minus,
@@ -74,7 +76,16 @@ fn resolve(events: &mut Vec<egui::Event>, keys: &Keybinds) -> Vec<Action> {
                     direct.push(a);
                 }
             }
-            Some(a @ Action::Function(Function::Group | Function::Ungroup)) => {
+            Some(
+                a @ Action::Function(
+                    Function::Group
+                    | Function::Ungroup
+                    | Function::VideoPlayback
+                    | Function::ToggleRecent
+                    | Function::ToggleAnnotations
+                    | Function::FitCanvas,
+                ),
+            ) => {
                 if !repeat && !direct.contains(&a) {
                     direct.push(a);
                 }
@@ -118,9 +129,34 @@ impl Editor {
         for action in actions {
             match action {
                 Action::Tool(id) => {
+                    if self.is_video()
+                        && matches!(id, ToolId::Crop | ToolId::CutOut | ToolId::Eraser)
+                    {
+                        continue;
+                    }
                     if let Some(index) = crate::shell::TOOLS.iter().position(|t| t.id == id) {
                         self.choose_tool(index);
                     }
+                }
+                Action::Function(Function::VideoPlayback) => {
+                    if self.is_video() && self.shell.canvas_enabled() {
+                        self.video_playback_key();
+                    }
+                }
+                Action::Function(Function::ToggleRecent) => {
+                    self.set_recent_visible(!self.history.recent);
+                    if self.history.recent {
+                        self.history.refresh();
+                    }
+                }
+                Action::Function(Function::ToggleAnnotations) => {
+                    self.toggle_annotations();
+                }
+                Action::Function(Function::FitCanvas) => {
+                    self.view.apply(
+                        crate::canvas_view::ZoomAction::Set(crate::canvas_view::ZoomMode::Fit),
+                        None,
+                    );
                 }
                 Action::Function(f) => {
                     let action = if f == Function::Group {
@@ -152,17 +188,11 @@ impl Editor {
             ToolId::Move => "Select and move objects.",
             ToolId::Text => "Draw a text box.",
             ToolId::Shape => "Draw a shape.",
-            ToolId::Step => "Place the next step marker.",
-            ToolId::Blur => "Blur or pixelate an area.",
-            ToolId::Selection => "Select image pixels.",
-            ToolId::Pen => "Draw a freehand stroke.",
-            ToolId::Callout => "Draw a callout.",
-            ToolId::Highlighter => "Highlight text or an area.",
-            ToolId::Redact => "Cover an area with solid black.",
-            ToolId::Arrow => "Draw an arrow.",
-            ToolId::Line => "Draw a line.",
-            ToolId::Fill => "Fill a connected color area.",
-            ToolId::Simplify => "Turn image details into editable blocks.",
+            ToolId::Steps => "Place the next step marker.",
+            ToolId::Focus => "Keep a clear window and soften or darken the content outside it.",
+            ToolId::Obfuscate => "Blur, pixelate or redact an area.",
+            ToolId::Penlighter => "Write or highlight with a freehand stroke.",
+            ToolId::Lines => "Draw lines and arrows.",
             ToolId::Crop => "Crop the image.",
             ToolId::CutOut => "Remove a strip of the image.",
             ToolId::Eraser => "Erase image pixels.",
@@ -290,7 +320,6 @@ mod tests {
             assert_eq!(e.current_tool().id, tool);
         }
         e.cancel_gesture();
-        e.shell.planned_tool = None;
         e.tool = None;
         let mut output = ctx.run_ui(
             egui::RawInput {
@@ -307,12 +336,47 @@ mod tests {
             |ui| {
                 let id = egui::Id::unique("typing-field");
                 ui.memory_mut(|m| m.request_focus(id));
-                ui.add(egui::TextEdit::singleline(&mut String::new()).id(id));
+                ui.add(crate::unicode_input::TextEdit::singleline(&mut String::new()).id(id));
                 e.editor_keybind_input(ui.ctx());
             },
         );
         output.textures_delta.clear();
         assert_eq!(e.tool, None);
         assert!(e.tool_tooltip(ToolId::Move).starts_with("Move (V)"));
+    }
+    #[test]
+    fn video_shortcut_remaps_ignores_repeat_and_keeps_spaces_in_text() {
+        let mut keys = Keybinds::default();
+        let action = Action::Function(Function::VideoPlayback);
+        let space = keys.get(action).unwrap();
+        assert_eq!(space.key, 0x20);
+        assert_eq!(resolve(&mut vec![event(space, false)], &keys), vec![action]);
+        assert!(resolve(&mut vec![event(space, true)], &keys).is_empty());
+        let remap = Chord {
+            key: 0x50,
+            modifiers: 2,
+        };
+        keys.set(action, Some(remap));
+        assert_eq!(resolve(&mut vec![event(remap, false)], &keys), vec![action]);
+        assert!(resolve(&mut vec![event(space, false)], &keys).is_empty());
+        let ctx = egui::Context::default();
+        let mut e = crate::canvas::tests::editor(&ctx);
+        let mut input = String::from("Hello");
+        let mut output = ctx.run_ui(
+            egui::RawInput {
+                focused: true,
+                events: vec![event(space, false), egui::Event::Text(" ".into())],
+                ..Default::default()
+            },
+            |ui| {
+                let id = egui::Id::unique("video-typing");
+                ui.memory_mut(|m| m.request_focus(id));
+                ui.add(crate::unicode_input::TextEdit::singleline(&mut input).id(id));
+                e.editor_keybind_input(ui.ctx());
+            },
+        );
+        output.textures_delta.clear();
+        assert!(input.contains(' '));
+        assert!(!e.video.playing);
     }
 }

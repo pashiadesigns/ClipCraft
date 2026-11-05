@@ -267,7 +267,12 @@ fn shared_library_and_recent_menu_actions_preserve_canvas_and_use_selected_entry
     assert_eq!(e.autosave_summary().0, "Removed from Library");
     assert!(e.history.active.is_none());
     assert!(e.history.entry(&tagged.id).is_none());
-    assert_eq!(e.session.document.annotations, doc.annotations);
+    assert!(e.session.document.annotations.is_empty());
+    assert!(e.session.document.video.is_none());
+    assert_eq!(
+        [e.session.document.width, e.session.document.height],
+        [1920, 1080]
+    );
 
     let mut guide = capture_core::step_capture::Guide::new([80, 50]).unwrap();
     guide

@@ -85,130 +85,135 @@ impl Editor {
         };
         let mut apply = None;
         let mut cancel = false;
-        let modal = egui::Modal::new(egui::Id::unique("resize_canvas")).show(ctx, |ui| {
-            ui.set_width(320.0);
-            ui.horizontal(|ui| {
-                ui.strong("Resize Canvas");
-                crate::shell::badge(ui, self.shell.badges, "EDIT-030");
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    let close = ui.button("×").on_hover_text("Close Resize Canvas");
-                    close.widget_info(|| {
-                        egui::WidgetInfo::labeled(egui::Role::Button, true, "Close Resize Canvas")
+        let modal =
+            crate::controls::Modal::new(egui::Id::unique("resize_canvas")).show(ctx, |ui| {
+                ui.set_width(320.0);
+                ui.horizontal(|ui| {
+                    ui.strong("Resize Canvas");
+
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        let close = ui.button("×").on_hover_text("Close Resize Canvas");
+                        close.widget_info(|| {
+                            egui::WidgetInfo::labeled(
+                                egui::Role::Button,
+                                true,
+                                "Close Resize Canvas",
+                            )
+                        });
+                        cancel |= close.clicked();
                     });
-                    cancel |= close.clicked();
                 });
-            });
-            ui.separator();
-            ui.add_space(10.0);
-            ui.horizontal(|ui| {
-                ui.add_space(77.0);
-                egui::Grid::new("canvas_resize_dimensions")
-                    .spacing([8.0, 8.0])
-                    .show(ui, |ui| {
-                        for (label, value) in
-                            [("Width:", &mut draft.width), ("Height:", &mut draft.height)]
-                        {
-                            let label = ui.label(label);
-                            let input = ui
-                                .add(
-                                    egui::TextEdit::singleline(value)
-                                        .desired_width(75.0)
-                                        .min_size(egui::vec2(75.0, 20.0))
-                                        .align(egui::Align2::RIGHT_CENTER),
-                                )
-                                .labelled_by(label.id);
-                            crate::controls::focus_once(&input, &mut draft.focus_pending);
-                            ui.label("px");
-                            ui.end_row();
-                        }
-                    });
-            });
-            ui.horizontal(|ui| {
-                ui.add_space(77.0);
-                if crate::controls::toggle(ui, &mut draft.relative, "Use relative dimensions")
-                    .changed()
-                {
-                    draft.width = if draft.relative {
-                        "0".into()
-                    } else {
-                        draft.original[0].to_string()
-                    };
-                    draft.height = if draft.relative {
-                        "0".into()
-                    } else {
-                        draft.original[1].to_string()
-                    };
-                }
-            });
-            ui.add_space(7.0);
-            ui.horizontal(|ui| {
-                ui.add_space(64.0);
-                ui.label("Placement:");
-                egui::Grid::new("canvas_placement")
-                    .min_col_width(0.0)
-                    .spacing([2.0, 2.0])
-                    .show(ui, |ui| {
-                        for (index, placement) in Placement::ALL.into_iter().enumerate() {
-                            let button = ui
-                                .add_sized(
-                                    [23.0, 23.0],
-                                    egui::Button::selectable(draft.placement == placement, " "),
-                                )
-                                .on_hover_text(placement.label());
-                            button.widget_info(|| {
-                                egui::WidgetInfo::selected(
-                                    egui::Role::RadioButton,
-                                    true,
-                                    draft.placement == placement,
-                                    placement.label(),
-                                )
-                            });
-                            ui.painter().rect_stroke(
-                                button.rect,
-                                0.0,
-                                egui::Stroke::new(1.0, egui::Color32::from_gray(105)),
-                                egui::StrokeKind::Inside,
-                            );
-                            if button.clicked() {
-                                draft.placement = placement;
-                            }
-                            if index % 3 == 2 {
+                ui.separator();
+                ui.add_space(10.0);
+                ui.horizontal(|ui| {
+                    ui.add_space(77.0);
+                    egui::Grid::new("canvas_resize_dimensions")
+                        .spacing([8.0, 8.0])
+                        .show(ui, |ui| {
+                            for (label, value) in
+                                [("Width:", &mut draft.width), ("Height:", &mut draft.height)]
+                            {
+                                let label = ui.label(label);
+                                let input = ui
+                                    .add(
+                                        crate::unicode_input::TextEdit::singleline(value)
+                                            .desired_width(75.0)
+                                            .min_size(egui::vec2(75.0, 20.0))
+                                            .align(egui::Align2::RIGHT_CENTER),
+                                    )
+                                    .labelled_by(label.id);
+                                crate::controls::focus_once(&input, &mut draft.focus_pending);
+                                ui.label("px");
                                 ui.end_row();
                             }
-                        }
-                    });
+                        });
+                });
+                ui.horizontal(|ui| {
+                    ui.add_space(77.0);
+                    if crate::controls::toggle(ui, &mut draft.relative, "Use relative dimensions")
+                        .changed()
+                    {
+                        draft.width = if draft.relative {
+                            "0".into()
+                        } else {
+                            draft.original[0].to_string()
+                        };
+                        draft.height = if draft.relative {
+                            "0".into()
+                        } else {
+                            draft.original[1].to_string()
+                        };
+                    }
+                });
+                ui.add_space(7.0);
+                ui.horizontal(|ui| {
+                    ui.add_space(64.0);
+                    ui.label("Placement:");
+                    egui::Grid::new("canvas_placement")
+                        .min_col_width(0.0)
+                        .spacing([2.0, 2.0])
+                        .show(ui, |ui| {
+                            for (index, placement) in Placement::ALL.into_iter().enumerate() {
+                                let button = ui
+                                    .add_sized(
+                                        [23.0, 23.0],
+                                        egui::Button::selectable(draft.placement == placement, " "),
+                                    )
+                                    .on_hover_text(placement.label());
+                                button.widget_info(|| {
+                                    egui::WidgetInfo::selected(
+                                        egui::Role::RadioButton,
+                                        true,
+                                        draft.placement == placement,
+                                        placement.label(),
+                                    )
+                                });
+                                ui.painter().rect_stroke(
+                                    button.rect,
+                                    0.0,
+                                    egui::Stroke::new(1.0, egui::Color32::from_gray(105)),
+                                    egui::StrokeKind::Inside,
+                                );
+                                if button.clicked() {
+                                    draft.placement = placement;
+                                }
+                                if index % 3 == 2 {
+                                    ui.end_row();
+                                }
+                            }
+                        });
+                });
+                ui.add_space(7.0);
+                let spec = draft.specification(&self.session.document);
+                match &spec {
+                    Ok([w, h]) => {
+                        ui.small(format!("Result: {w} × {h} px. Added space is transparent."));
+                    }
+                    Err(error) => {
+                        ui.colored_label(egui::Color32::from_rgb(255, 170, 160), error);
+                    }
+                }
+                ui.separator();
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    cancel |= ui
+                        .add_sized(
+                            [80.0, crate::controls::DIALOG_ACTION_HEIGHT],
+                            egui::Button::new("Cancel"),
+                        )
+                        .clicked();
+                    if ui
+                        .add_enabled(
+                            spec.as_ref().is_ok_and(|size| *size != draft.original),
+                            egui::Button::new("OK")
+                                .fill(crate::shell::ACCENT)
+                                .min_size(egui::vec2(80.0, crate::controls::DIALOG_ACTION_HEIGHT)),
+                        )
+                        .clicked()
+                    {
+                        apply = spec.ok();
+                    }
+                });
             });
-            ui.add_space(7.0);
-            let spec = draft.specification(&self.session.document);
-            match &spec {
-                Ok([w, h]) => {
-                    ui.small(format!("Result: {w} × {h} px. Added space is transparent."));
-                }
-                Err(error) => {
-                    ui.colored_label(egui::Color32::from_rgb(255, 170, 160), error);
-                }
-            }
-            ui.separator();
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                cancel |= ui
-                    .add_sized(
-                        [80.0, crate::controls::DIALOG_ACTION_HEIGHT],
-                        egui::Button::new("Cancel"),
-                    )
-                    .clicked();
-                if ui
-                    .add_enabled(
-                        spec.as_ref().is_ok_and(|size| *size != draft.original),
-                        egui::Button::new("OK")
-                            .fill(crate::shell::ACCENT)
-                            .min_size(egui::vec2(80.0, crate::controls::DIALOG_ACTION_HEIGHT)),
-                    )
-                    .clicked()
-                {
-                    apply = spec.ok();
-                }
-            });
-        });
         self.shell.canvas_relative = draft.relative;
         let placement = draft.placement;
         if cancel || modal.should_close() {

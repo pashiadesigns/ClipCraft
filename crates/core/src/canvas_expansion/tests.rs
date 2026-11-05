@@ -263,7 +263,7 @@ fn automatic_margins_follow_each_edge_inward_and_reopen_with_exact_original_pixe
         }
 
         assert!(s.document.auto_canvas_base.is_some());
-        assert_eq!(s.document.version, 4);
+        assert_eq!(s.document.version, crate::MAX_PROJECT_VERSION);
         let base = s.document.auto_canvas_base.unwrap();
         let half = translated(
             &original.annotations[..1],
@@ -367,7 +367,7 @@ fn outermost_remaining_object_controls_margin_and_delete_shrinks_in_one_undo() {
 }
 
 #[test]
-fn explicit_canvas_and_raster_changes_retire_auto_margins_and_legacy_projects_are_preserved() {
+fn explicit_canvas_and_raster_changes_retire_auto_margins() {
     let original = fixture();
     let mut expanded = Session::new(original.clone()).unwrap();
     expanded
@@ -388,12 +388,6 @@ fn explicit_canvas_and_raster_changes_retire_auto_margins_and_legacy_projects_ar
             height: 180,
         },
         Command::FlattenAll,
-        Command::FloodFill {
-            x: 0,
-            y: 0,
-            color: [10, 20, 30, 255],
-            tolerance: 0,
-        },
         Command::TransformImage {
             transform: crate::ImageTransform::Clockwise,
         },
@@ -411,24 +405,4 @@ fn explicit_canvas_and_raster_changes_retire_auto_margins_and_legacy_projects_ar
         s.execute(Command::Undo).unwrap();
         assert_eq!(s.document.auto_canvas_base, expanded.auto_canvas_base);
     }
-    let mut legacy = expanded.clone();
-    legacy.auto_canvas_base = None;
-    legacy.version = 2;
-    let size = [legacy.width, legacy.height];
-    let mut s = Session::new(legacy).unwrap();
-    s.execute(Command::MoveAndExpand {
-        annotations: original.annotations[..1].to_vec(),
-        duplicate: false,
-    })
-    .unwrap();
-    assert_eq!([s.document.width, s.document.height], size);
-    assert!(s.document.auto_canvas_base.is_none());
-    for base in [[u32::MAX, 0, 120, 80], [0, 0, 0, 80], [0, 0, 999, 80]] {
-        let mut bad = expanded.clone();
-        bad.auto_canvas_base = Some(base);
-        assert!(bad.validate().is_err());
-    }
-    let mut bad = expanded;
-    bad.version = 3;
-    assert!(bad.validate().is_err());
 }

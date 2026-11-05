@@ -32,7 +32,7 @@ fn handle_feedback(handle: Handle) -> Feedback {
     }
 }
 
-fn handle_cursor(handle: Handle) -> egui::CursorIcon {
+pub(crate) fn handle_cursor(handle: Handle) -> egui::CursorIcon {
     match handle {
         Handle::TopLeft | Handle::BottomRight => egui::CursorIcon::ResizeNwSe,
         Handle::TopRight | Handle::BottomLeft => egui::CursorIcon::ResizeNeSw,
@@ -56,9 +56,7 @@ impl Editor {
             || self.edit_drag.is_some()
             || self.group_drag.is_some()
             || self.view.panning
-            || self.fill_tool.active
             || self.crop.is_some()
-            || self.pixel_selection.is_some()
             || self.cut_out.is_some()
             || !transform
                 .image
@@ -144,34 +142,52 @@ impl Editor {
             return Feedback::interaction(Cursor::Grab);
         }
         if let Some(crop) = &self.crop {
+            let r = self.session.document.page_rect(crop.page);
+            let transform = Transform {
+                image: egui::Rect::from_min_size(
+                    transform.screen_point([r[0], r[1]]),
+                    egui::vec2(r[2], r[3]) * transform.scale,
+                ),
+                ..transform
+            };
             return crop
-                .cursor(pos, transform, self.image_size())
+                .cursor(pos, transform, [r[2] as u32, r[3] as u32])
                 .map_or_else(|| Feedback::tool("Crop"), Feedback::interaction);
         }
-        if let Some(selection) = &self.pixel_selection {
-            return selection
-                .cursor(pos, transform, self.image_size())
-                .map_or_else(|| Feedback::tool("Selection"), Feedback::interaction);
-        }
+
         if let Some(cut) = &self.cut_out {
             return Feedback {
                 icon: cut.cursor(),
                 tool: (cut.cursor() != Cursor::Default).then_some("Cut Out"),
             };
         }
-        if !transform.image.contains(pos) && self.drag_start.is_none() {
+        let near_handle = self
+            .selected_annotation()
+            .filter(|a| self.session.document.object_editable(a.id))
+            .is_some_and(|a| {
+                a.hit_handle(transform.image_point(pos), 7. / transform.scale)
+                    .is_some()
+            });
+        if !transform.image.contains(pos) && self.drag_start.is_none() && !near_handle {
             return Feedback::interaction(Cursor::Default);
         }
-        if self.fill_tool.active {
-            return Feedback::tool("Fill");
-        }
+
         if self.drag_start.is_none() {
             let point = transform.image_point(pos);
             let tolerance = 7.0 / transform.scale;
             if self.selected_objects().len() < 2
-                && let Some(annotation) = self.selected_annotation()
+                && let Some(annotation) = self
+                    .selected_annotation()
+                    .filter(|a| self.session.document.object_editable(a.id))
                 && Self::tool_matches(self.tool, annotation.kind)
-                && let Some(handle) = annotation.hit_handle(point, tolerance)
+                && let Some(handle) = annotation.hit_handle(
+                    point,
+                    if annotation.kind == Kind::Callout {
+                        9. / transform.scale
+                    } else {
+                        tolerance
+                    },
+                )
             {
                 return handle_feedback(handle);
             }
@@ -182,7 +198,6 @@ impl Editor {
         match self.tool {
             None => Feedback::interaction(Cursor::Default),
             Some(kind) => Feedback::tool(match kind {
-                Kind::Simplify => "Simplify",
                 Kind::Image => "Move",
                 Kind::Arrow => "Arrow",
                 Kind::Line => "Line",
@@ -202,10 +217,6 @@ impl Editor {
         }
     }
 
-    fn image_size(&self) -> [u32; 2] {
-        [self.session.document.width, self.session.document.height]
-    }
-
     pub(super) fn canvas_pointer(
         &self,
         ui: &egui::Ui,
@@ -223,7 +234,6 @@ impl Editor {
             || self.edit_drag.is_some()
             || self.drag_start.is_some()
             || self.crop.as_ref().is_some_and(|c| c.dragging())
-            || self.pixel_selection.as_ref().is_some_and(|s| s.dragging())
             || self.cut_out.as_ref().is_some_and(|c| c.dragging());
         if !response.hovered() && !dragging {
             return;
@@ -242,6 +252,9 @@ impl Editor {
             // and badge together and suppress that separate cursor only here.
             // Their distance cannot vary with pointer acceleration or frame rate.
             ui.ctx().set_cursor_icon(egui::CursorIcon::None);
+            if name == "Step" && self.paint_step_cursor(ui, transform, pos) {
+                return;
+            }
             let scale = 1.0 / ui.ctx().pixels_per_point();
             let rect = tool_badge_rect(pos, scale);
             let painter = ui
@@ -407,6 +420,11 @@ mod tests {
         frame(ctx, editor, vec![]);
         let (transform, _) = frame(ctx, editor, vec![]);
         let pos = transform.screen_point([540., 300.]);
+        ctx.data_mut(|d| {
+            d.remove::<(crate::Annotation, egui::Rect, egui::TextureId)>(egui::Id::unique(
+                "step-hover-preview",
+            ))
+        });
         let output = crate::property_layout::tests::PaintedOutput(ctx.run_ui(
             egui::RawInput {
                 screen_rect: Some(egui::Rect::from_min_size(
@@ -419,6 +437,14 @@ mod tests {
             },
             |ui| editor.show_canvas(ui),
         ));
+        if let Some((a, rect, _)) = ctx.data(|d| {
+            d.get_temp::<(crate::Annotation, egui::Rect, egui::TextureId)>(egui::Id::unique(
+                "step-hover-preview",
+            ))
+        }) {
+            assert!(rect.width() >= (a.end[0] - a.start[0]) * transform.scale);
+            return a.text.unwrap().content;
+        }
         let badge = tool_badge_rect(pos, 1.0 / ctx.pixels_per_point());
         output
             .shapes
@@ -842,21 +868,6 @@ mod tests {
             assert_eq!(cursor, Cursor::None);
             assert!(names.insert(editor.pointer_feedback(pos, transform, false).tool.unwrap()));
         }
-        editor.fill_tool.active = true;
-        assert_eq!(
-            frame(&ctx, &mut editor, vec![Event::PointerMoved(pos)]).1,
-            Cursor::None
-        );
-        assert_eq!(
-            editor.pointer_feedback(pos, transform, false).tool,
-            Some("Fill")
-        );
-        editor.fill_tool.active = false;
-        editor.begin_pixel_selection();
-        assert_eq!(
-            frame(&ctx, &mut editor, vec![Event::PointerMoved(pos)]).1,
-            Cursor::None
-        );
         editor.begin_cut_out();
         assert_eq!(
             frame(&ctx, &mut editor, vec![Event::PointerMoved(pos)]).1,
@@ -897,10 +908,13 @@ mod tests {
             step_outline: None,
             line_style: None,
             shadow: None,
-            analysis: None,
+
+            focus: None,
+
             highlighter_rect: false,
             group: None,
             rotation_degrees: 0.0,
+            mirror_x: false,
             id: 1,
             kind: Kind::Rectangle,
             start: [100.0, 100.0],

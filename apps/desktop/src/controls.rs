@@ -147,13 +147,104 @@ pub(super) fn slider(ui: &mut egui::Ui, slider: egui::Slider<'_>) -> egui::Respo
 }
 
 pub(crate) const DIALOG_ACTION_HEIGHT: f32 = 26.;
-pub(super) fn dialog_button(label: &str, primary: bool) -> egui::Button<'_> {
+pub(super) struct DialogButton<'a> {
+    button: egui::Button<'a>,
+    primary: bool,
+}
+impl DialogButton<'_> {
+    pub fn fill(mut self, color: egui::Color32) -> Self {
+        self.button = self.button.fill(color);
+        self
+    }
+    pub fn min_size(mut self, size: egui::Vec2) -> Self {
+        self.button = self.button.min_size(size);
+        self
+    }
+}
+impl egui::Widget for DialogButton<'_> {
+    fn ui(self, ui: &mut egui::Ui) -> egui::Response {
+        let mut r = ui.add(self.button);
+        let dialog = ui.memory(|m| m.top_modal_layer() == Some(ui.layer_id()))
+            || ui.layer_id().order == egui::Order::Foreground;
+        if self.primary && dialog && ui.is_enabled() && confirm_key(ui) {
+            r.flags.insert(egui::response::Flags::FAKE_PRIMARY_CLICKED);
+        }
+        r
+    }
+}
+pub(super) fn prepare_dialog_keys(ctx: &egui::Context) {
+    let (ime, enter) = ctx.input(|i| {
+        (
+            i.events
+                .iter()
+                .filter_map(|e| {
+                    if let egui::Event::Ime(e) = e {
+                        Some(e.clone())
+                    } else {
+                        None
+                    }
+                })
+                .collect::<Vec<_>>(),
+            i.key_pressed(egui::Key::Enter) && i.modifiers == egui::Modifiers::NONE,
+        )
+    });
+    ctx.data_mut(|d| {
+        let id = egui::Id::unique("dialog-ime");
+        let mut composing = d.get_temp::<bool>(id).unwrap_or(false);
+        for e in &ime {
+            match e {
+                egui::ImeEvent::Preedit { text, .. } => composing = !text.is_empty(),
+                egui::ImeEvent::Commit(_) => composing = false,
+                _ => (),
+            }
+        }
+        d.insert_temp(id, composing);
+        d.insert_temp(egui::Id::unique("dialog-singleline-enter"), false);
+        d.insert_temp(
+            egui::Id::unique("dialog-enter"),
+            enter && !composing && ime.is_empty(),
+        );
+    });
+}
+pub(super) fn confirm_key(ui: &egui::Ui) -> bool {
+    if ui.memory(|m| {
+        m.top_modal_layer()
+            .is_some_and(|layer| layer != ui.layer_id())
+    }) {
+        return false;
+    }
+    let singleline = ui.ctx().data(|d| {
+        d.get_temp::<bool>(egui::Id::unique("dialog-singleline-enter"))
+            .unwrap_or(false)
+    });
+    if !ui.is_enabled()
+        || egui::Popup::is_any_open(ui.ctx())
+        || (!singleline
+            && (ui.ctx().egui_wants_keyboard_input() || ui.memory(|m| m.focused().is_some())))
+    {
+        return false;
+    }
+    let pressed = ui.ctx().data_mut(|d| {
+        let id = egui::Id::unique("dialog-enter");
+        let value = d.get_temp::<bool>(id).unwrap_or(false);
+        d.insert_temp(id, false);
+        value
+    });
+    if pressed {
+        ui.input_mut(|i| {
+            i.consume_key(egui::Modifiers::NONE, egui::Key::Enter);
+        });
+    }
+    pressed
+}
+pub(super) fn dialog_button(label: &str, primary: bool) -> DialogButton<'_> {
     let b = egui::Button::new(label).min_size(egui::vec2(82., DIALOG_ACTION_HEIGHT));
-    if primary {
+    let button = if primary {
         b.fill(crate::shell::ACCENT)
     } else {
         b
-    }
+    };
+    DialogButton { button, primary }
 }
 
 /// Footer order is primary then secondary, aligned to the dialog's right edge.
@@ -185,15 +276,250 @@ pub(super) fn dialog_actions(
                         .fill(color),
                 )
                 .clicked();
-            (submit, cancel)
+            (submit || (enabled && confirm_key(ui)), cancel)
         },
     )
     .inner
 }
 
+/// Shared context-menu rows keep labels aligned behind a real vector glyph.
+pub(crate) fn menu_action(ui: &mut egui::Ui, label: impl AsRef<str>) -> egui::Response {
+    let label = label.as_ref();
+    let lower = label.to_lowercase();
+    let glyph = if lower == "move up" {
+        "Move up"
+    } else if lower == "move down" {
+        "Move down"
+    } else if lower == "send to top" {
+        "Send to top"
+    } else if lower == "send to bottom" {
+        "Send to bottom"
+    } else if lower.contains("update") || lower.contains("refresh") {
+        "Refresh"
+    } else if lower.contains("move left") {
+        "Move left"
+    } else if lower.contains("move right") {
+        "Move right"
+    } else if lower.contains("unlink") {
+        "Unlink"
+    } else if lower.contains("paste") {
+        "Copy"
+    } else if lower.contains("delete") || lower.contains("remove") || lower.contains("clear") {
+        "Delete effect"
+    } else if lower.contains("split") || lower.contains("separate audio") {
+        "Split"
+    } else if lower.contains("rename") || lower.contains("text") {
+        "Text"
+    } else if lower.contains("clipboard") || lower.contains("copy") || lower.contains("duplicate") {
+        "Copy"
+    } else if lower.contains("library") {
+        "Library"
+    } else if lower.contains("mute") {
+        if lower.contains("unmute") {
+            "Audio"
+        } else {
+            "Muted"
+        }
+    } else if lower.contains("hide") {
+        "Hide annotations"
+    } else if lower.contains("show") {
+        "Show annotations"
+    } else if lower.contains("link") {
+        "Link"
+    } else if lower.contains("crop") {
+        "Crop"
+    } else if lower.contains("frame") || lower.contains("picture") || lower.contains("image") {
+        "Image"
+    } else if lower.contains("track") || lower.contains("front") || lower.contains("back") {
+        "Layers"
+    } else if lower.contains("fade") || lower.contains("motion") || lower.contains("animation") {
+        "Motion"
+    } else if lower.contains("file") || lower.contains("import") {
+        "Open"
+    } else if lower.contains("save") || lower.contains("export") {
+        "Save As"
+    } else if lower.contains("record") || lower.contains("narration") {
+        "Microphone"
+    } else if lower.contains("lock") {
+        "Lock"
+    } else if lower.contains("reset") {
+        "Reset effect"
+    } else {
+        "Properties"
+    };
+    let text = ui.painter().layout_no_wrap(
+        label.into(),
+        egui::FontId::proportional(13.),
+        ui.visuals().text_color(),
+    );
+    let r =
+        ui.add(egui::Button::new("").min_size(egui::vec2((text.size().x + 42.).max(180.), 28.)));
+    crate::video_editor::ui::icon(
+        ui.painter(),
+        egui::Rect::from_center_size(
+            r.rect.left_center() + egui::vec2(14., 0.),
+            egui::vec2(16., 16.),
+        ),
+        glyph,
+        ui.visuals().text_color(),
+    );
+    ui.painter().galley(
+        r.rect.left_center() + egui::vec2(30., -text.size().y / 2.),
+        text,
+        ui.visuals().text_color(),
+    );
+    r.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, ui.is_enabled(), label));
+    r
+}
+
+pub(crate) fn menu_submenu(ui: &mut egui::Ui, label: &str, content: impl FnOnce(&mut egui::Ui)) {
+    let response = menu_action(ui, label);
+    crate::video_editor::ui::icon(
+        ui.painter(),
+        egui::Rect::from_center_size(
+            response.rect.right_center() - egui::vec2(9., 0.),
+            egui::vec2(12., 12.),
+        ),
+        "Expand section",
+        ui.visuals().text_color(),
+    );
+    egui::containers::menu::SubMenu::new().show(ui, &response, content);
+}
+
+/// Application dialogs share a close target and rounded, restrained chrome.
+/// Keeping the native ModalResponse preserves focus and input isolation.
+pub(crate) struct Modal(egui::Modal);
+impl Modal {
+    pub(crate) fn new(id: egui::Id) -> Self {
+        Self(
+            egui::Modal::new(id).frame(
+                egui::Frame::new()
+                    .fill(egui::Color32::from_rgb(48, 56, 59))
+                    .stroke(egui::Stroke::new(1.5, crate::shell::ACCENT))
+                    .corner_radius(10)
+                    .inner_margin(16),
+            ),
+        )
+    }
+    pub(crate) fn backdrop_color(mut self, color: egui::Color32) -> Self {
+        self.0 = self.0.backdrop_color(color);
+        self
+    }
+    pub(crate) fn area(mut self, area: egui::Area) -> Self {
+        self.0 = self.0.area(area);
+        self
+    }
+    pub(crate) fn frame(mut self, frame: egui::Frame) -> Self {
+        self.0 = self.0.frame(frame);
+        self
+    }
+    pub(crate) fn show<R>(
+        self,
+        ctx: &egui::Context,
+        content: impl FnOnce(&mut egui::Ui) -> R,
+    ) -> egui::ModalResponse<R> {
+        self.0.show(ctx, |ui| {
+            let top = ui.next_widget_position().y;
+            let result = content(ui);
+            let rect = egui::Rect::from_min_size(
+                egui::pos2(ui.min_rect().right() - 26., top),
+                egui::vec2(26., 26.),
+            );
+            let response = ui
+                .interact(
+                    rect,
+                    ui.scope_id().with("dialog-close"),
+                    egui::Sense::click(),
+                )
+                .on_hover_text("Close");
+            if response.hovered() {
+                ui.painter()
+                    .rect_filled(rect, 5., egui::Color32::from_white_alpha(20));
+            }
+            crate::video_editor::ui::icon(
+                ui.painter(),
+                rect.shrink(6.),
+                "Close",
+                ui.visuals().text_color(),
+            );
+            response.widget_info(|| {
+                egui::WidgetInfo::labeled(egui::Role::Button, true, "Close dialog")
+            });
+            #[cfg(test)]
+            ui.ctx()
+                .data_mut(|d| d.insert_temp(egui::Id::unique("dialog-close"), rect));
+            if response.clicked() {
+                ui.close();
+            }
+            result
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn enter_confirms_singleline_dialog_but_not_multiline_invalid_or_composition() {
+        for (multiline, enabled, ime, expected) in [
+            (false, true, false, true),
+            (true, true, false, false),
+            (false, false, false, false),
+            (false, true, true, false),
+        ] {
+            let ctx = egui::Context::default();
+            let mut value = "Example 📝".to_owned();
+            let mut submitted = false;
+            for frame in 0..3 {
+                let events = if frame == 2 {
+                    vec![egui::Event::Key {
+                        key: egui::Key::Enter,
+                        physical_key: None,
+                        pressed: true,
+                        repeat: false,
+                        modifiers: egui::Modifiers::NONE,
+                    }]
+                } else {
+                    vec![]
+                };
+                let mut output = ctx.run_ui(
+                    egui::RawInput {
+                        events,
+                        ..Default::default()
+                    },
+                    |ui| {
+                        prepare_dialog_keys(ui.ctx());
+                        if ime {
+                            ui.ctx().data_mut(|d| {
+                                d.insert_temp(egui::Id::unique("dialog-ime"), true);
+                                d.insert_temp(egui::Id::unique("dialog-enter"), false);
+                            });
+                        }
+                        crate::controls::Modal::new(egui::Id::unique("enter-test")).show(
+                            ui.ctx(),
+                            |ui| {
+                                let edit = if multiline {
+                                    crate::unicode_input::TextEdit::multiline(&mut value)
+                                } else {
+                                    crate::unicode_input::TextEdit::singleline(&mut value)
+                                };
+                                let response = ui.add(edit.id(egui::Id::unique("entry")));
+                                if frame < 2 {
+                                    response.request_focus();
+                                }
+                                submitted |= dialog_actions(ui, "Save", "Cancel", enabled, false).0;
+                            },
+                        );
+                    },
+                );
+                output.textures_delta.clear();
+            }
+            assert_eq!(
+                submitted, expected,
+                "multiline={multiline}, enabled={enabled}, composing={ime}"
+            );
+        }
+    }
     #[test]
     fn confirmation_actions_keep_26_logical_pixels_at_all_ui_scales() {
         for scale in [1., 1.25, 1.5, 2.] {
@@ -231,7 +557,7 @@ mod tests {
                 },
                 |ui| {
                     ui.add_enabled_ui(enabled, |ui| {
-                        response = Some(toggle(ui, &mut value, "Text Outline"));
+                        response = Some(toggle(ui, &mut value, "Text stroke"));
                     });
                 },
             );
@@ -246,7 +572,7 @@ mod tests {
         let (label, control) = ctx.data(|d| {
             d.get_temp::<(egui::Rect, egui::Rect)>(egui::Id::unique((
                 "property-toggle",
-                "Text Outline",
+                "Text stroke",
             )))
             .unwrap()
         });
@@ -375,8 +701,7 @@ mod tests {
                                     .find(|t| t.id == capture_core::toolbar::ToolId::Crop)
                                     .copied()
                                     .unwrap(),
-                                "Crop / Cut",
-                                false,
+                                "Crop",
                                 false,
                             );
                             ui.vertical(|ui| {
@@ -392,7 +717,6 @@ mod tests {
                                             .copied()
                                             .unwrap(),
                                         id == capture_core::toolbar::ToolId::CutOut,
-                                        false,
                                     );
                                 }
                             });

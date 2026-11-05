@@ -155,8 +155,8 @@ fn layer_rows_drag_toggle_visibility_lock_and_retain_one_step_undo() {
     assert_eq!(row(&ctx, step.id).3, "Step 1");
     click(&ctx, &mut e, row(&ctx, step.id).1.center());
     assert!(e.session.document.object_state(step.id).hidden);
-    assert!(e.selected_objects().is_empty());
-    assert!(e.selected_annotation().is_none());
+    assert_eq!(e.selected_objects().len(), 1);
+    assert_eq!(e.selected_annotation().unwrap().id, step.id);
     assert_eq!(e.selected, Some(step.id));
     assert_ne!(e.tool_hit(step.start, 3.), Some(step.id));
     e.execute(Command::Undo);

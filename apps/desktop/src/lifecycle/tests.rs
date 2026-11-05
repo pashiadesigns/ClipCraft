@@ -1,5 +1,64 @@
 use super::*;
+
+#[test]
+fn tray_capture_actions_use_saved_settings_and_video_opens_the_same_options() {
+    let ctx = egui::Context::default();
+    let mut e = editor(&ctx);
+    e.lifecycle.available = true;
+    e.close_editor_window(&ctx);
+    let settings = e.quick_controls.video_settings();
+    let before = serde_json::to_vec(&e.session.document).unwrap();
+    e.tray_action(tray::Action::CaptureVideo, &ctx);
+    assert!(!e.lifecycle.hidden && e.clip.video_dialog);
+    assert_eq!(e.clip.video_options, Some(settings));
+    assert!(!e.capture_requested);
+    assert_eq!(serde_json::to_vec(&e.session.document).unwrap(), before);
+    e.clip.video_dialog = false;
+    e.tray_action(tray::Action::CaptureClip, &ctx);
+    assert!(e.capture_requested || e.autosave.action.is_some());
+    assert_eq!(serde_json::to_vec(&e.session.document).unwrap(), before);
+}
 use crate::canvas::tests::editor;
+#[test]
+fn capture_tray_toggles_preserve_document_and_do_not_start_capture() {
+    let ctx = egui::Context::default();
+    let mut e = editor(&ctx);
+    let original = e.session.document.clone();
+    let preview = e.quick_controls.capture_settings().preview;
+    for expected in [!preview, preview] {
+        e.tray_action(tray::Action::ToggleOpenAfter, &ctx);
+        assert_eq!(e.quick_controls.capture_settings().preview, expected);
+        assert!(!e.capture_requested);
+    }
+    for expected in [true, false] {
+        e.tray_action(tray::Action::ToggleScrolling, &ctx);
+        assert_eq!(e.quick_controls.capture_settings().is_scrolling(), expected);
+    }
+    assert_eq!(
+        serde_json::to_vec(&e.session.document).unwrap(),
+        serde_json::to_vec(&original).unwrap()
+    );
+}
+#[test]
+fn cancelled_capture_refocuses_even_when_preview_is_off_and_preserves_project() {
+    for result in [Ok(None), Err("Synthetic capture failure".to_owned())] {
+        let ctx = egui::Context::default();
+        let mut e = editor(&ctx);
+        let before = serde_json::to_vec(&e.session.document).unwrap();
+        let settings = capture_core::capture_options::Settings {
+            preview: false,
+            ..Default::default()
+        };
+        e.clip.active = Some(settings);
+        let (tx, rx) = std::sync::mpsc::channel();
+        tx.send(result).unwrap();
+        e.capture_result = Some(rx);
+        e.receive_capture();
+        assert_eq!(e.clip.restore_focus, Some(true));
+        assert!(e.capture_result.is_none());
+        assert_eq!(serde_json::to_vec(&e.session.document).unwrap(), before);
+    }
+}
 
 #[test]
 fn post_capture_show_preserves_normal_and_maximized_placement() {
@@ -39,12 +98,10 @@ fn close_hides_without_destroying_document_or_capture_shortcuts_and_exit_is_expl
     assert_eq!(serde_json::to_vec(&e.session.document).unwrap(), before);
     e.tray_action(tray::Action::Editor, &ctx);
     assert!(!e.lifecycle.hidden);
-    e.tray_action(tray::Action::Controller, &ctx);
-    assert!(e.capture_controller.open);
+    e.tray_action(tray::Action::Clip, &ctx);
+    assert_eq!(e.shell.ribbon_tab, crate::ribbon::RibbonTab::Clip);
     e.close_editor_window(&ctx);
-    e.close_controller_window(&ctx);
     assert!(e.lifecycle.hidden);
-    assert!(!e.capture_controller.open);
     e.tray_action(tray::Action::Exit, &ctx);
     assert!(e.allow_close);
 }
@@ -78,11 +135,13 @@ fn startup_preference_file_override_and_tray_failure_have_accessible_windows() {
             let ctx = egui::Context::default();
             let mut e = editor(&ctx);
             e.lifecycle.available = available;
-            e.quick_controls
-                .test_lifecycle(true, StartupWindow::CaptureController);
+            e.quick_controls.test_lifecycle(true, StartupWindow::Clip);
             e.apply_startup_window(&ctx, explicit_file, e.quick_controls.startup_window());
-            assert_eq!(e.lifecycle.hidden, available && !explicit_file);
-            assert_eq!(e.capture_controller.open, available && !explicit_file);
+            assert!(!e.lifecycle.hidden);
+            assert_eq!(
+                e.shell.ribbon_tab == crate::ribbon::RibbonTab::Clip,
+                !explicit_file
+            );
         }
     }
     let ctx = egui::Context::default();

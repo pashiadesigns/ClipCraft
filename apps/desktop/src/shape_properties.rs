@@ -9,7 +9,7 @@ pub(super) fn show(ui: &mut egui::Ui, annotation: &mut Annotation) {
     }
     let mut outline = annotation.color;
     let had_fill = annotation.fill.is_some();
-    ui.horizontal_top(|ui| {
+    crate::property_layout::color_row(ui, if annotation.is_image_frame() { 2 } else { 5 }, |ui| {
         let mut fill = annotation.fill.unwrap_or([
             annotation.color[0],
             annotation.color[1],
@@ -31,6 +31,7 @@ pub(super) fn show(ui: &mut egui::Ui, annotation: &mut Annotation) {
         "Thickness",
         egui::Slider::new(&mut annotation.width, 1..=32),
     );
+    crate::line_properties::outline(ui, annotation);
     crate::property_layout::slider(
         ui,
         if annotation.is_image_frame() {

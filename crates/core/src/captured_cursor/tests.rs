@@ -28,14 +28,14 @@ fn cursor_retains_clean_base_masks_transforms_delete_undo_and_portable_copy() {
     d.annotations
         .push(c.annotation([-100, 20], [8, 8], 1).unwrap().unwrap());
     d.promote_features();
-    assert_eq!(d.version, 9);
+    assert_eq!(d.version, crate::MAX_PROJECT_VERSION);
     let render = d.render().unwrap();
     assert_eq!(render.get_pixel(2, 2).0, [235, 175, 135, 255]);
     assert_eq!(render.get_pixel(2, 1).0, [255, 0, 0, 255]);
     assert_eq!(d.base_image().unwrap(), clean);
     let mut s = Session::new(d).unwrap();
     let payload = ObjectPayload::capture(&s.document, &[1]).unwrap();
-    assert_eq!(payload.document_version, 9);
+    assert_eq!(payload.document_version, crate::MAX_PROJECT_VERSION);
     payload.validate().unwrap();
     s.execute(Command::Remove { id: 1 }).unwrap();
     assert_eq!(s.document.render().unwrap(), clean);
@@ -106,7 +106,7 @@ fn step_guide_keeps_a_separate_cursor_and_original_frame() {
         .unwrap();
     let d = guide.document().unwrap();
     assert_eq!(d.annotations.len(), 5);
-    assert_eq!(d.version, 19);
+    assert_eq!(d.version, crate::MAX_PROJECT_VERSION);
     assert_eq!(
         **d.annotations[0].image.as_ref().unwrap().pixels().unwrap(),
         image
@@ -121,4 +121,59 @@ fn step_guide_keeps_a_separate_cursor_and_original_frame() {
         d.group_members(circle.id),
         vec![circle.id, d.annotations[2].id]
     );
+}
+
+#[test]
+fn paginated_recorded_guide_with_cursors_exports_without_dangling_section_objects() {
+    let image = RgbaImage::from_pixel(320, 180, Rgba([20, 80, 120, 255]));
+    let mut guide = crate::step_capture::Guide::new([320, 180]).unwrap();
+    for _ in 0..4 {
+        guide
+            .push(
+                crate::step_capture::Frame {
+                    context: Default::default(),
+                    image: image.clone(),
+                    cursor: fixture().annotation([-100, 20], [320, 180], 1).unwrap(),
+                },
+                crate::step_capture::Gesture {
+                    start: [3, 3],
+                    end: [3, 3],
+                    button: crate::step_capture::Button::Left,
+                },
+            )
+            .unwrap();
+    }
+    let d = guide
+        .document()
+        .unwrap()
+        .edit_guide(&crate::guide_sections::Action::PageSetup {
+            settings: Box::new(crate::guide_sections::PageSetup {
+                size: [900, 700],
+                ..Default::default()
+            }),
+            pages: vec![0],
+            scale_content: false,
+            auto_overflow: true,
+            distribute: true,
+        })
+        .unwrap();
+    assert!(d.guide.as_ref().unwrap().page_count() > 1);
+    let before = serde_json::to_vec(&d).unwrap();
+    let options = crate::export::Options {
+        format: crate::export::Format::Pdf,
+        ..Default::default()
+    };
+    let pdf = crate::export::encode_document(&d, &options).unwrap();
+    assert!(pdf.starts_with(b"%PDF-"));
+    assert_eq!(serde_json::to_vec(&d).unwrap(), before);
+    if let Some(root) = std::env::var_os("CLIPCRAFT_GUIDE_PDF_EVIDENCE") {
+        let root = std::path::PathBuf::from(root);
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(root.join("cursor-guide.pdf"), pdf).unwrap();
+        d.save(&root.join("cursor-guide.iclip")).unwrap();
+        d.render()
+            .unwrap()
+            .save(root.join("cursor-guide.png"))
+            .unwrap();
+    }
 }

@@ -119,7 +119,7 @@ fn page_copy_delete_move_roundtrip_and_atomic_undo_preserve_objects() {
     assert_eq!(s.document.annotations.len(), original.annotations.len() * 2);
     assert_eq!(s.document.width, original.width * 2 + PAGE_GAP);
     assert_eq!(s.document.height, original.height);
-    assert_eq!(s.document.version, 29);
+    assert_eq!(s.document.version, crate::MAX_PROJECT_VERSION);
     let ids: BTreeSet<_> = s.document.annotations.iter().map(|a| a.id).collect();
     assert_eq!(ids.len(), s.document.annotations.len());
     let dir = tempfile::tempdir().unwrap();
@@ -427,112 +427,16 @@ fn horizontal_page_reordering_and_overlap_ownership_keep_independent_objects() {
 }
 
 #[test]
-fn legacy_vertical_pages_open_horizontally_without_changing_saved_file_or_locks() {
-    let horizontal = template()
-        .edit_guide(&Action::AddPage {
-            page: 0,
-            copy: true,
-        })
-        .unwrap();
-    let mut legacy = horizontal.clone();
-    let g = horizontal.guide.as_ref().unwrap();
-    let p = g.pages.as_ref().unwrap();
-    for a in &mut legacy.annotations {
-        let page = g.page_at(a.start);
-        let offset = [
-            -(page as f32) * (p.size[0] + PAGE_GAP) as f32,
-            page as f32 * (p.size[1] + 48) as f32,
-        ];
-        *a = crate::canvas_expansion::translated(std::slice::from_ref(a), offset)
-            .unwrap()
-            .remove(0);
-    }
-    legacy
-        .guide
-        .as_mut()
-        .unwrap()
-        .pages
-        .as_mut()
-        .unwrap()
-        .horizontal = false;
-    legacy.width = p.size[0];
-    legacy.guide.as_mut().unwrap().pages.as_mut().unwrap().gap = 48;
-    legacy.height = p.size[1] * p.count as u32 + 48 * (p.count as u32 - 1);
-    legacy.version = 27;
-    let id = legacy.annotations[0].id;
-    let mut state = legacy.object_state(id);
-    state.locked = true;
-    legacy.object_states.insert(id, state);
+fn unsupported_development_projects_are_rejected_without_rewriting_files() {
+    let d = crate::Document::blank(40, 30).unwrap();
     let dir = tempfile::tempdir().unwrap();
-    let path = dir.path().join("legacy.capture.json");
-    legacy.save(&path).unwrap();
-    let bytes = std::fs::read(&path).unwrap();
-    let loaded = Document::load(&path).unwrap();
-    assert!(
-        loaded
-            .guide
-            .as_ref()
-            .unwrap()
-            .pages
-            .as_ref()
-            .unwrap()
-            .horizontal
-    );
-    assert!(loaded.object_state(id).locked);
-    assert_eq!(loaded.width, horizontal.width);
-    assert_eq!(loaded.height, horizontal.height);
-    assert_eq!(loaded.annotations, horizontal.annotations);
-    assert_eq!(std::fs::read(path).unwrap(), bytes);
-}
-
-#[test]
-fn legacy_narrow_gutters_reflow_without_changing_page_pixels_or_source_file() {
-    let expected = template()
-        .edit_guide(&Action::AddPage {
-            page: 0,
-            copy: true,
-        })
-        .unwrap();
-    let mut old = expected.clone();
-    let g = expected.guide.as_ref().unwrap();
-    let size = g.pages.as_ref().unwrap().size;
-    for a in &mut old.annotations {
-        let page = g.page_at(a.start);
-        *a = crate::canvas_expansion::translated(
-            std::slice::from_ref(a),
-            [page as f32 * (48. - PAGE_GAP as f32), 0.],
-        )
-        .unwrap()
-        .remove(0);
-    }
-    old.guide.as_mut().unwrap().pages.as_mut().unwrap().gap = 48;
-    old.width = size[0] * 2 + 48;
-    old.version = 28;
-    old.validate().unwrap();
-    let mut json = serde_json::to_value(&old).unwrap();
-    json["guide"]["pages"]
-        .as_object_mut()
-        .unwrap()
-        .remove("gap");
-    let dir = tempfile::tempdir().unwrap();
-    let path = dir.path().join("narrow.capture.json");
-    let original_bytes = serde_json::to_vec(&json).unwrap();
-    std::fs::write(&path, &original_bytes).unwrap();
-    let loaded = Document::load(&path).unwrap();
-    assert_eq!(loaded.annotations, expected.annotations);
-    assert_eq!(
-        loaded.guide.as_ref().unwrap().pages.as_ref().unwrap().size,
-        size
-    );
-    assert_eq!(std::fs::read(&path).unwrap(), original_bytes);
-    let before = old.render().unwrap();
-    let after = loaded.render().unwrap();
-    for page in 0..2 {
-        assert_eq!(
-            image::imageops::crop_imm(&before, page * (size[0] + 48), 0, size[0], size[1])
-                .to_image(),
-            image::imageops::crop_imm(&after, page * (size[0] + PAGE_GAP), 0, size[0], size[1])
-                .to_image()
-        );
+    let path = dir.path().join("old.capture.json");
+    for version in [1, 27, 28, 30, 32] {
+        let mut old = d.clone();
+        old.version = version;
+        let bytes = serde_json::to_vec(&old).unwrap();
+        std::fs::write(&path, &bytes).unwrap();
+        assert!(crate::Document::load(&path).is_err());
+        assert_eq!(std::fs::read(&path).unwrap(), bytes);
     }
 }

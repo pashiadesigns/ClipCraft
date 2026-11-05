@@ -163,7 +163,7 @@ fn shadows_persist_copy_paint_resize_batch_and_undo_without_changing_source() {
         annotation: a.clone(),
     })
     .unwrap();
-    assert_eq!(s.document.version, 14);
+    assert_eq!(s.document.version, crate::MAX_PROJECT_VERSION);
     let image = exact(&s.document);
     let mut b = a.clone();
     b.shadow.as_mut().unwrap().angle = 45.;
@@ -184,7 +184,7 @@ fn shadows_persist_copy_paint_resize_batch_and_undo_without_changing_source() {
     );
     let copied = crate::clipboard_payload::ObjectPayload::capture(&s.document, &[1]).unwrap();
     copied.validate().unwrap();
-    assert_eq!(copied.document_version, 14);
+    assert_eq!(copied.document_version, crate::MAX_PROJECT_VERSION);
     let scaled = s.document.resized_annotations(440, 320).unwrap();
     assert_eq!(scaled[0].shadow.unwrap().distance, 28.);
     assert_eq!(scaled[0].shadow.unwrap().blur, 12.);
@@ -249,19 +249,22 @@ fn invalid_shadows_fail_atomically_and_expansion_keeps_the_full_shadow() {
 
 #[test]
 fn integer_movement_reuses_bounded_shadow_pixels_but_style_changes_regenerate() {
+    // Other parallel render tests may legitimately evict the global LRU. Use
+    // the same cache implementation with isolated ownership for reuse checks.
+    let cache = Mutex::new(ShadowCache::new());
     let a = shape();
-    let first = patch(&a).unwrap();
+    let first = patch_with_cache(&a, &cache).unwrap();
     let shifted = crate::canvas_expansion::translated(std::slice::from_ref(&a), [11., -7.])
         .unwrap()
         .remove(0);
-    let moved = patch(&shifted).unwrap();
+    let moved = patch_with_cache(&shifted, &cache).unwrap();
     assert!(Arc::ptr_eq(&first.pixels, &moved.pixels));
     assert_eq!(moved.origin, [first.origin[0] + 11, first.origin[1] - 7]);
     let mut changed = shifted;
     changed.shadow.as_mut().unwrap().blur = 15.;
-    let changed = patch(&changed).unwrap();
+    let changed = patch_with_cache(&changed, &cache).unwrap();
     assert!(!Arc::ptr_eq(&moved.pixels, &changed.pixels));
-    let guard = CACHE.get().unwrap().lock().unwrap();
+    let guard = cache.lock().unwrap();
     assert!(guard.len() <= 64);
     assert!(guard.iter().map(cache_bytes).sum::<usize>() <= crate::MAX_PIXELS as usize * 4);
     assert!(

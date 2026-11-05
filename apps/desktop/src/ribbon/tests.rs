@@ -4,7 +4,117 @@ use egui::{Event, Modifiers, PointerButton};
 
 struct Layout {
     header: Vec<(&'static str, Response)>,
-    tabs: [egui::Rect; 3],
+    tabs: [egui::Rect; 5],
+}
+
+#[test]
+fn step_press_hold_release_keeps_one_property_set_and_stable_canvas() {
+    let ctx = egui::Context::default();
+    crate::shell::configure(&ctx);
+    let mut e = crate::canvas::tests::editor(&ctx);
+    e.tool = Some(crate::Kind::Step);
+    e.session = crate::Session::new(crate::Document::blank(640, 400).unwrap()).unwrap();
+    e.add_step([100., 100.]);
+    e.needs_render = true;
+    let render = |e: &mut Editor, events| {
+        let mut viewport = egui::Rect::NOTHING;
+        let out = PaintedOutput(ctx.run_ui(
+            egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    egui::vec2(1280., 800.),
+                )),
+                events,
+                focused: true,
+                ..Default::default()
+            },
+            |ui| {
+                e.show_shell(ui);
+                if e.needs_render {
+                    e.refresh_canvas_display(&ctx);
+                }
+                egui::CentralPanel::default().show(ui, |ui| {
+                    viewport = ui.available_rect_before_wrap();
+                    e.show_workspace(ui);
+                });
+            },
+        ));
+        let transform = e
+            .view
+            .transform(viewport, egui::vec2(640., 400.), ctx.pixels_per_point());
+        (transform, out)
+    };
+    for _ in 0..4 {
+        render(&mut e, vec![]);
+    }
+    let (original, _) = render(&mut e, vec![]);
+    let pos = original.screen_point([350., 220.]);
+    let button = |pressed| Event::PointerButton {
+        pos,
+        pressed,
+        button: PointerButton::Primary,
+        modifiers: Modifiers::NONE,
+    };
+    render(&mut e, vec![Event::PointerMoved(pos), button(true)]);
+    assert!(e.step_placement.is_some());
+    for _ in 0..4 {
+        let (t, out) = render(&mut e, vec![]);
+        let count = out
+            .shapes
+            .iter()
+            .filter(|s| matches!(&s.shape,egui::Shape::Text(t) if t.galley.text()=="Marker size"))
+            .count();
+        assert_eq!(
+            count, 1,
+            "a pending marker must not duplicate the default and selected controls"
+        );
+        assert_eq!(
+            t.image, original.image,
+            "holding a new marker must not shift the canvas"
+        );
+    }
+    render(&mut e, vec![button(false)]);
+    assert!(e.step_placement.is_none());
+    assert_eq!(e.session.document.annotations.len(), 2);
+    let (t, _) = render(&mut e, vec![]);
+    assert_eq!(t.image, original.image);
+}
+
+#[test]
+fn installed_font_search_accepts_click_and_typing_without_dismissing_popup() {
+    let ctx = egui::Context::default();
+    crate::shell::configure(&ctx);
+    let mut e = crate::canvas::tests::editor(&ctx);
+    let mut a = e.new_annotation(crate::Kind::Text, [20., 20.], [260., 90.]);
+    a.text.get_or_insert_with(Default::default).content = "Font search".into();
+    let id = a.id;
+    e.execute(crate::Command::Add { annotation: a });
+    e.select_only(Some(id));
+    e.shell.ribbon_tab = RibbonTab::Formatting;
+    frame(&ctx, &mut e, vec![], 1280.);
+    frame(&ctx, &mut e, vec![], 1280.);
+    let rect = ctx
+        .data(|d| d.get_temp::<egui::Rect>(egui::Id::unique("font-search-button")))
+        .unwrap();
+    click(&ctx, &mut e, rect, 1280.);
+    frame(&ctx, &mut e, vec![], 1280.);
+    let input = ctx
+        .data(|d| d.get_temp::<egui::Rect>(egui::Id::unique("font-search-input")))
+        .unwrap();
+    click(&ctx, &mut e, input, 1280.);
+    frame(&ctx, &mut e, vec![Event::Text("Ubuntu".into())], 1280.);
+    assert_eq!(
+        ctx.data(|d| d.get_temp::<String>(egui::Id::unique("font-search")))
+            .as_deref(),
+        Some("Ubuntu")
+    );
+    ctx.data_mut(|d| d.remove::<egui::Rect>(egui::Id::unique("font-search-input")));
+    frame(&ctx, &mut e, vec![], 1280.);
+    assert!(
+        ctx.data(|d| d.get_temp::<egui::Rect>(egui::Id::unique("font-search-input")))
+            .is_some()
+    );
+    assert_eq!(e.selected, Some(id));
 }
 
 #[test]
@@ -13,8 +123,7 @@ fn ribbons_only_allocate_scrollbar_space_for_overflow_and_advanced_replaces_old_
         let ctx = egui::Context::default();
         crate::shell::configure(&ctx);
         let mut e = crate::canvas::tests::editor(&ctx);
-        e.shell.badges = false;
-        for tab in [RibbonTab::Home, RibbonTab::ToolSettings, RibbonTab::Export] {
+        for tab in [RibbonTab::Insert, RibbonTab::Formatting, RibbonTab::Export] {
             e.shell.ribbon_tab = tab;
             for _ in 0..4 {
                 frame(&ctx, &mut e, vec![], width);
@@ -76,10 +185,9 @@ fn page_controls_review_shell_reserves_scrollbar_rails_in_restored_and_wide_wind
         e.session = capture_core::Session::new(d).unwrap();
         e.tool = None;
         e.needs_render = true;
-        e.shell.badges = false;
         e.shell.properties = true;
         e.shell.property_tab = crate::shell::PropertyTab::Objects;
-        e.shell.ribbon_tab = RibbonTab::ToolSettings;
+        e.shell.ribbon_tab = RibbonTab::Formatting;
         ctx.data_mut(|d| d.insert_temp(egui::Id::unique(("objects-page-expanded", 0usize)), true));
         let render = |e: &mut crate::Editor| {
             PaintedOutput(ctx.run_ui(
@@ -144,7 +252,7 @@ fn page_controls_review_shell_reserves_scrollbar_rails_in_restored_and_wide_wind
 #[ignore = "Production UI image export; synthetic content and no desktop access"]
 fn website_ui_previews() {
     let root = std::env::var("CLIPCRAFT_WEBSITE_UI").expect("Set output directory");
-    for scene in ["editor", "stamps", "export"] {
+    for scene in ["editor", "icons", "export"] {
         let ctx = egui::Context::default();
         crate::shell::configure(&ctx);
         let mut e = crate::canvas::tests::editor(&ctx);
@@ -154,7 +262,6 @@ fn website_ui_previews() {
             capture_core::Document::canvas(640, 400, [255, 255, 255, 255]).unwrap(),
         )
         .unwrap();
-        e.shell.badges = false;
         e.shell.properties = true;
         e.tool = None;
         for (id, kind, start, end, text) in [
@@ -205,11 +312,11 @@ fn website_ui_previews() {
         e.session.document.validate().unwrap();
         e.status = "Synthetic onboarding guide".into();
         e.select_only(Some(2));
-        if scene == "stamps" {
+        if scene == "icons" {
             e.choose_tool(
                 crate::shell::TOOLS
                     .iter()
-                    .position(|t| t.id == capture_core::toolbar::ToolId::Stamp)
+                    .position(|t| t.id == capture_core::toolbar::ToolId::Icons)
                     .unwrap(),
             );
         }
@@ -265,7 +372,6 @@ fn library_tab_reclaims_ribbon_space_with_connected_full_workspace_border() {
         let ctx = egui::Context::default();
         crate::shell::configure(&ctx);
         let mut e = crate::canvas::tests::editor(&ctx);
-        e.shell.badges = false;
         e.shell.library = true;
         let library = tempfile::tempdir().unwrap();
         let mut store = capture_core::history::History::open(library.path()).unwrap();
@@ -350,7 +456,6 @@ fn actual_format_button_double_click_locks_and_single_click_turns_it_off() {
     let ctx = egui::Context::default();
     crate::shell::configure(&ctx);
     let mut e = crate::canvas::tests::editor(&ctx);
-    e.shell.badges = false;
     e.session.document.annotations = (1..=3)
         .map(|id| {
             capture_core::steps::marker(
@@ -404,7 +509,6 @@ fn actual_format_button_double_click_locks_and_single_click_turns_it_off() {
 fn more_tools_appears_only_when_the_actual_row_cannot_fit_every_tool() {
     let ctx = egui::Context::default();
     let mut e = crate::canvas::tests::editor(&ctx);
-    e.shell.badges = false;
     let total = e.quick_controls.toolbar_order().len();
     let all_width = e.tool_sections_width(total, 3.0);
     let before = e.quick_controls.toolbar_order().to_vec();
@@ -453,7 +557,7 @@ fn more_tools_appears_only_when_the_actual_row_cannot_fit_every_tool() {
 
 #[test]
 fn more_tools_matches_tool_height_and_hover_has_visible_background() {
-    for badges in [false, true] {
+    {
         let ctx = egui::Context::default();
         crate::shell::configure(&ctx);
         let mut tool = egui::Rect::NOTHING;
@@ -466,12 +570,11 @@ fn more_tools_matches_tool_height_and_hover_has_visible_background() {
                 },
                 |ui| {
                     ui.horizontal(|ui| {
-                        tool = crate::shell::tool_button(ui, crate::shell::TOOLS[2], false, badges)
-                            .rect;
+                        tool = crate::shell::tool_button(ui, crate::shell::TOOLS[2], false).rect;
                         more = crate::split_button::dropdown_sized(
                             ui,
                             "More tools",
-                            egui::vec2(24.0, if badges { 76.0 } else { 58.0 }),
+                            egui::vec2(24.0, 58.0),
                             |ui| ui.label("Other tools"),
                         )
                         .response
@@ -494,7 +597,7 @@ fn more_tools_matches_tool_height_and_hover_has_visible_background() {
             },
             |ui| {
                 ui.horizontal(|ui| {
-                    crate::shell::tool_button(ui, crate::shell::TOOLS[2], false, badges);
+                    crate::shell::tool_button(ui, crate::shell::TOOLS[2], false);
                     crate::split_button::dropdown_sized(
                         ui,
                         "More tools",
@@ -516,7 +619,7 @@ fn frame(
 ) -> (Layout, PaintedOutput) {
     let mut l = Layout {
         header: vec![],
-        tabs: [egui::Rect::NOTHING; 3],
+        tabs: [egui::Rect::NOTHING; 5],
     };
     let output = ctx.run_ui(
         egui::RawInput {
@@ -561,15 +664,14 @@ fn header_stays_fixed_between_tabs_and_library_with_working_undo_redo() {
     let ctx = egui::Context::default();
     crate::shell::configure(&ctx);
     let mut e = crate::canvas::tests::editor(&ctx);
-    e.shell.badges = false;
     e.tool = Some(crate::Kind::Step);
     e.add_step([100.0, 100.0]);
     frame(&ctx, &mut e, vec![], 1280.0);
     let (l, _) = frame(&ctx, &mut e, vec![], 1280.0);
     let original = serde_json::to_vec(&e.session.document).unwrap();
-    assert!(!header(&l, "Record").enabled());
+
     let fixed = header(&l, "Save As").rect;
-    click(&ctx, &mut e, l.tabs[2], 1280.0);
+    click(&ctx, &mut e, l.tabs[4], 1280.0);
     assert_eq!(e.shell.ribbon_tab, RibbonTab::Export);
     let (l, _) = frame(&ctx, &mut e, vec![], 1280.0);
     assert_eq!(header(&l, "Save As").rect, fixed);
@@ -588,7 +690,7 @@ fn header_stays_fixed_between_tabs_and_library_with_working_undo_redo() {
     let (l, _) = frame(&ctx, &mut e, vec![], 1280.0);
     assert_eq!(header(&l, "Save As").rect, fixed);
     assert!(!header(&l, "Undo").enabled());
-    click(&ctx, &mut e, l.tabs[2], 1280.0);
+    click(&ctx, &mut e, l.tabs[4], 1280.0);
     assert!(!e.shell.library);
     assert_eq!(e.shell.ribbon_tab, RibbonTab::Export);
     assert_eq!(serde_json::to_vec(&e.session.document).unwrap(), original);
@@ -599,44 +701,39 @@ fn compact_header_fits_and_ribbon_rendering_does_not_edit_documents() {
     assert_eq!(
         &capture_core::toolbar::default_order()[..7],
         &[
+            ToolId::Move,
             ToolId::Text,
-            ToolId::Arrow,
             ToolId::Shape,
-            ToolId::Callout,
-            ToolId::Step,
-            ToolId::Selection,
-            ToolId::Move
+            ToolId::Steps,
+            ToolId::Lines,
+            ToolId::Icons,
+            ToolId::Penlighter
         ]
     );
-    for (width, badges) in [
-        (900.0, false),
-        (1280.0, false),
-        (900.0, true),
-        (1280.0, true),
-    ] {
+    for width in [900.0, 1280.0] {
         let ctx = egui::Context::default();
         crate::shell::configure(&ctx);
         let mut e = crate::canvas::tests::editor(&ctx);
-        e.shell.badges = badges;
         let before = serde_json::to_vec(&e.session.document).unwrap();
         let mut first_footer = None;
-        for tab in [RibbonTab::Home, RibbonTab::ToolSettings, RibbonTab::Export] {
+        for tab in [RibbonTab::Insert, RibbonTab::Formatting, RibbonTab::Export] {
             e.shell.ribbon_tab = tab;
             frame(&ctx, &mut e, vec![], width);
             let (l, output) = frame(&ctx, &mut e, vec![], width);
             let labels: &[&str] = match tab {
-                RibbonTab::Home => &["Clipboard", "Favorites", "General Tools"],
-                RibbonTab::ToolSettings => &[
+                RibbonTab::Insert => &["Clipboard", "Favorites", "General Tools"],
+                RibbonTab::Formatting => &[
                     "Font",
                     "Justification",
                     "Alignment",
                     "Distribution",
                     "Arrange",
-                    "Objects",
-                    "Image",
-                    "Canvas",
                 ],
                 RibbonTab::Export => &["Image", "Editable project", "Printing"],
+                RibbonTab::Clip => &["Capture mode", "Output", "Options"],
+                RibbonTab::Advanced => {
+                    &["Text recognition", "Layers", "Image", "Canvas", "Restore"]
+                }
             };
             let footers: Vec<_> = output
                 .0
@@ -693,32 +790,29 @@ fn headless_full_workspace_ribbon_fixtures() {
         "../../../../crates/core/tests/fixtures/properties.capture.json"
     ))
     .unwrap();
-    for (tab, library, name, width, badges) in [
-        (RibbonTab::Home, false, "Home", 1280.0, false),
-        (RibbonTab::ToolSettings, false, "Typography", 1280.0, false),
-        (
-            RibbonTab::ToolSettings,
-            false,
-            "ToolSettings",
-            1280.0,
-            false,
-        ),
-        (RibbonTab::Export, false, "Export", 1280.0, false),
-        (RibbonTab::Home, true, "Library", 1280.0, false),
-        (RibbonTab::Home, false, "HomeWide", 1920.0, false),
-        (RibbonTab::Home, false, "HomeCompact", 900.0, true),
-        (
-            RibbonTab::ToolSettings,
-            false,
-            "SettingsCompact",
-            900.0,
-            true,
-        ),
+    for (tab, library, name, width) in [
+        (RibbonTab::Insert, false, "Insert", 1280.0),
+        (RibbonTab::Insert, false, "Shape", 1280.0),
+        (RibbonTab::Insert, false, "Pen", 1280.0),
+        (RibbonTab::Insert, false, "Obfuscate", 1280.0),
+        (RibbonTab::Insert, false, "Eraser", 1280.0),
+        (RibbonTab::Insert, false, "Icons", 1280.0),
+        (RibbonTab::Advanced, false, "Crop", 1280.0),
+        (RibbonTab::Advanced, false, "Cropped", 1280.0),
+        (RibbonTab::Formatting, false, "Typography", 1280.0),
+        (RibbonTab::Formatting, false, "Formatting", 1280.0),
+        (RibbonTab::Export, false, "Export", 1280.0),
+        (RibbonTab::Clip, false, "Clip", 1280.0),
+        (RibbonTab::Advanced, false, "Advanced", 1280.0),
+        (RibbonTab::Insert, true, "Library", 1280.0),
+        (RibbonTab::Insert, false, "HomeWide", 1920.0),
+        (RibbonTab::Insert, false, "HomeCompact", 900.0),
+        (RibbonTab::Formatting, false, "SettingsCompact", 900.0),
     ] {
         let ctx = egui::Context::default();
         crate::shell::configure(&ctx);
+        crate::text_layout::configure(&ctx);
         let mut e = crate::canvas::tests::editor(&ctx);
-        e.shell.badges = badges;
         e.shell.ribbon_tab = tab;
         e.shell.library = library;
         let mut fixture = fixture.clone();
@@ -740,6 +834,39 @@ fn headless_full_workspace_ribbon_fixtures() {
                 .unwrap()
                 .id,
         );
+        let root = tempfile::tempdir().unwrap();
+        e.history = crate::history::HistoryPanel::isolated(root.path());
+        if let Some(id) = match name {
+            "Shape" => Some(capture_core::toolbar::ToolId::Shape),
+            "Pen" => Some(capture_core::toolbar::ToolId::Penlighter),
+            "Obfuscate" => Some(capture_core::toolbar::ToolId::Obfuscate),
+            "Eraser" => Some(capture_core::toolbar::ToolId::Eraser),
+            "Icons" => Some(capture_core::toolbar::ToolId::Icons),
+            _ => None,
+        } {
+            e.select_only(None);
+            e.choose_tool(crate::shell::TOOLS.iter().position(|t| t.id == id).unwrap());
+            if name == "Obfuscate" {
+                e.tool = Some(crate::Kind::Redact);
+            }
+        }
+        if name == "Cropped" {
+            e.execute(capture_core::Command::CropImage {
+                x: 80,
+                y: 45,
+                width: 400,
+                height: 250,
+                mode: capture_core::crop::CropMode::Preserve,
+                page: 0,
+            });
+            fixture = e.session.document.clone();
+            e.select_only(None);
+        }
+        if name == "Crop" {
+            e.begin_crop();
+            e.crop.as_mut().unwrap().bounds = [80, 45, 480, 295];
+        }
+        e.needs_render = true;
         let mut render = || {
             PaintedOutput(ctx.run_ui(
                 egui::RawInput {
@@ -752,6 +879,16 @@ fn headless_full_workspace_ribbon_fixtures() {
                 },
                 |ui| {
                     e.show_shell(ui);
+                    if e.needs_render {
+                        e.refresh_canvas_display(&ctx);
+                    }
+                    egui::CentralPanel::default()
+                        .frame(
+                            egui::Frame::new()
+                                .fill(crate::shell::CANVAS)
+                                .inner_margin(12),
+                        )
+                        .show(ui, |ui| e.show_workspace(ui));
                 },
             ))
         };
@@ -764,11 +901,20 @@ fn headless_full_workspace_ribbon_fixtures() {
                 .append(settled.textures_delta.clone());
         }
         let output = render();
+        if name == "Crop" {
+            let apply = crate::color_widgets::tests::text_rect(&output.shapes, "Apply crop")
+                .expect("Crop dock must be painted");
+            assert!(
+                apply.bottom() < 665.,
+                "Crop dock overlaps the footer: {apply:?}"
+            );
+            assert!(apply.top() > e.view.current_transform().unwrap().viewport.bottom());
+        }
         if let Ok(root) = std::env::var("CLIPCRAFT_HEADLESS_RIBBON_DIR") {
             dump_meshes(&ctx, &root, name, first, output);
         }
         assert_eq!(e.session.document.annotations, fixture.annotations);
-        assert!(!e.session.can_undo());
+        assert_eq!(e.session.can_undo(), name == "Cropped");
     }
 }
 
@@ -819,4 +965,86 @@ fn advanced_restore_reverts_with_one_undo() {
     assert!(e.session.document.annotations.is_empty());
     e.execute(Command::Undo);
     assert_eq!(serde_json::to_vec(&e.session.document).unwrap(), original);
+}
+
+#[test]
+fn ribbon_frame_edges_and_advanced_action_tiles_match() {
+    for scale in [1., 1.25, 1.5] {
+        let ctx = egui::Context::default();
+        crate::shell::configure(&ctx);
+        ctx.set_pixels_per_point(scale);
+        let mut e = crate::canvas::tests::editor(&ctx);
+        let mut expected: Option<(f32, f32)> = None;
+        for tab in [
+            RibbonTab::Insert,
+            RibbonTab::Formatting,
+            RibbonTab::Export,
+            RibbonTab::Advanced,
+            RibbonTab::Clip,
+        ] {
+            e.shell.ribbon_tab = tab;
+            for _ in 0..3 {
+                frame(&ctx, &mut e, vec![], 1920.);
+            }
+            let (_, out) = frame(&ctx, &mut e, vec![], 1920.);
+            let border = out
+                .shapes
+                .iter()
+                .find_map(|s| match &s.shape {
+                    egui::Shape::Rect(r)
+                        if r.stroke.color == crate::tabs::ACTIVE_BLUE && r.rect.width() > 1000. =>
+                    {
+                        Some(r.rect)
+                    }
+                    _ => None,
+                })
+                .unwrap();
+            if let Some((top, height)) = expected {
+                assert!((border.top() - top).abs() < 0.1, "{tab:?}: {border:?}");
+                assert!(
+                    (border.height() - height).abs() < 0.1,
+                    "{tab:?}: {border:?} expected {height}"
+                );
+            } else {
+                expected = Some((border.top(), border.height()));
+            }
+            if tab == RibbonTab::Advanced {
+                let get = |label| {
+                    ctx.data(|d| {
+                        d.get_temp::<egui::Rect>(egui::Id::unique(("command-tile", label)))
+                    })
+                    .unwrap()
+                };
+                assert_eq!(get("Grab Text").size(), get("Revert to Original").size());
+            }
+        }
+    }
+}
+
+#[test]
+fn header_capture_starts_current_profile_without_switching_tabs() {
+    use capture_core::capture_options::{Fullscreen, Selection, Settings};
+    let ctx = egui::Context::default();
+    crate::shell::configure(&ctx);
+    let mut e = crate::canvas::tests::editor(&ctx);
+    e.shell.ribbon_tab = RibbonTab::Insert;
+    let settings = Settings {
+        selection: Selection::Fullscreen,
+        clipboard: true,
+        preview: false,
+        cursor: true,
+        delay_seconds: 3,
+        fullscreen: Fullscreen::All,
+        scroll_automatic: false,
+        scrolling: false,
+    };
+    e.quick_controls.remember_capture(settings.clone());
+    frame(&ctx, &mut e, vec![], 1280.);
+    let (layout, _) = frame(&ctx, &mut e, vec![], 1280.);
+    click(&ctx, &mut e, header(&layout, "Capture").rect, 1280.);
+    assert_eq!(e.clip.active, Some(settings));
+    assert_eq!(e.capture_requested, crate::CAPTURE_ENABLED);
+    assert_eq!(e.shell.ribbon_tab, RibbonTab::Insert);
+    let (layout, _) = frame(&ctx, &mut e, vec![], 1280.);
+    assert!(!header(&layout, "Capture").enabled());
 }

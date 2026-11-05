@@ -4,12 +4,13 @@ use capture_core::text::{MAX_TEXT_CHARS, TextStyle, VerticalAlignment};
 pub(super) fn cancel_on_escape(modal: &egui::ModalResponse<()>) -> bool {
     // Capture popup ownership from before the modal was drawn: the popup may
     // already have handled this Escape and closed during this same frame.
-    modal.is_top_modal
-        && !modal.any_popup_open
-        && modal
-            .response
-            .ctx
-            .input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape))
+    modal.response.should_close()
+        || modal.is_top_modal
+            && !modal.any_popup_open
+            && modal
+                .response
+                .ctx
+                .input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape))
 }
 
 pub(super) struct TextDraft {
@@ -17,9 +18,52 @@ pub(super) struct TextDraft {
     pub preview: Annotation,
     focus: bool,
     surface: Option<(egui::Rect, egui::Rect)>,
+    pub selection: std::ops::Range<usize>,
+    pub selection_active: bool,
+    pub typing: Option<capture_core::text::rich::Format>,
+    history: Vec<TextSnapshot>,
+    history_at: usize,
 }
 
+#[derive(Clone, PartialEq)]
+struct TextSnapshot {
+    annotation: Annotation,
+    selection: std::ops::Range<usize>,
+    typing: Option<capture_core::text::rich::Format>,
+}
 impl TextDraft {
+    fn remember(&mut self) {
+        let snapshot = TextSnapshot {
+            annotation: self.preview.clone(),
+            selection: self.selection.clone(),
+            typing: self.typing.clone(),
+        };
+        if self
+            .history
+            .get(self.history_at)
+            .is_some_and(|v| v.annotation == snapshot.annotation && v.typing == snapshot.typing)
+        {
+            return;
+        }
+        self.history.truncate(self.history_at + 1);
+        self.history.push(snapshot);
+        if self.history.len() > 100 {
+            self.history.remove(0);
+        }
+        self.history_at = self.history.len() - 1;
+    }
+    fn restore(&mut self, redo: bool) {
+        self.remember();
+        self.history_at = if redo {
+            (self.history_at + 1).min(self.history.len() - 1)
+        } else {
+            self.history_at.saturating_sub(1)
+        };
+        let value = &self.history[self.history_at];
+        self.preview = value.annotation.clone();
+        self.selection = value.selection.clone();
+        self.typing = value.typing.clone();
+    }
     fn changed(&self) -> bool {
         self.original != self.checkpoint_annotation()
     }
@@ -37,15 +81,16 @@ impl Editor {
 
     pub(super) fn begin_text_edit(&mut self) {
         if let Some(a) = self.selected_annotation().filter(|a| {
-            matches!(
-                a.kind,
-                Kind::Text
-                    | Kind::Callout
-                    | Kind::Step
-                    | Kind::Rectangle
-                    | Kind::Ellipse
-                    | Kind::Polygon
-            )
+            a.focus.is_none()
+                && matches!(
+                    a.kind,
+                    Kind::Text
+                        | Kind::Callout
+                        | Kind::Step
+                        | Kind::Rectangle
+                        | Kind::Ellipse
+                        | Kind::Polygon
+                )
         }) {
             if self.shell.raster_preview {
                 self.shell.raster_preview = false;
@@ -72,9 +117,15 @@ impl Editor {
                 preview,
                 focus: true,
                 surface: None,
+                selection: 0..0,
+                selection_active: false,
+                typing: None,
+                history: vec![],
+                history_at: 0,
             });
+            self.text_draft.as_mut().unwrap().remember();
             self.shell.properties = true;
-            self.shell.effects = false;
+
             self.shell.property_tab = crate::shell::PropertyTab::Tool;
             self.needs_render = true;
         }
@@ -123,12 +174,9 @@ impl Editor {
         };
         if ctx.input(|i| {
             i.pointer.button_pressed(egui::PointerButton::Primary)
-                && i.pointer.interact_pos().is_some_and(|p| {
-                    !rect.contains(p)
-                        && !(p.x >= viewport.right()
-                            && p.y >= viewport.top()
-                            && p.y <= viewport.bottom())
-                })
+                && i.pointer
+                    .interact_pos()
+                    .is_some_and(|p| !rect.contains(p) && viewport.contains(p))
         }) {
             self.commit_text();
         }
@@ -141,7 +189,7 @@ impl Editor {
         if draft.preview.kind == Kind::Text {
             crate::property_layout::section_help(
                 ui,
-                "Tool Properties",
+                "Properties",
                 crate::property_layout::TEXT_HELP,
             );
         } else if crate::property_layout::text_section_with_back(ui).clicked() && self.commit_text()
@@ -164,10 +212,66 @@ impl Editor {
         ui: &mut egui::Ui,
         transform: crate::canvas_view::Transform,
     ) {
+        self.inline_format_shortcuts(ui.ctx());
         let Some(draft) = &mut self.text_draft else {
             return;
         };
         let ctx = ui.ctx().clone();
+        let before = draft.preview.clone();
+        let input_id = egui::Id::unique(("text_content", draft.preview.id));
+        // Enter on an empty list item ends the list without inserting another
+        // bullet. Keep this in the same inline edit/Undo transaction.
+        if ctx.memory(|m| m.has_focus(input_id))
+            && draft.selection.is_empty()
+            && draft.preview.text.as_mut().is_some_and(|s| {
+                let caret = draft.selection.start;
+                let chars: Vec<_> = s.content.chars().collect();
+                let start = chars[..caret.min(chars.len())]
+                    .iter()
+                    .rposition(|c| *c == '\n')
+                    .map_or(0, |i| i + 1);
+                let end = chars[caret.min(chars.len())..]
+                    .iter()
+                    .position(|c| *c == '\n')
+                    .map_or(chars.len(), |i| caret + i);
+                let listed = s
+                    .rich
+                    .as_ref()
+                    .and_then(|r| r.paragraphs.iter().rev().find(|p| p.start <= caret))
+                    .is_some_and(|p| p.list != capture_core::text::rich::List::None);
+                if listed
+                    && start == end
+                    && ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Enter))
+                {
+                    capture_core::text::rich::paragraph_range(s, caret..caret, |p| {
+                        p.list = capture_core::text::rich::List::None;
+                        p.level = 0;
+                    });
+                    true
+                } else {
+                    false
+                }
+            })
+        {
+            self.needs_render = true;
+        }
+        if ctx.memory(|m| m.has_focus(input_id)) {
+            let redo = ctx.input_mut(|i| {
+                i.consume_key(
+                    egui::Modifiers::COMMAND | egui::Modifiers::SHIFT,
+                    egui::Key::Z,
+                ) || i.consume_key(egui::Modifiers::COMMAND, egui::Key::Y)
+            });
+            let undo = ctx.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::Z));
+            if redo || undo {
+                draft.restore(redo);
+                crate::text_clipboard::set_cursor(&ctx, input_id, draft.selection.end);
+                self.needs_render = true;
+            }
+        }
+        if let Err(error) = crate::text_clipboard::events(&ctx, draft) {
+            self.status = error;
+        }
         let navigating = self.view.panning
             || ui.input(|i| i.pointer.button_released(egui::PointerButton::Middle));
         let input_id = egui::Id::unique(("text_content", draft.preview.id));
@@ -175,7 +279,6 @@ impl Editor {
         let navigation_cursor = navigating
             .then(|| egui::TextEdit::load_state(&ctx, input_id).map(|state| state.cursor))
             .flatten();
-        let before = draft.preview.clone();
         match draft
             .preview
             .fit_text_shape([self.session.document.width, self.session.document.height])
@@ -218,8 +321,12 @@ impl Editor {
         let color = style.color.unwrap_or(inherited_color);
         let family = crate::text_layout::available_family(ui.ctx(), style);
         let mut layout_style = style.clone();
+        let original_content = style.content.clone();
+        let typing = draft.typing.clone();
         let mut layouter = |ui: &egui::Ui, text: &dyn egui::TextBuffer, _: f32| {
+            let before = layout_style.content.clone();
             layout_style.content = text.as_str().to_owned();
+            capture_core::text::rich::rebase(&mut layout_style, &before, typing.as_ref());
             // Recalculate Step sizing for the text in this exact input frame.
             // Keep the requested font size untouched in the editable object.
             let resolved_style = if layout_annotation.kind == Kind::Step {
@@ -253,7 +360,7 @@ impl Editor {
                 }
                 let input = ui.add_sized(
                     rect.size(),
-                    egui::TextEdit::multiline(&mut style.content)
+                    crate::unicode_input::TextEdit::multiline(&mut style.content)
                         .id(input_id)
                         .font(egui::FontId::new(
                             style.size_points * 4.0 / 3.0 * transform.scale,
@@ -286,6 +393,30 @@ impl Editor {
                 }
             },
         );
+        capture_core::text::rich::rebase(style, &original_content, draft.typing.as_ref());
+        if ctx.memory(|m| m.has_focus(input_id))
+            && let Some(range) =
+                egui::TextEdit::load_state(&ctx, input_id).and_then(|s| s.cursor.char_range())
+        {
+            let r = range.as_sorted_char_range();
+            let next = r.start.0..r.end.0;
+            if next != draft.selection && original_content == style.content {
+                draft.typing = None;
+            }
+            draft.selection = next;
+            draft.selection_active = true;
+        }
+        if self.rich_text.autocorrect
+            && original_content != style.content
+            && let Some(caret) = crate::rich_text::autocorrect(
+                style,
+                draft.selection.end,
+                &self.rich_text.corrections,
+            )
+        {
+            crate::text_clipboard::set_cursor(&ctx, input_id, caret);
+            draft.selection = caret..caret;
+        }
         match draft
             .preview
             .fit_text_shape([self.session.document.width, self.session.document.height])
@@ -297,14 +428,15 @@ impl Editor {
             self.needs_render = true;
             ctx.request_repaint();
         }
+        draft.remember();
         let cancel = !egui::Popup::is_any_open(&ctx)
             && ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape));
         let apply = ctx.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::Enter));
         if cancel {
             self.text_draft = None;
             self.tool = None;
-            self.stamps.active = false;
-            self.fill_tool.active = false;
+            self.icon_library.active = false;
+
             self.needs_render = true;
             ctx.request_repaint();
         } else if apply {
@@ -317,6 +449,264 @@ impl Editor {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn repeated_sidebar_formatting_retains_range_and_whole_block_changes_apply_immediately() {
+        for kind in [Kind::Text, Kind::Step, Kind::Rectangle] {
+            let ctx = egui::Context::default();
+            crate::shell::configure(&ctx);
+            crate::text_layout::configure(&ctx);
+            let mut e = crate::canvas::tests::editor(&ctx);
+            let mut a = capture_core::steps::marker(
+                1,
+                [220., 180.],
+                140,
+                [20, 150, 190, 255],
+                (1, false),
+                [640, 400],
+            )
+            .unwrap();
+            a.kind = kind;
+            let text = a.text.as_mut().unwrap();
+            text.content = "First second".into();
+            text.bold = false;
+            text.italic = false;
+            e.session.document.annotations = vec![a];
+            e.select_only(Some(1));
+            e.tool = None;
+            e.begin_text_edit();
+            let draw = |e: &mut Editor, events| {
+                let mut output = ctx.run_ui(
+                    egui::RawInput {
+                        screen_rect: Some(egui::Rect::from_min_size(
+                            egui::Pos2::ZERO,
+                            egui::vec2(1200., 900.),
+                        )),
+                        focused: true,
+                        events,
+                        ..Default::default()
+                    },
+                    |ui| {
+                        e.finish_text_on_outside_click(&ctx);
+                        egui::Panel::right("test-properties")
+                            .exact_size(390.)
+                            .show(ui, |ui| e.image_properties_pane(ui));
+                        e.show_canvas(ui);
+                    },
+                );
+                output.textures_delta.clear();
+            };
+            for _ in 0..3 {
+                draw(&mut e, vec![]);
+            }
+            let input_id = egui::Id::unique(("text_content", 1u64));
+            let mut state = egui::TextEdit::load_state(&ctx, input_id).unwrap();
+            state
+                .cursor
+                .set_char_range(Some(egui::text::CCursorRange::two(
+                    egui::text::CCursor::new(0),
+                    egui::text::CCursor::new(5),
+                )));
+            state.store(&ctx, input_id);
+            draw(&mut e, vec![]);
+            for label in ["Bold", "Italic"] {
+                let pos = ctx
+                    .data(|d| {
+                        d.get_temp::<(egui::Rect, bool)>(egui::Id::unique((
+                            "quick_text_button",
+                            label,
+                        )))
+                    })
+                    .unwrap()
+                    .0
+                    .center();
+                for pressed in [true, false] {
+                    draw(
+                        &mut e,
+                        vec![
+                            egui::Event::PointerMoved(pos),
+                            egui::Event::PointerButton {
+                                pos,
+                                button: egui::PointerButton::Primary,
+                                pressed,
+                                modifiers: egui::Modifiers::NONE,
+                            },
+                        ],
+                    );
+                }
+            }
+            let draft = e.text_draft.as_ref().unwrap();
+            assert_eq!(draft.selection, 0..5, "{kind:?}");
+            let text = draft.preview.text.as_ref().unwrap();
+            let f = capture_core::text::rich::format_at(text, 1);
+            assert!(f.bold && f.italic, "{kind:?}: {f:?}");
+            assert!(!capture_core::text::rich::format_at(text, 8).bold);
+            // A caret with whole-block mode immediately affects every run.
+            let draft = e.text_draft.as_mut().unwrap();
+            draft.selection = 5..5;
+            draft.selection_active = true;
+            e.rich_text.caret_formatting = false;
+            let pos = ctx
+                .data(|d| {
+                    d.get_temp::<(egui::Rect, bool)>(egui::Id::unique((
+                        "quick_text_button",
+                        "Underline",
+                    )))
+                })
+                .unwrap()
+                .0
+                .center();
+            for pressed in [true, false] {
+                draw(
+                    &mut e,
+                    vec![
+                        egui::Event::PointerMoved(pos),
+                        egui::Event::PointerButton {
+                            pos,
+                            button: egui::PointerButton::Primary,
+                            pressed,
+                            modifiers: egui::Modifiers::NONE,
+                        },
+                    ],
+                );
+            }
+            let text = e
+                .text_draft
+                .as_ref()
+                .unwrap()
+                .preview
+                .text
+                .as_ref()
+                .unwrap();
+            assert!(capture_core::text::rich::format_at(text, 1).underline);
+            assert!(capture_core::text::rich::format_at(text, 8).underline);
+        }
+    }
+
+    #[test]
+    fn enter_on_empty_list_item_returns_to_plain_paragraph() {
+        let ctx = egui::Context::default();
+        let mut e = crate::rich_text::tests::editor(&ctx);
+        let text = e.session.document.annotations[0].text.as_mut().unwrap();
+        text.content = "Item\n".into();
+        capture_core::text::rich::paragraph_range(text, 0..6, |p| {
+            p.list = capture_core::text::rich::List::Bullet
+        });
+        e.select_only(Some(e.session.document.annotations[0].id));
+        e.begin_text_edit();
+        inline_frame(&ctx, &mut e, vec![]);
+        let id = egui::Id::unique(("text_content", e.text_draft.as_ref().unwrap().preview.id));
+        crate::text_clipboard::set_cursor(&ctx, id, 5);
+        inline_frame(&ctx, &mut e, vec![]);
+        inline_frame(
+            &ctx,
+            &mut e,
+            vec![egui::Event::Key {
+                key: egui::Key::Enter,
+                physical_key: None,
+                pressed: true,
+                repeat: false,
+                modifiers: egui::Modifiers::NONE,
+            }],
+        );
+        let text = e
+            .text_draft
+            .as_ref()
+            .unwrap()
+            .preview
+            .text
+            .as_ref()
+            .unwrap();
+        assert_eq!(text.content, "Item\n");
+        assert_eq!(
+            text.rich.as_ref().unwrap().paragraphs.last().unwrap().list,
+            capture_core::text::rich::List::None
+        );
+    }
+
+    #[test]
+    fn mixed_selection_typing_and_formatting_undo_restore_runs() {
+        let ctx = egui::Context::default();
+        let mut e = crate::rich_text::tests::editor(&ctx);
+        e.begin_text_edit();
+        inline_frame(&ctx, &mut e, vec![]);
+        let id = egui::Id::unique(("text_content", e.text_draft.as_ref().unwrap().preview.id));
+        let key = |key| egui::Event::Key {
+            key,
+            physical_key: None,
+            pressed: true,
+            repeat: false,
+            modifiers: egui::Modifiers::COMMAND,
+        };
+        // Selection is kept when the formatting ribbon takes focus.
+        let draft = e.text_draft.as_mut().unwrap();
+        draft.selection = 0..6;
+        draft.selection_active = true;
+        inline_frame(&ctx, &mut e, vec![key(egui::Key::B)]);
+        let text = e
+            .text_draft
+            .as_ref()
+            .unwrap()
+            .preview
+            .text
+            .as_ref()
+            .unwrap();
+        assert!(capture_core::text::rich::format_at(text, 0).bold);
+        assert!(!capture_core::text::rich::format_at(text, 9).bold);
+        inline_frame(&ctx, &mut e, vec![key(egui::Key::Z)]);
+        assert!(
+            !capture_core::text::rich::format_at(
+                e.text_draft
+                    .as_ref()
+                    .unwrap()
+                    .preview
+                    .text
+                    .as_ref()
+                    .unwrap(),
+                0
+            )
+            .bold
+        );
+        inline_frame(&ctx, &mut e, vec![key(egui::Key::Y)]);
+        assert!(
+            capture_core::text::rich::format_at(
+                e.text_draft
+                    .as_ref()
+                    .unwrap()
+                    .preview
+                    .text
+                    .as_ref()
+                    .unwrap(),
+                0
+            )
+            .bold
+        );
+        crate::text_clipboard::set_cursor(&ctx, id, 6);
+        inline_frame(&ctx, &mut e, vec![]);
+        inline_frame(&ctx, &mut e, vec![key(egui::Key::I)]);
+        inline_frame(&ctx, &mut e, vec![egui::Event::Text("!".into())]);
+        let text = e
+            .text_draft
+            .as_ref()
+            .unwrap()
+            .preview
+            .text
+            .as_ref()
+            .unwrap();
+        assert_eq!(text.content.chars().nth(6), Some('!'));
+        assert!(capture_core::text::rich::format_at(text, 6).italic);
+        assert!(e.commit_text());
+        e.session.document.validate().unwrap();
+        e.execute(Command::Undo);
+        assert!(
+            e.session.document.annotations[0]
+                .text
+                .as_ref()
+                .unwrap()
+                .rich
+                .is_none()
+        );
+    }
 
     fn inline_frame(
         ctx: &egui::Context,
@@ -463,7 +853,7 @@ mod tests {
             text.underline = true;
             text.strikethrough = true;
             text.color = Some([30, 80, 140, 96]);
-            e.session.document.version = 5;
+            e.session.document.version = capture_core::MAX_PROJECT_VERSION;
             e.session.document.annotations = vec![a.clone()];
             e.selected = Some(a.id);
             e.tool = Some(a.kind);
@@ -553,7 +943,7 @@ mod tests {
         )
         .unwrap();
         a.rotation_degrees = 37.0;
-        e.session.document.version = 3;
+        e.session.document.version = capture_core::MAX_PROJECT_VERSION;
         e.session.document.annotations.push(a.clone());
         e.session = crate::Session::new(e.session.document.clone()).unwrap();
         e.tool = Some(Kind::Step);
@@ -737,10 +1127,13 @@ mod tests {
                 step_outline: None,
                 line_style: None,
                 shadow: None,
-                analysis: None,
+
+                focus: None,
+
                 highlighter_rect: false,
                 group: None,
                 rotation_degrees: 0.0,
+                mirror_x: false,
                 id: 1,
                 kind,
                 start: [100.0, 100.0],
@@ -1015,11 +1408,12 @@ mod tests {
             |_| {
                 let mut popup_id = None;
                 let mut color = [25, 85, 160, 200];
-                let modal = egui::Modal::new(egui::Id::unique("escape_test")).show(ctx, |ui| {
-                    ui.label("Keep the enclosing text draft");
-                    let response = crate::color_widgets::rgba(ui, &mut color);
-                    popup_id = Some(response.id.with("rgba-popup"));
-                });
+                let modal =
+                    crate::controls::Modal::new(egui::Id::unique("escape_test")).show(ctx, |ui| {
+                        ui.label("Keep the enclosing text draft");
+                        let response = crate::color_widgets::rgba(ui, &mut color);
+                        popup_id = Some(response.id.with("rgba-popup"));
+                    });
                 assert_eq!(color, [25, 85, 160, 200]);
                 result = Some((popup_id.unwrap(), cancel_on_escape(&modal)));
             },
@@ -1046,5 +1440,52 @@ mod tests {
             frame(&ctx, true).1,
             "a second Escape cancels the text draft"
         );
+    }
+}
+
+#[cfg(test)]
+mod capture_refinement_tests {
+    #[test]
+    fn controls_below_canvas_do_not_end_inline_text_editing() {
+        let ctx = egui::Context::default();
+        let mut e = crate::rich_text::tests::editor(&ctx);
+        e.begin_text_edit();
+        let viewport = egui::Rect::from_min_max(egui::pos2(0., 0.), egui::pos2(800., 500.));
+        let text = egui::Rect::from_min_max(egui::pos2(100., 100.), egui::pos2(300., 150.));
+        e.text_draft.as_mut().unwrap().surface = Some((text, viewport));
+        for pos in [
+            egui::pos2(850., 300.),
+            egui::pos2(850., 700.),
+            egui::pos2(400., 700.),
+        ] {
+            let _output = crate::property_layout::tests::PaintedOutput(ctx.run_ui(
+                egui::RawInput {
+                    events: vec![
+                        egui::Event::PointerMoved(pos),
+                        egui::Event::PointerButton {
+                            pos,
+                            button: egui::PointerButton::Primary,
+                            pressed: true,
+                            modifiers: egui::Modifiers::NONE,
+                        },
+                    ],
+                    ..Default::default()
+                },
+                |_| e.finish_text_on_outside_click(&ctx),
+            ));
+            assert!(e.text_draft.is_some());
+            let _output = crate::property_layout::tests::PaintedOutput(ctx.run_ui(
+                egui::RawInput {
+                    events: vec![egui::Event::PointerButton {
+                        pos,
+                        button: egui::PointerButton::Primary,
+                        pressed: false,
+                        modifiers: egui::Modifiers::NONE,
+                    }],
+                    ..Default::default()
+                },
+                |_| {},
+            ));
+        }
     }
 }

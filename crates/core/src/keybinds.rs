@@ -13,16 +13,14 @@ pub enum Action {
     Window,
     Fullscreen,
     Steps,
-    GrabText,
 }
 impl Action {
-    pub const ALL: [Self; 6] = [
+    pub const ALL: [Self; 5] = [
         Self::Saved,
         Self::Region,
         Self::Window,
         Self::Fullscreen,
         Self::Steps,
-        Self::GrabText,
     ];
     pub fn label(self) -> &'static str {
         match self {
@@ -30,8 +28,7 @@ impl Action {
             Self::Region => "Region",
             Self::Window => "Window",
             Self::Fullscreen => "Fullscreen",
-            Self::Steps => "Steps",
-            Self::GrabText => "Grab Text",
+            Self::Steps => "Step by Step",
         }
     }
     pub fn settings(self, mut saved: Settings) -> Settings {
@@ -41,7 +38,6 @@ impl Action {
             Self::Window => Selection::Window,
             Self::Fullscreen => Selection::Fullscreen,
             Self::Steps => Selection::Steps,
-            Self::GrabText => Selection::GrabText,
         };
         saved
     }
@@ -61,6 +57,7 @@ impl Chord {
             0x2c => "Print Screen".into(),
             0x20 => "Space".into(),
             0x08 => "Backspace".into(),
+            0x09 => "Tab".into(),
             0x21 => "Page Up".into(),
             0x22 => "Page Down".into(),
             0x23 => "End".into(),
@@ -139,18 +136,6 @@ impl Default for Keybinds {
     }
 }
 impl Keybinds {
-    pub(crate) fn is_legacy_default(&self) -> bool {
-        self.enabled
-            && self.editor == crate::editor_keybinds::Keybinds::default()
-            && self.bindings
-                == [Binding {
-                    action: Action::Saved,
-                    chord: Chord {
-                        key: 0x43,
-                        modifiers: 3,
-                    },
-                }]
-    }
     pub fn get(&self, action: Action) -> Option<Chord> {
         self.bindings
             .iter()
@@ -196,28 +181,7 @@ impl Keybinds {
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[test]
-    fn new_capture_defaults_and_saved_legacy_customizations_are_distinct() {
-        let defaults = Keybinds::default();
-        defaults.validate().unwrap();
-        assert_eq!(defaults.get(Action::Saved).unwrap().label(), "Print Screen");
-        assert_eq!(defaults.get(Action::Region).unwrap().label(), "Alt+F11");
-        let legacy = serde_json::json!({"version":4,"alignment":"left","distribution":"horizontal_gaps","justification":"center_middle", "keybinds":{"enabled":true,"bindings":[{"action":"saved","chord":{"key":67,"modifiers":3}}]}});
-        let root = tempfile::tempdir().unwrap();
-        let path = root.path().join("quick-controls.json");
-        std::fs::write(&path, serde_json::to_vec(&legacy).unwrap()).unwrap();
-        let store = crate::quick_preferences::Store::open(root.path()).unwrap();
-        let preferences = store.read().unwrap();
-        assert!(preferences.keybinds.is_legacy_default());
-        assert_eq!(
-            preferences.startup_window,
-            crate::quick_preferences::StartupWindow::Editor
-        );
-        assert_eq!(
-            serde_json::from_slice::<serde_json::Value>(&std::fs::read(path).unwrap()).unwrap(),
-            legacy
-        );
-    }
+
     #[test]
     fn mode_shortcuts_override_only_selection_and_keep_saved_capture_options() {
         let saved = Settings {
@@ -233,11 +197,7 @@ mod tests {
             let mut restored = settings.clone();
             restored.selection = saved.selection;
             assert_eq!(restored, saved);
-            assert!(
-                settings
-                    .request(crate::capture_options::Mode::Image)
-                    .is_ok()
-            );
+            assert!(settings.request().is_ok());
         }
         assert_eq!(Action::Steps.settings(saved).selection, Selection::Steps);
     }
@@ -245,7 +205,7 @@ mod tests {
     fn shortcuts_migrate_persist_and_reject_conflicts_without_changing_preferences() {
         use crate::quick_preferences::{Choice, Preferences, Store};
         let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("quick-controls.json");
+        let path = dir.path().join("quick-controls-v2.json");
         let mut legacy = serde_json::to_value(Preferences::default()).unwrap();
         legacy.as_object_mut().unwrap().remove("keybinds");
         std::fs::write(&path, serde_json::to_vec(&legacy).unwrap()).unwrap();
@@ -268,7 +228,7 @@ mod tests {
             }),
         );
         let saved = store.remember(Choice::Keybinds(keys.clone())).unwrap();
-        assert_eq!(saved.version, 8);
+        assert_eq!(saved.version, 12);
         assert_eq!(
             Store::open(dir.path()).unwrap().read().unwrap().keybinds,
             keys

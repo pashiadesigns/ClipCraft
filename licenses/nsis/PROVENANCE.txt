@@ -1,7 +1,0 @@
-NSIS 3.13 installer engine, unmodified official Windows binary distribution.
-Source: https://sourceforge.net/projects/nsis/files/NSIS%203/3.13/nsis-3.13.zip/download
-SHA256: ba63dffc4410ee89193e1cb5a41989991bd77c61068da17e3156d136b7b0b3d8
-Upstream license: COPYING.txt, retained verbatim from that archive.
-ClipCraft uses the zlib compressor and standard Modern UI installer stub.
-No LZMA/bzip2 compressor is selected. The compiler itself is a build tool,
-not part of the installed ClipCraft application.
