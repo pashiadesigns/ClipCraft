@@ -74,7 +74,11 @@ $source=@"
 <Package InstallerVersion="500" Compressed="yes" InstallScope="perUser" InstallPrivileges="limited" Platform="x64" />
 <MajorUpgrade AllowSameVersionUpgrades="yes" DowngradeErrorMessage="A newer ClipCraft version is already installed." />
 <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
-<Condition Message="ClipCraft requires 64-bit Windows 10 or newer.">Installed OR (VersionNT64 AND WindowsBuild &gt;= 10240)</Condition>
+<!-- MSI's legacy WindowsBuild property reports 9600 on current Windows. -->
+<Property Id="CLIPCRAFT_WINDOWS_BUILD">
+<RegistrySearch Id="ActualWindowsBuild" Root="HKLM" Key="SOFTWARE\Microsoft\Windows NT\CurrentVersion" Name="CurrentBuildNumber" Type="raw" Win64="yes" />
+</Property>
+<Condition Message="ClipCraft requires 64-bit Windows 10 or newer.">Installed OR (VersionNT64 AND CLIPCRAFT_WINDOWS_BUILD &gt;= 10240)</Condition>
 <Property Id="ARPPRODUCTICON" Value="AppIcon" /><Property Id="ARPURLINFOABOUT" Value="https://github.com/pashiadesigns/ClipCraft" />
 <Property Id="MSIRESTARTMANAGERCONTROL" Value="Disable" /><Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER" />
 <Icon Id="AppIcon" SourceFile="$(Xml (Join-Path $payload 'ClipCraft.exe'))" />
