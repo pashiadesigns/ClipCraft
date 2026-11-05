@@ -91,7 +91,7 @@ fn circular_bend_is_round_and_node_endpoints_and_patterns_share_rendering() {
     let resized = b.resized(Handle::End, [260., 60.], [300, 220]).unwrap();
     assert_eq!(resized.line_style, b.line_style);
     assert_eq!(bend_point(&resized), [150., 115.]);
-    let mut fixture = Document::canvas(600, 540, [255; 4]).unwrap();
+    let mut fixture = Document::canvas(600, 640, [255; 4]).unwrap();
     for (i, pattern) in Pattern::ALL.into_iter().enumerate() {
         let mut line = b.clone();
         line.id = i as u64 + 1;
@@ -101,7 +101,7 @@ fn circular_bend_is_round_and_node_endpoints_and_patterns_share_rendering() {
         style.bend = 0.09;
         style.pattern = pattern;
         style.start = Endpoint::ALL[i];
-        style.end = Endpoint::ALL[i + 4];
+        style.end = Endpoint::ALL[(i + 4) % Endpoint::ALL.len()];
         fixture.annotations.push(line);
     }
     fixture.promote_features();
@@ -125,7 +125,7 @@ fn line_styles_bends_painter_clipboard_persistence_and_undo_preserve_source_and_
         annotation: changed.clone(),
     })
     .unwrap();
-    assert_eq!(s.document.version, 15);
+    assert_eq!(s.document.version, crate::MAX_PROJECT_VERSION);
     let style =
         crate::object_styles::ObjectStyle::from_annotation("Curved".into(), &changed).unwrap();
     let style: crate::object_styles::ObjectStyle =
@@ -143,7 +143,7 @@ fn line_styles_bends_painter_clipboard_persistence_and_undo_preserve_source_and_
     );
     let copied = crate::clipboard_payload::ObjectPayload::capture(&s.document, &[1]).unwrap();
     copied.validate().unwrap();
-    assert_eq!(copied.document_version, 15);
+    assert_eq!(copied.document_version, crate::MAX_PROJECT_VERSION);
     let temp = tempfile::tempdir().unwrap();
     let path = temp.path().join("lines.capture.json");
     s.save(&path).unwrap();
@@ -159,4 +159,103 @@ fn line_styles_bends_painter_clipboard_persistence_and_undo_preserve_source_and_
     let mut old = loaded;
     old.version = 14;
     assert!(old.validate().is_err());
+}
+
+#[test]
+fn shape_outline_patterns_roundtrip_and_share_export_geometry() {
+    let mut fixture = Document::canvas(740, 700, [255; 4]).unwrap();
+    for (row, pattern) in Pattern::ALL.into_iter().enumerate() {
+        for (column, kind) in [Kind::Callout, Kind::Arrow].into_iter().enumerate() {
+            let mut a = annotation(kind);
+            a.id = fixture.annotations.len() as u64 + 1;
+            a.start = [35. + column as f32 * 350., 25. + row as f32 * 95.];
+            a.end = [
+                a.start[0] + 260.,
+                a.start[1] + if kind == Kind::Callout { 55. } else { 15. },
+            ];
+            a.line_style = Some(Style {
+                pattern,
+                ..Style::for_kind(kind)
+            });
+            if kind == Kind::Callout {
+                a.callout = Some(crate::callout::CalloutStyle::for_box(
+                    a.start,
+                    a.end,
+                    [740, 700],
+                ));
+                a.text = Some(crate::text::TextStyle {
+                    content: pattern.label().into(),
+                    ..Default::default()
+                });
+            }
+            fixture.annotations.push(a);
+        }
+        for kind in [Kind::Rectangle, Kind::Ellipse, Kind::Polygon, Kind::Callout] {
+            let mut a = annotation(kind);
+            a.end = [220., 140.];
+            a.line_style = Some(Style {
+                pattern,
+                ..Style::for_kind(kind)
+            });
+            if kind == Kind::Polygon {
+                a.points = crate::polygon::outline(a.start, a.end, 5);
+            }
+            if kind == Kind::Callout {
+                a.callout = Some(crate::callout::CalloutStyle::for_box(
+                    a.start,
+                    a.end,
+                    [300, 220],
+                ));
+                a.text = Some(crate::text::TextStyle {
+                    content: "Text".into(),
+                    ..Default::default()
+                });
+            }
+            let d = document(a.clone());
+            let pixels = exact(&d);
+            let loaded: Document =
+                serde_json::from_str(&serde_json::to_string(&d).unwrap()).unwrap();
+            loaded.validate().unwrap();
+            assert_eq!(exact(&loaded), pixels);
+            let style =
+                crate::object_styles::ObjectStyle::from_annotation("Outline".into(), &a).unwrap();
+            let mut plain = a.clone();
+            plain.line_style = None;
+            assert_eq!(style.apply(&plain).unwrap().line_style, a.line_style);
+            let mut session = Session::new(document(plain.clone())).unwrap();
+            session.execute(Command::Update { annotation: a }).unwrap();
+            session.execute(Command::Undo).unwrap();
+            assert_eq!(session.document.annotations[0], plain);
+        }
+    }
+    fixture.promote_features();
+    fixture.validate().unwrap();
+    if let Some(root) = std::env::var_os("CLIPCRAFT_PATTERN_FIXTURES") {
+        let root = std::path::PathBuf::from(root);
+        std::fs::create_dir_all(&root).unwrap();
+        fixture
+            .save(&root.join("outline-patterns.capture.json"))
+            .unwrap();
+        exact(&fixture)
+            .save(root.join("outline-patterns.png"))
+            .unwrap();
+    }
+}
+
+#[test]
+fn waves_preserve_tips_hit_bounds_and_bounded_geometry() {
+    let mut a = annotation(Kind::Arrow);
+    a.line_style.as_mut().unwrap().pattern = Pattern::Wavy;
+    let g = geometry(&a);
+    assert!(g.full_shaft.bounding_box().height() > 2.);
+    assert_eq!(g.full_shaft.segments().next().unwrap().start(), p(a.start));
+    assert_eq!(g.full_shaft.segments().last().unwrap().end(), p(a.end));
+    for seg in g.full_shaft.segments() {
+        assert!(hit(&a, [seg.start().x as f32, seg.start().y as f32], 0.01));
+    }
+    a.end = [16000., 60.];
+    assert!(geometry(&a).shaft.elements().len() <= 1538);
+    let mut invalid = Style::for_kind(Kind::Arrow);
+    invalid.pattern = Pattern::Wavy;
+    assert!(invalid.validate_for(Kind::Callout).is_err());
 }

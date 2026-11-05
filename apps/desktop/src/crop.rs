@@ -1,11 +1,11 @@
 use crate::{Command, Editor, canvas_view::Transform, egui};
-
 pub(super) struct Crop {
     // Exclusive right/bottom edges in image pixels.
     pub(super) bounds: [u32; 4],
     drag: Option<Drag>,
+    pub(super) page: usize,
+    content: capture_core::crop::CropMode,
 }
-
 struct Drag {
     original: [u32; 4],
     origin: [i32; 2],
@@ -17,17 +17,21 @@ enum Mode {
     Move,
     Resize(usize),
 }
-
 impl Crop {
-    fn new(size: [u32; 2]) -> Self {
-        Self {
-            bounds: [0, 0, size[0], size[1]],
-            drag: None,
-        }
-    }
+    #[cfg(test)]
     pub(super) fn empty() -> Self {
         Self {
             bounds: [0; 4],
+            page: 0,
+            content: Default::default(),
+            drag: None,
+        }
+    }
+    fn new(size: [u32; 2]) -> Self {
+        Self {
+            bounds: [0, 0, size[0], size[1]],
+            page: 0,
+            content: Default::default(),
             drag: None,
         }
     }
@@ -253,19 +257,28 @@ impl Crop {
         .map(|v| v as u32);
     }
 }
-
 impl Editor {
     pub(super) fn begin_crop(&mut self) {
+        let doc = &self.session.document;
+        let point = self
+            .selected_annotation()
+            .map(|a| a.start)
+            .or_else(|| {
+                self.view
+                    .current_transform()
+                    .map(|t| t.image_point(t.viewport.center()))
+            })
+            .unwrap_or([0.; 2]);
+        let page = doc.guide.as_ref().map_or(0, |g| g.page_at(point));
+        let r = doc.page_rect(page);
         self.cancel_gesture();
         self.select_only(None);
         self.tool = None;
-        self.crop = Some(Crop::new([
-            self.session.document.width,
-            self.session.document.height,
-        ]));
+        let mut crop = Crop::new([r[2] as u32, r[3] as u32]);
+        crop.page = page;
+        self.crop = Some(crop);
         self.status="Crop: drag a new rectangle or adjust its handles. Apply to crop; Cancel preserves the image.".into();
     }
-
     fn apply_crop(&mut self) {
         let Some(crop) = self.crop.as_ref() else {
             return;
@@ -276,6 +289,8 @@ impl Editor {
             y,
             width: right - x,
             height: bottom - y,
+            mode: crop.content,
+            page: crop.page,
         }) {
             Ok(()) => {
                 self.crop = None;
@@ -283,12 +298,11 @@ impl Editor {
                 self.needs_render = true;
                 self.view = crate::canvas_view::CanvasView::default();
                 self.status =
-                    "Cropped image. Undo restores the previous image and editable objects.".into();
+                    "Cropped page. Objects remain editable; red crosshatching marks content excluded from export. Undo restores the crop.".into();
             }
             Err(e) => self.status = e.to_string(),
         }
     }
-
     pub(super) fn crop_canvas(
         &mut self,
         ui: &mut egui::Ui,
@@ -296,9 +310,32 @@ impl Editor {
         transform: Transform,
         interactive: bool,
     ) {
-        let size = [self.session.document.width, self.session.document.height];
+        let document = &self.session.document;
         let Some(crop) = self.crop.as_mut() else {
             return;
+        };
+        if interactive
+            && response.drag_started_by(egui::PointerButton::Primary)
+            && let Some(pos) = ui.input(|i| i.pointer.press_origin())
+        {
+            let point = transform.image_point(pos);
+            let page = document.guide.as_ref().map_or(0, |g| g.page_at(point));
+            if page != crop.page {
+                let r = document.page_rect(page);
+                let content = crop.content;
+                *crop = Crop::new([r[2] as u32, r[3] as u32]);
+                crop.page = page;
+                crop.content = content;
+            }
+        }
+        let r = document.page_rect(crop.page);
+        let size = [r[2] as u32, r[3] as u32];
+        let transform = Transform {
+            image: egui::Rect::from_min_size(
+                transform.screen_point([r[0], r[1]]),
+                egui::vec2(r[2], r[3]) * transform.scale,
+            ),
+            ..transform
         };
         let mut cancel = crop.interact(
             ui,
@@ -308,17 +345,14 @@ impl Editor {
             interactive,
             self.view.panning,
         );
-        let selected = crop.paint(ui, transform, true);
-        let flatten = !self.session.document.annotations.is_empty();
-        let toolbar_width = if flatten { 390.0 } else { 260.0 };
+        crop.paint(ui, transform, true);
+        let toolbar_width = 350.0f32.min(transform.viewport.width());
         let pos = egui::pos2(
-            (selected.center().x - toolbar_width * 0.5).clamp(
+            (transform.viewport.center().x - toolbar_width * 0.5).clamp(
                 transform.viewport.left(),
                 (transform.viewport.right() - toolbar_width).max(transform.viewport.left()),
             ),
-            (selected.bottom() + 12.0)
-                .min(transform.viewport.bottom() - 60.0)
-                .max(transform.viewport.top()),
+            transform.viewport.bottom() + 8.0,
         );
         let mut apply = false;
         let bounds = crop.bounds;
@@ -326,7 +360,7 @@ impl Editor {
         ui.scope_builder(
             egui::UiBuilder::new().max_rect(egui::Rect::from_min_size(
                 pos,
-                egui::vec2(toolbar_width, 60.0),
+                egui::vec2(toolbar_width, 144.0),
             )),
             |ui| {
                 egui::Frame::new()
@@ -334,27 +368,12 @@ impl Editor {
                     .inner_margin(6.0)
                     .show(ui, |ui| {
                         ui.add_enabled_ui(interactive, |ui| {
-                            ui.horizontal(|ui| {
-                                ui.label(format!(
-                                    "{} × {} px",
-                                    bounds[2] - bounds[0],
-                                    bounds[3] - bounds[1]
-                                ));
-                                apply = ui
-                                    .add_enabled(
-                                        valid,
-                                        egui::Button::new(if flatten {
-                                            "Flatten and crop"
-                                        } else {
-                                            "Crop image"
-                                        }),
-                                    )
-                                    .clicked();
-                                cancel |= ui.button("Cancel crop").clicked();
-                            });
-                            if flatten {
-                                ui.small("Objects will flatten. Undo restores their editability.");
-                            }
+                            ui.label(format!("Page {} · {} × {} px",crop.page+1,bounds[2]-bounds[0],bounds[3]-bounds[1]));
+                            ui.radio_value(&mut crop.content,capture_core::crop::CropMode::Preserve,"Preserve content outside the crop");
+                            ui.radio_value(&mut crop.content,capture_core::crop::CropMode::Delete,"Delete raster content outside the crop");
+                            ui.small("Shapes and text stay editable. Outside portions are excluded from export.");
+                            let (yes,no)=crate::controls::dialog_actions(ui,"Apply crop","Cancel",valid,false);
+                            apply=yes;cancel|=no;
                         });
                     });
             },
@@ -367,11 +386,9 @@ impl Editor {
         }
     }
 }
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
     #[test]
     fn crop_navigation_preserves_selection_and_footer_zoom_then_applies_once() {
         use crate::canvas_view::{ZoomAction, ZoomMode};
@@ -400,11 +417,7 @@ mod tests {
                 },
             );
             out.textures_delta.clear();
-            (
-                e.view
-                    .transform(viewport, egui::vec2(640.0, 400.0), ctx.pixels_per_point()),
-                buttons,
-            )
+            (e.view.current_transform().unwrap(), buttons)
         };
         let button = |pos, button, pressed| Event::PointerButton {
             pos,
@@ -511,7 +524,6 @@ mod tests {
         );
         assert!(!e.session.can_undo());
     }
-
     #[test]
     fn crop_handles_and_movement_preserve_positive_bounded_selection() {
         let initial = [20, 30, 140, 100];
@@ -528,6 +540,8 @@ mod tests {
         for (i, bounds) in expected.into_iter().enumerate() {
             let mut crop = Crop {
                 bounds: initial,
+                page: 0,
+                content: Default::default(),
                 drag: Some(Drag {
                     original: initial,
                     origin: [0, 0],
@@ -547,6 +561,8 @@ mod tests {
         }
         let mut crop = Crop {
             bounds: initial,
+            page: 0,
+            content: Default::default(),
             drag: Some(Drag {
                 original: initial,
                 origin: [80, 65],
@@ -558,7 +574,6 @@ mod tests {
         crop.update_drag([-1000, -1000], [200, 160]);
         assert_eq!(crop.bounds, [0, 0, 120, 70]);
     }
-
     #[test]
     fn native_input_crop_preview_reverse_drag_escape_and_one_undo() {
         use egui::{Event, Modifiers, PointerButton};
@@ -589,9 +604,7 @@ mod tests {
                 },
             );
             output.textures_delta.clear();
-            editor
-                .view
-                .transform(viewport, egui::vec2(640.0, 400.0), ctx.pixels_per_point())
+            editor.view.current_transform().unwrap()
         };
         let transform = frame(&mut editor, vec![], true);
         let start = transform.screen_point([500.0, 260.0]);
@@ -623,7 +636,10 @@ mod tests {
             ],
             [400, 200]
         );
-        assert!(editor.session.document.annotations.is_empty());
+        assert_eq!(
+            editor.session.document.annotations.len(),
+            doc.annotations.len()
+        );
         editor.execute(Command::Undo);
         assert_eq!(
             serde_json::to_vec(&editor.session.document).unwrap(),
@@ -658,5 +674,162 @@ mod tests {
             serde_json::to_vec(&editor.session.document).unwrap(),
             original
         );
+    }
+}
+/// Nonoverlapping pieces of a rectangle outside the output rectangle.
+pub(super) fn outside(rect: egui::Rect, keep: egui::Rect) -> Vec<egui::Rect> {
+    let c = rect.intersect(keep);
+    if !rect.is_positive() {
+        return vec![];
+    }
+    if !c.is_positive() {
+        return vec![rect];
+    }
+    [
+        egui::Rect::from_min_max(rect.min, egui::pos2(rect.right(), c.top())),
+        egui::Rect::from_min_max(egui::pos2(rect.left(), c.bottom()), rect.max),
+        egui::Rect::from_min_max(
+            egui::pos2(rect.left(), c.top()),
+            egui::pos2(c.left(), c.bottom()),
+        ),
+        egui::Rect::from_min_max(
+            egui::pos2(c.right(), c.top()),
+            egui::pos2(rect.right(), c.bottom()),
+        ),
+    ]
+    .into_iter()
+    .filter(|r| r.is_positive())
+    .collect()
+}
+impl Editor {
+    pub(super) fn paint_crop_overflow(&self, ui: &egui::Ui, t: Transform) {
+        if !self.session.document.canvas_behavior.allow_overflow
+            || self.shell.annotations_hidden
+            || self.shell.raster_preview
+        {
+            return;
+        }
+        let d = self.canvas_document();
+        for a in d.annotations.iter().filter(|a| d.object_visible(a.id)) {
+            let (lo, hi) = a.bounds();
+            let rect = egui::Rect::from_min_max(t.screen_point(lo), t.screen_point(hi))
+                .intersect(t.viewport);
+            let r = d.page_rect(d.object_page(a));
+            let keep = egui::Rect::from_min_size(
+                t.screen_point([r[0], r[1]]),
+                egui::vec2(r[2], r[3]) * t.scale,
+            );
+            for piece in outside(rect, keep) {
+                let p = ui.painter().with_clip_rect(piece);
+                p.rect_filled(
+                    piece,
+                    0,
+                    egui::Color32::from_rgba_unmultiplied(220, 55, 65, 28),
+                );
+                let stroke =
+                    egui::Stroke::new(1., egui::Color32::from_rgba_unmultiplied(240, 85, 95, 90));
+                let spacing = 18.;
+                let begin = (piece.left() / spacing).floor() * spacing - piece.height();
+                let end = piece.right() + piece.height();
+                let mut x = begin;
+                while x < end {
+                    p.line_segment(
+                        [
+                            egui::pos2(x, piece.top()),
+                            egui::pos2(x + piece.height(), piece.bottom()),
+                        ],
+                        stroke,
+                    );
+                    p.line_segment(
+                        [
+                            egui::pos2(x, piece.top()),
+                            egui::pos2(x - piece.height(), piece.bottom()),
+                        ],
+                        stroke,
+                    );
+                    x += spacing;
+                }
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod pasteboard_tests {
+    use super::*;
+    #[test]
+    fn outside_object_click_and_drag_preserve_crop_and_display_cache() {
+        use egui::{Event, Modifiers, PointerButton};
+        let ctx = egui::Context::default();
+        let mut e = crate::canvas::tests::editor(&ctx);
+        let mut d = capture_core::Document::blank(320, 240).unwrap();
+        d.annotations.push(
+            capture_core::steps::marker(
+                1,
+                [65., 90.],
+                64,
+                [0, 140, 230, 255],
+                (1, false),
+                [320, 240],
+            )
+            .unwrap(),
+        );
+        e.session = capture_core::Session::new(d).unwrap();
+        e.execute(Command::CropImage {
+            x: 60,
+            y: 35,
+            width: 170,
+            height: 140,
+            mode: capture_core::crop::CropMode::Preserve,
+            page: 0,
+        });
+        e.tool = None;
+        e.view.apply(
+            crate::canvas_view::ZoomAction::Set(crate::canvas_view::ZoomMode::Manual(1.)),
+            None,
+        );
+        let frame = |e: &mut Editor, events| {
+            let mut out = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        egui::vec2(800., 600.),
+                    )),
+                    focused: true,
+                    events,
+                    ..Default::default()
+                },
+                |ui| {
+                    if e.needs_render {
+                        e.refresh_canvas_display(&ctx);
+                    }
+                    e.show_canvas(ui);
+                },
+            );
+            out.textures_delta.clear();
+        };
+        frame(&mut e, vec![]);
+        frame(&mut e, vec![]);
+        let t = e.view.current_transform().unwrap();
+        let p = t.screen_point([-12., 55.]);
+        let button = |p, pressed| Event::PointerButton {
+            pos: p,
+            button: PointerButton::Primary,
+            pressed,
+            modifiers: Modifiers::NONE,
+        };
+        frame(&mut e, vec![Event::PointerMoved(p), button(p, true)]);
+        frame(&mut e, vec![button(p, false)]);
+        assert_eq!(e.selected, Some(1));
+        frame(&mut e, vec![button(p, true)]);
+        frame(&mut e, vec![Event::PointerMoved(p + egui::vec2(-40., 0.))]);
+        frame(&mut e, vec![button(p + egui::vec2(-40., 0.), false)]);
+        assert_eq!(
+            [e.session.document.width, e.session.document.height],
+            [170, 140]
+        );
+        assert!(e.session.document.annotations[0].start[0] < -40.);
+        assert!(e.session.document.canvas_behavior.held.contains(&1));
+        assert!(e.display.uses_retained_scene());
     }
 }

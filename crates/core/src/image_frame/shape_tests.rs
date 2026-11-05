@@ -128,7 +128,7 @@ fn conversion_and_inverse_are_single_undo_transactions_and_versioned() {
         annotation: converted.clone(),
     })
     .unwrap();
-    assert_eq!(s.document.version, 27);
+    assert_eq!(s.document.version, crate::MAX_PROJECT_VERSION);
     let mut old = s.document.clone();
     old.version = 26;
     assert!(old.validate().is_err());

@@ -1,6 +1,6 @@
 use crate::{Command, Editor, Kind, egui};
 
-/// Shared press-origin resolution for click-and-place tools (Step and Stamp).
+/// Shared press-origin resolution for click-and-place tools (Step and Icon).
 pub(super) fn placement_origin(ui: &egui::Ui) -> Option<egui::Pos2> {
     ui.input(|i| {
         i.events
@@ -19,7 +19,136 @@ pub(super) fn placement_origin(ui: &egui::Ui) -> Option<egui::Pos2> {
     })
 }
 
+#[derive(Clone)]
+struct CursorPreview {
+    annotation: crate::Annotation,
+    pixels: [u32; 2],
+    texture: egui::TextureHandle,
+}
+
 impl Editor {
+    /// Project-scoped placement state must not leak out of a guide into the
+    /// next capture, template, new canvas or Library project.
+    pub(super) fn reset_document_tools(&mut self) {
+        self.quick_controls.snap_recent.clear();
+        self.icon_library.reset_document();
+        self.step_placement = None;
+        self.step_letters = capture_core::steps::highest_number(&self.session.document, false)
+            .is_none()
+            && capture_core::steps::highest_number(&self.session.document, true).is_some();
+        self.step_number =
+            capture_core::steps::next_number(&self.session.document, self.step_letters);
+    }
+
+    pub(super) fn paint_step_cursor(
+        &self,
+        ui: &egui::Ui,
+        transform: crate::canvas_view::Transform,
+        pointer: egui::Pos2,
+    ) -> bool {
+        let shift = ui.input(|i| i.modifiers.shift);
+        let point = self.constrain_placement(Kind::Step, transform.image_point(pointer), shift);
+        let Ok(mut placed) = self.step_marker(point) else {
+            return false;
+        };
+        let center = [
+            (placed.start[0] + placed.end[0]) * 0.5,
+            (placed.start[1] + placed.end[1]) * 0.5,
+        ];
+        if let Ok(mut result) = crate::canvas_expansion::move_with_candidates(
+            &self.session.document,
+            std::slice::from_ref(&placed),
+            [point[0] - center[0], point[1] - center[1]],
+            self.quick_controls
+                .snapping()
+                .then_some(6. / transform.scale),
+            true,
+            self.quick_controls.snap_candidates(),
+        ) {
+            placed = result.annotations.remove(0);
+        }
+        let center = [
+            (placed.start[0] + placed.end[0]) * 0.5,
+            (placed.start[1] + placed.end[1]) * 0.5,
+        ];
+        let center = self.constrain_placement(Kind::Step, center, shift);
+        // Canonical local geometry keeps pointer movement out of the texture key.
+        let Ok(a) = self.step_marker([0., 0.]) else {
+            return false;
+        };
+        let (mut lo, mut hi) = a.bounds();
+        let marker_center = [(a.start[0] + a.end[0]) * 0.5, (a.start[1] + a.end[1]) * 0.5];
+        if let Some((shadow_lo, shadow_hi)) = capture_core::shadow::bounds(&a) {
+            for axis in 0..2 {
+                lo[axis] = lo[axis].min(shadow_lo[axis]);
+                hi[axis] = hi[axis].max(shadow_hi[axis]);
+            }
+        }
+        lo = lo.map(|v| v - 2.);
+        hi = hi.map(|v| v + 2.);
+        let extent = egui::vec2(hi[0] - lo[0], hi[1] - lo[1]);
+        let density =
+            (transform.scale * ui.ctx().pixels_per_point()).min(1024. / extent.max_elem());
+        let pixels = [
+            (extent.x * density).ceil().max(1.) as u32,
+            (extent.y * density).ceil().max(1.) as u32,
+        ];
+        let key = egui::Id::unique("step-placement-preview");
+        let mut cached = ui.ctx().data(|d| d.get_temp::<CursorPreview>(key));
+        if cached
+            .as_ref()
+            .is_none_or(|c| c.annotation != a || c.pixels != pixels)
+        {
+            let Ok(image) = capture_core::display::render_annotation_preview(
+                &a,
+                capture_core::display::Viewport {
+                    size: pixels,
+                    origin: lo.map(f64::from),
+                    scale: f64::from(density),
+                },
+            ) else {
+                return false;
+            };
+            let texture = ui.ctx().load_texture(
+                "step-placement-preview",
+                egui::ColorImage::from_rgba_unmultiplied(
+                    [pixels[0] as usize, pixels[1] as usize],
+                    image.as_raw(),
+                ),
+                egui::TextureOptions::LINEAR,
+            );
+            cached = Some(CursorPreview {
+                annotation: a,
+                pixels,
+                texture,
+            });
+            ui.ctx()
+                .data_mut(|d| d.insert_temp(key, cached.clone().unwrap()));
+        }
+        let min = transform.screen_point([
+            center[0] + lo[0] - marker_center[0],
+            center[1] + lo[1] - marker_center[1],
+        ]);
+        let rect = egui::Rect::from_min_size(min, extent * transform.scale);
+        let c = cached.unwrap();
+        ui.painter()
+            .with_clip_rect(transform.viewport.intersect(transform.image))
+            .image(
+                c.texture.id(),
+                rect,
+                egui::Rect::from_min_max(egui::Pos2::ZERO, egui::pos2(1., 1.)),
+                egui::Color32::WHITE,
+            );
+        #[cfg(test)]
+        ui.ctx().data_mut(|d| {
+            d.insert_temp(
+                egui::Id::unique("step-hover-preview"),
+                (c.annotation.clone(), rect, c.texture.id()),
+            )
+        });
+        true
+    }
+
     /// A newly pressed Step is visible immediately, but creation and numbering
     /// form one document transaction when the pointer is released.
     pub(super) fn step_placement_input(
@@ -27,12 +156,13 @@ impl Editor {
         ui: &egui::Ui,
         response: &egui::Response,
         transform: crate::canvas_view::Transform,
+        base_transform: crate::canvas_view::Transform,
     ) -> bool {
         if self.tool != Some(Kind::Step) {
             return false;
         }
         if self.step_placement.is_none() && ui.input(|i|i.events.iter().any(|event|matches!(event,
-            egui::Event::PointerButton {button:egui::PointerButton::Primary,pressed:true,modifiers,..} if modifiers.alt))) {
+            egui::Event::PointerButton {button:egui::PointerButton::Primary,pressed:true,modifiers,..} if self.gesture_matches(crate::gesture_input::Gesture::DuplicateDrag,*modifiers)))) {
             return false;
         }
         let (focused, pressed, released, pointer, additive, space) = ui.input(|i| {
@@ -67,7 +197,14 @@ impl Editor {
             let on_handle = self
                 .selected_annotation()
                 .is_some_and(|a| a.kind == Kind::Step && a.hit_handle(point, tolerance).is_some());
-            if !on_handle && self.tool_hit(point, tolerance).is_none() {
+            if !on_handle
+                && self
+                    .tool_hit(
+                        base_transform.image_point(pointer),
+                        7. / base_transform.scale,
+                    )
+                    .is_none()
+            {
                 match self.step_marker(point) {
                     Ok(step) => {
                         self.select_only(None);
@@ -85,7 +222,7 @@ impl Editor {
                 ui.input(|i| i.modifiers.shift),
             ))
         });
-        let anchor = self.stamps.anchor;
+        let anchor = self.icon_library.anchor;
         let Some(step) = &mut self.step_placement else {
             return false;
         };
@@ -207,11 +344,11 @@ impl Editor {
                     .labelled_by(label.id);
             }
         });
-        if self.selected.is_none() {
+        if self.selected_annotation().is_none() {
             crate::property_layout::slider(
                 ui,
                 "Marker size",
-                egui::Slider::new(&mut self.step_size, 24..=160),
+                egui::Slider::new(&mut self.step_size, 1..=16384).logarithmic(true),
             );
         }
     }
@@ -231,6 +368,81 @@ impl Editor {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn project_switch_resets_sequence_for_new_captures_and_restores_existing_labels() {
+        let ctx = egui::Context::default();
+        let mut e = crate::canvas::tests::editor(&ctx);
+        let root = tempfile::tempdir().unwrap();
+        e.history = crate::history::HistoryPanel::isolated(root.path());
+        e.tool = Some(Kind::Step);
+        e.step_number = 18;
+        e.add_step([100., 100.]);
+        let guide = e.session.document.clone();
+        for active in [Some(Kind::Step), None] {
+            e.tool = active;
+            e.perform_action(
+                crate::FileAction::CreateCanvas(crate::new_image::CanvasSpec {
+                    width: 640,
+                    height: 400,
+                    color: [255; 4],
+                }),
+                &ctx,
+            );
+            assert_eq!(e.next_step_number(), 1);
+            e.add_step([100., 100.]);
+            assert_eq!(
+                e.session.document.annotations[0]
+                    .text
+                    .as_ref()
+                    .unwrap()
+                    .content,
+                "1"
+            );
+            e.perform_action(
+                crate::FileAction::HistorySnapshot {
+                    session: crate::Session::new(guide.clone()).unwrap(),
+                    id: "isolated-guide".into(),
+                },
+                &ctx,
+            );
+            assert_eq!(e.next_step_number(), 19);
+            e.accept_capture(
+                crate::Document::blank(640, 400).unwrap(),
+                capture_core::capture_options::Settings {
+                    preview: true,
+                    clipboard: false,
+                    ..Default::default()
+                },
+                |_| panic!("No OS clipboard operation expected"),
+            );
+            assert_eq!(e.next_step_number(), 1);
+            // Opening a lettered project selects its own sequence; a subsequent
+            // blank clipboard project starts with numeric 1 again.
+            let mut letters = guide.clone();
+            letters.annotations[0].text.as_mut().unwrap().content = "D".into();
+            e.perform_action(
+                crate::FileAction::Template {
+                    session: crate::Session::new(letters).unwrap(),
+                    title: "Lettered".into(),
+                },
+                &ctx,
+            );
+            assert!(e.step_letters);
+            assert_eq!(
+                e.step_marker([100., 100.]).unwrap().text.unwrap().content,
+                "E"
+            );
+            e.perform_action(
+                crate::FileAction::FromClipboard(
+                    crate::Session::new(crate::Document::blank(640, 400).unwrap()).unwrap(),
+                ),
+                &ctx,
+            );
+            assert!(!e.step_letters);
+            assert_eq!(e.next_step_number(), 1);
+        }
+    }
 
     #[test]
     fn selecting_and_editing_step_carries_size_format_and_sequence_into_next_marker() {

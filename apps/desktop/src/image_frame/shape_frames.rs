@@ -3,7 +3,7 @@ use super::*;
 // Winit 0.30's Windows OLE DragOver does not forward cursor coordinates.
 // Read only the pointer (never screen pixels) while a file drag is active.
 #[cfg(windows)]
-fn native_drop_pointer(owner: Option<isize>, ppp: f32) -> Option<egui::Pos2> {
+pub(crate) fn native_drop_pointer(owner: Option<isize>, ppp: f32) -> Option<egui::Pos2> {
     use windows_sys::Win32::{
         Foundation::{HWND, POINT},
         Graphics::Gdi::ScreenToClient,
@@ -38,19 +38,24 @@ impl Editor {
         let Some(a) = self.selected_annotation().filter(|a| a.is_image_frame()) else {
             return;
         };
-        property_layout::section_help(
-            ui,
-            "Image frame styles",
-            "Choose a frame shape. Click once for its shape properties; double-click for image cropping and replacement.",
-        );
         ui.horizontal(|ui| {
+            let width = ((ui.available_width() - 2. * ui.spacing().item_spacing.x) / 3.).min(100.);
             for (label, kind, radius) in [
                 ("Square", Kind::Rectangle, 0.0_f32),
                 ("Rounded", Kind::Rectangle, 20.),
                 ("Circle", Kind::Ellipse, 0.),
             ] {
                 let (rect, response) =
-                    ui.allocate_exact_size(egui::vec2(70., 62.), egui::Sense::click());
+                    ui.allocate_exact_size(egui::vec2(width, 68.), egui::Sense::click());
+                ui.painter().rect_filled(
+                    rect,
+                    3.,
+                    if response.hovered() {
+                        egui::Color32::from_rgb(65, 79, 85)
+                    } else {
+                        egui::Color32::from_rgb(42, 47, 50)
+                    },
+                );
                 let icon = egui::Rect::from_center_size(
                     rect.center() - egui::vec2(0., 8.),
                     egui::vec2(38., 30.),
@@ -74,12 +79,20 @@ impl Editor {
                     );
                 }
                 ui.painter().text(
-                    rect.center_bottom(),
+                    rect.center_bottom() - egui::vec2(0., 5.),
                     egui::Align2::CENTER_BOTTOM,
                     label,
                     egui::FontId::proportional(12.),
                     ui.visuals().text_color(),
                 );
+                if a.kind == kind && ((a.corner_radius > 0.) == (radius > 0.)) {
+                    ui.painter().rect_stroke(
+                        rect,
+                        3.,
+                        egui::Stroke::new(2., crate::shell::ACCENT),
+                        egui::StrokeKind::Inside,
+                    );
+                }
                 if response
                     .on_hover_text(format!("{label} image frame"))
                     .clicked()

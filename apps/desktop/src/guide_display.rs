@@ -7,6 +7,8 @@ use std::{collections::HashMap, sync::Arc};
 #[cfg(test)]
 #[path = "guide_display_effect_tests.rs"]
 mod effect_tests;
+#[path = "guide_display_focus.rs"]
+mod focus;
 #[derive(Default)]
 pub(super) struct Scene {
     background: Option<Background>,
@@ -19,6 +21,7 @@ struct Effect {
     plan: Plan,
     offset: [i32; 2],
     tiles: Vec<([u32; 4], egui::TextureHandle)>,
+    clear: Option<Vec<([u32; 4], egui::TextureHandle)>>,
 }
 struct Background {
     raster: Option<Arc<capture_core::RasterImage>>,
@@ -34,7 +37,8 @@ struct Vector {
     origin: [f64; 2],
 }
 pub(super) fn supported(d: &Document) -> bool {
-    d.guide.is_some()
+    d.canvas_behavior.allow_overflow
+        || d.guide.is_some()
         || d.raster.is_some()
         || !d.source_png.is_empty()
         || d.annotations.iter().any(|a| a.image.is_some())
@@ -80,6 +84,49 @@ fn with_holes(
     }
 }
 impl Scene {
+    pub(super) fn paint_video(
+        &mut self,
+        ui: &egui::Ui,
+        d: &Document,
+        t: Transform,
+        frame: Option<&image::RgbaImage>,
+        revision: u64,
+        project: &capture_core::video::editor::Project,
+    ) -> capture_core::Result<()> {
+        let key = if frame.is_none_or(|f| f.dimensions() == (1, 1)) {
+            format!(
+                "video-background:{:?}:{}:{}",
+                project.background, d.width, d.height
+            )
+        } else {
+            format!(
+                "video:{revision}:{}:{:?}:{}:{}:{}:{:?}",
+                project.source, project.crop, project.fill, d.width, d.height, project.background
+            )
+        };
+        let mut base = d.clone();
+        base.annotations.clear();
+        base.raster = None;
+        base.source_png = key.clone();
+        base.source_size = None;
+        if self.background.as_ref().is_none_or(|b| b.source != key) {
+            base.video = Some(project.clone());
+            let pixels = if frame.is_none_or(|f| f.dimensions() == (1, 1)) {
+                image::RgbaImage::from_pixel(d.width, d.height, image::Rgba(project.background))
+            } else {
+                capture_core::video::editor::composite(&base, frame.unwrap(), 0)?
+            };
+            self.background = Some(Background {
+                raster: None,
+                source: key,
+                pixels,
+                tiles: HashMap::new(),
+            });
+            self.effects.clear();
+        }
+        base.video = None;
+        self.paint_with_base(ui, d, t, &base, [0, 0])
+    }
     pub(super) fn paint(
         &mut self,
         ui: &egui::Ui,
@@ -96,12 +143,18 @@ impl Scene {
         base: &Document,
         offset: [i32; 2],
     ) -> capture_core::Result<()> {
-        let painter = ui.painter().with_clip_rect(t.viewport.intersect(t.image));
+        let painter = ui
+            .painter()
+            .with_clip_rect(if d.canvas_behavior.allow_overflow {
+                t.viewport
+            } else {
+                t.viewport.intersect(t.image)
+            });
         let shift = offset.map(|n| n as f32);
         let mut objects: Vec<_> = d
             .annotations
             .iter()
-            .filter(|a| d.object_visible(a.id) && a.analysis.is_none())
+            .filter(|a| d.object_visible(a.id))
             .cloned()
             .collect();
         objects.extend(d.page_furniture());
@@ -109,7 +162,23 @@ impl Scene {
             .iter()
             .enumerate()
             .filter_map(|(i, a)| {
-                let plan = Plan::new(&objects, i, [d.width, d.height])?;
+                let plan = if !d.canvas_behavior.page_owners.is_empty()
+                    || (a.focus.is_some() && d.guide.is_some())
+                {
+                    if !effect_patch::needs_pixels(a) {
+                        return None;
+                    }
+                    let owner = d.object_page(a);
+                    let own: Vec<_> = objects[..=i]
+                        .iter()
+                        .filter(|o| d.object_page(o) == owner)
+                        .cloned()
+                        .collect();
+                    Plan::new(&own, own.len() - 1, [d.width, d.height])?
+                        .clipped(d.page_rect(owner).map(|n| n as u32))?
+                } else {
+                    Plan::new(&objects, i, [d.width, d.height])?
+                };
                 let [x, y, w, h] = plan.output;
                 let rect = egui::Rect::from_min_max(
                     t.screen_point([x as f32, y as f32]),
@@ -118,7 +187,24 @@ impl Scene {
                 rect.intersects(t.viewport).then_some((i, a.id, rect, plan))
             })
             .collect();
-        let all_holes: Vec<_> = plans.iter().map(|p| p.2).collect();
+        let mut all_holes: Vec<_> = plans.iter().map(|p| p.2).collect();
+        if d.canvas_behavior.allow_overflow
+            && let Some(g) = &d.guide
+        {
+            let mut gaps = vec![t.image.intersect(t.viewport)];
+            for i in 0..g.page_count() {
+                let r = d.page_rect(i);
+                let screen = egui::Rect::from_min_size(
+                    t.screen_point([r[0], r[1]]),
+                    egui::vec2(r[2], r[3]) * t.scale,
+                );
+                gaps = gaps
+                    .into_iter()
+                    .flat_map(|r| crate::crop::outside(r, screen))
+                    .collect();
+            }
+            all_holes.extend(gaps);
+        }
         if base.raster.is_some() || !base.source_png.is_empty() || !plans.is_empty() {
             if self.background.as_ref().is_none_or(|b| {
                 !match (&b.raster, &base.raster) {
@@ -185,12 +271,19 @@ impl Scene {
             });
         }
         for (_, id, _, plan) in &plans {
+            let surfaces = plan.focus_surfaces();
+            let key = surfaces.as_ref().map_or(plan, |(_, outside)| outside);
             if self
                 .effects
                 .get(id)
-                .is_none_or(|e| e.plan != *plan || e.offset != offset)
+                .is_none_or(|e| e.plan != *key || e.offset != offset)
             {
-                let pixels = plan.render(&self.background.as_ref().unwrap().pixels, offset)?;
+                let base = &self.background.as_ref().unwrap().pixels;
+                let pixels = key.render(base, offset)?;
+                let clear = surfaces
+                    .as_ref()
+                    .map(|(lower, _)| lower.render(base, offset))
+                    .transpose()?;
                 let limit = (ui.input(|i| i.max_texture_side) as u32).clamp(1, 1024);
                 let mut tiles = Vec::new();
                 for y in (0..pixels.height()).step_by(limit as usize) {
@@ -214,9 +307,10 @@ impl Scene {
                 self.effects.insert(
                     *id,
                     Effect {
-                        plan: plan.clone(),
+                        plan: key.clone(),
                         offset,
                         tiles,
+                        clear: clear.map(|pixels| focus::textures(ui, &pixels, limit)),
                     },
                 );
             }
@@ -225,31 +319,61 @@ impl Scene {
         let mut live_vectors = Vec::new();
         let ppp = ui.ctx().pixels_per_point();
         for (index, a) in objects.iter().enumerate() {
-            let holes: Vec<_> = plans.iter().filter(|p| p.0 > index).map(|p| p.2).collect();
+            let mut outline;
+            let mut holes: Vec<_> = plans.iter().filter(|p| p.0 > index).map(|p| p.2).collect();
+            if !d.canvas_behavior.page_owners.is_empty()
+                && let Some(g) = &d.guide
+            {
+                for page in 0..g.page_count() {
+                    if page == d.object_page(a) {
+                        continue;
+                    }
+                    let r = d.page_rect(page);
+                    holes.push(egui::Rect::from_min_size(
+                        t.screen_point([r[0], r[1]]),
+                        egui::vec2(r[2], r[3]) * t.scale,
+                    ));
+                }
+            }
             if effect_patch::needs_pixels(a) {
                 if let Some(e) = self
                     .effects
                     .get(&a.id)
                     .filter(|_| plans.iter().any(|p| p.1 == a.id))
                 {
-                    for ([x, y, w, h], texture) in &e.tiles {
-                        let [ox, oy, _, _] = e.plan.output;
-                        let rect = egui::Rect::from_min_max(
-                            t.screen_point([(ox + x) as f32, (oy + y) as f32]),
-                            t.screen_point([(ox + x + w) as f32, (oy + y + h) as f32]),
-                        );
-                        with_holes(&painter, rect, &holes, |p| {
-                            p.image(
-                                texture.id(),
-                                rect,
-                                egui::Rect::from_min_max(egui::Pos2::ZERO, egui::pos2(1., 1.)),
-                                egui::Color32::WHITE,
+                    if let Some(clear) = &e.clear {
+                        focus::paint(&painter, t, a, e.plan.output, clear, &e.tiles, &holes);
+                        // Only the stroke remains a normal retained vector.
+                        outline = a.clone();
+                        outline.focus = None;
+                        outline.fill = None;
+                        outline.text = None;
+                        outline.shadow = None;
+                    } else {
+                        for ([x, y, w, h], texture) in &e.tiles {
+                            let [ox, oy, _, _] = e.plan.output;
+                            let rect = egui::Rect::from_min_max(
+                                t.screen_point([(ox + x) as f32, (oy + y) as f32]),
+                                t.screen_point([(ox + x + w) as f32, (oy + y + h) as f32]),
                             );
-                        });
+                            with_holes(&painter, rect, &holes, |p| {
+                                p.image(
+                                    texture.id(),
+                                    rect,
+                                    egui::Rect::from_min_max(egui::Pos2::ZERO, egui::pos2(1., 1.)),
+                                    egui::Color32::WHITE,
+                                );
+                            });
+                        }
+                        continue;
                     }
+                } else {
+                    continue;
                 }
-                continue;
+            } else {
+                outline = a.clone();
             }
+            let a = &outline;
             let (mut lo, mut hi) = a.bounds();
             if let Some((slo, shi)) = capture_core::shadow::bounds(a) {
                 for i in 0..2 {
@@ -260,7 +384,7 @@ impl Scene {
             let margin = if matches!(a.kind, Kind::Arrow | Kind::Polygon) {
                 a.width as f32 * 4. + 2.
             } else {
-                a.width as f32 * 0.5 + 2.
+                capture_core::line_style::stroke_reach(a) + 2.
             };
             lo = lo.map(|x| x - margin);
             hi = hi.map(|x| x + margin);
@@ -268,6 +392,10 @@ impl Scene {
             if !screen.intersects(t.viewport) {
                 continue;
             }
+            let patterned_frame = a.is_image_frame()
+                && a.line_style
+                    .is_some_and(|s| s.pattern != capture_core::line_style::Pattern::Solid);
+            let mut frame_outline_only = false;
             if (a.kind == Kind::Image || a.is_image_frame())
                 && a.convex_frame()
                 && a.image.as_ref().is_some_and(|b| b.vector().is_none())
@@ -293,6 +421,7 @@ impl Scene {
                             *n = (*n * 256.).round() / 256.;
                         }
                     }
+                    capture_core::shadow::normalize_opaque_source(&mut local);
                     if self
                         .shadows
                         .get(&a.id)
@@ -352,7 +481,7 @@ impl Scene {
                 // The image mask bounds exclude the outer half of the outline.
                 // Clip against expanded ink bounds, never the frame's body rectangle.
                 with_holes(&painter, screen, &holes, |p| {
-                    if a.is_shape() || a.rotation_degrees != 0. {
+                    if a.is_shape() || a.rotation_degrees != 0. || a.mirror_x {
                         let boundary = a.frame_boundary();
                         let points: Vec<_> = boundary
                             .iter()
@@ -382,7 +511,7 @@ impl Scene {
                             mesh.indices.extend([0, i as u32, i as u32 + 1]);
                         }
                         p.add(mesh);
-                        if a.is_shape() {
+                        if a.is_shape() && !patterned_frame {
                             p.add(egui::Shape::closed_line(
                                 points,
                                 egui::Stroke::new(
@@ -410,7 +539,10 @@ impl Scene {
                         );
                     }
                 });
-                continue;
+                if !patterned_frame {
+                    continue;
+                }
+                frame_outline_only = true;
             }
             live_vectors.push(a.id);
             let mut local = capture_core::canvas_expansion::translated(
@@ -418,6 +550,12 @@ impl Scene {
                 lo.map(|x| -x),
             )?
             .remove(0);
+            if frame_outline_only {
+                local.image = None;
+                local.fill = None;
+                local.text = None;
+                local.shadow = None;
+            }
             // Translation subtraction can leave tiny f32 differences in local
             // geometry. Quantize the display cache only (never the document).
             let stable_point = |p: &mut [f32; 2]| {
@@ -673,13 +811,13 @@ mod tests {
         }
     }
     #[test]
-    fn blank_canvas_raster_and_vector_stamps_reuse_pixels_during_fractional_movement() {
+    fn blank_canvas_raster_and_vector_icons_reuse_pixels_during_fractional_movement() {
         for id in ["builtin-raster-sample", "builtin-check-circle"] {
             let mut session =
                 capture_core::Session::new(Document::blank(3000, 2000).unwrap()).unwrap();
             session
                 .execute(capture_core::Command::PasteObjects {
-                    payload: capture_core::stamps::builtin::find(id)
+                    payload: capture_core::icon_library::builtin::find(id)
                         .unwrap()
                         .payload()
                         .unwrap(),

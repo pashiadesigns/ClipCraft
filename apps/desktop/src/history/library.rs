@@ -3,28 +3,30 @@ use capture_core::history::MediaKind;
 
 fn filter(ui: &mut egui::Ui, selected: bool, label: &str, icon: &str) -> egui::Response {
     let (rect, response) =
-        ui.allocate_exact_size(egui::vec2(ui.available_width(), 26.), egui::Sense::click());
+        ui.allocate_exact_size(egui::vec2(ui.available_width(), 36.), egui::Sense::click());
     let visuals = ui.style().interact_selectable(&response, selected);
     if selected || response.hovered() {
         ui.painter().rect_filled(rect, 4., visuals.bg_fill);
     }
-    crate::ribbon::draw_icon(
+    super::library_icons::paint(
         ui.painter(),
         rect.left_center() + egui::vec2(14., 0.),
         icon,
         visuals.text_color(),
     );
-    ui.painter().text(
-        rect.left_center() + egui::vec2(32., 0.),
-        egui::Align2::LEFT_CENTER,
-        label,
-        egui::FontId::proportional(13.),
-        visuals.text_color(),
-    );
+    if ui.clip_rect().width() > 80. {
+        ui.painter().text(
+            rect.left_center() + egui::vec2(38., 0.),
+            egui::Align2::LEFT_CENTER,
+            label,
+            egui::FontId::proportional(13.),
+            visuals.text_color(),
+        );
+    }
     response.widget_info(|| {
         egui::WidgetInfo::selected(egui::Role::Button, ui.is_enabled(), selected, label)
     });
-    response
+    response.on_hover_text(label)
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -54,6 +56,14 @@ pub(super) struct View {
     pub(super) tag: Option<String>,
     order: Order,
     zoom: f32,
+    sidebar_expanded: bool,
+    tags_open: bool,
+    apps_open: bool,
+    sites_open: bool,
+    sidebar_motion: crate::motion::Tween,
+    sidebar_width: f32,
+    last_sidebar_hover: f64,
+    positions: std::collections::HashMap<String, (crate::motion::Tween, crate::motion::Tween)>,
 }
 impl Default for View {
     fn default() -> Self {
@@ -66,6 +76,14 @@ impl Default for View {
             tag: None,
             order: Order::Newest,
             zoom: 100.0,
+            sidebar_expanded: false,
+            tags_open: true,
+            apps_open: false,
+            sites_open: false,
+            sidebar_motion: crate::motion::Tween::new(52.),
+            sidebar_width: 52.,
+            last_sidebar_hover: f64::NEG_INFINITY,
+            positions: Default::default(),
         }
     }
 }
@@ -160,10 +178,50 @@ impl Editor {
         for entry in &entries {
             *years.entry(entry.created_date()[0]).or_default() += 1;
         }
-        egui::Panel::left("library_sidebar")
-            .default_size(280.0)
-            .min_size(280.0)
-            .max_size(280.0)
+        let pinned = self.quick_controls.library_pinned();
+        let available = ui.available_rect_before_wrap();
+        let now = ui.input(|i| i.time);
+        let duration = if crate::motion::enabled() { 0.260 } else { 0. };
+        let hover_rect = egui::Rect::from_min_size(
+            available.min,
+            egui::vec2(self.history.library.sidebar_width, available.height()),
+        );
+        let hovered = ui.input(|i| {
+            i.pointer
+                .hover_pos()
+                .is_some_and(|p| hover_rect.contains(p))
+        });
+        if hovered {
+            self.history.library.last_sidebar_hover = now;
+        }
+        let focused = ui.memory(|m| m.has_focus(egui::Id::unique("library-search")));
+        let expanded = pinned
+            || hovered
+            || focused
+            || now - self.history.library.last_sidebar_hover < 0.180
+            || (self.history.library.sidebar_expanded && egui::Popup::is_any_open(ui.ctx()));
+        self.history.library.sidebar_expanded = expanded;
+        let target_width = if expanded {
+            280f32.min((available.width() - 160.).max(52.))
+        } else {
+            52.
+        };
+        let width = self
+            .history
+            .library
+            .sidebar_motion
+            .advance(target_width, now, duration);
+        self.history.library.sidebar_width = width;
+        if (width - target_width).abs() > 0.01 || hovered {
+            ui.ctx().request_repaint();
+        }
+        #[cfg(test)]
+        ui.ctx()
+            .data_mut(|d| d.insert_temp(egui::Id::unique("library-sidebar-width"), width));
+        let sidebar = egui::Panel::left("library_sidebar")
+            .default_size(width)
+            .min_size(width)
+            .max_size(width)
             .resizable(false)
             .frame(
                 egui::Frame::new()
@@ -174,45 +232,84 @@ impl Editor {
                         ne: 0,
                         se: 0,
                     })
-                    .inner_margin(egui::Margin::same(12)),
+                    .inner_margin(egui::Margin::symmetric(8, 10)),
             )
             .show(ui, |ui| {
-                ui.add(
-                    egui::TextEdit::singleline(&mut self.history.query)
-                        .hint_text("Search Library")
-                        .char_limit(120)
-                        .desired_width(f32::INFINITY),
-                )
-                .on_hover_text(
-                    "Search names, tags, capture types and dimensions. Every word must match.",
-                );
                 ui.horizontal(|ui| {
-                    if ui
-                        .add_enabled(
-                            !self.history.query.is_empty()
-                                || self.history.library.year.is_some()
-                                || self.history.library.kind.is_some()
-                                || self.history.library.tag.is_some(),
-                            egui::Button::new("Clear filters"),
-                        )
-                        .clicked()
-                    {
-                        self.history.query.clear();
-                        self.history.library.year = None;
-                        self.history.library.kind = None;
-                        self.history.library.tag = None;
-                    }
-                    crate::shell::badge(ui, self.shell.badges, "LIB-005");
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        let response = super::library_icons::button(
+                            ui,
+                            "Pin",
+                            if pinned {
+                                "Unpin Library sidebar"
+                            } else {
+                                "Pin Library sidebar open"
+                            },
+                            true,
+                            pinned,
+                            egui::vec2(28., 26.),
+                        );
+                        #[cfg(test)]
+                        ui.ctx().data_mut(|d| {
+                            d.insert_temp(egui::Id::unique("library-pin"), response.rect)
+                        });
+                        if response.clicked() {
+                            self.quick_controls.set_library_pinned(!pinned);
+                        }
+                        if width > 128. {
+                            ui.label("Filters");
+                        }
+                    });
                 });
-                ui.add_space(10.0);
+                // The content remains fixed-width; only its clip reveals labels.
+                // All primary icons keep the same x/y position while the rail moves.
+                let clip = ui.clip_rect().intersect(egui::Rect::from_min_size(
+                    ui.min_rect().min,
+                    egui::vec2(width - 16., ui.available_height()),
+                ));
+                ui.set_clip_rect(clip);
+                ui.set_width(264.);
+                ui.set_max_width(264.);
+                ui.horizontal(|ui| {
+                    let (r, _) = ui.allocate_exact_size(egui::vec2(30., 36.), egui::Sense::hover());
+                    super::library_icons::paint(
+                        ui.painter(),
+                        r.center(),
+                        "Search",
+                        ui.visuals().text_color(),
+                    );
+                    ui.add_visible(
+                        width > 80.,
+                        crate::unicode_input::TextEdit::singleline(&mut self.history.query)
+                            .id(egui::Id::unique("library-search"))
+                            .hint_text("Search Library")
+                            .char_limit(120)
+                            .desired_width(f32::INFINITY),
+                    )
+                    .on_hover_text(
+                        "Search names, tags, capture types and dimensions. Every word must match.",
+                    );
+                });
+                if (!self.history.query.is_empty()
+                    || self.history.library.year.is_some()
+                    || self.history.library.kind.is_some()
+                    || self.history.library.tag.is_some())
+                    && filter(ui, false, "Clear filters", "Clear").clicked()
+                {
+                    self.history.query.clear();
+                    self.history.library.year = None;
+                    self.history.library.kind = None;
+                    self.history.library.tag = None;
+                }
                 egui::ScrollArea::vertical()
                     .id_salt("library_categories")
                     .show(ui, |ui| {
                         for (kind, label, icon) in [
                             (None, "All Files", "Library"),
                             (Some(MediaKind::Image), "Images", "Image"),
-                            (Some(MediaKind::Steps), "Step Captures", "Steps"),
-                            (Some(MediaKind::Template), "From Template", "Image"),
+                            (Some(MediaKind::Steps), "Step by Step Captures", "Steps"),
+                            (Some(MediaKind::Template), "From Template", "Template"),
+                            (Some(MediaKind::Video), "Videos", "Capture Video"),
                         ] {
                             let count = entries
                                 .iter()
@@ -229,76 +326,131 @@ impl Editor {
                                 self.history.library.kind = kind;
                             }
                         }
-                        ui.add_enabled_ui(false, |ui| filter(ui, false, "Videos  (0)", "Video"));
                         ui.separator();
-                        if ui
-                            .selectable_label(self.history.library.year.is_none(), "All dates")
-                            .clicked()
+                        if filter(
+                            ui,
+                            self.history.library.year.is_none(),
+                            &format!("All dates  ({})", entries.len()),
+                            "Dates",
+                        )
+                        .clicked()
                         {
                             self.history.library.year = None;
                         }
-                        for (&year, count) in years.iter().rev() {
-                            if ui
-                                .selectable_label(
-                                    self.history.library.year == Some(year),
-                                    format!("{year}  ({count})"),
-                                )
-                                .clicked()
-                            {
-                                self.history.library.year = Some(year);
+                        let mut dates =
+                            egui::collapsing_header::CollapsingState::load_with_default_open(
+                                ui.ctx(),
+                                egui::Id::unique("library-date-body"),
+                                false,
+                            );
+                        dates.set_open(expanded);
+                        dates.show_body_unindented(ui, |ui| {
+                            if width <= 80. {
+                                ui.set_invisible();
                             }
-                        }
-                        ui.separator();
-                        egui::CollapsingHeader::new("Tags")
-                            .id_salt(("library-tags", entries.iter().any(|e| !e.tags.is_empty())))
-                            .default_open(entries.iter().any(|e| !e.tags.is_empty()))
-                            .show(ui, |ui| {
-                                let mut tags = std::collections::BTreeSet::new();
-                                for e in &entries {
-                                    tags.extend(e.tags.iter().cloned());
-                                }
-                                if tags.is_empty() {
-                                    ui.small("Right-click a capture to add tags.");
-                                }
+                            for (&year, count) in years.iter().rev() {
                                 if ui
                                     .selectable_label(
-                                        self.history.library.tag.is_none(),
-                                        "All tags",
+                                        self.history.library.year == Some(year),
+                                        format!("{year}  ({count})"),
                                     )
                                     .clicked()
                                 {
-                                    self.history.library.tag = None;
+                                    self.history.library.year = Some(year);
                                 }
-                                for tag in tags {
-                                    let response = ui.selectable_label(
-                                        self.history.library.tag.as_ref() == Some(&tag),
-                                        &tag,
-                                    );
-                                    if response.clicked() {
-                                        self.history.library.tag = Some(tag.clone());
+                            }
+                        });
+                        ui.separator();
+                        if filter(ui, false, "Tags", "Tags").clicked() {
+                            self.history.library.tags_open = !self.history.library.tags_open;
+                        }
+                        let mut tags_body =
+                            egui::collapsing_header::CollapsingState::load_with_default_open(
+                                ui.ctx(),
+                                egui::Id::unique("library-tags-body"),
+                                false,
+                            );
+                        tags_body.set_open(expanded && self.history.library.tags_open);
+                        tags_body.show_body_unindented(ui, |ui| {
+                            if width <= 80. {
+                                ui.set_invisible();
+                            }
+                            let mut tags = std::collections::BTreeSet::new();
+                            for e in &entries {
+                                tags.extend(e.tags.iter().cloned());
+                            }
+                            if tags.is_empty() {
+                                ui.small("Right-click a capture to add tags.");
+                            }
+                            if ui
+                                .selectable_label(
+                                    self.history.library.tag.is_none(),
+                                    format!("All tags  ({})", entries.len()),
+                                )
+                                .clicked()
+                            {
+                                self.history.library.tag = None;
+                            }
+                            for tag in tags {
+                                let response = ui.selectable_label(
+                                    self.history.library.tag.as_ref() == Some(&tag),
+                                    format!(
+                                        "{tag}  ({})",
+                                        entries
+                                            .iter()
+                                            .filter(|e| e
+                                                .tags
+                                                .iter()
+                                                .any(|t| t.eq_ignore_ascii_case(&tag)))
+                                            .count()
+                                    ),
+                                );
+                                if response.clicked() {
+                                    self.history.library.tag = Some(tag.clone());
+                                }
+                                response.context_menu(|ui| {
+                                    if crate::controls::menu_action(ui, "Rename tag everywhere…")
+                                        .clicked()
+                                    {
+                                        self.begin_global_tag(&tag, false);
+                                        ui.close();
                                     }
-                                    response.context_menu(|ui| {
-                                        if ui.button("Rename tag everywhere…").clicked() {
-                                            self.begin_global_tag(&tag, false);
-                                            ui.close();
-                                        }
-                                        if ui.button("Delete tag everywhere…").clicked() {
-                                            self.begin_global_tag(&tag, true);
-                                            ui.close();
-                                        }
-                                    });
+                                    if crate::controls::menu_action(ui, "Delete tag everywhere…")
+                                        .clicked()
+                                    {
+                                        self.begin_global_tag(&tag, true);
+                                        ui.close();
+                                    }
+                                });
+                            }
+                        });
+                        for (label, open) in [
+                            ("Applications", &mut self.history.library.apps_open),
+                            ("Websites", &mut self.history.library.sites_open),
+                        ] {
+                            if filter(ui, false, label, label).clicked() {
+                                *open = !*open;
+                            }
+                            let mut body =
+                                egui::collapsing_header::CollapsingState::load_with_default_open(
+                                    ui.ctx(),
+                                    egui::Id::unique(("library-body", label)),
+                                    false,
+                                );
+                            body.set_open(expanded && *open);
+                            body.show_body_unindented(ui, |ui| {
+                                if width <= 80. {
+                                    ui.set_invisible();
                                 }
-                            });
-                        for label in ["Applications", "Websites"] {
-                            ui.collapsing(label, |ui| {
                                 ui.label("Not available yet.");
-                                crate::shell::badge(ui, self.shell.badges, "LIB-002");
                             });
                         }
                         ui.add_space(16.0);
-                        crate::shell::badge(ui, self.shell.badges, "LIB-006");
                     });
             });
+        if expanded != pinned && !sidebar.response.contains_pointer() {
+            ui.ctx().request_repaint();
+        }
         egui::CentralPanel::default()
             .frame(egui::Frame::new().inner_margin(egui::Margin::same(12)))
             .show(ui, |ui| {
@@ -322,7 +474,7 @@ impl Editor {
                             }
                         });
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if crate::ribbon::icon(
+                        if super::library_icons::button(
                             ui,
                             "Refresh",
                             "Refresh Library",
@@ -365,6 +517,15 @@ impl Editor {
                     .library
                     .selected
                     .retain(|id| visible.iter().any(|e| &e.id == id));
+                if ui.rect_contains_pointer(ui.available_rect_before_wrap())
+                    && !ui.ctx().egui_wants_keyboard_input()
+                {
+                    let delta = self.gesture_wheel(ui, crate::gesture_input::Gesture::LibraryZoom);
+                    if delta != 0. {
+                        self.history.library.zoom =
+                            (self.history.library.zoom + delta.signum() * 10.).clamp(50., 200.);
+                    }
+                }
                 egui::ScrollArea::vertical()
                     .id_salt("library_grid_scroll")
                     .scroll_source(egui::scroll_area::ScrollSource {
@@ -377,66 +538,95 @@ impl Editor {
                         let mut cards = Vec::new();
                         let (columns, size) =
                             grid_geometry(ui.available_width(), self.history.library.zoom);
-                        egui::Grid::new("library_grid")
-                            .num_columns(columns)
-                            .spacing(egui::vec2(12., 16.))
-                            .show(ui, |ui| {
-                                for row in visible.chunks(columns) {
-                                    for entry in row {
-                                        let card = ui.vertical(|ui| {
-                                            ui.set_width(size.x);
-                                            ui.set_max_width(size.x);
-                                            self.history_card(ui, entry, size);
-                                            ui.add(egui::Label::new(&entry.label).truncate())
-                                                .on_hover_text(&entry.label);
-                                            if self.quick_controls.thumbnail_details() {
-                                                ui.add(
-                                                    egui::Label::new(format!(
-                                                        "{} × {} · {}",
-                                                        entry.width,
-                                                        entry.height,
-                                                        entry.kind.label()
-                                                    ))
-                                                    .truncate(),
-                                                );
-                                                ui.add(
-                                                    egui::Label::new(entry.created_utc())
-                                                        .truncate(),
-                                                );
-                                            }
-                                        });
-                                        let response = ui.interact(
-                                            card.response.rect,
-                                            ui.scope_id().with(("library-card", &entry.id)),
-                                            egui::Sense::click_and_drag(),
+                        let card_height = size.y
+                            + if self.quick_controls.thumbnail_details() {
+                                72.
+                            } else {
+                                30.
+                            };
+                        let row_height = card_height + 16.;
+                        let rows = visible.len().div_ceil(columns);
+                        ui.allocate_space(egui::vec2(
+                            ui.available_width(),
+                            rows as f32 * row_height,
+                        ));
+                        self.history
+                            .library
+                            .positions
+                            .retain(|id, _| entries.iter().any(|e| &e.id == id));
+                        for (index, entry) in visible.iter().enumerate() {
+                            let x = (index % columns) as f32 * (size.x + 12.);
+                            let y = (index / columns) as f32 * row_height;
+                            let motion = self
+                                .history
+                                .library
+                                .positions
+                                .entry(entry.id.clone())
+                                .or_insert_with(|| {
+                                    (crate::motion::Tween::new(x), crate::motion::Tween::new(y))
+                                });
+                            let pos = egui::vec2(
+                                motion.0.advance(x, now, duration),
+                                motion.1.advance(y, now, duration),
+                            );
+                            if (pos.x - x).abs() + (pos.y - y).abs() > 0.01 {
+                                ui.ctx().request_repaint();
+                            }
+                            let rect = egui::Rect::from_min_size(
+                                origin + pos,
+                                egui::vec2(size.x, card_height),
+                            );
+                            let card = ui.scope_builder(
+                                egui::UiBuilder::new()
+                                    .max_rect(rect)
+                                    .layout(egui::Layout::top_down(egui::Align::Min)),
+                                |ui| {
+                                    ui.set_width(size.x);
+                                    ui.set_max_width(size.x);
+                                    self.history_card(ui, entry, size);
+                                    ui.add(egui::Label::new(&entry.label).truncate())
+                                        .on_hover_text(&entry.label);
+                                    if self.quick_controls.thumbnail_details() {
+                                        ui.add(
+                                            egui::Label::new(format!(
+                                                "{} × {} · {}",
+                                                entry.width,
+                                                entry.height,
+                                                entry.kind.label()
+                                            ))
+                                            .truncate(),
                                         );
-                                        if response.secondary_clicked()
-                                            && !self.history.library.selected.contains(&entry.id)
-                                        {
-                                            self.history.library.select(
-                                                &entry.id,
-                                                &visible,
-                                                egui::Modifiers::NONE,
-                                            );
-                                        }
-                                        if response.double_clicked()
-                                            && self.history.available(&entry.id)
-                                        {
-                                            open = Some(entry.id.clone());
-                                        } else if response.clicked() {
-                                            self.history.library.select(
-                                                &entry.id,
-                                                &visible,
-                                                ui.input(|i| i.modifiers),
-                                            );
-                                        }
-                                        let available = self.history.available(&entry.id);
-                                        self.history_context(&response, entry, available);
-                                        cards.push((entry.id.clone(), card.response.rect));
+                                        ui.add(egui::Label::new(entry.created_utc()).truncate());
                                     }
-                                    ui.end_row();
-                                }
-                            });
+                                },
+                            );
+                            let response = ui.interact(
+                                card.response.rect,
+                                ui.scope_id().with(("library-card", &entry.id)),
+                                egui::Sense::click_and_drag(),
+                            );
+                            if response.secondary_clicked()
+                                && !self.history.library.selected.contains(&entry.id)
+                            {
+                                self.history.library.select(
+                                    &entry.id,
+                                    &visible,
+                                    egui::Modifiers::NONE,
+                                );
+                            }
+                            if response.double_clicked() && self.history.available(&entry.id) {
+                                open = Some(entry.id.clone());
+                            } else if response.clicked() {
+                                self.history.library.select(
+                                    &entry.id,
+                                    &visible,
+                                    ui.input(|i| i.modifiers),
+                                );
+                            }
+                            let available = self.history.available(&entry.id);
+                            self.history_context(&response, entry, available);
+                            cards.push((entry.id.clone(), card.response.rect));
+                        }
                         let (pressed, released, down, pos, modifiers) = ui.input(|i| {
                             (
                                 i.pointer.primary_pressed(),

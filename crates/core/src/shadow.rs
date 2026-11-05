@@ -92,7 +92,7 @@ pub fn bounds(a: &Annotation) -> Option<([f32; 2], [f32; 2])> {
     let stroke = if a.kind == Kind::Arrow {
         a.width as f32 * 4.0
     } else {
-        a.width as f32 * 0.5
+        crate::line_style::stroke_reach(a)
     };
     let text = a
         .text
@@ -136,7 +136,31 @@ fn cache_bytes((a, patch): &(Annotation, Patch)) -> usize {
         + a.text.as_ref().map_or(0, |text| text.content.len())
 }
 
+/// RGB changes do not invalidate the shadow of an opaque video frame.
+pub fn normalize_opaque_source(key: &mut Annotation) {
+    if key.image.as_ref().is_some_and(|b| b.opaque_transient()) {
+        // The source RGB changes on every video frame, but its alpha silhouette
+        // does not. Reuse an equivalent opaque source rather than reblurring it.
+        static OPAQUE: OnceLock<Arc<crate::bitmap::Bitmap>> = OnceLock::new();
+        let opacity = key.image_opacity();
+        let white = OPAQUE.get_or_init(|| {
+            Arc::new(
+                crate::bitmap::Bitmap::transient(Arc::new(RgbaImage::from_pixel(
+                    2,
+                    2,
+                    Rgba([255; 4]),
+                )))
+                .expect("opaque silhouette"),
+            )
+        });
+        key.image = Some(Arc::new(white.with_frame_opacity(opacity)));
+    }
+}
+
 pub fn patch(a: &Annotation) -> Option<Patch> {
+    patch_with_cache(a, CACHE.get_or_init(Default::default))
+}
+fn patch_with_cache(a: &Annotation, cache: &Mutex<ShadowCache>) -> Option<Patch> {
     bounds(a)?;
     validate_patch(a).ok()?;
     let anchor = a.body_bounds().0.map(f32::floor);
@@ -144,7 +168,8 @@ pub fn patch(a: &Annotation) -> Option<Patch> {
         .ok()?
         .remove(0);
     key.id = 0;
-    let cache = CACHE.get_or_init(Default::default);
+    normalize_opaque_source(&mut key);
+
     let cached = {
         let mut guard = cache.lock().unwrap_or_else(|p| p.into_inner());
         guard
@@ -191,7 +216,8 @@ fn uncached_patch(a: &Annotation) -> Option<Patch> {
     // knocked out underneath the operation so it cannot contaminate blur input.
     let pixel_effect = matches!(a.kind, Kind::Blur | Kind::Pixelate | Kind::Eraser);
     if matches!(a.kind, Kind::Blur | Kind::Pixelate) {
-        ink.kind = Kind::Simplify;
+        ink.kind = Kind::Rectangle;
+        ink.fill = Some([255; 4]);
         ink.color = [255; 4];
     } else if a.kind == Kind::Eraser {
         ink.kind = Kind::Pen;

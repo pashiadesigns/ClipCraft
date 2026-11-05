@@ -1,5 +1,5 @@
 use super::*;
-use crate::{Annotation, Kind, bitmap::Bitmap, stamps::vector::VectorStamp, steps, text};
+use crate::{Annotation, Kind, bitmap::Bitmap, icon_library::vector::VectorIcon, steps, text};
 use std::sync::Arc;
 fn object(id: u64, kind: Kind, rect: [f32; 4]) -> Annotation {
     let mut a = steps::marker(
@@ -45,7 +45,7 @@ fn vectors() -> Document {
     let mut a = object(4, Kind::Arrow, [20., 205., 190., 280.]);
     a.width = 7;
     d.annotations.push(a);
-    let vector = VectorStamp::builtin("check-circle");
+    let vector = VectorIcon::builtin("check-circle");
     let mut a = Arc::new(Bitmap::from_vector(vector).unwrap()).annotation(5);
     a.start = [235., 205.];
     a.end = [305., 275.];
@@ -74,6 +74,37 @@ fn options(d: &Document) -> Options {
             paginate: false,
         },
         ..Default::default()
+    }
+}
+#[test]
+fn links_are_clickable_but_covered_uris_never_enter_pdf_objects() {
+    let mut d = Document::canvas(400, 200, [255; 4]).unwrap();
+    let mut a = object(1, Kind::Text, [20., 20., 380., 90.]);
+    let mut text = text::TextStyle {
+        content: "Open private account".into(),
+        horizontal: text::HorizontalAlignment::Left,
+        vertical: text::VerticalAlignment::Top,
+        ..Default::default()
+    };
+    crate::text::rich::format_range(&mut text, 0..20, |f| {
+        f.link = Some("https://example.com/private-account".into());
+        f.underline = true;
+    });
+    a.text = Some(text);
+    d.annotations.push(a);
+    let pdf = encode(&d, &options(&d)).unwrap();
+    assert!(String::from_utf8_lossy(&pdf).contains("/Subtype /Link"));
+    for kind in [Kind::Redact, Kind::Blur, Kind::Pixelate, Kind::Eraser] {
+        let mut covered = d.clone();
+        let mut cover = object(2, kind, [0., 0., 400., 120.]);
+        if kind == Kind::Eraser {
+            cover.points = vec![cover.start, cover.end];
+        }
+        covered.annotations.push(cover);
+        let pdf = encode(&covered, &options(&covered)).unwrap();
+        let bytes = String::from_utf8_lossy(&pdf);
+        assert!(!bytes.contains("/URI"), "{kind:?}");
+        assert!(!bytes.contains("707269766174652D6163636F756E74"));
     }
 }
 fn streams(bytes: &[u8]) -> Vec<Vec<u8>> {
@@ -158,6 +189,48 @@ fn pdf_effects_remove_covered_source_data_and_preserve_later_vectors() {
     d.annotations.push(e);
     d.promote_features();
     fixture("effects", &d, &options(&d));
+}
+
+#[test]
+fn optional_redaction_labels_never_retain_source_in_pdf_or_raster() {
+    let secret = [117, 43, 201, 255];
+    let mut document = Document::canvas(180, 70, secret).unwrap();
+    document
+        .annotations
+        .push(object(1, Kind::Redact, [0., 0., 180., 70.]));
+    let original = serde_json::to_vec(&document).unwrap();
+    let mut results = Vec::new();
+    for labels in [false, true] {
+        let prepared = crate::redaction_labels::decorate(document.clone(), labels).unwrap();
+        prepared.validate().unwrap();
+        let rendered = prepared.render().unwrap();
+        assert!(!rendered.pixels().any(|p| p.0 == secret));
+        assert_eq!(prepared.annotations[0], document.annotations[0]);
+        let mut options = options(&document);
+        options.redaction_labels = labels;
+        let pdf = crate::export::encode_document(&document, &options).unwrap();
+        for stream in streams(&pdf) {
+            assert!(!stream.windows(3).any(|w| w == &secret[..3]));
+        }
+        options.format = Format::Png;
+        let png = crate::export::encode_document(&document, &options).unwrap();
+        assert_eq!(
+            image::load_from_memory(&png).unwrap().into_rgba8(),
+            rendered
+        );
+        results.push(rendered);
+        fixture(
+            if labels {
+                "redaction-label"
+            } else {
+                "redaction-no-label"
+            },
+            &prepared,
+            &options,
+        );
+    }
+    assert_ne!(results[0], results[1]);
+    assert_eq!(serde_json::to_vec(&document).unwrap(), original);
 }
 #[test]
 fn pdf_keeps_cropped_frames_transparency_and_pagination() {

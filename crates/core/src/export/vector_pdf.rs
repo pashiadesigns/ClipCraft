@@ -188,6 +188,7 @@ fn rotation(a: &crate::Annotation) -> Affine {
     let r = a.rotation();
     Affine::translate((r.center[0] as f64, r.center[1] as f64))
         * Affine::rotate((r.degrees as f64).to_radians())
+        * Affine::scale_non_uniform(if a.mirror_x { -1. } else { 1. }, 1.)
         * Affine::translate((-r.center[0] as f64, -r.center[1] as f64))
 }
 fn vector(pdf: &mut Pdf, out: &mut String, a: &crate::Annotation, bounds: Rect) -> Result<()> {
@@ -204,7 +205,7 @@ fn vector(pdf: &mut Pdf, out: &mut String, a: &crate::Annotation, bounds: Rect) 
             ink[1] as f64 / 255.,
             ink[2] as f64 / 255.
         );
-        // Outer text outlines subtract glyph interiors in an isolated luminosity
+        // Outer text strokes subtract glyph interiors in an isolated luminosity
         // mask. The mask itself is paths, so transparent glyphs stay sharp too.
         if let Some(start) = list
             .iter()
@@ -294,6 +295,10 @@ pub(super) fn encode(document: &Document, options: &Options) -> Result<Vec<u8>> 
                     .position(|p| p.id == a.id)
                     .unwrap();
                 prefix.annotations.truncate(end + 1);
+                prefix.prune_canvas_behavior();
+                // The export-only prefix keeps page geometry but no references
+                // to objects that have not been drawn yet (including step markers).
+                prefix.reconcile_guide();
                 let pixels = prefix.render()?;
                 *layer = Layer::ReplacePixels {
                     origin: [x, y],
@@ -354,8 +359,23 @@ pub(super) fn encode(document: &Document, options: &Options) -> Result<Vec<u8>> 
     } else {
         image(&mut pdf, &mut content, &base, [0, 0])?;
     }
+    let full_bounds = bounds;
+    let mut bounds = bounds;
     for layer in list.layers {
         match layer {
+            Layer::BeginClip(r) => {
+                bounds = Rect::new(
+                    r[0] as f64,
+                    r[1] as f64,
+                    (r[0] + r[2]) as f64,
+                    (r[1] + r[3]) as f64,
+                );
+                let _ = writeln!(content, "q {} {} {} {} re W n", r[0], r[1], r[2], r[3]);
+            }
+            Layer::EndClip => {
+                content.push_str("Q\n");
+                bounds = full_bounds;
+            }
             Layer::ReplacePixels { origin, mut pixels } => {
                 future.remove(0);
                 erase(&mut pixels, origin.map(|n| n as i32), &future);
@@ -431,7 +451,12 @@ pub(super) fn encode(document: &Document, options: &Options) -> Result<Vec<u8>> 
     }
     let drawing = pdf.form(&content, bounds, false)?;
     let mut kids = vec![];
-    for page in options.page.document_pages(document)? {
+    for (page_index, page) in options
+        .page
+        .document_pages(document)?
+        .into_iter()
+        .enumerate()
+    {
         let media = page.media_size;
         let bleed = page.setup.as_ref().map_or(0., |s| s.bleed);
         let [dx, dy, dw, dh] = page.destination;
@@ -495,8 +520,51 @@ pub(super) fn encode(document: &Document, options: &Options) -> Result<Vec<u8>> 
                 page_content.push_str("Q\n");
             }
         }
+        let mut annotations = Vec::new();
+        for (i, a) in document.annotations.iter().enumerate().filter(|(_, a)| {
+            document.object_visible(a.id)
+                && (document.canvas_behavior.page_owners.is_empty()
+                    || document.object_page(a) == page_index)
+        }) {
+            for (b, url) in crate::text::rich::links(a) {
+                // Any later visible covering object suppresses the entire link.
+                // In particular, replacement effects must not leave a URI that
+                // exposes text removed from the PDF's drawing streams.
+                if document.annotations[i + 1..]
+                    .iter()
+                    .filter(|a| document.object_visible(a.id))
+                    .any(|a| {
+                        let (lo, hi) = a.bounds();
+                        lo[0] < b[2] && hi[0] > b[0] && lo[1] < b[3] && hi[1] > b[1]
+                    })
+                {
+                    continue;
+                }
+                let x0 = (b[0] as f64).max(page.source[0] as f64);
+                let y0 = (b[1] as f64).max(page.source[1] as f64);
+                let x1 = (b[2] as f64).min((page.source[0] + page.source[2]) as f64);
+                let y1 = (b[3] as f64).min((page.source[1] + page.source[3]) as f64);
+                if x1 <= x0 || y1 <= y0 {
+                    continue;
+                }
+                let rect = [
+                    dx + (x0 - page.source[0] as f64) * scale,
+                    media[1] - dy - (y1 - page.source[1] as f64) * scale,
+                    dx + (x1 - page.source[0] as f64) * scale,
+                    media[1] - dy - (y0 - page.source[1] as f64) * scale,
+                ];
+                let uri = url.bytes().map(|b| format!("{b:02X}")).collect::<String>();
+                let id=pdf.add(format!("<< /Type /Annot /Subtype /Link /Rect [{} {} {} {}] /Border [0 0 0] /A << /S /URI /URI <{uri}> >> >>",rect[0],rect[1],rect[2],rect[3]).into_bytes());
+                annotations.push(format!("{id} 0 R"));
+            }
+        }
+        let annotations = if annotations.is_empty() {
+            String::new()
+        } else {
+            format!(" /Annots [{}]", annotations.join(" "))
+        };
         let stream = pdf.stream("", page_content.as_bytes())?;
-        let id=pdf.add(format!("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {} {}]{boxes} /Resources {} /Contents {stream} 0 R >>",media[0],media[1],pdf.resources()).into_bytes());
+        let id=pdf.add(format!("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {} {}]{boxes}{annotations} /Resources {} /Contents {stream} 0 R >>",media[0],media[1],pdf.resources()).into_bytes());
         kids.push(format!("{id} 0 R"));
     }
     pdf.objects[1] = format!(

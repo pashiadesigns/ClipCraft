@@ -1,4 +1,4 @@
-//! Editable text outline state and shared outer-edge coverage.
+//! Editable text stroke state and shared outer-edge coverage.
 //!
 //! Stroke/isolated glyph knockout adapted from DesignCraft paint_glyphs at
 //! ea08e4c2ba290f092063c99d70c4bdd5afc45887 (MIT).
@@ -30,7 +30,7 @@ impl Default for Outline {
 impl Outline {
     pub fn validate(&self) -> Result<()> {
         if !self.width.is_finite() || !(0.0..=32.0).contains(&self.width) {
-            return Err(Error::Invalid("Text outline must be 0–32 pixels".into()));
+            return Err(Error::Invalid("Text stroke must be 0–32 pixels".into()));
         }
         Ok(())
     }
@@ -46,12 +46,21 @@ pub fn paint_coverage(
     width: f64,
     tolerance: f64,
 ) -> Result<bool> {
+    paint_coverage_clipped(context, annotation, width, tolerance, None)
+}
+pub(crate) fn paint_coverage_clipped(
+    context: &mut impl crate::display::vector::Painter,
+    annotation: &Annotation,
+    width: f64,
+    tolerance: f64,
+    parent_clip: Option<Rect>,
+) -> Result<bool> {
     if !width.is_finite() || !(0.0..=32.0).contains(&width) {
-        return Err(Error::Invalid("Text outline must be 0–32 pixels".into()));
+        return Err(Error::Invalid("Text stroke must be 0–32 pixels".into()));
     }
     if !tolerance.is_finite() || tolerance <= 0.0 {
         return Err(Error::Invalid(
-            "Text outline tolerance must be positive".into(),
+            "Text stroke tolerance must be positive".into(),
         ));
     }
     if width == 0.0 {
@@ -60,6 +69,7 @@ pub fn paint_coverage(
     let Some((path, clip, _)) = super::vector_geometry(annotation) else {
         return Ok(false);
     };
+    let clip = parent_clip.unwrap_or(clip);
     let style = annotation.text.as_ref().expect("geometry requires text");
     let (min, max) = super::content_bounds(annotation);
     let bands: Vec<_> =

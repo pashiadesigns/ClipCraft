@@ -10,6 +10,72 @@ impl Drop for Icon {
     }
 }
 
+/// Cache the cursor artwork once per shape. Per-frame composition touches only
+/// our DIB bytes: no repeated DrawIconEx calls involving a live desktop cursor.
+#[derive(Default)]
+pub(super) struct Painter {
+    original: usize,
+    cached: Option<Cursor>,
+}
+impl Painter {
+    pub fn draw(&mut self, bgra: &mut [u8], origin: [i32; 2], source: [u32; 2], size: [u32; 2]) {
+        let mut c = CURSORINFO {
+            cbSize: size_of::<CURSORINFO>() as u32,
+            ..Default::default()
+        };
+        if unsafe { GetCursorInfo(&mut c) } == 0
+            || c.flags & CURSOR_SHOWING == 0
+            || c.hCursor.is_null()
+        {
+            return;
+        }
+        if self.original != c.hCursor as usize || self.cached.is_none() {
+            let Ok(cursor) = extract(c.hCursor, [0, 0]) else {
+                return;
+            };
+            self.original = c.hCursor as usize;
+            self.cached = Some(cursor);
+        }
+        let cursor = self.cached.as_ref().unwrap();
+        let Ok(pixels) = cursor.bitmap.pixels() else {
+            return;
+        };
+        let scale = [
+            size[0] as f64 / source[0] as f64,
+            size[1] as f64 / source[1] as f64,
+        ];
+        let pos = [
+            c.ptScreenPos.x + cursor.position[0] - origin[0],
+            c.ptScreenPos.y + cursor.position[1] - origin[1],
+        ];
+        let lo = [0, 1].map(|i| (pos[i] as f64 * scale[i]).floor() as i32);
+        let hi = [0, 1]
+            .map(|i| ((pos[i] as f64 + cursor.bitmap.size()[i] as f64) * scale[i]).ceil() as i32);
+        for y in lo[1].max(0)..hi[1].min(size[1] as i32) {
+            for x in lo[0].max(0)..hi[0].min(size[0] as i32) {
+                let sx = (((x as f64 + 0.5) / scale[0] - pos[0] as f64).floor() as u32)
+                    .min(pixels.width() - 1);
+                let sy = (((y as f64 + 0.5) / scale[1] - pos[1] as f64).floor() as u32)
+                    .min(pixels.height() - 1);
+                let dest = &mut bgra[(y as usize * size[0] as usize + x as usize) * 4..][..4];
+                if cursor.bitmap.inverted(sy * pixels.width() + sx) {
+                    for c in &mut dest[..3] {
+                        *c = 255 - *c;
+                    }
+                } else {
+                    let p = pixels.get_pixel(sx, sy);
+                    for (d, c) in [2, 1, 0].into_iter().enumerate() {
+                        dest[d] = ((p[c] as u32 * p[3] as u32
+                            + dest[d] as u32 * (255 - p[3] as u32)
+                            + 127)
+                            / 255) as u8;
+                    }
+                }
+            }
+        }
+    }
+}
+
 pub(super) fn current() -> Result<Option<Cursor>, String> {
     unsafe {
         let mut info = CURSORINFO {

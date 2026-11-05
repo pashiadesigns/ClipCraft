@@ -86,7 +86,6 @@ fn shape_fill_uses_color_and_transparency_without_a_separate_enable_control() {
         crate::shell::configure(&ctx);
         ctx.all_styles_mut(|s| s.animation_time = 0.);
         let mut editor = crate::canvas::tests::editor(&ctx);
-        editor.shell.badges = false;
         editor.tool = Some(kind);
         let mut a = editor.new_annotation(kind, [60., 60.], [260., 160.]);
         a.id = 1;
@@ -135,7 +134,6 @@ fn production_outline_text_and_stroke_colors_are_independent_live_in_batches_and
             crate::shell::configure(&ctx);
             ctx.all_styles_mut(|s| s.animation_time = 0.);
             let mut editor = crate::canvas::tests::editor(&ctx);
-            editor.shell.badges = false;
             editor.tool = Some(kind);
             let mut primary = if kind == Kind::Step {
                 capture_core::steps::marker(

@@ -13,6 +13,66 @@ pub enum ImageTransform {
     FlipVertical,
 }
 
+/// Transform editable objects as one selection. Local source geometry is retained.
+pub fn transform_objects(
+    objects: &[crate::Annotation],
+    transform: ImageTransform,
+) -> Result<Vec<crate::Annotation>> {
+    if objects.is_empty() {
+        return Err(crate::Error::Invalid("Select one or more objects.".into()));
+    }
+    let (lo, hi) = if objects.len() == 1 {
+        objects[0].bounds()
+    } else {
+        crate::groups::bounds(objects)?
+    };
+    let center = [(lo[0] + hi[0]) * 0.5, (lo[1] + hi[1]) * 0.5];
+    let degrees = match transform {
+        ImageTransform::Clockwise => 90.,
+        ImageTransform::CounterClockwise => -90.,
+        ImageTransform::HalfTurn => 180.,
+        _ => 0.,
+    };
+    let rotation = crate::rotation::Rotation::new(center, degrees)?;
+    let map = |p: [f32; 2]| match transform {
+        ImageTransform::FlipHorizontal => [2. * center[0] - p[0], p[1]],
+        ImageTransform::FlipVertical => [p[0], 2. * center[1] - p[1]],
+        _ => rotation.point(p),
+    };
+    objects
+        .iter()
+        .map(|a| {
+            if !a.can_rotate() {
+                let mut b = a.clone();
+                b.start = map(a.start);
+                b.end = map(a.end);
+                b.points = a.points.iter().copied().map(map).collect();
+                return Ok(b);
+            }
+            let old = a.rotation().center;
+            let new = map(old);
+            let mut b = crate::canvas_expansion::translated(
+                std::slice::from_ref(a),
+                [new[0] - old[0], new[1] - old[1]],
+            )?
+            .remove(0);
+            let angle = match transform {
+                ImageTransform::FlipHorizontal => {
+                    b.mirror_x = !a.mirror_x;
+                    -a.rotation_degrees
+                }
+                ImageTransform::FlipVertical => {
+                    b.mirror_x = !a.mirror_x;
+                    180. - a.rotation_degrees
+                }
+                _ => a.rotation_degrees + degrees,
+            };
+            b = b.with_rotation(angle)?;
+            Ok(b)
+        })
+        .collect()
+}
+
 impl Document {
     pub(crate) fn transform_image(&mut self, transform: ImageTransform) -> Result<bool> {
         let source = self.render()?;
@@ -33,7 +93,7 @@ impl Document {
         self.height = image.height();
         self.raster = Some(raster);
         self.auto_canvas_base = None;
-        self.version = 2;
+        self.version = crate::MAX_PROJECT_VERSION;
         self.annotations.clear();
         Ok(true)
     }
@@ -44,6 +104,80 @@ mod tests {
     use super::*;
     use crate::{Command, Placement, Session};
     use image::{Rgba, RgbaImage};
+    #[test]
+    fn selected_transforms_keep_sources_vectors_text_and_exact_undo() {
+        use std::sync::Arc;
+        let mut doc = Document::blank(256, 256).unwrap();
+        let mut shape = crate::templates::text(1, [40., 50., 40., 50.], "", 12., false);
+        shape.kind = crate::Kind::Rectangle;
+        shape.fill = Some([20, 130, 200, 255]);
+        shape.color = [200, 35, 70, 255];
+        shape.width = 2;
+        let pixels = RgbaImage::from_fn(40, 50, |x, y| Rgba([x as u8 * 5, y as u8 * 4, 80, 255]));
+        let bitmap = Arc::new(
+            crate::bitmap::Bitmap::new(Arc::new(RasterImage::from_image(&pixels).unwrap()))
+                .unwrap(),
+        );
+        let image =
+            crate::canvas_expansion::translated(&[bitmap.clone().annotation(2)], [176., 156.])
+                .unwrap()
+                .remove(0);
+        let text = crate::templates::text(3, [90., 110., 76., 40.], "Flip", 18., true);
+        doc.annotations = vec![shape, image, text];
+        doc.validate().unwrap();
+        let original = doc.render().unwrap();
+        for action in ALL {
+            let mut s = Session::new(doc.clone()).unwrap();
+            let annotations = transform_objects(&doc.annotations, action).unwrap();
+            s.execute(Command::UpdateMany { annotations }).unwrap();
+            assert_eq!(s.document.annotations.len(), 3);
+            assert!(s.document.raster.is_none());
+            assert!(Arc::ptr_eq(
+                s.document.annotations[1].image.as_ref().unwrap(),
+                &bitmap
+            ));
+            assert_eq!(s.document.annotations[2].text, doc.annotations[2].text);
+            let actual = s.document.render().unwrap();
+            let expected = expected(&original, action);
+            let error = actual
+                .as_raw()
+                .iter()
+                .zip(expected.as_raw())
+                .map(|(a, b)| a.abs_diff(*b) as u64)
+                .sum::<u64>() as f64
+                / actual.as_raw().len() as f64;
+            assert!(error < 0.1, "{action:?}: {error}");
+            let temp = tempfile::tempdir().unwrap();
+            let path = temp.path().join("transformed.iclip");
+            s.save(&path).unwrap();
+            assert_eq!(Document::load(&path).unwrap().render().unwrap(), actual);
+            if action == ImageTransform::FlipHorizontal
+                && let Ok(dir) = std::env::var("CLIPCRAFT_PATTERN_FIXTURES")
+            {
+                s.document
+                    .save(&std::path::Path::new(&dir).join("editable-transforms.capture.json"))
+                    .unwrap();
+            }
+            s.execute(Command::Undo).unwrap();
+            assert_eq!(s.document.annotations, doc.annotations);
+            assert!(!s.can_undo());
+        }
+        for action in [ImageTransform::FlipHorizontal, ImageTransform::FlipVertical] {
+            let twice = transform_objects(
+                &transform_objects(&doc.annotations, action).unwrap(),
+                action,
+            )
+            .unwrap();
+            assert_eq!(twice, doc.annotations);
+        }
+        let mirrored = transform_objects(&doc.annotations, ImageTransform::FlipHorizontal).unwrap();
+        let a = &mirrored[2];
+        let (lo, hi) = a.body_bounds();
+        let point = [lo[0] + 8., lo[1] + 9.];
+        let roundtrip = a.rotation().inverse_point(a.rotation().point(point));
+        assert!((roundtrip[0] - point[0]).abs() < 0.001);
+        let _ = hi;
+    }
 
     const ALL: [ImageTransform; 5] = [
         ImageTransform::Clockwise,

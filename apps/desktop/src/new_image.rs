@@ -15,8 +15,8 @@ pub struct NewImage {
 impl Default for NewImage {
     fn default() -> Self {
         Self {
-            width: "300".into(),
-            height: "200".into(),
+            width: "1920".into(),
+            height: "1080".into(),
             color: [255; 4],
             focus_pending: true,
         }
@@ -55,7 +55,7 @@ impl Editor {
         };
         let mut create = None;
         let mut cancel = false;
-        let modal = egui::Modal::new(egui::Id::unique("new_image")).show(ctx, |ui| {
+        let modal = crate::controls::Modal::new(egui::Id::unique("new_image")).show(ctx, |ui| {
             ui.set_width(266.0);
             ui.set_max_width(266.0);
             ui.style_mut().override_font_id = Some(egui::FontId::proportional(12.0));
@@ -75,13 +75,13 @@ impl Editor {
                 .spacing([6.0, 8.0])
                 .show(ui, |ui| {
                     let width_label = ui.label("Width:");
-                    let input = ui.add(egui::TextEdit::singleline(&mut draft.width).desired_width(48.0).min_size(egui::vec2(48.0,20.0)).align(egui::Align2::RIGHT_CENTER))
+                    let input = ui.add(crate::unicode_input::TextEdit::singleline(&mut draft.width).desired_width(48.0).min_size(egui::vec2(48.0,20.0)).align(egui::Align2::RIGHT_CENTER))
                         .labelled_by(width_label.id);
                     crate::controls::focus_once(&input, &mut draft.focus_pending);
                     ui.label("px");
                     ui.end_row();
                     let height_label = ui.label("Height:");
-                    ui.add(egui::TextEdit::singleline(&mut draft.height).desired_width(48.0).min_size(egui::vec2(48.0,20.0)).align(egui::Align2::RIGHT_CENTER))
+                    ui.add(crate::unicode_input::TextEdit::singleline(&mut draft.height).desired_width(48.0).min_size(egui::vec2(48.0,20.0)).align(egui::Align2::RIGHT_CENTER))
                         .labelled_by(height_label.id);
                     ui.label("px");
                     ui.end_row();
@@ -98,7 +98,7 @@ impl Editor {
             ui.add_space(12.0);
             ui.separator();
             ui.horizontal(|ui| {
-                crate::shell::badge(ui,self.shell.badges,"FILE-010");
+
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center),|ui| {
                 if ui.add_sized([78.0,crate::controls::DIALOG_ACTION_HEIGHT],egui::Button::new("Cancel")).clicked() {cancel=true;}
                 if ui

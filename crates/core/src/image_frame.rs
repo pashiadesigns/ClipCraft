@@ -18,11 +18,16 @@ impl Annotation {
             && self
                 .image
                 .as_ref()
-                .is_some_and(|b| !b.is_cursor() && !b.is_stamp())
+                .is_some_and(|b| !b.is_cursor() && !b.is_icon())
     }
     /// Geometry, outline, rotation and object identity survive either conversion.
     /// Undo owns the previous document, including any replaced text or image.
     pub fn converted_frame(&self, frame: bool) -> Result<Self> {
+        if self.focus.is_some() {
+            return Err(Error::Invalid(
+                "Focus windows are transparent effects, not image frames.".into(),
+            ));
+        }
         if !self.is_shape() && !self.is_image_frame() {
             return Err(Error::Invalid("Select a shape or image frame".into()));
         }

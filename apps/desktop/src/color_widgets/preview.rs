@@ -7,6 +7,7 @@ pub(crate) enum Preview {
     Outline,
     Text,
     Stroke,
+    Highlight,
 }
 impl Preview {
     pub(crate) fn label(self) -> &'static str {
@@ -15,6 +16,7 @@ impl Preview {
             Self::Outline => "Outline color",
             Self::Text => "Text color",
             Self::Stroke => "Text stroke color",
+            Self::Highlight => "Text highlight color",
         }
     }
 }
@@ -67,7 +69,7 @@ pub(super) fn paint(
         (
             egui::Rect::from_center_size(
                 rect.center_top() + egui::vec2(0., 25.),
-                egui::vec2(46., 42.),
+                egui::vec2((rect.width() - 8.).min(46.), 42.),
             ),
             rect.center_bottom() - egui::vec2(0., 8.),
         )
@@ -100,8 +102,14 @@ pub(super) fn paint(
                 );
             }
         }
-        Preview::Text | Preview::Stroke => {
-            if let Some(texture) = text_texture(ui.ctx(), preview) {
+        Preview::Text | Preview::Stroke | Preview::Highlight => {
+            let highlight = preview == Preview::Highlight;
+            if highlight {
+                p.rect_filled(art.shrink2(egui::vec2(0., 9.)), 0., ink);
+            }
+            if let Some(texture) =
+                text_texture(ui.ctx(), if highlight { Preview::Text } else { preview })
+            {
                 let scale = (art.width() / 46.).min(art.height() / 28.);
                 let target =
                     egui::Rect::from_center_size(art.center(), egui::vec2(46., 28.) * scale);
@@ -109,7 +117,7 @@ pub(super) fn paint(
                     texture.id(),
                     target,
                     egui::Rect::from_min_max(egui::Pos2::ZERO, egui::pos2(1., 1.)),
-                    ink,
+                    if highlight { egui::Color32::BLACK } else { ink },
                 );
             }
         }
@@ -233,13 +241,16 @@ fn text_mask(preview: Preview, scale: u32) -> capture_core::Result<image::RgbaIm
         corner_radius: 0.,
         fill: None,
         rotation_degrees: 0.,
+        mirror_x: false,
         callout: None,
         points: vec![],
         image: None,
         step_outline: None,
         line_style: None,
         shadow: None,
-        analysis: None,
+
+        focus: None,
+
         highlighter_rect: false,
         group: None,
     };
@@ -321,7 +332,7 @@ mod tests {
                             ..Default::default()
                         },
                         |ui| {
-                            ui.heading("Tool Properties");
+                            ui.heading("Properties");
                             ui.horizontal(|ui| {
                                 for (color, role) in colors.iter_mut().zip([
                                     Preview::Fill,
@@ -339,6 +350,7 @@ mod tests {
                                                     Preview::Outline => "Outline",
                                                     Preview::Text => "Text",
                                                     Preview::Stroke => "Stroke",
+                                                    Preview::Highlight => "Highlight",
                                                 });
                                                 property_rgba(ui, color, role);
                                             },

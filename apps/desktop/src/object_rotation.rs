@@ -11,11 +11,20 @@ impl Editor {
         (self.selected_objects().len() == 1 && self.text_draft.is_none())
             .then(|| self.selected_annotation())
             .flatten()
-            .filter(|a| a.can_rotate() && Self::tool_matches(self.tool, a.kind))
+            .filter(|a| {
+                self.session.document.object_editable(a.id)
+                    && a.can_rotate()
+                    && Self::tool_matches(self.tool, a.kind)
+            })
     }
 
     pub(super) fn rotation_hit(&self, pos: egui::Pos2, transform: Transform) -> bool {
         self.rotatable_selection().is_some_and(|a| {
+            if a.hit_handle(transform.image_point(pos), 7. / transform.scale)
+                .is_some()
+            {
+                return false;
+            }
             let (min, max) = a.body_bounds();
             a.rotation()
                 .handle(min, max, transform.scale)
@@ -258,7 +267,7 @@ mod tests {
                 assert_eq!(e.session.document.annotations, vec![a.clone()]);
                 assert!(!e.session.can_undo());
                 let preview = e.preview_document();
-                assert_eq!(preview.version, 3);
+                assert_eq!(preview.version, capture_core::MAX_PROJECT_VERSION);
                 assert_ne!(
                     preview.render().unwrap(),
                     e.session.document.render().unwrap()

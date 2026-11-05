@@ -238,7 +238,8 @@ pub(super) fn fields(ui: &mut egui::Ui, d: &mut Draft) {
                         let w = (ui.available_width() - 94.).max(90.);
                         ui.add_sized(
                             [w, 28.],
-                            egui::TextEdit::singleline(&mut t.text).hint_text(label),
+                            crate::unicode_input::TextEdit::singleline(&mut t.text)
+                                .hint_text(label),
                         );
                         combo_align(ui, label, &mut t.alignment);
                     });

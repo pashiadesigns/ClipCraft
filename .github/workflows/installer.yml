@@ -1,0 +1,39 @@
+name: MSI release qualification
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing draft or public release to qualify
+        required: true
+        default: v1.0.0-beta.1
+permissions:
+  contents: read
+jobs:
+  installer:
+    runs-on: windows-2025
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - name: Download and verify exact release payload
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          if ($env:TAG -notmatch '^v\d+\.\d+\.\d+-[a-z0-9.]+$') { throw 'Invalid tag' }
+          gh release download $env:TAG --repo $env:GITHUB_REPOSITORY --dir artifacts/downloads --pattern '*windows-x64*' --pattern SHA256SUMS.txt
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          $hashes=Get-Content artifacts/downloads/SHA256SUMS.txt
+          foreach ($file in Get-ChildItem artifacts/downloads -File | Where-Object Name -ne SHA256SUMS.txt) {
+            $expected=$hashes | Where-Object { $_.EndsWith('  '+$file.Name) }
+            if (!$expected -or (Get-FileHash $file.FullName).Hash.ToLowerInvariant() -ne $expected.Substring(0,64)) { throw 'Release checksum differs.' }
+          }
+          $zip=(Get-ChildItem artifacts/downloads -Filter '*.zip').FullName
+          $msi=(Get-ChildItem artifacts/downloads -Filter '*.msi').FullName
+          Expand-Archive -LiteralPath $zip -DestinationPath artifacts/payload
+          ./scripts/test-msi.ps1 -Package artifacts/payload -Installer $msi
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        if: always()
+        with:
+          name: msi-qualification
+          path: artifacts/installer-test/

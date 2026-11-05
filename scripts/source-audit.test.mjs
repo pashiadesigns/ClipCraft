@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {auditFile} from './source-audit.mjs';
 test('private captures, credentials and executable output cannot enter the source import',()=>{
-  for(const path of ['artifacts/capture.png','.codex/settings.json','.openai/hosting.json','x/.env','target/app.exe','key.pfx','sites/a/release-assets/a.zip'])
+  for(const path of ['artifacts/capture.png','.codex/settings.json','.openai/hosting.json','x/.env','target/app.exe','key.pfx','sites/a/release-assets/a.zip','docs/manual-verification.json','docs/beta-finish-work.md','sites/capture-workbench/roadmap.json'])
     assert.ok(auditFile(path,Buffer.from('sample')).length,path);
 });
 test('recognized secrets are rejected without printing their values',()=>{

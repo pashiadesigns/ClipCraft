@@ -1,8 +1,5 @@
 //! Original reorderable toolbar. Tool IDs stay independent of visible positions.
-use crate::{
-    Editor, egui,
-    shell::{TOOLS, badge, tool_button},
-};
+use crate::{Editor, egui, shell::TOOLS};
 use capture_core::{
     quick_preferences::Choice,
     toolbar::{Group, ToolId},
@@ -62,24 +59,15 @@ impl Editor {
         // out. A release never shifts hit targets midway through the row.
         let mut reorder = None;
         for (slot, id) in order.iter().copied().take(visible).enumerate().skip(start) {
-            let active_id = if id == ToolId::Crop {
-                self.quick_controls.canvas_tool()
-            } else {
-                id
-            };
+            let active_id = id;
             let index = TOOLS.iter().position(|t| t.id == active_id).unwrap();
             let response = ui
                 .push_id(("toolbar-tool", id), |ui| {
                     crate::shell::tool_button_label(
                         ui,
                         TOOLS[index],
-                        if id == ToolId::Crop {
-                            "Crop / Cut"
-                        } else {
-                            TOOLS[index].name
-                        },
+                        TOOLS[index].name,
                         current == active_id,
-                        self.shell.badges,
                     )
                 })
                 .inner
@@ -136,9 +124,7 @@ impl Editor {
             {
                 reorder = Some(choice);
             }
-            if id == ToolId::Crop {
-                egui::Popup::menu(&response).show(|ui| self.canvas_tool_choices(ui));
-            } else if response.clicked() {
+            if response.clicked() {
                 self.choose_tool(index);
             }
             responses.push((id, response));
@@ -147,33 +133,6 @@ impl Editor {
             self.apply_toolbar_choice(choice);
         }
         responses
-    }
-
-    fn canvas_tool_choices(&mut self, ui: &mut egui::Ui) {
-        ui.vertical(|ui| {
-            for id in [ToolId::Crop, ToolId::CutOut] {
-                let index = TOOLS.iter().position(|t| t.id == id).unwrap();
-                let response = ui
-                    .push_id(id, |ui| {
-                        tool_button(
-                            ui,
-                            TOOLS[index],
-                            self.quick_controls.canvas_tool() == id,
-                            false,
-                        )
-                    })
-                    .inner
-                    .on_hover_text(self.tool_tooltip(id));
-                #[cfg(test)]
-                ui.ctx().data_mut(|d| {
-                    d.insert_temp(egui::Id::unique(("canvas-tool-choice", id)), response.rect)
-                });
-                if response.clicked() {
-                    self.choose_tool(index);
-                    ui.close();
-                }
-            }
-        });
     }
 
     fn toolbar_reorder_controls(
@@ -187,11 +146,14 @@ impl Editor {
         let mut choice = None;
         let content = |ui: &mut egui::Ui| {
             let favorite = self.quick_controls.tool_group(id) == Group::Favorites;
-            let r = ui.button(if favorite {
-                "Remove from Favorites"
-            } else {
-                "Add to Favorites"
-            });
+            let r = crate::controls::menu_action(
+                ui,
+                if favorite {
+                    "Remove from Favorites"
+                } else {
+                    "Add to Favorites"
+                },
+            );
             #[cfg(test)]
             ui.ctx()
                 .data_mut(|d| d.insert_temp(egui::Id::unique("favorite-context-action"), r.rect));
@@ -209,13 +171,13 @@ impl Editor {
                 ("Move right", before_at(order, id, 1)),
                 ("Move to end", None),
             ] {
-                if ui.button(label).clicked() {
+                if crate::controls::menu_action(ui, label).clicked() {
                     choice = Some(Choice::MoveSectionTool { tool: id, before });
                     ui.close();
                 }
             }
             ui.separator();
-            if ui.button("Reset toolbar order").clicked() {
+            if crate::controls::menu_action(ui, "Reset toolbar order").clicked() {
                 choice = Some(Choice::ResetToolbar);
                 ui.close();
             }
@@ -281,11 +243,7 @@ impl Editor {
                         ui.strong(group.label());
                         last_group = Some(group);
                     }
-                    let active_id = if id == ToolId::Crop {
-                        self.quick_controls.canvas_tool()
-                    } else {
-                        id
-                    };
+                    let active_id = id;
                     let index = TOOLS.iter().position(|t| t.id == active_id).unwrap();
                     let tool = TOOLS[index];
                     let response = ui
@@ -297,11 +255,7 @@ impl Editor {
                                         .min_size(egui::vec2(170.0, 26.0))
                                         .sense(egui::Sense::click_and_drag()),
                                 );
-                                let label = if id == ToolId::Crop {
-                                    "Crop / Cut"
-                                } else {
-                                    tool.name
-                                };
+                                let label = tool.name;
                                 response.widget_info(|| {
                                     egui::WidgetInfo::labeled(egui::Role::Button, true, label)
                                 });
@@ -324,7 +278,7 @@ impl Editor {
                                     egui::FontId::proportional(13.),
                                     ui.visuals().text_color(),
                                 );
-                                badge(ui, self.shell.badges, tool.feature);
+
                                 response
                             })
                             .inner
@@ -342,14 +296,7 @@ impl Editor {
                     {
                         reorder = Some(choice);
                     }
-                    if id == ToolId::Crop
-                        && ui.ctx().data(|d| {
-                            d.get_temp::<ToolId>(egui::Id::unique("overflow-tool-context"))
-                        }) != Some(id)
-                    {
-                        egui::containers::menu::SubMenu::new()
-                            .show(ui, &response, |ui| self.canvas_tool_choices(ui));
-                    } else if response.clicked() {
+                    if response.clicked() {
                         self.choose_tool(index);
                         ui.close();
                     }

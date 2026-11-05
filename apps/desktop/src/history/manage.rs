@@ -220,22 +220,22 @@ impl Editor {
         };
         let mut submit = false;
         let mut cancel = false;
-        let modal=egui::Modal::new(egui::Id::unique("library-management")).show(ctx,|ui|{
+        let modal=crate::controls::Modal::new(egui::Id::unique("library-management")).show(ctx,|ui|{
             ui.set_width(420.);let title=match d.action{Action::AddTags=>"Add tags",Action::RemoveTags=>"Remove tags",Action::Delete=>"Delete selected captures",Action::Export=>"Save As",Action::Rename=>"Rename All",Action::Duplicate=>"Duplicate All",Action::RenameTag=>"Rename tag everywhere",Action::DeleteTag=>"Delete tag everywhere"};ui.heading(title);ui.add_space(8.);
             match d.action {
                 Action::RenameTag|Action::DeleteTag=>{
                     ui.label(format!("Tag: {} · {} captures",d.tags,d.entries.len()));
                     if d.action==Action::RenameTag {
-                        ui.label("New name");let input=ui.add(egui::TextEdit::singleline(&mut d.name).char_limit(48).desired_width(f32::INFINITY));crate::controls::focus_once(&input,&mut d.focus_pending);
+                        ui.label("New name");let input=ui.add(crate::unicode_input::TextEdit::singleline(&mut d.name).char_limit(48).desired_width(f32::INFINITY));crate::controls::focus_once(&input,&mut d.focus_pending);
                         ui.small("An existing tag with this name will be merged.");
                     } else {ui.label("Remove this tag from every Library item? Images and projects are kept.");}
                 },
                 Action::AddTags|Action::RemoveTags=>{ui.horizontal(|ui|{ui.label("Operation");ui.selectable_value(&mut d.action,Action::AddTags,"Add tags");ui.selectable_value(&mut d.action,Action::RemoveTags,"Remove tags");});ui.label(format!("{} selected captures",d.entries.len()));ui.label("Tags (comma separated)");let input=ui.text_edit_singleline(&mut d.tags);crate::controls::focus_once(&input,&mut d.focus_pending);},
-                Action::Delete=>{ui.label(format!("Delete {} selected capture(s) from Library?",d.entries.len()));ui.label("Stored projects are removed permanently. Exported files and the open canvas are kept.");},
+                Action::Delete=>{ui.label(format!("Delete {} selected capture(s) from Library?",d.entries.len()));ui.label("Stored projects are removed permanently. Exported files are kept. Deleting the open project clears its canvas.");},
                 Action::Export|Action::Rename=>{
                     ui.label(format!("{} selected captures",d.entries.len()));
                     ui.label(if d.entries.len()>1 {"Base name"}else{"Name"});
-                    let input=ui.add(egui::TextEdit::singleline(&mut d.name).char_limit(100).desired_width(f32::INFINITY));crate::controls::focus_once(&input,&mut d.focus_pending);
+                    let input=ui.add(crate::unicode_input::TextEdit::singleline(&mut d.name).char_limit(100).desired_width(f32::INFINITY));crate::controls::focus_once(&input,&mut d.focus_pending);
                     if d.entries.len()>1 { ui.small(format!("{} 1, {} 2, … · existing names are skipped",d.name,d.name)); }
                     if d.action==Action::Export {
                         ui.horizontal(|ui| {
@@ -247,6 +247,9 @@ impl Editor {
                                 }
                             });
                         });
+                        if !d.editable {
+                            crate::controls::toggle(ui, &mut self.export_preferences.options.redaction_labels, "Include redaction labels");
+                        }
                         self.export_preferences.after.controls(ui);
                         if d.entries.len()>1 {ui.small("A new subfolder keeps existing files untouched.");}
                     }
@@ -272,8 +275,9 @@ impl Editor {
                 self.suspend_global_capture();
                 let format = (!d.editable).then_some(d.format);
                 let result = if d.entries.len() == 1 {
+                    let video = d.entries[0].kind == capture_core::history::MediaKind::Video;
                     let extension = if d.editable {
-                        "capture.json"
+                        if video { "vclip" } else { "iclip" }
                     } else {
                         d.format.extension()
                     };
@@ -285,6 +289,17 @@ impl Editor {
                         .set_file_name(format!("{}.{}", safe_name(&d.name), extension))
                         .save_file()
                         .map(|path| {
+                            let path = if d.editable {
+                                if video {
+                                    let mut p = path;
+                                    p.set_extension("vclip");
+                                    p
+                                } else {
+                                    capture_core::project_file::image_path(&path)
+                                }
+                            } else {
+                                path
+                            };
                             self.save_library_item(&d.entries[0], &path, format)?;
                             if let Some(parent) = path.parent() {
                                 self.last_directory = parent.to_path_buf();
@@ -359,6 +374,11 @@ impl Editor {
             store.load(&entry.id).map_err(|e| e.to_string())?
         };
         if let Some(format) = format {
+            let doc = if doc.video.is_some() {
+                crate::video_editor::still(&doc)?
+            } else {
+                doc
+            };
             capture_core::export::save(
                 &doc,
                 path,
@@ -391,7 +411,14 @@ impl Editor {
             })
             .ok_or("No export folder available")??;
         for (i, (e, name)) in entries.iter().zip(names).enumerate() {
-            let extension = format.map_or("capture.json", |f| f.extension());
+            let extension = format.map_or(
+                if e.kind == capture_core::history::MediaKind::Video {
+                    "vclip"
+                } else {
+                    "iclip"
+                },
+                |f| f.extension(),
+            );
             let path = directory.join(format!("{name}.{extension}"));
             let result = self.save_library_item(e, &path, format);
             if let Err(error) = result {
@@ -524,10 +551,9 @@ mod tests {
         );
         e.export_library_batch(&entries[..1], root.path(), None, "Guide")
             .unwrap();
-        let exported = capture_core::Document::load(
-            &root.path().join("ClipCraft export 3/Guide 1.capture.json"),
-        )
-        .unwrap();
+        let exported =
+            capture_core::Document::load(&root.path().join("ClipCraft export 3/Guide 1.iclip"))
+                .unwrap();
         assert_eq!(
             exported.render().unwrap(),
             e.history

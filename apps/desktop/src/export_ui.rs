@@ -65,10 +65,26 @@ impl Editor {
         }
         self.commit_property_preview();
         self.cancel_gesture();
-        match self.session.document.render() {
+        let document = if self.is_video() {
+            match self.video_frame_document() {
+                Ok(d) => d,
+                Err(e) => {
+                    self.status = e;
+                    return;
+                }
+            }
+        } else {
+            self.session.document.clone()
+        };
+        match capture_core::redaction_labels::decorate(
+            document.clone(),
+            self.export_preferences.options.redaction_labels,
+        )
+        .and_then(|d| d.render())
+        {
             Ok(pixels) => {
                 self.export_dialog = Some(Dialog {
-                    document: self.session.document.clone(),
+                    document: document.clone(),
                     pixels,
                     texture: None,
                     options: Options {
@@ -95,7 +111,7 @@ impl Editor {
         let mut save = false;
         let mut print = false;
         let mut cancel = false;
-        let modal = egui::Modal::new(egui::Id::unique("export-print"))
+        let modal = crate::controls::Modal::new(egui::Id::unique("export-print"))
             .area(
                 egui::Area::new(egui::Id::unique("export-print"))
                     .anchor(egui::Align2::CENTER_TOP, egui::vec2(0., 32.)),
@@ -160,6 +176,26 @@ impl Editor {
                         ui.selectable_value(&mut d.options.page.paginate, false, "Fit one page");
                         ui.selectable_value(&mut d.options.page.paginate, true, "Multiple pages");
                     });
+                }
+                if crate::controls::toggle(
+                    ui,
+                    &mut d.options.redaction_labels,
+                    "Include redaction labels",
+                )
+                .changed()
+                {
+                    match capture_core::redaction_labels::decorate(
+                        d.document.clone(),
+                        d.options.redaction_labels,
+                    )
+                    .and_then(|doc| doc.render())
+                    {
+                        Ok(pixels) => {
+                            d.pixels = pixels;
+                            d.texture = None;
+                        }
+                        Err(e) => d.error = e.to_string(),
+                    }
                 }
                 let texture = d.texture.get_or_insert_with(|| {
                     let thumb = image::imageops::thumbnail(&d.pixels, 1000, 1000);
@@ -274,7 +310,7 @@ impl Editor {
                     print = ui
                         .add_enabled(
                             pages.is_ok(),
-                            crate::controls::dialog_button("Print…", false).fill(if d.print {
+                            crate::controls::dialog_button("Print…", d.print).fill(if d.print {
                                 crate::shell::ACCENT
                             } else {
                                 ui.visuals().widgets.inactive.bg_fill
@@ -283,7 +319,7 @@ impl Editor {
                         .on_hover_text("Choose a printer and confirm in the Windows print dialog.")
                         .clicked();
                     save = ui
-                        .add(crate::controls::dialog_button("Save", true))
+                        .add(crate::controls::dialog_button("Save", !d.print))
                         .clicked();
                 });
             });

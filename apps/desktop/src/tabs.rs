@@ -75,18 +75,9 @@ pub(super) fn tab(ui: &mut egui::Ui, label: &str, selected: bool, width: f32) ->
             p.line_segment([at(-2.0, 4.0), at(2.0, 4.0)], stroke);
         }
         "Library" => crate::ribbon::draw_icon(p, c, "Library", Color32::WHITE),
-        "Tools" => crate::ribbon::draw_icon(p, c, "Tools", Color32::WHITE),
-        "Home" => {
-            p.line_segment([at(-7.0, -1.0), at(0.0, -7.0)], stroke);
-            p.line_segment([at(0.0, -7.0), at(7.0, -1.0)], stroke);
-            p.rect_stroke(
-                egui::Rect::from_min_max(at(-5.0, -1.0), at(5.0, 7.0)),
-                0.0,
-                stroke,
-                egui::StrokeKind::Inside,
-            );
-        }
-        "Objects" => {
+        "Insert" => crate::ribbon::draw_icon(p, c, "Tools", Color32::WHITE),
+
+        "Layers" => {
             for offset in [-3.0, 2.0] {
                 p.rect_stroke(
                     egui::Rect::from_center_size(at(offset, offset), egui::vec2(10.0, 10.0)),
@@ -96,15 +87,17 @@ pub(super) fn tab(ui: &mut egui::Ui, label: &str, selected: bool, width: f32) ->
                 );
             }
         }
-        "Effects" => {
-            p.line_segment(
-                [at(-6.0, 7.0), at(4.0, -3.0)],
-                Stroke::new(2.2, Color32::WHITE),
+
+        "Clip" => crate::ribbon::draw_icon(p, c, "Capture", Color32::WHITE),
+        "Formatting" => {
+            p.text(
+                c,
+                egui::Align2::CENTER_CENTER,
+                "A",
+                egui::FontId::proportional(18.),
+                Color32::WHITE,
             );
-            for (x, y) in [(-5.0, -5.0), (6.0, 4.0), (3.0, -7.0)] {
-                p.line_segment([at(x - 2.0, y), at(x + 2.0, y)], stroke);
-                p.line_segment([at(x, y - 2.0), at(x, y + 2.0)], stroke);
-            }
+            p.line_segment([at(-6., 7.), at(6., 7.)], stroke);
         }
         "Export" => crate::ribbon::draw_icon(p, c, "Save As", Color32::WHITE),
         _ => {

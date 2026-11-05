@@ -9,6 +9,10 @@ pub(super) fn print(
     document: &capture_core::Document,
     options: &capture_core::export::Options,
 ) -> Result<bool, String> {
+    let prepared =
+        capture_core::redaction_labels::decorate(document.clone(), options.redaction_labels)
+            .map_err(|e| e.to_string())?;
+    let document = &prepared;
     unsafe {
         let mut dialog = PRINTDLGW {
             lStructSize: size_of::<PRINTDLGW>() as u32,

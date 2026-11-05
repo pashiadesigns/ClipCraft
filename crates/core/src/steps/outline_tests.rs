@@ -35,6 +35,7 @@ fn outlined_step_roundtrips_versions_commands_styles_defaults_and_payloads() {
     });
     let mut invalid = original.clone();
     invalid.annotations[0] = outlined.clone();
+    invalid.version = 30;
     assert!(invalid.validate().is_err());
     for command in [
         Command::Update {
@@ -46,7 +47,7 @@ fn outlined_step_roundtrips_versions_commands_styles_defaults_and_payloads() {
     ] {
         let mut s = Session::new(original.clone()).unwrap();
         s.execute(command).unwrap();
-        assert_eq!(s.document.version, 6);
+        assert_eq!(s.document.version, crate::MAX_PROJECT_VERSION);
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("step.capture.json");
         s.save(&path).unwrap();
@@ -54,7 +55,7 @@ fn outlined_step_roundtrips_versions_commands_styles_defaults_and_payloads() {
         assert_eq!(saved.annotations, s.document.annotations);
         assert_eq!(saved.render().unwrap(), s.document.render().unwrap());
         let payload = crate::clipboard_payload::ObjectPayload::capture(&saved, &[1]).unwrap();
-        assert_eq!(payload.document_version, 6);
+        assert_eq!(payload.document_version, crate::MAX_PROJECT_VERSION);
         assert_eq!(
             payload.place(&original, [110.0, 65.0]).unwrap()[0].step_outline,
             outlined.step_outline
@@ -64,9 +65,9 @@ fn outlined_step_roundtrips_versions_commands_styles_defaults_and_payloads() {
         assert!(!s.can_undo());
         s.execute(Command::Redo).unwrap();
         s.execute(Command::FlattenAll).unwrap();
-        assert_eq!(s.document.version, 2);
+        assert_eq!(s.document.version, crate::MAX_PROJECT_VERSION);
         s.execute(Command::Undo).unwrap();
-        assert_eq!(s.document.version, 6);
+        assert_eq!(s.document.version, crate::MAX_PROJECT_VERSION);
         s.execute(Command::ResizeImage {
             width: 400,
             height: 240,
@@ -80,7 +81,7 @@ fn outlined_step_roundtrips_versions_commands_styles_defaults_and_payloads() {
                 .width,
             11.0
         );
-        assert_eq!(s.document.version, 6);
+        assert_eq!(s.document.version, crate::MAX_PROJECT_VERSION);
     }
     let mut added = Session::new(Document::blank(200, 120).unwrap()).unwrap();
     added
@@ -88,9 +89,9 @@ fn outlined_step_roundtrips_versions_commands_styles_defaults_and_payloads() {
             annotation: outlined.clone(),
         })
         .unwrap();
-    assert_eq!(added.document.version, 6);
+    assert_eq!(added.document.version, crate::MAX_PROJECT_VERSION);
     added.execute(Command::Undo).unwrap();
-    assert_eq!(added.document.version, 1);
+    assert_eq!(added.document.version, crate::MAX_PROJECT_VERSION);
     let dir = tempfile::tempdir().unwrap();
     let style = ObjectStyle::from_annotation("Outlined step".into(), &outlined).unwrap();
     Store::open(dir.path())

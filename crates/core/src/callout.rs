@@ -34,17 +34,26 @@ impl CalloutStyle {
         }
     }
 
-    pub fn validate(&self, annotation: &Annotation, canvas: [u32; 2]) -> Result<()> {
+    pub fn validate(
+        &self,
+        annotation: &Annotation,
+        canvas: [u32; 2],
+        overflow: bool,
+    ) -> Result<()> {
         if !self.padding.is_finite() || !(0.0..=128.0).contains(&self.padding) {
             return Err(Error::Invalid(
                 "Callout padding must be 0–128 pixels".into(),
             ));
         }
-        if !self.pointer.iter().all(|p| p.is_finite())
-            || self.pointer[0] < 0.0
-            || self.pointer[1] < 0.0
-            || self.pointer[0] > canvas[0] as f32
-            || self.pointer[1] > canvas[1] as f32
+        if !self
+            .pointer
+            .iter()
+            .all(|p| p.is_finite() && p.abs() <= 1_000_000.)
+            || (!overflow
+                && (self.pointer[0] < 0.0
+                    || self.pointer[1] < 0.0
+                    || self.pointer[0] > canvas[0] as f32
+                    || self.pointer[1] > canvas[1] as f32))
         {
             return Err(Error::Invalid(
                 "Callout pointer must be inside the image".into(),

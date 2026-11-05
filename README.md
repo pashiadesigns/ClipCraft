@@ -1,84 +1,109 @@
 # ClipCraft
 
-[![Windows checks](https://github.com/pashiadesigns/ClipCraft/actions/workflows/windows.yml/badge.svg?branch=main)](https://github.com/pashiadesigns/ClipCraft/actions/workflows/windows.yml)
+**Capture a moment. Explain a workflow. Make it editable.**
 
-ClipCraft is a local Windows screenshot capture and annotation editor written in Rust.
-It includes an editable document engine, desktop application, and command-line tools.
-ClipCraft is in public beta; release notes identify tested behavior and remaining checks.
+ClipCraft brings image capture, instructional guides and video editing into one
+local Windows workspace. Capture your screen, point out what matters, add narration,
+and share a polished image, PDF or video. No ClipCraft account is required.
 
-## Downloads
+**[Download 1.0.0-beta.1](https://github.com/pashiadesigns/ClipCraft/releases/tag/v1.0.0-beta.1)**
+· [Install & storage locations](docs/installing.md) · [Build from source](docs/building.md)
+· [Known limitations](#beta-notes)
 
-Open the [GitHub Releases page](https://github.com/pashiadesigns/ClipCraft/releases) for the **0.2.0-beta.1** Windows x64 installer, portable ZIP and source archives.
-The installer creates separate Editor and Capture Controller Start menu entries.
-For portable use, extract the whole ZIP and run `ClipCraft.exe`. No ClipCraft account
-is required. Both downloads are **unsigned**; signing remains planned.
-See [installation and removal](docs/installing.md).
-Organizations can build from source or review the checksums, dependency inventory,
-and GitHub build attestations before deployment.
+Windows 10/11, x64. Choose the **MSI installer** or extract the **portable ZIP**.
+This beta is unsigned. The source is available under Apache-2.0 with retained
+third-party notices. Older development project formats are not supported.
 
-## Features
+## Images that explain
 
-- Region, window and monitor capture; configurable hotkeys and tray behavior.
-- Steps recording and editable guides with horizontal pages and section reordering; local OCR through Windows APIs.
-- Text, arrows, lines, shapes, callouts, numbered/lettered steps, pen and highlighter.
-- Blur, pixelate, redact, eraser, simplification, groups and image-frame cropping.
-- Local Library, range/drag selection, bulk operations, file details and imported image stamps.
-- Original vector starter stamps with independently editable palette colors.
-- PNG/JPEG/PDF export and a Windows print-dialog workflow.
-- Page Setup: physical dimensions, resolution, margins, headers/footers, page numbering, bleed and crop marks.
-- Editable image templates, empty guide sections and reusable local layouts.
-- Shapes convert to image frames, with file drops, cropping and replacement from files, clipboard or Library thumbnails.
-- Bounded Library version recovery and reusable template management.
+![Editable image guide with Focus controls](docs/images/image-workflow.png)
 
-Video and All-in-One capture are not implemented. PDF preserves vector paths and
-outlined text; screenshots and pixel effects remain raster. PDF text is not searchable.
-Installed fonts in editable projects are referenced, not embedded; missing
-families use a bundled fallback. Beta releases are not an enterprise certification.
-The source branch can include local review changes newer than the latest release;
-use the release notes for the exact download's capabilities. General SVG/EPS stamp
-import is not implemented yet.
-Known issue: on some multi-monitor setups the right window border moves inward
-while ClipCraft is inactive and recovers on focus. This cosmetic defect is deferred.
-See the [feature inventory](sites/capture-workbench/ROADMAP.md) for scoped status;
-historical local evidence links in it are not distributed verification records.
+Capture a region, window or fullscreen; stitch a scrolling region manually or
+automatically; or record actions as an editable **Step by Step** guide. Captures
+are saved to your local Library even when you send the result only to the clipboard.
 
-## Build and inspect
+- **Annotate:** Lines and arrows, rich text, shapes and callouts, Icons, numbered
+  Steps, Penlighter, and editable image frames.
+- **Direct attention:** Focus windows keep an area clear while blurring or
+  darkening the content beneath them. Combine effects, choose a frame shape and
+  keep labels and arrows above the effect.
+- **Build guides:** reusable templates, sections, multipage layouts, Page Setup,
+  physical page sizes, margins, headers/footers, numbering, bleed and crop marks.
+- **Refine:** layers, groups, alignment, snapping, crop, Cut Out, Eraser, rotation,
+  flips, text styles, lists and presets. Original content stays editable.
+- **Review privacy:** local OCR and sensitive-information suggestions for still
+  images; opaque redaction, blur and pixelation with optional redaction labels.
 
-See [building.md](docs/building.md), the [security/data model](docs/security-model.md),
-and the [release verification guide](docs/github-releases.md).
+Export PNG, JPEG or PDF; print from Windows; save an editable `.iclip` project.
 
-```powershell
-cargo fetch --locked
-./scripts/check.ps1
-cargo build --release --workspace --locked --offline
-./target/release/capture-cli.exe --help
-```
+## Video with context
 
-The pinned Rust toolchain is in `rust-toolchain.toml`. Windows MSVC build tools
-and the Windows SDK are required. CI does not opt into desktop capture, clipboard
-access, print jobs, personal fixtures, or an AI service.
+![Video timeline with annotations, narration and motion properties](docs/images/video-workflow.png)
 
-## Source layout
+Record your screen or a selected window with microphone and system audio, then
+continue in the editor. Add recordings to an existing project, import media, or
+record narration with an optional webcam.
 
-| Directory | Purpose |
-| --- | --- |
-| `crates/core` | Shared document, rendering, export, persistence and history engine |
-| `apps/desktop` | Windows UI, capture, OCR, clipboard, printing and integration |
-| `apps/cli` | Local automation using the same engine |
-| `scripts` | Checks, packaging, dependency inventory and optional website hosting |
-| `licenses` | Third-party asset and adapted-source notices |
-| `sites/capture-workbench` | Companion website source and feature inventory |
+- Arrange video, images, audio, voiceover and annotations on separate tracks.
+- Trim, split, duplicate, link and move clips together; adjust fades, volume and
+  timing, and generate a held still frame from a video.
+- Add animated text, shapes, arrows, Icons and Steps. Use entrance/exit presets,
+  path drawing, typewriter text and compatible animation combinations.
+- Add editable **Zoom** and **Focus** objects: their position in the track stack
+  determines which underlying content they affect.
+- Crop, pan and zoom inside video frames; change frame shapes, strokes and shadows.
 
-All required application source, synthetic test fixtures, fonts and brand resources
-are included. Machine-specific settings, personal captures, credentials, build
-caches and private development journals are excluded. Binaries are release
-attachments rather than Git objects.
+Export MP4 or save an editable `.vclip` with its accompanying media folder.
 
-ClipCraft uses original branding and implementation, with documented MIT-licensed
-DesignCraft adaptations. Original ClipCraft code is [Apache-2.0 licensed](LICENSE).
-Third-party
-code and fonts retain their own licenses; see `licenses/` and release notices.
+## Narration and audio, in the same workflow
 
-Fresh profiles open the Capture Controller, with development badges disabled. Print Screen
-starts capture with saved settings, and Alt+F11 captures a region. Existing saved
-preferences are preserved. See [licensing and provenance](docs/licensing.md).
+![Effects Workstation with EQ, live spectrum and an editable vocal chain](docs/images/effects-workstation.png)
+
+Record and review takes, choose input/output devices, monitor through headphones,
+and switch stereo/mono. The Effects Workstation provides an ordered, editable
+chain of **parametric EQ, compression, clarity, de-essing, leveling and limiting**.
+Apply effects to a clip or a whole track, adjust them during playback, and compare
+original and processed sound. Local **Analyze Voice** suggests settings that you
+can audition and refine; the original recording is preserved.
+
+## Built around your workflow
+
+![Image and video capture controls](docs/images/capture-workflow.png)
+
+The Library includes search, tags and application/website/date filters. Save
+templates and presets, customize shortcuts, capture from the tray, and switch
+between image and video projects without leaving ClipCraft.
+
+Screenshots above are rendered from the application with original synthetic
+demonstration content. Release packages contain no personal projects, recordings,
+saved settings or prepopulated Recent items.
+
+## Beta notes
+
+- **Framed crossfades:** the missing-preview/transparent-canvas defect is repaired.
+  Transitions involving rotated, transparent, differently framed or fit-mode
+  video can still play less smoothly. Export uses the full-resolution compositor.
+- **Video privacy:** redactions are editable, timed objects; they do not
+  automatically follow moving text or people. Review every frame. Focus is visual
+  emphasis, not a redaction tool. Blur/pixelation can leave information inferable.
+- **Share exports for redaction:** editable projects and their media retain
+  original content. Do not share them as sanitized documents. See
+  [the security and data model](docs/security-model.md).
+- Scrolling capture is limited to a selected region. Exclude fixed headers and
+  footers from that region. Automatic cursor choreography and tracked video
+  redaction are planned for a later revision.
+- Complex effects and high-resolution webcam previews may be slower on some
+  systems. Capture devices, drivers and Windows audio routing can affect results.
+- PDF text is exported as vector outlines, not searchable text. Installed fonts
+  are referenced by editable projects; missing fonts use a fallback.
+- This first v1 beta does not support old development projects or automatic
+  updates. Back up important work. The installer and portable binaries are unsigned.
+
+## Source, licenses and reporting
+
+ClipCraft is written in Rust. See [building](docs/building.md),
+[release verification](docs/github-releases.md), [licensing](docs/licensing.md),
+[contributing](CONTRIBUTING.md) and [security reporting](SECURITY.md).
+
+Report a bug through [GitHub Issues](https://github.com/pashiadesigns/ClipCraft/issues)
+with the version, reproduction steps and a non-sensitive example when possible.

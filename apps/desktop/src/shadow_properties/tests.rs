@@ -76,7 +76,6 @@ fn direction_settings_live_slider_batch_inheritance_and_one_undo() {
     e.tool = Some(crate::Kind::Step);
     e.select_only(Some(1));
     e.click_selection(Some(2), true);
-    e.shell.badges = false;
     let original = e.session.document.annotations.clone();
     let mut first = frame(&ctx, &mut e, vec![]);
     frame(&ctx, &mut e, vec![]);
@@ -94,21 +93,17 @@ fn direction_settings_live_slider_batch_inheritance_and_one_undo() {
             .iter()
             .all(|a| a.shadow.is_some_and(|s| s.angle == 45.))
     );
-    assert_eq!(e.session.document.version, 14);
+    assert_eq!(
+        e.session.document.version,
+        capture_core::MAX_PROJECT_VERSION
+    );
     e.execute(crate::Command::Undo);
     assert_eq!(e.session.document.annotations, original);
     assert!(!e.session.can_undo());
     click(&ctx, &mut e, direction);
     let selected = e.session.document.annotations.clone();
-    let settings = ctx
-        .data(|d| {
-            d.get_temp::<Rect>(egui::Id::unique("shadow-settings"))
-                .unwrap()
-        })
-        .center();
-    click(&ctx, &mut e, settings);
     let rail = ctx.data(|d| {
-        d.get_temp::<(Rect, Rect)>(egui::Id::unique(("property-slider", "Distance")))
+        d.get_temp::<(Rect, Rect)>(egui::Id::unique(("property-slider", "Shadow distance")))
             .unwrap()
             .1
     });
@@ -174,12 +169,12 @@ fn shadow_color_opens_nested_picker_and_commits_one_undo() {
     );
     e.tool = Some(crate::Kind::Step);
     e.select_only(Some(1));
-    e.shell.badges = false;
+    e.session.document.annotations[0].shadow = Some(Default::default());
     let original = e.session.document.annotations.clone();
     let mut first = frame(&ctx, &mut e, vec![]);
     frame(&ctx, &mut e, vec![]);
     let rect = |key| ctx.data(|d| d.get_temp::<Rect>(egui::Id::unique(key)).unwrap());
-    click(&ctx, &mut e, rect("shadow-settings").center());
+
     click(&ctx, &mut e, rect("shadow-color").center());
     let output = frame(&ctx, &mut e, vec![]);
     assert!(

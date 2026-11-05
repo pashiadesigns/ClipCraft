@@ -7,8 +7,7 @@ use capture_core::display::Viewport;
 #[derive(Default)]
 pub(super) struct Creation {
     pub annotation: Option<Annotation>,
-    pub simplify_candidates: Option<Vec<Annotation>>,
-    pub simplified: Vec<Annotation>,
+
     box_end: Option<[f32; 2]>,
     tail: Option<[f32; 2]>,
     texture: Option<egui::TextureHandle>,
@@ -40,10 +39,13 @@ impl Editor {
             step_outline: None,
             line_style: None,
             shadow: None,
-            analysis: None,
+
+            focus: None,
+
             highlighter_rect: rectangle,
             group: None,
             rotation_degrees: 0.0,
+            mirror_x: false,
             kind,
             start,
             end,
@@ -54,7 +56,7 @@ impl Editor {
                     self.color[0],
                     self.color[1],
                     self.color[2],
-                    self.quick_styles.alpha,
+                    self.presets.alpha,
                 ]
             },
             width: self.width,
@@ -75,6 +77,9 @@ impl Editor {
                 )
             }),
         });
+        if self.shell.focus.active && matches!(kind, Kind::Rectangle | Kind::Ellipse) {
+            self.shell.focus.apply(&mut annotation);
+        }
         if annotation.highlighter_rect {
             annotation.points.clear();
         }
@@ -99,11 +104,7 @@ impl Editor {
             && (self.drawing_rectangle_highlighter() && kind == Kind::Highlighter
                 || matches!(
                     kind,
-                    Kind::Rectangle
-                        | Kind::Ellipse
-                        | Kind::Polygon
-                        | Kind::Callout
-                        | Kind::Simplify
+                    Kind::Rectangle | Kind::Ellipse | Kind::Polygon | Kind::Callout
                 ))
         {
             end = capture_core::angle_snap::square_endpoint(start, pointer, canvas);
@@ -123,27 +124,7 @@ impl Editor {
         if let (Some(callout), Some(tail)) = (&mut annotation.callout, self.creation.tail) {
             callout.pointer = tail;
         }
-        if kind == Kind::Simplify && self.simplify_auto {
-            if self.creation.simplify_candidates.is_none() {
-                self.creation.simplify_candidates = Some(self.analyze_simplify());
-            }
-            let (lo, hi) = annotation.body_bounds();
-            self.creation.simplified = self
-                .creation
-                .simplify_candidates
-                .as_ref()
-                .unwrap()
-                .iter()
-                .filter_map(|a| {
-                    let mut a = a.clone();
-                    for i in 0..2 {
-                        a.start[i] = a.start[i].max(lo[i]);
-                        a.end[i] = a.end[i].min(hi[i]);
-                    }
-                    ((a.end[0] - a.start[0]) > 1. && (a.end[1] - a.start[1]) > 1.).then_some(a)
-                })
-                .collect();
-        }
+
         self.creation.annotation = Some(annotation);
     }
     pub(super) fn paint_creation(&mut self, ui: &egui::Ui, transform: Transform) {
@@ -156,26 +137,8 @@ impl Editor {
         let (min, max) = annotation.bounds();
         let bounds =
             egui::Rect::from_min_max(transform.screen_point(min), transform.screen_point(max));
-        if self.creation.simplify_candidates.is_some() {
-            for block in &self.creation.simplified {
-                p.rect_filled(
-                    egui::Rect::from_min_max(
-                        transform.screen_point(block.start),
-                        transform.screen_point(block.end),
-                    ),
-                    0.,
-                    egui::Color32::from_rgba_unmultiplied(
-                        block.color[0],
-                        block.color[1],
-                        block.color[2],
-                        block.color[3],
-                    ),
-                );
-            }
-        }
-        if self.creation.simplify_candidates.is_some()
-            || matches!(annotation.kind, Kind::Text | Kind::Blur | Kind::Pixelate)
-        {
+
+        if matches!(annotation.kind, Kind::Text | Kind::Blur | Kind::Pixelate) {
             // A neutral guide is editor UI, never a promised formatted border.
             let stroke = egui::Stroke::new(1.0, egui::Color32::from_rgb(90, 191, 224));
             for edge in [

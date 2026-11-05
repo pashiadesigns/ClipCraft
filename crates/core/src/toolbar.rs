@@ -5,62 +5,39 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ToolId {
-    Favorites,
-    Arrow,
-    Text,
-    Callout,
-    Shape,
-    Stamp,
-    Selection,
-    Fill,
     Move,
-    Blur,
-    Simplify,
-    MagicWand,
+    // Persisted identities are independent of visible tool names.
+    #[serde(rename = "arrow")]
+    Lines,
+    Text,
+    Shape,
+    Focus,
+    Icons,
+    Steps,
+    #[serde(rename = "pen")]
+    Penlighter,
+    Obfuscate,
     Crop,
     CutOut,
-    Pen,
-    Line,
-    Highlighter,
-    Step,
     Eraser,
-    Magnify,
-    Redact,
 }
 
-pub const ALL: [ToolId; 21] = [
-    ToolId::Favorites,
-    ToolId::Arrow,
-    ToolId::Text,
-    ToolId::Callout,
-    ToolId::Shape,
-    ToolId::Stamp,
-    ToolId::Selection,
-    ToolId::Fill,
+pub const ALL: [ToolId; 12] = [
     ToolId::Move,
-    ToolId::Blur,
-    ToolId::Simplify,
-    ToolId::MagicWand,
+    ToolId::Lines,
+    ToolId::Text,
+    ToolId::Shape,
+    ToolId::Icons,
+    ToolId::Steps,
+    ToolId::Penlighter,
+    ToolId::Obfuscate,
     ToolId::Crop,
     ToolId::CutOut,
-    ToolId::Pen,
-    ToolId::Line,
-    ToolId::Highlighter,
-    ToolId::Step,
     ToolId::Eraser,
-    ToolId::Magnify,
-    ToolId::Redact,
+    ToolId::Focus,
 ];
 pub fn default_order() -> Vec<ToolId> {
-    let mut order = vec![
-        ToolId::Text,
-        ToolId::Arrow,
-        ToolId::Shape,
-        ToolId::Callout,
-        ToolId::Step,
-        ToolId::Selection,
-        ToolId::Move,
-    ];
+    let mut order = vec![ToolId::Move, ToolId::Text, ToolId::Shape, ToolId::Steps];
     for id in ALL {
         if !order.contains(&id) {
             order.push(id);
@@ -71,7 +48,7 @@ pub fn default_order() -> Vec<ToolId> {
 
 /// The user-reviewed layout; explicit saved memberships always take precedence.
 pub fn default_favorites() -> Vec<ToolId> {
-    vec![ToolId::Move, ToolId::Text, ToolId::Shape, ToolId::Step]
+    vec![ToolId::Move, ToolId::Text, ToolId::Shape, ToolId::Steps]
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -100,14 +77,9 @@ impl Group {
         }
     }
 }
-/// Crop and Cut Out share one toolbar slot; the old Favorites identity is kept
-/// solely so existing saved tool orders still deserialize without losing data.
+/// Each supported tool has a distinct toolbar slot.
 pub fn slot(tool: ToolId) -> ToolId {
-    if tool == ToolId::CutOut {
-        ToolId::Crop
-    } else {
-        tool
-    }
+    tool
 }
 pub fn group(tool: ToolId, favorites: &[ToolId]) -> Group {
     let tool = slot(tool);
@@ -115,37 +87,20 @@ pub fn group(tool: ToolId, favorites: &[ToolId]) -> Group {
         return Group::Favorites;
     }
     match tool {
-        ToolId::Favorites => Group::Favorites,
-        ToolId::Selection | ToolId::Move | ToolId::Blur | ToolId::Pen => Group::General,
-        ToolId::Text | ToolId::Callout | ToolId::Step | ToolId::Redact | ToolId::Highlighter => {
-            Group::Text
-        }
-        ToolId::Shape | ToolId::Arrow | ToolId::Line | ToolId::Stamp => Group::Shape,
-        ToolId::Crop
-        | ToolId::CutOut
-        | ToolId::Fill
-        | ToolId::Eraser
-        | ToolId::Simplify
-        | ToolId::MagicWand
-        | ToolId::Magnify => Group::Canvas,
+        ToolId::Move | ToolId::Penlighter | ToolId::Obfuscate => Group::General,
+        ToolId::Text | ToolId::Steps => Group::Text,
+        ToolId::Focus | ToolId::Shape | ToolId::Lines | ToolId::Icons => Group::Shape,
+        ToolId::Crop | ToolId::CutOut | ToolId::Eraser => Group::Canvas,
     }
 }
 pub fn validate_favorites(favorites: &[ToolId]) -> Result<()> {
     validate(favorites)?;
-    if favorites
-        .iter()
-        .any(|t| matches!(t, ToolId::Favorites | ToolId::CutOut))
-    {
-        return Err(Error::Invalid("Invalid favorite tool slot".into()));
-    }
     Ok(())
 }
 pub fn grouped_order(order: &[ToolId], favorites: &[ToolId]) -> Vec<ToolId> {
     let mut result = favorites.to_vec();
     for g in GROUPS.into_iter().skip(1) {
-        result.extend(order.iter().copied().filter(|t| {
-            !matches!(t, ToolId::Favorites | ToolId::CutOut) && group(*t, favorites) == g
-        }));
+        result.extend(order.iter().copied().filter(|t| group(*t, favorites) == g));
     }
     result
 }
@@ -157,11 +112,7 @@ pub fn move_in_group(
 ) -> Result<()> {
     let tool = slot(tool);
     let before = before.map(slot);
-    if tool == ToolId::Favorites
-        || before.is_some_and(|b| {
-            b == ToolId::Favorites || group(b, favorites) != group(tool, favorites)
-        })
-    {
+    if before.is_some_and(|b| group(b, favorites) != group(tool, favorites)) {
         return Err(Error::Invalid(
             "Drag tools within their section; use Add to Favorites to change sections".into(),
         ));
@@ -226,82 +177,60 @@ mod tests {
     use super::*;
     use crate::quick_preferences::{Choice, Justification, Store};
     #[test]
-    fn section_favorites_and_shared_canvas_slot_persist_and_reject_cross_section_moves() {
+    fn independent_crop_and_cut_out_favorites_preserve_order() {
         let temp = tempfile::tempdir().unwrap();
-        let a = Store::open(temp.path()).unwrap();
-        let b = Store::open(temp.path()).unwrap();
-        assert_eq!(a.read().unwrap().favorite_tools, default_favorites());
+        let store = Store::open(temp.path()).unwrap();
         for tool in default_favorites() {
-            a.remember(Choice::FavoriteTool {
-                tool,
-                favorite: false,
+            store
+                .remember(Choice::FavoriteTool {
+                    tool,
+                    favorite: false,
+                })
+                .unwrap();
+        }
+        for tool in [ToolId::Text, ToolId::Crop, ToolId::CutOut] {
+            store
+                .remember(Choice::FavoriteTool {
+                    tool,
+                    favorite: true,
+                })
+                .unwrap();
+        }
+        store
+            .remember(Choice::MoveSectionTool {
+                tool: ToolId::CutOut,
+                before: Some(ToolId::Text),
             })
             .unwrap();
-        }
-        a.remember(Choice::FavoriteTool {
-            tool: ToolId::Text,
-            favorite: true,
-        })
-        .unwrap();
-        b.remember(Choice::FavoriteTool {
-            tool: ToolId::CutOut,
-            favorite: true,
-        })
-        .unwrap();
-        a.remember(Choice::MoveSectionTool {
-            tool: ToolId::Crop,
-            before: Some(ToolId::Text),
-        })
-        .unwrap();
-        b.remember(Choice::CanvasTool(ToolId::CutOut)).unwrap();
-        // Drawing defaults must not downgrade startup preferences or erase favorites.
-        b.remember(Choice::DrawingStyle(
-            crate::object_styles::presets(crate::Kind::Text).remove(0),
-        ))
-        .unwrap();
-        let loaded = a.read().unwrap();
-        assert_eq!(loaded.version, 8);
-        assert_eq!(loaded.favorite_tools, vec![ToolId::Crop, ToolId::Text]);
-        assert_eq!(loaded.canvas_tool, ToolId::CutOut);
-        let order = grouped_order(&loaded.toolbar_order, &loaded.favorite_tools);
-        assert_eq!(&order[..2], &[ToolId::Crop, ToolId::Text]);
-        assert_eq!(order.len(), 19);
-        assert!(!order.contains(&ToolId::CutOut));
-        assert_eq!(order.iter().filter(|t| **t == ToolId::Crop).count(), 1);
-        let path = temp.path().join("quick-controls.json");
-        let saved = std::fs::read(&path).unwrap();
-        assert!(
-            a.remember(Choice::MoveSectionTool {
-                tool: ToolId::Text,
-                before: Some(ToolId::Arrow)
-            })
-            .is_err()
+        let saved = store.read().unwrap();
+        assert_eq!(
+            saved.favorite_tools,
+            [ToolId::CutOut, ToolId::Text, ToolId::Crop]
         );
-        assert_eq!(std::fs::read(&path).unwrap(), saved);
-        a.remember(Choice::FavoriteTool {
-            tool: ToolId::Crop,
-            favorite: false,
-        })
-        .unwrap();
-        let loaded = Store::open(temp.path()).unwrap().read().unwrap();
-        assert_eq!(group(ToolId::Crop, &loaded.favorite_tools), Group::Canvas);
-        assert_eq!(loaded.canvas_tool, ToolId::CutOut);
-        assert_eq!(loaded.favorite_tools, vec![ToolId::Text]);
-        assert!(validate_favorites(&[ToolId::Crop, ToolId::Crop]).is_err());
-        assert!(validate_favorites(&[ToolId::CutOut]).is_err());
+        let order = grouped_order(&saved.toolbar_order, &saved.favorite_tools);
+        assert_eq!(order.len(), ALL.len());
+        assert!(
+            store
+                .remember(Choice::MoveSectionTool {
+                    tool: ToolId::Lines,
+                    before: Some(ToolId::Text)
+                })
+                .is_err()
+        );
+        assert_eq!(store.read().unwrap(), saved);
     }
     #[test]
     fn moves_both_directions_preserve_identity_noops_and_missing_tools() {
-        let mut order = vec![ToolId::Step, ToolId::Text];
+        let mut order = vec![ToolId::Steps, ToolId::Text];
         normalize(&mut order).unwrap();
-        assert_eq!(&order[..2], &[ToolId::Step, ToolId::Text]);
+        assert_eq!(&order[..2], &[ToolId::Steps, ToolId::Text]);
         assert_eq!(order.len(), ALL.len());
-        move_before(&mut order, ToolId::Line, Some(ToolId::Text)).unwrap();
-        assert_eq!(&order[..3], &[ToolId::Step, ToolId::Line, ToolId::Text]);
-        move_before(&mut order, ToolId::Step, None).unwrap();
-        assert_eq!(order.last(), Some(&ToolId::Step));
+        move_before(&mut order, ToolId::Icons, Some(ToolId::Text)).unwrap();
+        assert_eq!(&order[..3], &[ToolId::Steps, ToolId::Icons, ToolId::Text]);
+        move_before(&mut order, ToolId::Steps, None).unwrap();
+        assert_eq!(order.last(), Some(&ToolId::Steps));
         let saved = order.clone();
-        move_before(&mut order, ToolId::Line, Some(ToolId::Line)).unwrap();
+        move_before(&mut order, ToolId::Icons, Some(ToolId::Icons)).unwrap();
         assert_eq!(order, saved);
         let mut invalid = vec![ToolId::Text, ToolId::Text];
         assert!(normalize(&mut invalid).is_err());
@@ -309,16 +238,16 @@ mod tests {
     }
 
     #[test]
-    fn legacy_restart_and_two_writers_preserve_independent_preferences() {
+    fn restart_and_two_writers_preserve_independent_preferences() {
         let temp = tempfile::tempdir().unwrap();
-        let path = temp.path().join("quick-controls.json");
-        std::fs::write(&path, br#"{"version":1,"alignment":"left","distribution":"vertical_gaps","justification":"bottom_right","canvas_snapping":false}"#).unwrap();
+        let path = temp.path().join("quick-controls-v2.json");
+        std::fs::write(&path, br#"{"version":12,"alignment":"left","distribution":"vertical_gaps","justification":"bottom_right","canvas_snapping":false}"#).unwrap();
         let first = Store::open(temp.path()).unwrap();
         let second = Store::open(temp.path()).unwrap();
         assert_eq!(first.read().unwrap().toolbar_order, default_order());
         first
             .remember(Choice::MoveTool {
-                tool: ToolId::Step,
+                tool: ToolId::Steps,
                 before: Some(ToolId::Text),
             })
             .unwrap();
@@ -327,13 +256,13 @@ mod tests {
             .unwrap();
         second
             .remember(Choice::MoveTool {
-                tool: ToolId::Line,
-                before: Some(ToolId::Step),
+                tool: ToolId::Icons,
+                before: Some(ToolId::Steps),
             })
             .unwrap();
         let loaded = Store::open(temp.path()).unwrap().read().unwrap();
-        assert_eq!(&loaded.toolbar_order[..2], &[ToolId::Line, ToolId::Step]);
-        assert_eq!(loaded.version, 2);
+        assert_eq!(&loaded.toolbar_order[1..3], &[ToolId::Icons, ToolId::Steps]);
+        assert_eq!(loaded.version, 12);
         assert!(!loaded.canvas_snapping);
         assert_eq!(loaded.justification, Justification::CenterMiddle);
         let reset = first.remember(Choice::ResetToolbar).unwrap();
@@ -345,7 +274,7 @@ mod tests {
     #[test]
     fn duplicate_unknown_and_locked_preferences_cannot_overwrite_saved_state() {
         let temp = tempfile::tempdir().unwrap();
-        let path = temp.path().join("quick-controls.json");
+        let path = temp.path().join("quick-controls-v2.json");
         let store = Store::open(temp.path()).unwrap();
         store
             .remember(Choice::MoveTool {

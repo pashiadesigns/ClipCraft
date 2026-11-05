@@ -11,7 +11,10 @@ use std::{
 use windows_sys::Win32::{
     Foundation::*,
     Graphics::{
-        Dwm::{DWMWA_CLOAKED, DWMWA_EXTENDED_FRAME_BOUNDS, DwmFlush, DwmGetWindowAttribute},
+        Dwm::{
+            DWMWA_CLOAKED, DWMWA_EXTENDED_FRAME_BOUNDS, DWMWA_TRANSITIONS_FORCEDISABLED, DwmFlush,
+            DwmGetWindowAttribute, DwmSetWindowAttribute,
+        },
         Gdi::*,
     },
     System::LibraryLoader::GetModuleHandleW,
@@ -20,11 +23,18 @@ use windows_sys::Win32::{
 use windows_sys::core::{BOOL, w};
 mod countdown;
 mod cursor;
+mod monitor_picker;
 mod region_preview;
 mod restart;
+mod scrolling;
+mod scrolling_preview;
 mod step_context;
 mod step_recorder;
 mod steps_intro;
+mod transport;
+pub(crate) mod video_audio;
+pub(crate) mod video_encoder;
+mod video_recording;
 
 fn win_error(operation: &str) -> String {
     format!("{operation}: {}", std::io::Error::last_os_error())
@@ -55,6 +65,35 @@ impl Drop for Bitmap {
     }
 }
 struct RestoreEditor(HWND, bool);
+fn hide_for_capture(owner: HWND) -> Result<(), String> {
+    // Per-window setting only: suppress the OS show/hide transition before
+    // hiding this editor. Keep it disabled when restoring the capture preview.
+    let disabled: BOOL = 1;
+    unsafe {
+        let status = DwmSetWindowAttribute(
+            owner,
+            DWMWA_TRANSITIONS_FORCEDISABLED as u32,
+            (&disabled as *const BOOL).cast(),
+            size_of::<BOOL>() as u32,
+        );
+        if status < 0 {
+            return Err(format!(
+                "Could not hide ClipCraft without animation ({status:#x}). Try the capture again."
+            ));
+        }
+        ShowWindow(owner, SW_HIDE);
+        if IsWindowVisible(owner) != 0 {
+            return Err(
+                "ClipCraft is still visible. Close any open dialog and try the capture again."
+                    .into(),
+            );
+        }
+        if DwmFlush() < 0 {
+            return Err("Windows could not prepare the screen for capture. Try again.".into());
+        }
+    }
+    Ok(())
+}
 impl Drop for RestoreEditor {
     fn drop(&mut self) {
         unsafe {
@@ -101,6 +140,57 @@ fn bitmap_info(size: [u32; 2]) -> BITMAPINFO {
 }
 
 impl Snapshot {
+    fn capture_window(hwnd: HWND, include_cursor: bool) -> Result<Self, String> {
+        unsafe {
+            let mut bounds = RECT::default();
+            if GetWindowRect(hwnd, &mut bounds) == 0 {
+                return Err(win_error("The selected window is no longer available"));
+            }
+            let size = [
+                (bounds.right - bounds.left).max(1) as u32,
+                (bounds.bottom - bounds.top).max(1) as u32,
+            ];
+            capture_core::validate_dimensions(size[0], size[1]).map_err(|e| e.to_string())?;
+            let memory = MemoryDc(CreateCompatibleDC(null_mut()));
+            let mut bits = null_mut();
+            let bitmap = Bitmap(CreateDIBSection(
+                memory.0,
+                &bitmap_info(size),
+                DIB_RGB_COLORS,
+                &mut bits,
+                null_mut(),
+                0,
+            ));
+            if memory.0.is_null() || bitmap.0.is_null() || bits.is_null() {
+                return Err(win_error("Cannot allocate window capture"));
+            }
+            let old = SelectObject(memory.0, bitmap.0);
+            let ok = windows_sys::Win32::Storage::Xps::PrintWindow(hwnd, memory.0, 2);
+            GdiFlush();
+            SelectObject(memory.0, old);
+            if ok == 0 {
+                return Err(
+                    "This window could not provide its image. Restore it and try again.".into(),
+                );
+            }
+            let pixels = std::slice::from_raw_parts(
+                bits.cast::<u8>(),
+                size[0] as usize * size[1] as usize * 4,
+            )
+            .to_vec();
+            Ok(Self {
+                origin: [bounds.left, bounds.top],
+                size,
+                pixels,
+                dimmed: vec![],
+                cursor: if include_cursor {
+                    cursor::current()?
+                } else {
+                    None
+                },
+            })
+        }
+    }
     fn frame(&self, region: Region) -> Result<capture_core::step_capture::Frame, String> {
         let image = crop_bgra(&self.pixels, self.size, region)?;
         let origin = [
@@ -544,10 +634,20 @@ pub(super) fn select_image(
     owner: isize,
     settings: capture_core::capture_options::Settings,
     history_root: Option<std::path::PathBuf>,
+    scroll_mode: std::sync::mpsc::Sender<bool>,
+    video: Option<super::VideoRequest>,
 ) -> CaptureResult {
-    settings
-        .request(capture_core::capture_options::Mode::Image)
-        .map_err(|e| e.to_string())?;
+    settings.request().map_err(|e| e.to_string())?;
+    if video.is_some()
+        && !matches!(
+            settings.selection,
+            capture_core::capture_options::Selection::Region
+                | capture_core::capture_options::Selection::Window
+                | capture_core::capture_options::Selection::Fullscreen
+        )
+    {
+        return Err("Choose Region, Window or Fullscreen for video.".into());
+    }
     unsafe {
         let previous_dpi = SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
         if previous_dpi.is_null() {
@@ -556,13 +656,14 @@ pub(super) fn select_image(
         let _dpi = DpiContext(previous_dpi);
         let owner = owner as HWND;
         let _restore = RestoreEditor(owner, IsWindowVisible(owner) != 0);
-        ShowWindow(owner, SW_HIDE);
+        hide_for_capture(owner)?;
         if !countdown::wait(owner, settings.delay_seconds)? {
             return Ok(None);
         }
         // Let the compositor remove the editor before freezing the desktop.
         DwmFlush();
         std::thread::sleep(Duration::from_millis(160));
+        DwmFlush();
         if settings.selection == capture_core::capture_options::Selection::Steps {
             return step_recorder::record(owner, settings.cursor, history_root);
         }
@@ -570,8 +671,17 @@ pub(super) fn select_image(
         if settings.selection == capture_core::capture_options::Selection::Fullscreen {
             let mut cursor = POINT::default();
             GetCursorPos(&mut cursor);
+            let available = displays()?;
+            let target = if settings.fullscreen == capture_core::capture_options::Fullscreen::Ask {
+                let Some(device) = monitor_picker::choose(owner, &snapshot, &available)? else {
+                    return Ok(None);
+                };
+                capture_core::capture_options::Fullscreen::Display(device)
+            } else {
+                settings.fullscreen.clone()
+            };
             let bounds = capture_core::capture_options::fullscreen_bounds(
-                &settings.fullscreen,
+                &target,
                 &displays()?,
                 [cursor.x, cursor.y],
             )
@@ -583,6 +693,29 @@ pub(super) fn select_image(
                 [bounds[2], bounds[3]],
             )
             .ok_or("Display is outside the captured desktop")?;
+            if let Some(video) = video {
+                drop(snapshot);
+                DwmFlush();
+                std::thread::sleep(Duration::from_millis(160));
+                return video_recording::record(
+                    owner,
+                    [bounds[0], bounds[1]],
+                    [region.width, region.height],
+                    None,
+                    video,
+                );
+            }
+            if settings.is_scrolling() {
+                drop(snapshot);
+                DwmFlush();
+                return scrolling::record(
+                    owner,
+                    [bounds[0], bounds[1]],
+                    [region.width, region.height],
+                    settings.scroll_automatic,
+                    scroll_mode,
+                );
+            }
             return snapshot.document(region).map(|d| Some(d.into()));
         }
         let window_targets =
@@ -697,7 +830,77 @@ pub(super) fn select_image(
             return Err("The Windows capture event loop failed.".into());
         }
         let region = picker.selection;
-        // The ordinary picker result uses its frozen snapshot, captured above.
+        if settings.is_scrolling() && video.is_none() {
+            let origin = picker.snapshot.origin;
+            drop(picker);
+            DwmFlush();
+            std::thread::sleep(Duration::from_millis(160));
+            return match region {
+                Some(r) => scrolling::record(
+                    owner,
+                    [origin[0] + r.x as i32, origin[1] + r.y as i32],
+                    [r.width, r.height],
+                    settings.scroll_automatic,
+                    scroll_mode,
+                ),
+                None => Ok(None),
+            };
+        }
+        if let Some(video) = video {
+            let origin = picker.snapshot.origin;
+            let point = picker.pointer;
+            drop(picker);
+            DwmFlush();
+            std::thread::sleep(Duration::from_millis(160));
+            return match region {
+                Some(r) => video_recording::record(
+                    owner,
+                    [origin[0] + r.x as i32, origin[1] + r.y as i32],
+                    [r.width, r.height],
+                    (settings.selection == capture_core::capture_options::Selection::Window).then(
+                        || {
+                            GetAncestor(
+                                WindowFromPoint(POINT {
+                                    x: point[0],
+                                    y: point[1],
+                                }),
+                                GA_ROOT,
+                            ) as usize
+                        },
+                    ),
+                    video,
+                ),
+                None => Ok(None),
+            };
+        }
+        if settings.selection == capture_core::capture_options::Selection::Window
+            && let Some(region) = region
+        {
+            let origin = picker.snapshot.origin;
+            let point = picker.pointer;
+            drop(picker);
+            DwmFlush();
+            let target = GetAncestor(
+                WindowFromPoint(POINT {
+                    x: point[0],
+                    y: point[1],
+                }),
+                GA_ROOT,
+            );
+            let snapshot = Snapshot::capture_window(target, settings.cursor)?;
+            let crop = Region::from_drag(
+                snapshot.origin,
+                snapshot.size,
+                [origin[0] + region.x as i32, origin[1] + region.y as i32],
+                [
+                    origin[0] + region.x as i32 + region.width as i32,
+                    origin[1] + region.y as i32 + region.height as i32,
+                ],
+            )
+            .ok_or("The selected window moved. Capture it again.")?;
+            return snapshot.document(crop).map(|d| Some(d.into()));
+        }
+        // Region capture retains its frozen screen snapshot.
         match region {
             Some(region) => picker.snapshot.document(region).map(|d| Some(d.into())),
             None => Ok(None),
@@ -862,5 +1065,35 @@ mod document_tests {
             session.document.render().unwrap().get_pixel(0, 0).0,
             [170, 80, 30, 255]
         );
+    }
+}
+
+#[cfg(test)]
+mod hide_tests {
+    use super::*;
+    #[test]
+    fn capture_hide_disables_transitions_on_owned_never_shown_window() {
+        unsafe {
+            let window = CreateWindowExW(
+                0,
+                w!("STATIC"),
+                w!("ClipCraft capture visibility fixture"),
+                WS_OVERLAPPEDWINDOW,
+                0,
+                0,
+                100,
+                80,
+                null_mut(),
+                null_mut(),
+                GetModuleHandleW(null()),
+                null(),
+            );
+            assert!(!window.is_null());
+            let result = hide_for_capture(window);
+            let hidden = IsWindowVisible(window) == 0;
+            DestroyWindow(window);
+            assert!(result.is_ok(), "{result:?}");
+            assert!(hidden);
+        }
     }
 }

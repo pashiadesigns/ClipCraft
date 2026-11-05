@@ -36,14 +36,14 @@ impl Action {
             Self::Group => "Group objects",
             Self::Ungroup => "Ungroup objects",
             Self::FlattenSelected => "Flatten selected — planned",
-            Self::FlattenAll => "Flatten all · Ctrl+Shift+T",
+            Self::FlattenAll => "Flatten page · Ctrl+Shift+T",
             Self::ResizeImage => "Resize image",
             Self::ResizeCanvas => "Resize canvas",
-            Self::Clockwise => "Rotate image clockwise",
-            Self::CounterClockwise => "Rotate image counterclockwise",
-            Self::HalfTurn => "Rotate image 180 degrees",
-            Self::FlipHorizontal => "Flip image horizontally",
-            Self::FlipVertical => "Flip image vertically",
+            Self::Clockwise => "Rotate clockwise",
+            Self::CounterClockwise => "Rotate counterclockwise",
+            Self::HalfTurn => "Rotate 180 degrees",
+            Self::FlipHorizontal => "Flip horizontally",
+            Self::FlipVertical => "Flip vertically",
             Self::Trim => "Trim image — planned",
             Self::Snapping => "Canvas snapping",
             Self::PixelGrid => "Pixel grid · Ctrl+Alt+G · visible at 600% and above",
@@ -73,6 +73,22 @@ impl Action {
         }
     }
     fn enabled(self, e: &Editor) -> bool {
+        if e.is_video() {
+            if self.order().is_some() {
+                return e.selected.is_some();
+            }
+            if matches!(
+                self,
+                Self::FlattenAll
+                    | Self::FlattenSelected
+                    | Self::ResizeCanvas
+                    | Self::ResizeImage
+                    | Self::CanvasColor
+                    | Self::Template
+            ) {
+                return false;
+            }
+        }
         if e.shell.library {
             return false;
         }
@@ -111,8 +127,29 @@ impl Action {
 }
 
 impl Editor {
-    pub(super) fn tool_settings_ribbon(&mut self, ui: &mut egui::Ui, height: f32) {
+    pub(super) fn formatting_ribbon(&mut self, ui: &mut egui::Ui, height: f32) {
         use crate::ribbon::{divider, group};
+        if self.is_video() {
+            group(ui, "Motion", 132., height, |ui| {
+                ui.vertical(|ui| {
+                    if crate::video_editor::ui::button(ui, "Motion", "Animations", 124., false)
+                        .clicked()
+                    {
+                        self.video.tab = crate::video_editor::PropertyTab::Motion;
+                        self.video.object_tab = crate::video_editor::PropertyTab::Motion;
+                        self.shell.properties = true;
+                        self.shell.property_tab = crate::shell::PropertyTab::Tool;
+                    }
+                    if crate::video_editor::ui::button(ui, "Play", "Preview", 124., false).clicked()
+                    {
+                        let at = self.video_clip_start();
+                        self.video_seek(at);
+                        self.video_play();
+                    }
+                });
+            });
+            divider(ui, height);
+        }
         group(ui, "Font", 404.0, height, |ui| {
             self.show_quick_font_controls(ui)
         });
@@ -120,6 +157,8 @@ impl Editor {
         group(ui, "Justification", 70.0, height, |ui| {
             self.show_justification_grid(ui);
         });
+        divider(ui, height);
+        group(ui, "Text", 100., height, |ui| self.rich_text_buttons(ui));
         divider(ui, height);
         group(ui, "Alignment", 70.0, height, |ui| {
             self.show_layout_grid(ui, false);
@@ -146,7 +185,14 @@ impl Editor {
             self.settings_grid(ui, &[Action::Group, Action::Ungroup], 2);
         });
         divider(ui, height);
-        group(ui, "Objects", 66.0, height, |ui| {
+    }
+    pub(super) fn advanced_ribbon(&mut self, ui: &mut egui::Ui, height: f32) {
+        if self.is_video() {
+            self.video_advanced_ribbon(ui, height);
+            return;
+        }
+        use crate::ribbon::{divider, group};
+        group(ui, "Layers", 66.0, height, |ui| {
             self.settings_grid(ui, &[Action::FlattenSelected, Action::FlattenAll], 2);
         });
         divider(ui, height);
@@ -178,6 +224,44 @@ impl Editor {
                 ],
                 2,
             );
+        });
+        divider(ui, height);
+        group(ui, "Canvas behavior", 132., height, |ui| {
+            let enabled = self.session.document.canvas_behavior.dynamic_expansion;
+            if crate::ribbon::command_tile(
+                ui,
+                if enabled {
+                    "Expand canvas on"
+                } else {
+                    "Expand canvas off"
+                },
+                "Auto-expand canvas",
+                "Dynamically expand canvas to fit objects",
+                true,
+                enabled,
+                132.,
+                height,
+            )
+            .clicked()
+            {
+                self.execute(Command::SetCanvasExpansion { enabled: !enabled });
+            }
+        });
+        divider(ui, height);
+        group(ui, "Text recognition", 132., height, |ui| {
+            let r = crate::ribbon::command_tile(
+                ui,
+                "Grab Text",
+                "Grab Text",
+                "Grab Text from the visible canvas or selected area",
+                !self.ocr.busy(),
+                false,
+                132.,
+                height,
+            );
+            if r.clicked() {
+                self.grab_canvas_text(ui.ctx());
+            }
         });
         divider(ui, height);
         self.restore_ribbon(ui, height);
@@ -239,6 +323,25 @@ impl Editor {
             return;
         }
         if let Some(order) = action.order() {
+            if let Some(mut v) = self.session.document.video.clone() {
+                if let Some(track) = self
+                    .selected
+                    .and_then(|id| v.objects.get(&id).map(|t| t.track))
+                    && let Some(index) = v.tracks.iter().position(|id| *id == track)
+                {
+                    use capture_core::StackOrder as S;
+                    let next = match order {
+                        S::BringForward => index.saturating_sub(1),
+                        S::BringToFront => 0,
+                        S::SendBackward => (index + 1).min(v.tracks.len() - 1),
+                        S::SendToBack => v.tracks.len() - 1,
+                    };
+                    v.tracks.remove(index);
+                    v.tracks.insert(next, track);
+                    self.commit_video(v);
+                }
+                return;
+            }
             let ids: Vec<_> = self.selected_objects().iter().map(|a| a.id).collect();
             if ids.len() > 1 {
                 self.execute(Command::ArrangeMany { ids, order });
@@ -305,7 +408,7 @@ impl Editor {
                     }
                 })
                 .response
-                .on_hover_text("Canvas zoom · Ctrl+wheel to zoom · middle-drag to pan");
+                .on_hover_text("Canvas zoom · Configured zoom modifier + wheel to zoom · middle-drag to pan");
             },
         );
         if let Some(action) = action {
@@ -346,7 +449,7 @@ pub(super) fn command_icon(
     draw(ui.painter(), response.rect.center(), name, color);
     response.on_hover_text(name)
 }
-fn draw(p: &egui::Painter, c: egui::Pos2, name: &str, color: Color32) {
+pub(crate) fn draw(p: &egui::Painter, c: egui::Pos2, name: &str, color: Color32) {
     let at = |x, y| c + egui::vec2(x, y);
     let stroke = Stroke::new(1.4, color);
     let box_at = |x, y, w, h| egui::Rect::from_center_size(at(x, y), egui::vec2(w, h));
@@ -409,7 +512,7 @@ fn draw(p: &egui::Painter, c: egui::Pos2, name: &str, color: Color32) {
                 stroke,
             ));
         }
-        if name.starts_with("Flatten all") {
+        if name.starts_with("Flatten page") {
             p.line_segment([at(-9.0, 10.0), at(9.0, 10.0)], stroke);
         }
     } else if name.starts_with("Resize") {
@@ -689,6 +792,13 @@ mod tests {
         assert!(e.resize_image.take().is_some());
         click(&ctx, &mut e, Action::ResizeCanvas.label());
         assert!(e.resize_canvas.take().is_some());
+        click(&ctx, &mut e, Action::Clockwise.label());
+        assert!(e.image_transform.is_none());
+        assert_eq!(e.session.document.annotations.len(), original.len());
+        assert_eq!(e.session.document.annotations[0].rotation_degrees, 90.);
+        e.execute(Command::Undo);
+        assert_eq!(e.session.document.annotations, original);
+        e.select_only(None);
         click(&ctx, &mut e, Action::Clockwise.label());
         assert_eq!(
             e.image_transform.take(),

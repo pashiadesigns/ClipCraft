@@ -5,6 +5,24 @@ impl Editor {
         if count == 0 {
             return;
         }
+        if let Some(guide) = &self.session.document.guide {
+            let point = self
+                .selected_annotation()
+                .map(|a| a.start)
+                .or_else(|| {
+                    self.view
+                        .current_transform()
+                        .map(|t| t.image_point(t.viewport.center()))
+                })
+                .unwrap_or([0.; 2]);
+            let page = guide.page_at(point);
+            self.execute(Command::FlattenPage { page });
+            self.status = format!(
+                "Flattened page {}. Other pages stay editable; Undo restores this operation.",
+                page + 1
+            );
+            return;
+        }
         self.execute(Command::FlattenAll);
         if self.session.document.annotations.is_empty() {
             self.status = format!(
@@ -43,5 +61,72 @@ impl Editor {
         {
             self.flatten_all();
         }
+    }
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn editor_cut_then_flatten_and_undo_rebuilds_complete_page_display() {
+        use capture_core::{cut_out::CutAxis, guide_sections::Action, templates};
+        let ctx = egui::Context::default();
+        let mut e = crate::canvas::tests::editor(&ctx);
+        e.session = crate::Session::new(
+            templates::build("three-steps", "Guide", &[], templates::Scale::Fit).unwrap(),
+        )
+        .unwrap();
+        e.execute(Command::Guide {
+            action: Action::AddPage {
+                page: 0,
+                copy: true,
+            },
+        });
+        e.refresh_canvas_display(&ctx);
+        let original = e.session.document.clone();
+        e.execute(Command::CutOutPages {
+            axis: CutAxis::Horizontal,
+            start: 180,
+            end: 200,
+            page: 0,
+            all_pages: false,
+        });
+        e.refresh_canvas_display(&ctx);
+        let cut = e.session.document.clone();
+        e.flatten_all();
+        assert_eq!(e.session.document.guide.as_ref().unwrap().page_count(), 2);
+        e.refresh_canvas_display(&ctx);
+        e.execute(Command::Undo);
+        e.refresh_canvas_display(&ctx);
+        assert_eq!(
+            serde_json::to_value(&e.session.document).unwrap(),
+            serde_json::to_value(&cut).unwrap()
+        );
+        e.execute(Command::Undo);
+        e.refresh_canvas_display(&ctx);
+        assert_eq!(
+            serde_json::to_value(&e.session.document).unwrap(),
+            serde_json::to_value(&original).unwrap()
+        );
+        assert_eq!(
+            e.session.document.render().unwrap(),
+            original.render().unwrap()
+        );
+        // Switching projects after Undo must not substitute a stale saved snapshot.
+        e.history.active = Some("original".into());
+        e.switch_session(
+            crate::Session::new(crate::Document::blank(40, 40).unwrap()).unwrap(),
+            Some("other"),
+            None,
+        );
+        e.switch_session(
+            crate::Session::new(crate::Document::blank(40, 40).unwrap()).unwrap(),
+            Some("original"),
+            None,
+        );
+        assert_eq!(
+            serde_json::to_value(&e.session.document).unwrap(),
+            serde_json::to_value(&original).unwrap()
+        );
+        assert!(e.session.can_redo());
     }
 }

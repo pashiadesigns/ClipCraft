@@ -15,7 +15,7 @@ fn membership_copy_duplicate_lock_prune_reopen_and_undo_are_atomic() {
     let mut s = Session::new(d).unwrap();
     s.execute(Command::GroupObjects { ids: ids.clone() })
         .unwrap();
-    assert_eq!(s.document.version, 16);
+    assert_eq!(s.document.version, crate::MAX_PROJECT_VERSION);
     assert_eq!(s.document.group_members(ids[0]), ids);
     assert_eq!(s.document.render().unwrap(), output);
     let grouped = bytes(&s.document);

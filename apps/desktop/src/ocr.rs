@@ -9,6 +9,7 @@ pub(crate) struct Recognized {
     pub text: String,
     pub language: String,
     pub scaled: bool,
+    pub words: Vec<capture_core::privacy::Word>,
     spans: Vec<formatting::Span>,
 }
 #[derive(Default)]
@@ -28,6 +29,7 @@ impl State {
     pub(super) fn is_open(&self) -> bool {
         self.open
     }
+    #[cfg(test)]
     pub(super) fn present(&mut self, result: Result<Recognized, String>, open: bool, copy: bool) {
         self.result = Some(result);
         self.open = open;
@@ -38,6 +40,56 @@ impl State {
     }
 }
 impl Editor {
+    /// OCR receives the composited visible image, never an embedded original.
+    pub(super) fn grab_canvas_text(&mut self, ctx: &egui::Context) {
+        if self.ocr.busy() || !self.commit_text() {
+            return;
+        }
+        self.commit_property_preview();
+        let pixels = match self.ocr_pixels() {
+            Ok(pixels) => pixels,
+            Err(error) => {
+                self.status = error;
+                return;
+            }
+        };
+        let (tx, rx) = mpsc::channel();
+        self.ocr = State {
+            receiver: Some(rx),
+            open: true,
+            focus_pending: true,
+            ..Default::default()
+        };
+        let ctx = ctx.clone();
+        std::thread::spawn(move || {
+            let _ = tx.send(recognize(&pixels));
+            ctx.request_repaint();
+        });
+    }
+    pub(super) fn ocr_pixels(&self) -> Result<image::RgbaImage, String> {
+        let mut pixels = self.session.document.render().map_err(|e| e.to_string())?;
+        let objects = self.selected_objects();
+        if !objects.is_empty() {
+            let mut lo = [f32::INFINITY; 2];
+            let mut hi = [f32::NEG_INFINITY; 2];
+            for a in objects {
+                let (a, b) = a.bounds();
+                for i in 0..2 {
+                    lo[i] = lo[i].min(a[i]);
+                    hi[i] = hi[i].max(b[i]);
+                }
+            }
+            let size = [pixels.width(), pixels.height()];
+            let lo = [0, 1].map(|i| lo[i].floor().clamp(0., size[i] as f32) as u32);
+            let hi = [0, 1].map(|i| hi[i].ceil().clamp(0., size[i] as f32) as u32);
+            if hi[0] <= lo[0] || hi[1] <= lo[1] {
+                return Err("Select an area inside the canvas to recognize text.".into());
+            }
+            pixels = image::imageops::crop_imm(&pixels, lo[0], lo[1], hi[0] - lo[0], hi[1] - lo[1])
+                .to_image();
+        }
+        Ok(pixels)
+    }
     pub(super) fn show_ocr(&mut self, ctx: &egui::Context) {
         self.ocr.poll();
         self.ocr.show(ctx);
@@ -168,6 +220,7 @@ fn recognize_impl(
     let lines = result.Lines().map_err(|e| e.to_string())?;
     let mut text = String::new();
     let mut spans = Vec::new();
+    let mut geometry = Vec::new();
     let angle = result.TextAngle().and_then(|a| a.Value()).unwrap_or(0.);
     let scale = [
         image.width() as f32 / pixels.width() as f32,
@@ -181,6 +234,26 @@ fn recognize_impl(
         }
         let start = text.len();
         text.push_str(&line);
+        if angle.abs() < 2.
+            && let Ok(words) = source.Words()
+        {
+            for j in 0..words.Size().unwrap_or(0) {
+                if let Ok(word) = words.GetAt(j)
+                    && let (Ok(value), Ok(b)) = (word.Text(), word.BoundingRect())
+                {
+                    geometry.push(capture_core::privacy::Word {
+                        text: value.to_string(),
+                        line: i,
+                        bounds: [
+                            b.X * scale[0],
+                            b.Y * scale[1],
+                            b.Width * scale[0],
+                            b.Height * scale[1],
+                        ],
+                    });
+                }
+            }
+        }
         // Steps captions deliberately bypass this work. Full results infer one
         // representative appearance per line, with a bounded 64-line budget.
         if formatting
@@ -227,6 +300,7 @@ fn recognize_impl(
         text,
         language,
         scaled,
+        words: geometry,
         spans,
     })
 }
@@ -237,3 +311,18 @@ pub(crate) fn recognize(_image: &image::RgbaImage) -> Result<Recognized, String>
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+pub(crate) fn synthetic_recognized(words: Vec<capture_core::privacy::Word>) -> Recognized {
+    Recognized {
+        text: words
+            .iter()
+            .map(|w| w.text.as_str())
+            .collect::<Vec<_>>()
+            .join(" "),
+        language: "test".into(),
+        scaled: false,
+        words,
+        spans: vec![],
+    }
+}

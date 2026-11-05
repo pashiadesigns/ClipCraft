@@ -1,4 +1,4 @@
-fn legacy_editor(ctx: &egui::Context) -> Editor {
+fn grouped_editor(ctx: &egui::Context) -> Editor {
     let mut e = crate::canvas::tests::editor(ctx);
     for tool in capture_core::toolbar::default_favorites() {
         e.apply_toolbar_choice(Choice::FavoriteTool {
@@ -12,13 +12,10 @@ use super::*;
 use egui::{Event, Modifiers, PointerButton, Pos2};
 
 fn favorite_order() -> Vec<ToolId> {
-    capture_core::toolbar::default_order()
-        .into_iter()
-        .filter(|t| !matches!(t, ToolId::Favorites | ToolId::CutOut))
-        .collect()
+    capture_core::toolbar::default_order().into_iter().collect()
 }
 fn favorite_editor(ctx: &egui::Context) -> Editor {
-    let mut e = legacy_editor(ctx);
+    let mut e = grouped_editor(ctx);
     for tool in favorite_order() {
         e.apply_toolbar_choice(Choice::FavoriteTool {
             tool,
@@ -29,9 +26,9 @@ fn favorite_editor(ctx: &egui::Context) -> Editor {
 }
 
 #[test]
-fn overflow_context_favorites_and_combined_crop_choices_remain_interactive() {
+fn overflow_context_favorites_and_crop_remain_interactive() {
     let ctx = egui::Context::default();
-    let mut e = legacy_editor(&ctx);
+    let mut e = grouped_editor(&ctx);
     frame(&ctx, &mut e, vec![], 2, true);
     let layout = frame(&ctx, &mut e, vec![], 2, true);
     click(&ctx, &mut e, layout.more.center(), 2);
@@ -63,35 +60,18 @@ fn overflow_context_favorites_and_combined_crop_choices_remain_interactive() {
     });
     click(&ctx, &mut e, action.center(), 2);
     assert_eq!(e.quick_controls.tool_group(ToolId::Text), Group::Favorites);
-    // Put the combined button near the beginning of overflow to avoid scrolling.
-    for id in [ToolId::Text, ToolId::Move, ToolId::Crop] {
-        e.apply_toolbar_choice(Choice::FavoriteTool {
-            tool: id,
-            favorite: true,
-        });
-    }
     egui::Popup::close_all(&ctx);
-    frame(&ctx, &mut e, vec![], 2, true);
-    let layout = frame(&ctx, &mut e, vec![], 2, true);
-    click(&ctx, &mut e, layout.more.center(), 2);
-    frame(&ctx, &mut e, vec![], 2, true);
-    let layout = frame(&ctx, &mut e, vec![], 2, true);
-    click(&ctx, &mut e, pos(&layout.menu, ToolId::Crop), 2);
-    frame(&ctx, &mut e, vec![], 2, true);
-    frame(&ctx, &mut e, vec![], 2, true);
-    let choice = ctx.data(|d| {
-        d.get_temp::<egui::Rect>(egui::Id::unique(("canvas-tool-choice", ToolId::CutOut)))
-            .unwrap()
-    });
-    click(&ctx, &mut e, choice.center(), 2);
-    assert_eq!(e.quick_controls.canvas_tool(), ToolId::CutOut);
-    assert!(e.cut_out.is_some());
+    let count = TOOLS.len();
+    frame(&ctx, &mut e, vec![], count, true);
+    let layout = frame(&ctx, &mut e, vec![], count, true);
+    click(&ctx, &mut e, pos(&layout.tools, ToolId::Crop), count);
+    assert!(e.crop.is_some());
 }
 
 #[test]
 fn real_context_menu_adds_and_removes_favorites_without_editing_document() {
     let ctx = egui::Context::default();
-    let mut e = legacy_editor(&ctx);
+    let mut e = grouped_editor(&ctx);
     let before = serde_json::to_vec(&e.session.document).unwrap();
     for favorite in [true, false] {
         frame(&ctx, &mut e, vec![], 8, true);
@@ -138,52 +118,25 @@ fn real_context_menu_adds_and_removes_favorites_without_editing_document() {
 }
 
 #[test]
-fn crop_cut_button_opens_stacked_full_tools_and_only_choice_activates() {
+fn crop_and_cut_out_have_independent_direct_buttons() {
     let ctx = egui::Context::default();
-    let mut e = legacy_editor(&ctx);
-    e.apply_toolbar_choice(Choice::FavoriteTool {
-        tool: ToolId::Crop,
-        favorite: true,
-    });
-    frame(&ctx, &mut e, vec![], 4, true);
-    let layout = frame(&ctx, &mut e, vec![], 4, true);
-    let before = e.current_tool().id;
-    click(&ctx, &mut e, pos(&layout.tools, ToolId::Crop), 4);
-    assert_eq!(e.current_tool().id, before);
-    frame(&ctx, &mut e, vec![], 4, true);
-    let crop = ctx.data(|d| {
-        d.get_temp::<egui::Rect>(egui::Id::unique(("canvas-tool-choice", ToolId::Crop)))
-            .unwrap()
-    });
-    let choice = ctx.data(|d| {
-        d.get_temp::<egui::Rect>(egui::Id::unique(("canvas-tool-choice", ToolId::CutOut)))
-            .unwrap()
-    });
-    assert_eq!(crop.size(), egui::vec2(72.0, 58.0));
-    assert_eq!(choice.size(), crop.size());
-    assert!(choice.top() > crop.bottom());
-    click(&ctx, &mut e, choice.center(), 4);
-    assert_eq!(e.quick_controls.canvas_tool(), ToolId::CutOut);
-    assert!(e.cut_out.is_some());
-    e.choose_tool(TOOLS.iter().position(|t| t.id == ToolId::Text).unwrap());
-    let layout = frame(&ctx, &mut e, vec![], 4, true);
-    click(&ctx, &mut e, pos(&layout.tools, ToolId::Crop), 4);
-    assert_eq!(e.current_tool().id, ToolId::Text);
-    frame(&ctx, &mut e, vec![], 4, true);
-    let crop = ctx.data(|d| {
-        d.get_temp::<egui::Rect>(egui::Id::unique(("canvas-tool-choice", ToolId::Crop)))
-            .unwrap()
-    });
-    click(&ctx, &mut e, crop.center(), 4);
-    assert!(e.crop.is_some());
-    assert_eq!(e.quick_controls.canvas_tool(), ToolId::Crop);
+    let mut e = grouped_editor(&ctx);
+    let count = TOOLS.len();
+    for id in [ToolId::CutOut, ToolId::Crop] {
+        frame(&ctx, &mut e, vec![], count, true);
+        let layout = frame(&ctx, &mut e, vec![], count, true);
+        click(&ctx, &mut e, pos(&layout.tools, id), count);
+        assert_eq!(e.current_tool().id, id);
+        assert_eq!(e.crop.is_some(), id == ToolId::Crop);
+        assert_eq!(e.cut_out.is_some(), id == ToolId::CutOut);
+    }
     assert!(!e.session.can_undo());
 }
 
 #[test]
 fn cross_section_pointer_drag_leaves_membership_and_order_unchanged() {
     let ctx = egui::Context::default();
-    let mut e = legacy_editor(&ctx);
+    let mut e = grouped_editor(&ctx);
     e.apply_toolbar_choice(Choice::FavoriteTool {
         tool: ToolId::Text,
         favorite: true,
@@ -286,17 +239,17 @@ fn toolbar_catalog_has_unique_stable_ids_and_reordered_click_selects_correct_too
     let ctx = egui::Context::default();
     let mut editor = favorite_editor(&ctx);
     editor.apply_toolbar_choice(Choice::MoveTool {
-        tool: ToolId::Step,
+        tool: ToolId::Steps,
         before: Some(ToolId::Text),
     });
     frame(&ctx, &mut editor, vec![], 4, true);
     let layout = frame(&ctx, &mut editor, vec![], 4, true);
-    click(&ctx, &mut editor, pos(&layout.tools, ToolId::Step), 4);
+    click(&ctx, &mut editor, pos(&layout.tools, ToolId::Steps), 4);
     assert_eq!(editor.tool, Some(crate::Kind::Step));
-    assert_eq!(editor.current_tool().id, ToolId::Step);
+    assert_eq!(editor.current_tool().id, ToolId::Steps);
     editor.apply_toolbar_choice(Choice::MoveTool {
         tool: ToolId::Move,
-        before: Some(ToolId::Step),
+        before: Some(ToolId::Steps),
     });
     let layout = frame(&ctx, &mut editor, vec![], 2, true);
     click(&ctx, &mut editor, pos(&layout.tools, ToolId::Move), 2);
@@ -339,7 +292,7 @@ fn dragging_toolbar_reorders_only_on_release_without_selecting_or_editing() {
     frame(&ctx, &mut editor, vec![button(target, false)], 4, true);
     assert_eq!(
         &editor.quick_controls.toolbar_order()[..3],
-        &[ToolId::Shape, ToolId::Text, ToolId::Arrow]
+        &[ToolId::Shape, ToolId::Move, ToolId::Text]
     );
     assert_eq!(editor.tool, Some(crate::Kind::Arrow));
     assert_eq!(serde_json::to_vec(&editor.session.document).unwrap(), bytes);
@@ -366,7 +319,7 @@ fn actual_more_popup_drag_promotes_hidden_tool_even_at_last_slot_edge() {
     );
     // Line starts below the popup's visible clip. Exercise the real scroll
     // path before grabbing it instead of clicking an offscreen layout rect.
-    let inside = pos(&menu.menu, ToolId::Callout);
+    let inside = pos(&menu.menu, ToolId::Shape);
     frame(
         &ctx,
         &mut editor,
@@ -385,11 +338,11 @@ fn actual_more_popup_drag_promotes_hidden_tool_even_at_last_slot_edge() {
     );
     frame(&ctx, &mut editor, vec![], 2, true);
     let menu = frame(&ctx, &mut editor, vec![], 2, true);
-    let source = pos(&menu.menu, ToolId::Line);
+    let source = pos(&menu.menu, ToolId::Obfuscate);
     assert!(
         menu.menu
             .iter()
-            .find(|(id, _)| *id == ToolId::Line)
+            .find(|(id, _)| *id == ToolId::Obfuscate)
             .unwrap()
             .1
             .interact_rect
@@ -424,13 +377,13 @@ fn actual_more_popup_drag_promotes_hidden_tool_even_at_last_slot_edge() {
     frame(&ctx, &mut editor, vec![button(target, false)], 2, true);
     assert_eq!(
         &editor.quick_controls.toolbar_order()[..2],
-        &[ToolId::Text, ToolId::Line]
+        &[ToolId::Move, ToolId::Obfuscate]
     );
     assert_eq!(editor.tool, Some(crate::Kind::Arrow));
     let layout = frame(&ctx, &mut editor, vec![], 2, true);
-    assert!(layout.tools.iter().any(|(id, _)| *id == ToolId::Line));
-    click(&ctx, &mut editor, pos(&layout.tools, ToolId::Line), 2);
-    assert_eq!(editor.tool, Some(crate::Kind::Line));
+    assert!(layout.tools.iter().any(|(id, _)| *id == ToolId::Obfuscate));
+    click(&ctx, &mut editor, pos(&layout.tools, ToolId::Obfuscate), 2);
+    assert_eq!(editor.tool, Some(crate::Kind::Blur));
 }
 
 #[test]

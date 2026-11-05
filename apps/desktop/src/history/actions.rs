@@ -202,7 +202,7 @@ impl Editor {
         let mut action = None;
         response.context_menu(|ui| {
             action = menu(ui, available, busy);
-            if ui.button("Previous versions…").clicked() {
+            if crate::controls::menu_action(ui, "Previous versions…").clicked() {
                 self.start_library_scan(ui.ctx(), Some(entry.id.clone()));
                 ui.close();
             }
@@ -319,7 +319,7 @@ impl Editor {
         };
         let mut submit = false;
         let mut cancel = false;
-        egui::Modal::new(egui::Id::unique((
+        let modal = crate::controls::Modal::new(egui::Id::unique((
             "library_entry_dialog",
             dialog.action.label(),
         )))
@@ -362,7 +362,7 @@ impl Editor {
             } else if dialog.action == Action::Rename {
                 ui.label("Name");
                 let input = ui.add(
-                    egui::TextEdit::singleline(&mut dialog.name)
+                    crate::unicode_input::TextEdit::singleline(&mut dialog.name)
                         .desired_width(f32::INFINITY)
                         .char_limit(120),
                 );
@@ -370,7 +370,7 @@ impl Editor {
             } else {
                 ui.label("Tags (separate with commas)");
                 let input = ui.add(
-                    egui::TextEdit::singleline(&mut dialog.tags)
+                    crate::unicode_input::TextEdit::singleline(&mut dialog.tags)
                         .desired_width(f32::INFINITY)
                         .char_limit(1200),
                 );
@@ -401,6 +401,7 @@ impl Editor {
             }
         });
         cancel |= ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape));
+        cancel |= modal.should_close();
         if submit {
             match self.submit_history_dialog(&dialog) {
                 Ok(()) => return,

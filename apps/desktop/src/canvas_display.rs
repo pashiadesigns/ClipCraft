@@ -5,7 +5,7 @@ use capture_core::display::{DisplayList, Viewport};
 
 #[derive(Default)]
 pub(super) struct CanvasDisplay {
-    scene: crate::guide_display::Scene,
+    pub(super) scene: crate::guide_display::Scene,
     list: Option<DisplayList>,
     texture: Option<egui::TextureHandle>,
     key: Option<Viewport>,
@@ -40,6 +40,10 @@ impl Editor {
     }
 
     pub(super) fn refresh_canvas_display(&mut self, ctx: &egui::Context) {
+        if self.is_video() {
+            self.needs_render = false;
+            return;
+        }
         if !self.shell.raster_preview && self.guide_scene_document().is_some() {
             self.texture = None;
             self.display.list = None;
@@ -82,8 +86,11 @@ impl Editor {
     }
 
     pub(super) fn paint_canvas_display(&mut self, ui: &egui::Ui, transform: Transform) {
+        if self.paint_video(ui, transform) {
+            return;
+        }
         let visible = transform.image.intersect(transform.viewport);
-        if !visible.is_positive() {
+        if !visible.is_positive() && !self.session.document.canvas_behavior.allow_overflow {
             return;
         }
         if !self.shell.raster_preview
@@ -162,6 +169,9 @@ impl Editor {
             if self.shell.annotations_hidden {
                 d.annotations.clear();
             }
+            let d =
+                capture_core::redaction_labels::decorate(d.clone(), self.shell.redaction_labels)
+                    .unwrap_or(d);
             crate::guide_display::supported(&d).then_some((d, Some(plan.offset)))
         } else {
             let d = self.canvas_document();

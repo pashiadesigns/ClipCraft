@@ -7,8 +7,10 @@ mod blue_surround_preview;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum RibbonTab {
-    Home,
-    ToolSettings,
+    Clip,
+    Insert,
+    Formatting,
+    Advanced,
     Export,
 }
 
@@ -29,8 +31,8 @@ pub(super) fn icon(
         })
         .inner;
     r.widget_info(|| egui::WidgetInfo::selected(egui::Role::Button, enabled, selected, tooltip));
-    let color = if name == "Record" {
-        Color32::from_rgb(235, 62, 67)
+    let color = if enabled && matches!(name, "Record" | "Capture Clip" | "Capture Video") {
+        Color32::from_rgb(235, 65, 76)
     } else if enabled {
         match name {
             "Save As" | "Copy" => Color32::from_rgb(87, 162, 239),
@@ -49,6 +51,90 @@ pub(super) fn draw_icon(p: &egui::Painter, c: egui::Pos2, name: &str, color: Col
     let stroke = Stroke::new(1.4, color);
     let rect = |x, y, w, h| egui::Rect::from_center_size(at(x, y), egui::vec2(w, h));
     match name {
+        "Expand canvas on" | "Expand canvas off" => {
+            p.rect_stroke(rect(0., 0., 12., 10.), 2., stroke, egui::StrokeKind::Inside);
+            let direction = if name == "Expand canvas on" { 1. } else { -1. };
+            for sign in [-1., 1.] {
+                let outer = at(sign * 11., sign * 9.);
+                let inner = at(sign * 7., sign * 5.);
+                if direction > 0. {
+                    p.arrow(inner, outer - inner, stroke);
+                } else {
+                    p.arrow(outer, inner - outer, stroke);
+                }
+            }
+        }
+        "Recording" | "Voiceover" | "Narration" | "Audio effects" => crate::video_editor::ui::icon(
+            p,
+            egui::Rect::from_center_size(c, egui::vec2(24., 24.)),
+            name,
+            color,
+        ),
+        "Capture Clip" | "Capture Video" => {
+            crate::icons::draw_scaled(p, rect(0., 0., 24., 24.), name, color, 0.65)
+        }
+        "Video setup" => {
+            p.rect_stroke(
+                rect(0., -1., 20., 14.),
+                2.,
+                stroke,
+                egui::StrokeKind::Inside,
+            );
+            p.line_segment([at(-4., 9.), at(4., 9.)], stroke);
+            p.line_segment([at(0., 6.), at(0., 9.)], stroke);
+            p.arrow(at(-4., 2.), egui::vec2(8., -6.), stroke);
+        }
+        "Tags" => {
+            p.add(egui::Shape::closed_line(
+                vec![
+                    at(-8., -7.),
+                    at(1., -7.),
+                    at(9., 1.),
+                    at(1., 9.),
+                    at(-8., 0.),
+                ],
+                stroke,
+            ));
+            p.circle_stroke(at(-3., -2.), 1.8, stroke);
+        }
+        "Dates" => {
+            p.rect_stroke(rect(0., 1., 18., 16.), 2., stroke, egui::StrokeKind::Inside);
+            for x in [-4., 4.] {
+                p.line_segment([at(x, -9.), at(x, -4.)], stroke);
+            }
+            p.line_segment([at(-8., -2.), at(8., -2.)], stroke);
+            for x in [-4., 1., 5.] {
+                p.circle_filled(at(x, 3.), 1., color);
+            }
+        }
+        "Applications" => {
+            p.rect_stroke(rect(0., 0., 18., 16.), 2., stroke, egui::StrokeKind::Inside);
+            p.line_segment([at(-8., -3.), at(8., -3.)], stroke);
+            p.circle_filled(at(-5., -5.5), 0.8, color);
+        }
+        "Websites" => {
+            p.circle_stroke(c, 9., stroke);
+            p.add(egui::Shape::ellipse_stroke(c, egui::vec2(4., 9.), stroke));
+            p.line_segment([at(-8., 0.), at(8., 0.)], stroke);
+        }
+        "Pin" => {
+            p.add(egui::Shape::closed_line(
+                vec![
+                    at(-4., -8.),
+                    at(4., -8.),
+                    at(3., -2.),
+                    at(6., 2.),
+                    at(-6., 2.),
+                    at(-3., -2.),
+                ],
+                stroke,
+            ));
+            p.line_segment([at(0., 2.), at(0., 9.)], stroke);
+        }
+        "Search" => {
+            p.circle_stroke(at(-2., -2.), 6., stroke);
+            p.line_segment([at(3., 3.), at(9., 9.)], stroke);
+        }
         "Image" => {
             p.rect_stroke(rect(0., 0., 18., 15.), 2., stroke, egui::StrokeKind::Inside);
             p.circle_filled(at(4., -3.), 1.5, color);
@@ -75,18 +161,6 @@ pub(super) fn draw_icon(p: &egui::Painter, c: egui::Pos2, name: &str, color: Col
                 );
                 p.line_segment([at(2., y), at(9., y)], stroke);
             }
-        }
-        "Video" => {
-            p.rect_stroke(
-                rect(-2., 0., 13., 13.),
-                2.,
-                stroke,
-                egui::StrokeKind::Inside,
-            );
-            p.add(egui::Shape::line(
-                vec![at(5., -3.), at(10., -6.), at(10., 6.), at(5., 3.)],
-                stroke,
-            ));
         }
         "Tools" => {
             p.rect_stroke(rect(0., 2., 16., 11.), 2., stroke, egui::StrokeKind::Inside);
@@ -116,6 +190,13 @@ pub(super) fn draw_icon(p: &egui::Painter, c: egui::Pos2, name: &str, color: Col
                 egui::StrokeKind::Inside,
             );
             p.line_segment([at(-5.0, 4.0), at(3.0, -4.0)], stroke);
+        }
+        "Template" => {
+            p.rect_stroke(rect(0., 0., 18., 21.), 2., stroke, egui::StrokeKind::Inside);
+            p.line_segment([at(-5., -6.), at(5., -6.)], stroke);
+            p.rect_stroke(rect(-3., 0., 5., 5.), 0., stroke, egui::StrokeKind::Inside);
+            p.line_segment([at(2., 0.), at(6., 0.)], stroke);
+            p.line_segment([at(-5., 6.), at(5., 6.)], stroke);
         }
         "Save As" => {
             p.rect_stroke(
@@ -284,7 +365,7 @@ pub(super) fn draw_icon(p: &egui::Painter, c: egui::Pos2, name: &str, color: Col
     }
 }
 #[allow(clippy::too_many_arguments)]
-fn command_tile(
+pub(super) fn command_tile(
     ui: &mut egui::Ui,
     glyph: &str,
     label: &str,
@@ -305,18 +386,36 @@ fn command_tile(
         "Copy" | "Save As" => Color32::from_rgb(87, 162, 239),
         "Revert" => Color32::from_rgb(238, 172, 87),
         "Switch tools" => Color32::from_rgb(182, 151, 242),
+        "Capture Clip" | "Capture Video" => Color32::from_rgb(235, 65, 76),
         _ => Color32::from_rgb(133, 181, 198),
     };
-    draw_icon(
-        ui.painter(),
-        r.rect.center_top() + egui::vec2(0.0, height * 0.34),
-        glyph,
-        if enabled {
-            color
-        } else {
-            color.gamma_multiply(0.5)
-        },
-    );
+    if matches!(glyph, "Capture Clip" | "Capture Video") {
+        crate::icons::draw_scaled(
+            ui.painter(),
+            egui::Rect::from_center_size(
+                r.rect.center_top() + egui::vec2(0., height * 0.36),
+                egui::vec2(48., 48.),
+            ),
+            glyph,
+            if enabled {
+                color
+            } else {
+                color.gamma_multiply(0.5)
+            },
+            1.6,
+        );
+    } else {
+        draw_icon(
+            ui.painter(),
+            r.rect.center_top() + egui::vec2(0.0, height * 0.34),
+            glyph,
+            if enabled {
+                color
+            } else {
+                color.gamma_multiply(0.5)
+            },
+        );
+    }
     ui.painter().text(
         r.rect.center_bottom() - egui::vec2(0.0, 9.0),
         egui::Align2::CENTER_BOTTOM,
@@ -329,6 +428,9 @@ fn command_tile(
         },
     );
     r.widget_info(|| egui::WidgetInfo::selected(egui::Role::Button, enabled, selected, label));
+    #[cfg(test)]
+    ui.ctx()
+        .data_mut(|d| d.insert_temp(egui::Id::unique(("command-tile", label)), r.rect));
     r.on_hover_text(tip)
 }
 
@@ -414,7 +516,7 @@ pub(super) fn divider(ui: &mut egui::Ui, height: f32) {
 }
 
 impl Editor {
-    pub(super) fn ribbon_tabs(&mut self, ui: &mut egui::Ui) -> [Response; 3] {
+    pub(super) fn ribbon_tabs(&mut self, ui: &mut egui::Ui) -> [Response; 5] {
         crate::tabs::group(ui, |ui| {
             ui.horizontal(|ui| {
                 if crate::tabs::tab(ui, "File", false, 76.0).clicked() {
@@ -432,8 +534,10 @@ impl Editor {
                 }
 
                 [
-                    (RibbonTab::Home, "Tools", 88.0),
-                    (RibbonTab::ToolSettings, "Advanced", 112.0),
+                    (RibbonTab::Clip, "Clip", 76.),
+                    (RibbonTab::Insert, "Insert", 88.0),
+                    (RibbonTab::Formatting, "Formatting", 118.0),
+                    (RibbonTab::Advanced, "Advanced", 112.0),
                     (RibbonTab::Export, "Export", 90.0),
                 ]
                 .map(|(tab, label, width)| {
@@ -487,25 +591,21 @@ impl Editor {
                     buttons.push(("Save As", r));
                     let r = icon(
                         ui,
-                        "Capture",
-                        "Open Capture controller",
-                        crate::CAPTURE_ENABLED,
+                        "Capture Clip",
+                        "Capture Clip · Use current Clip settings",
+                        crate::CAPTURE_ENABLED
+                            && self.capture_result.is_none()
+                            && !self.capture_requested,
                         false,
                         egui::vec2(28.0, 26.0),
                     );
                     if r.clicked() {
-                        self.request_action(FileAction::Capture, &ctx);
+                        self.request_action(
+                            FileAction::StartCapture(self.quick_controls.capture_settings()),
+                            &ctx,
+                        );
                     }
                     buttons.push(("Capture", r));
-                    let r = icon(
-                        ui,
-                        "Record",
-                        "Record video — planned",
-                        false,
-                        false,
-                        egui::vec2(28.0, 26.0),
-                    );
-                    buttons.push(("Record", r));
                     let r = icon(
                         ui,
                         "Undo",
@@ -542,7 +642,7 @@ impl Editor {
             });
         buttons
     }
-    pub(super) fn show_ribbon(&mut self, ui: &mut egui::Ui) -> [Response; 3] {
+    pub(super) fn show_ribbon(&mut self, ui: &mut egui::Ui) -> [Response; 5] {
         egui::Panel::top("workspace_ribbon")
             .show_separator_line(false)
             .frame(egui::Frame::new().fill(crate::shell::SURROUND))
@@ -553,8 +653,8 @@ impl Editor {
                     .inner_margin(egui::Margin::symmetric(8, 2))
                     .show(ui, |ui| ui.horizontal(|ui| self.ribbon_tabs(ui)).inner)
                     .inner;
+                self.show_ui_button(ui);
                 if self.shell.preview_ui {
-                    self.show_ui_button(ui);
                     return tabs;
                 }
                 if self.shell.library {
@@ -580,17 +680,17 @@ impl Editor {
                             .inner_margin(egui::Margin::symmetric(8, 4))
                             .show(ui, |ui| {
                                 ui.set_min_width(ui.available_width());
-                                let height = if self.shell.badges { 76. } else { 70. };
+                                let height = 70.;
                                 let bounds = ui.available_rect_before_wrap();
-                                let setup = self.shell.ribbon_tab == RibbonTab::ToolSettings;
+                                let setup = self.shell.ribbon_tab == RibbonTab::Advanced && !self.is_video();
                                 let mut setup_rect = egui::Rect::from_min_max(
-                                    egui::pos2(bounds.right() - 104., bounds.top() - 1.),
-                                    egui::pos2(bounds.right() + 4., bounds.top() + height + 1.),
+                                    egui::pos2(bounds.left(), bounds.top()),
+                                    egui::pos2(bounds.left() + 108., bounds.top() + height),
                                 );
                                 let scroll_width = bounds.width() - if setup { 112. } else { 0. };
                                 let scrolled = ui.scope_builder(
                                     egui::UiBuilder::new().max_rect(egui::Rect::from_min_size(
-                                        bounds.min,
+                                        bounds.min + egui::vec2(if setup {112.} else {0.},0.),
                                         egui::vec2(scroll_width, height + 27.),
                                     )),
                                     |ui| {
@@ -605,12 +705,14 @@ impl Editor {
                                         ui.horizontal(|ui| {
                                             ui.spacing_mut().item_spacing.x = 3.0;
                                             let height =
-                                                if self.shell.badges { 76.0 } else { 70.0 };
+                                                70.0;
                                             match self.shell.ribbon_tab {
-                                                RibbonTab::Home => self.home_ribbon(ui, height),
-                                                RibbonTab::ToolSettings => {
+                                                RibbonTab::Clip => self.clip_ribbon(ui, height),
+                                                RibbonTab::Advanced => self.advanced_ribbon(ui, height),
+                                                RibbonTab::Insert => self.insert_ribbon(ui, height),
+                                                RibbonTab::Formatting => {
                                                     ui.add_enabled_ui(!self.shell.library, |ui| {
-                                                        self.tool_settings_ribbon(ui, height)
+                                                        self.formatting_ribbon(ui, height)
                                                     });
                                                 }
                                                 RibbonTab::Export => self.export_ribbon(ui, height),
@@ -619,7 +721,7 @@ impl Editor {
                                     })
                                     },
                                 );
-                                setup_rect.max.y = scrolled.response.rect.bottom() + 1.;
+                                setup_rect.max.y = scrolled.response.rect.bottom();
                                 let _scroll = scrolled.inner;
                                 if setup {
                                     ui.scope_builder(
@@ -648,9 +750,11 @@ impl Editor {
                     })
                     .inner;
                 let active = tabs[match self.shell.ribbon_tab {
-                    RibbonTab::Home => 0,
-                    RibbonTab::ToolSettings => 1,
-                    RibbonTab::Export => 2,
+                    RibbonTab::Clip => 0,
+                    RibbonTab::Insert => 1,
+                    RibbonTab::Formatting => 2,
+                    RibbonTab::Advanced => 3,
+                    RibbonTab::Export => 4,
                 }]
                 .rect;
                 ui.painter().rect_filled(
@@ -665,7 +769,11 @@ impl Editor {
             })
             .inner
     }
-    fn home_ribbon(&mut self, ui: &mut egui::Ui, height: f32) {
+    fn insert_ribbon(&mut self, ui: &mut egui::Ui, height: f32) {
+        if self.is_video() {
+            self.video_insert_ribbon(ui, height);
+            return;
+        }
         let ctx = ui.ctx().clone();
         let available = ui.available_width();
         group(ui, "Clipboard", 151.0, height, |ui| {
@@ -703,7 +811,7 @@ impl Editor {
                     ui,
                     "Cut",
                     "Cut selected objects or pixels · Ctrl+X",
-                    self.selected_pixels().is_some() || !self.selected_objects().is_empty(),
+                    !self.selected_objects().is_empty(),
                     false,
                 )
                 .clicked()
@@ -807,10 +915,8 @@ impl Editor {
             };
             group(ui, section.label(), w, height, |ui| {
                 if range.is_empty() {
-                    let (r, response) = ui.allocate_exact_size(
-                        egui::vec2(84.0, if self.shell.badges { 76.0 } else { 58.0 }),
-                        egui::Sense::hover(),
-                    );
+                    let (r, response) =
+                        ui.allocate_exact_size(egui::vec2(84.0, 58.0), egui::Sense::hover());
                     crate::icons::draw(ui.painter(), r, "Favorites", Color32::WHITE);
                     response.on_hover_text("Right-click any tool and choose Add to Favorites.");
                 } else {
@@ -828,7 +934,7 @@ impl Editor {
                     crate::split_button::dropdown_sized(
                         ui,
                         "More tools",
-                        egui::vec2(24.0, if self.shell.badges { 76.0 } else { 58.0 }),
+                        egui::vec2(24.0, 58.0),
                         |ui| self.draggable_tools_menu(ui, visible),
                     )
                     .response
@@ -858,6 +964,10 @@ impl Editor {
         (visible, last, more)
     }
     fn export_ribbon(&mut self, ui: &mut egui::Ui, height: f32) {
+        if self.is_video() {
+            self.video_export_ribbon(ui, height);
+            return;
+        }
         group(ui, "Image", 204.0, height, |ui| {
             if command_tile(
                 ui,
@@ -889,7 +999,7 @@ impl Editor {
             }
         });
         divider(ui, height);
-        group(ui, "Editable project", 126.0, height, |ui| {
+        group(ui, "Editable project", 256.0, height, |ui| {
             if command_tile(
                 ui,
                 "Save As",
@@ -903,6 +1013,20 @@ impl Editor {
             .clicked()
             {
                 self.save(true);
+            }
+            if command_tile(
+                ui,
+                "Template",
+                "Save layout as template",
+                "Save current layout as a reusable local template",
+                true,
+                false,
+                126.0,
+                height,
+            )
+            .clicked()
+            {
+                self.begin_save_template();
             }
         });
         divider(ui, height);

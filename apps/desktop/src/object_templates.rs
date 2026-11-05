@@ -2,8 +2,25 @@ use crate::{Editor, Kind, egui};
 use capture_core::object_styles::ObjectStyle;
 
 impl Editor {
+    fn remembered_brush_preset<'a>(&'a self, preset: &'a ObjectStyle) -> &'a ObjectStyle {
+        if matches!(preset.kind, Kind::Pen | Kind::Highlighter) {
+            self.presets
+                .drawing_styles
+                .iter()
+                .rev()
+                .find(|s| s.same_variant(preset))
+                .or_else(|| {
+                    self.quick_controls
+                        .drawing_variant(preset.kind, preset.highlighter_rect)
+                })
+                .unwrap_or(preset)
+        } else {
+            preset
+        }
+    }
+
     pub(super) fn drawing_rectangle_highlighter(&self) -> bool {
-        self.quick_styles
+        self.presets
             .drawing_styles
             .iter()
             .rev()
@@ -12,11 +29,15 @@ impl Editor {
             .is_some_and(|s| s.highlighter_rect)
     }
     pub(super) fn remember_annotation_style(&mut self, annotation: &crate::Annotation) {
+        if annotation.focus.is_some() {
+            self.shell.focus.remember(annotation);
+            return;
+        }
         if let Ok(style) = ObjectStyle::from_annotation("Last used".into(), annotation) {
-            self.quick_styles
+            self.presets
                 .drawing_styles
                 .retain(|s| !s.same_variant(&style));
-            self.quick_styles.drawing_styles.push(style.clone());
+            self.presets.drawing_styles.push(style.clone());
             self.quick_controls.remember_drawing_style(style);
             if self.tool == Some(annotation.kind) {
                 self.restore_drawing_defaults(self.tool);
@@ -25,16 +46,20 @@ impl Editor {
     }
     pub(super) fn restore_drawing_defaults(&mut self, kind: Option<Kind>) {
         if let Some(style) = kind.and_then(|k| {
-            self.quick_styles
+            self.presets
                 .drawing_styles
                 .iter()
                 .rev()
-                .find(|s| s.kind == k)
-                .or_else(|| self.quick_controls.drawing_style(k))
+                .find(|s| s.kind == k && s.focus.is_none())
+                .or_else(|| {
+                    self.quick_controls
+                        .drawing_style(k)
+                        .filter(|s| s.focus.is_none())
+                })
         }) {
             self.color = style.color[..3].try_into().unwrap();
             self.width = style.width;
-            self.quick_styles.alpha = style.color[3];
+            self.presets.alpha = style.color[3];
         }
     }
     pub(super) fn apply_object_template(&mut self, style: &ObjectStyle, custom: bool) {
@@ -67,18 +92,18 @@ impl Editor {
                 }
             }
         }
-        self.quick_styles
+        self.presets
             .drawing_styles
             .retain(|s| !s.same_variant(style));
-        self.quick_styles.drawing_styles.push(style.clone());
+        self.presets.drawing_styles.push(style.clone());
         self.quick_controls.remember_drawing_style(style.clone());
         self.color = style.color[..3].try_into().unwrap();
         self.width = style.width;
-        self.quick_styles.alpha = style.color[3];
+        self.presets.alpha = style.color[3];
         if self.tool.is_some() {
             self.tool = Some(style.kind);
         }
-        self.quick_styles.template_chosen = Some((style.kind, style.name.clone(), custom));
+        self.presets.template_chosen = Some((style.kind, style.name.clone(), custom));
         self.status = format!(
             "{} applied. New objects use this style; Undo restores the selection.",
             style.name
@@ -86,12 +111,16 @@ impl Editor {
     }
     pub(super) fn styled_new_annotation(&self, annotation: crate::Annotation) -> crate::Annotation {
         let Some(style) = self
-            .quick_styles
+            .presets
             .drawing_styles
             .iter()
             .rev()
-            .find(|s| s.kind == annotation.kind)
-            .or_else(|| self.quick_controls.drawing_style(annotation.kind))
+            .find(|s| s.kind == annotation.kind && s.focus.is_none())
+            .or_else(|| {
+                self.quick_controls
+                    .drawing_style(annotation.kind)
+                    .filter(|s| s.focus.is_none())
+            })
         else {
             return annotation;
         };
@@ -101,7 +130,7 @@ impl Editor {
                     self.color[0],
                     self.color[1],
                     self.color[2],
-                    self.quick_styles.alpha,
+                    self.presets.alpha,
                 ];
                 styled.width = self.width;
                 styled
@@ -116,18 +145,18 @@ impl Editor {
             self.status = "Select one object of the saved style's type to update it.".into();
             return;
         };
-        let Some(store) = &mut self.quick_styles.templates else {
+        let Some(store) = &mut self.presets.templates else {
             return;
         };
         match ObjectStyle::from_annotation(name.into(), &source).and_then(|style| store.save(style))
         {
             Ok(()) => {
-                self.quick_styles.template_error.clear();
-                self.quick_styles.template_chosen = Some((kind, name.into(), true));
+                self.presets.template_error.clear();
+                self.presets.template_chosen = Some((kind, name.into(), true));
                 self.status =
                     format!("Updated {name} from the selection. Existing objects are unchanged.");
             }
-            Err(error) => self.quick_styles.template_error = error.to_string(),
+            Err(error) => self.presets.template_error = error.to_string(),
         }
     }
     pub(super) fn save_selected_template(&mut self) -> bool {
@@ -140,10 +169,10 @@ impl Editor {
             .selected_annotation()
             .unwrap_or_else(|| objects[0].clone());
         let a = &selected;
-        let Some(store) = &mut self.quick_styles.templates else {
+        let Some(store) = &mut self.presets.templates else {
             return false;
         };
-        let name = if self.quick_styles.template_name.trim().is_empty() {
+        let name = if self.presets.template_name.trim().is_empty() {
             let mut n = 1;
             loop {
                 let name = format!("{:?} {n}", a.kind);
@@ -157,18 +186,18 @@ impl Editor {
                 n += 1;
             }
         } else {
-            self.quick_styles.template_name.trim().to_owned()
+            self.presets.template_name.trim().to_owned()
         };
         match ObjectStyle::from_annotation(name.clone(), a).and_then(|s| store.save(s)) {
             Ok(()) => {
-                self.quick_styles.template_error.clear();
-                self.quick_styles.template_chosen = Some((a.kind, name.clone(), true));
+                self.presets.template_error.clear();
+                self.presets.template_chosen = Some((a.kind, name.clone(), true));
                 self.status =
                     format!("Saved {name}. Select matching objects and click its tile to apply.");
                 true
             }
             Err(error) => {
-                self.quick_styles.template_error = error.to_string();
+                self.presets.template_error = error.to_string();
                 false
             }
         }
@@ -181,14 +210,14 @@ impl Editor {
             .map(|a| vec![a])
             .unwrap_or_else(|| objects.clone());
         let saved: Vec<_> = self
-            .quick_styles
+            .presets
             .templates
             .as_ref()
             .map(|store| {
                 store
                     .entries()
                     .iter()
-                    .filter(|s| s.accepts(kind))
+                    .filter(|s| s.focus.is_none() && s.accepts(kind))
                     .cloned()
                     .collect()
             })
@@ -211,6 +240,8 @@ impl Editor {
             .id_salt("object_templates")
             .max_height(214.0)
             .show(ui, |ui| {
+                let saved_columns = crate::style_tile::columns(ui.available_width(), false);
+                let columns = crate::style_tile::columns(ui.available_width(), true);
                 if !saved.is_empty() {
                     ui.small("Your styles");
                     egui::Grid::new("saved_templates")
@@ -229,28 +260,34 @@ impl Editor {
                                 }
                                 response.context_menu(|ui| {
                                     if ui
-                                        .add_enabled(
+                                        .add_enabled_ui(
                                             objects.len() == 1 && objects[0].kind == style.kind,
-                                            egui::Button::new("Update from selection"),
+                                            |ui| {
+                                                crate::controls::menu_action(
+                                                    ui,
+                                                    "Update from selection",
+                                                )
+                                            },
                                         )
+                                        .inner
                                         .clicked()
                                     {
                                         update = Some((style.kind, style.name.clone()));
                                         ui.close();
                                     }
-                                    if ui.button("Delete style").clicked() {
+                                    if crate::controls::menu_action(ui, "Delete style").clicked() {
                                         remove = Some((style.kind, style.name.clone()));
                                         ui.close();
                                     }
                                 });
-                                if index % 2 == 1 {
+                                if (index + 1) % saved_columns == 0 {
                                     ui.end_row();
                                 }
                             }
                         });
                     ui.separator();
                 }
-                for row in groups.chunks(2) {
+                for row in groups.chunks(columns) {
                     ui.horizontal_top(|ui| {
                         ui.spacing_mut().item_spacing.x = 5.0;
                         for group in row {
@@ -260,23 +297,11 @@ impl Editor {
                                 .iter()
                                 .find(|s| Some(s.name.as_str()) == last)
                                 .unwrap_or(&group.styles[0]);
-                            let remembered = if kind == Kind::Highlighter {
-                                self.quick_styles
-                                    .drawing_styles
-                                    .iter()
-                                    .find(|s| s.same_variant(remembered))
-                                    .or_else(|| {
-                                        self.quick_controls
-                                            .drawing_variant(kind, remembered.highlighter_rect)
-                                    })
-                                    .unwrap_or(remembered)
-                            } else {
-                                remembered
-                            };
+                            let remembered = self.remembered_brush_preset(remembered);
                             let enabled = objects.iter().all(|a| remembered.accepts(a.kind));
                             ui.add_enabled_ui(enabled, |ui| {
-                                crate::split_button::show(ui, |ui| {
-                                    let response = crate::style_tile::tile(
+                                crate::split_button::preset(ui, is_active(remembered), |ui| {
+                                    let response = crate::style_tile::split_tile(
                                         ui,
                                         remembered,
                                         group.label,
@@ -340,18 +365,18 @@ impl Editor {
             self.update_saved_template(kind, &name);
         }
         if let Some((kind, name)) = remove
-            && let Some(store) = &mut self.quick_styles.templates
+            && let Some(store) = &mut self.presets.templates
         {
             match store.remove(kind, &name) {
                 Ok(()) => {
-                    self.quick_styles.template_error.clear();
+                    self.presets.template_error.clear();
                     self.status = format!("Deleted {name}. Existing objects are unchanged.");
                 }
-                Err(e) => self.quick_styles.template_error = e.to_string(),
+                Err(e) => self.presets.template_error = e.to_string(),
             }
         }
-        if !self.quick_styles.template_error.is_empty() {
-            ui.colored_label(egui::Color32::LIGHT_RED, &self.quick_styles.template_error);
+        if !self.presets.template_error.is_empty() {
+            ui.colored_label(egui::Color32::LIGHT_RED, &self.presets.template_error);
         }
     }
 }
@@ -376,9 +401,8 @@ mod tests {
         e.select_only(Some(1));
         e.tool = Some(Kind::Step);
         let dir = tempfile::tempdir().unwrap();
-        e.quick_styles.templates =
-            Some(capture_core::object_styles::Store::open(dir.path()).unwrap());
-        e.quick_styles.template_name = "My marker".into();
+        e.presets.templates = Some(capture_core::object_styles::Store::open(dir.path()).unwrap());
+        e.presets.template_name = "My marker".into();
         e.save_selected_template();
         let style = capture_core::object_styles::groups(Kind::Step)
             .remove(0)
@@ -400,7 +424,7 @@ mod tests {
         let drawn = e.styled_new_annotation(next.clone());
         assert_eq!(drawn.color, style.color);
         assert_eq!(drawn.text.as_ref().unwrap().content, "2");
-        e.quick_styles
+        e.presets
             .templates
             .as_mut()
             .unwrap()
@@ -456,8 +480,7 @@ mod tests {
         let expected = e.session.document.annotations.clone();
         e.select_only(Some(1));
         let dir = tempfile::tempdir().unwrap();
-        e.quick_styles.templates =
-            Some(capture_core::object_styles::Store::open(dir.path()).unwrap());
+        e.presets.templates = Some(capture_core::object_styles::Store::open(dir.path()).unwrap());
         e.save_selected_template();
         assert_eq!(e.session.document.annotations, expected);
         let store = capture_core::object_styles::Store::open(dir.path()).unwrap();
@@ -472,4 +495,37 @@ mod tests {
         e.apply_object_template(&store.entries()[0], true);
         assert_eq!(e.session.document.annotations, expected);
     }
+}
+
+#[cfg(test)]
+#[test]
+fn penlighter_primary_presets_keep_separate_width_and_opacity() {
+    let ctx = egui::Context::default();
+    let mut e = crate::canvas::tests::editor(&ctx);
+    e.tool = Some(Kind::Pen);
+    for (kind, width, alpha) in [(Kind::Pen, 7, 190), (Kind::Highlighter, 25, 65)] {
+        e.tool = Some(kind);
+        e.width = width;
+        e.presets.alpha = alpha;
+        let example = e.new_annotation(kind, [30., 30.], [100., 60.]);
+        e.remember_annotation_style(&example);
+    }
+    for kind in [Kind::Pen, Kind::Highlighter, Kind::Pen, Kind::Highlighter] {
+        let groups = capture_core::object_styles::groups(kind);
+        let preset = groups
+            .iter()
+            .flat_map(|g| &g.styles)
+            .find(|s| s.kind == kind && !s.highlighter_rect)
+            .unwrap();
+        let restored = e.remembered_brush_preset(preset).clone();
+        e.apply_object_template(&restored, false);
+        let expected = if kind == Kind::Pen {
+            (7, 190)
+        } else {
+            (25, 65)
+        };
+        assert_eq!((e.width, e.presets.alpha), expected);
+        assert_eq!(e.tool, Some(kind));
+    }
+    assert!(e.session.document.annotations.is_empty());
 }

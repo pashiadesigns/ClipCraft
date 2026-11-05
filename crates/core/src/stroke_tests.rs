@@ -6,10 +6,13 @@ fn stroke(kind: Kind) -> Annotation {
         step_outline: None,
         line_style: None,
         shadow: None,
-        analysis: None,
+
+        focus: None,
+
         highlighter_rect: false,
         group: None,
         rotation_degrees: 0.0,
+        mirror_x: false,
         id: 1,
         kind,
         start: [20.0, 20.0],
@@ -31,7 +34,7 @@ fn stroke(kind: Kind) -> Annotation {
 fn rectangle_highlighter_is_editable_translucent_and_survives_all_transfers() {
     let original = stroke(Kind::Highlighter);
     let style = crate::object_styles::groups(Kind::Highlighter)
-        .remove(1)
+        .remove(2)
         .styles
         .remove(3);
     let mut a = style.apply(&original).unwrap();
@@ -46,7 +49,7 @@ fn rectangle_highlighter_is_editable_translucent_and_survives_all_transfers() {
         annotation: a.clone(),
     })
     .unwrap();
-    assert_eq!(s.document.version, 17);
+    assert_eq!(s.document.version, crate::MAX_PROJECT_VERSION);
     let output = s.document.render().unwrap();
     assert_eq!(output.get_pixel(60, 40).0, a.color);
     assert!(output.pixels().any(|p| p[3] > 0 && p[3] < a.color[3]));
@@ -122,9 +125,9 @@ fn highlighter_variants_validate_and_remember_independent_defaults() {
         p.choose(Choice::DrawingStyle(style)).unwrap();
     }
     let p: Preferences = serde_json::from_str(&serde_json::to_string(&p).unwrap()).unwrap();
-    assert_eq!(p.drawing_styles.len(), 2);
+    assert_eq!(p.drawing_styles.len(), 3);
     assert!(!p.drawing_styles[0].highlighter_rect);
-    assert!(p.drawing_styles[1].highlighter_rect);
+    assert!(p.drawing_styles[2].highlighter_rect);
     let mut s = Session::new(Document::blank(100, 100).unwrap()).unwrap();
     s.execute(Command::Add {
         annotation: stroke(Kind::Highlighter),

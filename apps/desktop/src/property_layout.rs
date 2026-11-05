@@ -1,14 +1,32 @@
 use crate::{Annotation, Editor, Kind, egui, shell::PropertyTab};
 use egui::{Color32, Stroke};
 
-/// Full-width bars and inset-free rules match the supplied properties references.
+/// Legacy callers use the same open, left-aligned headings as the current
+/// Properties groups. No filled bar or pair of enclosing rules.
 pub(super) fn section(ui: &mut egui::Ui, title: &str) -> egui::Rect {
     let rect = section_frame(ui);
+    let glyph = match title {
+        "Presets" => "Presets",
+        "Vector icon" => "Icons",
+        "Image frame" | "Image frame styles" => "Image",
+        "Cut Out Properties" => "Crop",
+        "Text" | "Character spacing" => "Text",
+        _ => "Style",
+    };
+    crate::video_editor::ui::icon(
+        ui.painter(),
+        egui::Rect::from_center_size(
+            rect.left_center() + egui::vec2(9., 0.),
+            egui::vec2(17., 17.),
+        ),
+        glyph,
+        crate::panel_ui::MUTED,
+    );
     ui.painter().text(
-        rect.center(),
-        egui::Align2::CENTER_CENTER,
+        rect.left_center() + egui::vec2(27., 0.),
+        egui::Align2::LEFT_CENTER,
         title,
-        egui::FontId::proportional(15.0),
+        crate::panel_ui::font(13.),
         Color32::WHITE,
     );
     rect
@@ -58,9 +76,6 @@ pub(super) fn help_at(ui: &mut egui::Ui, center: egui::Pos2, title: &str, help: 
 
 pub(super) fn tool_help(kind: Option<Kind>) -> &'static str {
     match kind {
-        Some(Kind::Simplify) => {
-            "Analyze drawn area detects text and interface details as one editable group. Resize the group's corners to update its coverage live; release commits one Undo. Expand it in Objects or double-click a block to edit it separately. Disable Analyze drawn area for manual blocks. Original pixels remain intact; background repair is not included."
-        }
         Some(Kind::Redact) => {
             "Draw an opaque black cover. PNG export and Copy All flatten the covering pixels. Editable projects retain the original image; share the flattened output for redaction."
         }
@@ -68,7 +83,7 @@ pub(super) fn tool_help(kind: Option<Kind>) -> &'static str {
             "Drag a rectangle, then move or resize it with its handles. Intensity updates live. These are visual effects: use Redact for an opaque cover. Editable projects retain the original image."
         }
         Some(Kind::Eraser) => {
-            "Drag to erase to transparency; release to keep, Undo to restore. Strokes remain editable. Alt + mouse wheel adjusts the brush width. Smooth brush edges are available; brush presets and hard edges are planned."
+            "Drag to erase to transparency; release to keep, Undo to restore. Choose a circle preset for brush size. Strokes remain editable. The configured stroke-size modifier + mouse wheel adjusts the brush width."
         }
         Some(Kind::Text | Kind::Callout) => TEXT_HELP,
         Some(Kind::Step) => {
@@ -78,13 +93,13 @@ pub(super) fn tool_help(kind: Option<Kind>) -> &'static str {
             "Drag to draw; hold Shift for equal proportions. Handles resize the object live; corner nodes round supported shapes. Double-click to edit text. Shift-click selects multiple objects for shared formatting."
         }
         Some(Kind::Arrow | Kind::Line) => {
-            "Drag to draw; hold Shift to constrain the angle. Alt + mouse wheel adjusts the stroke width. Drag endpoints to resize, or the middle diamond to bend. Choose circular or Bézier curves, endpoint shapes/sizes and line patterns. Alt-drag copies an object; Shift-click selects multiple objects for shared formatting."
+            "Drag to draw; hold Shift to constrain the angle. The configured stroke-size modifier + mouse wheel adjusts the stroke width. Drag endpoints to resize, or the middle diamond to bend. Choose circular or Bézier curves, endpoint shapes/sizes and line patterns. The configured duplicate-drag modifier copies an object; Shift-click selects multiple objects for shared formatting."
         }
         Some(Kind::Highlighter) => {
-            "Choose Highlighter pen for freehand strokes or Highlighter rectangle for a filled region. Alt + mouse wheel adjusts pen width. Drag to create; Shift constrains a rectangle to a square. Color and opacity update live. Release commits one Undo."
+            "Choose Highlighter pen for freehand strokes or Highlighter box for a filled region. The configured stroke-size modifier + mouse wheel adjusts pen width. Drag to create; Shift constrains a rectangle to a square. Color and opacity update live. Release commits one Undo."
         }
         Some(Kind::Pen) => {
-            "Drag to draw a stroke. Alt + mouse wheel adjusts the stroke width. Select a stroke to change its color, width or opacity live. Shift-click selects multiple objects for shared formatting."
+            "Drag to draw a stroke. The configured stroke-size modifier + mouse wheel adjusts the stroke width. Select a stroke to change its color, width or opacity live. Shift-click selects multiple objects for shared formatting."
         }
         _ => {
             "Click an object to select it; Shift-click toggles multiple selection. Drag objects or their handles. Arrow keys nudge; Shift moves 10 pixels. Same-type selections share formatting; mixed selections move together."
@@ -95,16 +110,10 @@ pub(super) fn tool_help(kind: Option<Kind>) -> &'static str {
 pub(super) const TEXT_HELP: &str = "Drag a box and type directly. Double-click text in an existing object to edit it. Font and justification changes apply live; Shift-click selects multiple objects for shared formatting. Advanced controls text fitting, wrapping, padding and opacity.";
 
 fn section_frame(ui: &mut egui::Ui) -> egui::Rect {
+    ui.add_space(10.);
     let (rect, _) =
-        ui.allocate_exact_size(egui::vec2(ui.available_width(), 30.0), egui::Sense::hover());
-    ui.painter()
-        .rect_filled(rect, 0.0, Color32::from_rgb(60, 67, 69));
-    for y in [rect.top(), rect.bottom()] {
-        ui.painter().line_segment(
-            [egui::pos2(rect.left(), y), egui::pos2(rect.right(), y)],
-            Stroke::new(1.0, Color32::from_gray(104)),
-        );
-    }
+        ui.allocate_exact_size(egui::vec2(ui.available_width(), 24.0), egui::Sense::hover());
+    ui.add_space(4.);
     rect
 }
 
@@ -139,14 +148,14 @@ pub(super) fn text_section_with_back(ui: &mut egui::Ui) -> egui::Response {
             rect.center().y,
         ),
         egui::Align2::CENTER_CENTER,
-        "Tool Properties",
-        egui::FontId::proportional(13.0),
+        "Properties",
+        crate::panel_ui::font(13.),
         Color32::WHITE,
     );
     help_at(
         ui,
         rect.right_center() - egui::vec2(15.0, 0.0),
-        "Tool Properties",
+        "Properties",
         TEXT_HELP,
     );
     #[cfg(test)]
@@ -203,34 +212,80 @@ pub(super) fn slider(ui: &mut egui::Ui, label: &str, slider: egui::Slider<'_>) -
 }
 
 pub(super) fn swatch(ui: &mut egui::Ui, label: &str, color: &mut [u8; 4]) {
+    let preview = match label {
+        "Outline" => crate::color_widgets::Preview::Outline,
+        "Text" => crate::color_widgets::Preview::Text,
+        "Stroke" => crate::color_widgets::Preview::Stroke,
+        "Highlight" => crate::color_widgets::Preview::Highlight,
+        _ => crate::color_widgets::Preview::Fill,
+    };
+    swatch_preview(ui, label, color, preview);
+}
+pub(super) fn swatch_preview(
+    ui: &mut egui::Ui,
+    label: &str,
+    color: &mut [u8; 4],
+    preview: crate::color_widgets::Preview,
+) {
     ui.push_id(label, |ui| {
         ui.vertical(|ui| {
-            ui.set_width(56.0);
+            ui.set_width(swatch_width(ui));
             ui.with_layout(egui::Layout::top_down(egui::Align::Min), |ui| {
-                ui.label(label);
-                let preview = match label {
-                    "Outline" => crate::color_widgets::Preview::Outline,
-                    "Text" => crate::color_widgets::Preview::Text,
-                    "Stroke" => crate::color_widgets::Preview::Stroke,
-                    _ => crate::color_widgets::Preview::Fill,
-                };
+                ui.add(
+                    egui::Label::new(egui::RichText::new(label).size(if swatch_width(ui) < 44. {
+                        11.
+                    } else {
+                        13.
+                    }))
+                    .truncate(),
+                );
                 crate::color_widgets::property_rgba(ui, color, preview).on_hover_text(label);
             });
         });
+    });
+}
+pub(super) fn swatch_width(ui: &egui::Ui) -> f32 {
+    ui.ctx()
+        .data(|d| d.get_temp::<f32>(egui::Id::unique("property-color-row-width")))
+        .unwrap_or(56.)
+}
+pub(super) fn color_row(ui: &mut egui::Ui, count: usize, body: impl FnOnce(&mut egui::Ui)) {
+    let key = egui::Id::unique("property-color-row-width");
+    let old = ui.ctx().data(|d| d.get_temp::<f32>(key));
+    let width = ((ui.available_width()
+        - ui.spacing().item_spacing.x * (count.saturating_sub(1)) as f32)
+        / count.max(1) as f32)
+        .clamp(34., 56.);
+    ui.ctx().data_mut(|d| d.insert_temp(key, width));
+    ui.horizontal_top(body);
+    ui.ctx().data_mut(|d| {
+        d.remove::<f32>(key);
+        if let Some(old) = old {
+            d.insert_temp(key, old);
+        }
     });
 }
 
 impl Editor {
     pub(super) fn property_tabs(&mut self, ui: &mut egui::Ui) -> [egui::Response; 2] {
         let old = self.shell.property_tab;
-        let result = crate::tabs::group(ui, |ui| {
+        let result = crate::panel_ui::rail(ui, |ui| {
             ui.horizontal(|ui| {
+                ui.spacing_mut().item_spacing.x = 0.;
+                let width = ui.available_width() * 0.5;
                 [
-                    (PropertyTab::Tool, "Tool Properties", 146.0),
-                    (PropertyTab::Objects, "Objects", 90.0),
+                    (PropertyTab::Tool, "Properties"),
+                    (PropertyTab::Objects, "Layers"),
                 ]
-                .map(|(tab, label, width)| {
-                    let r = crate::tabs::tab(ui, label, self.shell.property_tab == tab, width);
+                .map(|(tab, label)| {
+                    let r = crate::panel_ui::tab(
+                        ui,
+                        label,
+                        label,
+                        self.shell.property_tab == tab,
+                        width,
+                        true,
+                    );
                     if r.clicked() {
                         self.shell.property_tab = tab;
                     }
@@ -251,13 +306,8 @@ impl Editor {
 pub(super) fn annotation_properties(
     ui: &mut egui::Ui,
     a: &mut Annotation,
-    badges: bool,
     canvas: [u32; 2],
 ) -> bool {
-    if a.kind == Kind::Simplify {
-        ui.horizontal(|ui| swatch(ui, "Color", &mut a.color));
-        slider(ui, "Opacity", egui::Slider::new(&mut a.color[3], 0..=255));
-    }
     crate::obscure_properties::show(ui, a);
     if a.kind == Kind::Image
         || (a.is_image_frame() && crate::image_frame::content_mode(ui.ctx(), a.id))
@@ -298,18 +348,19 @@ pub(super) fn annotation_properties(
         slider(ui, "Opacity", egui::Slider::new(&mut a.color[3], 0..=255));
     }
     if let Some(style) = &mut a.callout {
-        ui.horizontal_top(|ui| {
+        color_row(ui, 5, |ui| {
             swatch(ui, "Fill", &mut style.fill);
             swatch(ui, "Outline", &mut style.outline);
             crate::text_properties::color_swatch(ui, &mut a.text, a.color);
         });
         divider(ui);
         slider(ui, "Outline size", egui::Slider::new(&mut a.width, 1..=32));
+        crate::line_properties::outline(ui, a);
     }
     if a.kind == Kind::Step {
         let mut outline = a.step_outline.clone().unwrap_or_default();
         let before_color = outline.color;
-        ui.horizontal(|ui| {
+        color_row(ui, 5, |ui| {
             swatch(ui, "Fill", &mut a.color);
             swatch(ui, "Outline", &mut outline.color);
             let foreground = capture_core::steps::foreground(a).color;
@@ -336,7 +387,7 @@ pub(super) fn annotation_properties(
         if slider(
             ui,
             "Marker size",
-            egui::Slider::new(&mut diameter, 24.0..=160.0),
+            egui::Slider::new(&mut diameter, 1.0..=16384.0).logarithmic(true),
         )
         .changed()
             && let Ok(resized) = capture_core::steps::resized_marker(a, diameter, canvas)
@@ -346,21 +397,23 @@ pub(super) fn annotation_properties(
         if let Some(style) = &mut a.text {
             ui.horizontal(|ui| {
                 let label = ui.label("Step label");
-                ui.add(
-                    egui::TextEdit::singleline(&mut style.content)
-                        .desired_width(100.0)
+                ui.add_sized(
+                    [90., 28.],
+                    crate::unicode_input::TextEdit::singleline(&mut style.content)
+                        .align(egui::Align2::CENTER_CENTER)
+                        .desired_width(90.0)
                         .char_limit(8),
                 )
                 .labelled_by(label.id);
             });
         }
     } else if !a.is_image_frame() {
-        crate::text_properties::show(ui, a, badges);
+        crate::text_properties::show(ui, a);
     }
     if a.kind != Kind::Text && !a.is_image_frame() {
         crate::text_properties::outline_controls(ui, a);
     }
-    if matches!(a.kind, Kind::Rectangle | Kind::Callout | Kind::Simplify) {
+    if matches!(a.kind, Kind::Rectangle | Kind::Callout) {
         let max = a.max_corner_radius();
         slider(
             ui,
@@ -372,7 +425,7 @@ pub(super) fn annotation_properties(
     crate::shadow_properties::show(ui, a);
     let requested = rotation_controls(ui, a).is_some_and(|r| r[0].changed() || r[1].clicked());
     if a.kind != Kind::Step && !a.is_image_frame() {
-        crate::text_properties::advanced(ui, a, badges);
+        crate::text_properties::advanced(ui, a);
     }
     requested
 }

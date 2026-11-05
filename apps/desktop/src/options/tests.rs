@@ -88,6 +88,7 @@ fn key(key: egui::Key, modifiers: egui::Modifiers) -> egui::Event {
 fn recording_conflicts_and_cancel_are_isolated_from_document_and_capture() {
     let ctx = egui::Context::default();
     crate::shell::configure(&ctx);
+    crate::text_layout::configure(&ctx);
     ctx.style_mut_of(egui::Theme::Dark, |s| s.animation_time = 0.);
     let mut e = crate::canvas::tests::editor(&ctx);
     e.shell.backstage = Some(crate::backstage::Page::Options);
@@ -187,12 +188,20 @@ fn options_tabs_and_keybinds_fit_compact_and_wide_views() {
         for (tab, label) in [(Tab::General, "General"), (Tab::Keybinds, "Keybinds")] {
             let ctx = egui::Context::default();
             crate::shell::configure(&ctx);
+            crate::text_layout::configure(&ctx);
             ctx.style_mut_of(egui::Theme::Dark, |s| s.animation_time = 0.);
             let mut e = crate::canvas::tests::editor(&ctx);
             e.shell.backstage = Some(crate::backstage::Page::Options);
             e.options.tab = tab;
             let first = frame(&ctx, &mut e, width, vec![]);
             let o = frame(&ctx, &mut e, width, vec![]);
+            let content = ctx
+                .data(|d| d.get_temp::<egui::Rect>(egui::Id::unique("options-content-bounds")))
+                .unwrap();
+            assert!(
+                content.width() <= 681.,
+                "Settings fields must remain compact at {width}: {content:?}"
+            );
             for label in ["General", "Keybinds"] {
                 assert!(text(&o, label).max.x < width);
             }
@@ -205,6 +214,61 @@ fn options_tabs_and_keybinds_fit_compact_and_wide_views() {
             }
         }
     }
+}
+
+#[test]
+fn keybind_categories_keep_navigation_fixed_and_restore_their_scroll_positions() {
+    let ctx = egui::Context::default();
+    crate::shell::configure(&ctx);
+    crate::text_layout::configure(&ctx);
+    ctx.style_mut_of(egui::Theme::Dark, |s| s.animation_time = 0.);
+    let mut e = crate::canvas::tests::editor(&ctx);
+    e.shell.backstage = Some(crate::backstage::Page::Options);
+    e.options.tab = Tab::Keybinds;
+    e.options.category = 2;
+    let first = frame(&ctx, &mut e, 980., vec![]);
+    let before = frame(&ctx, &mut e, 980., vec![]);
+    let nav = text(&before, "Functions");
+    let footer = text(&before, "Save shortcuts");
+    let state = |ctx: &egui::Context| {
+        ctx.data(|d| {
+            d.get_temp::<(egui::Rect, egui::Vec2)>(egui::Id::unique("keybinds-scroll"))
+                .unwrap()
+        })
+    };
+    let (rect, _) = state(&ctx);
+    let mut input = vec![
+        egui::Event::PointerMoved(rect.center()),
+        egui::Event::MouseWheel {
+            unit: egui::MouseWheelUnit::Point,
+            delta: egui::vec2(0., -550.),
+            modifiers: egui::Modifiers::NONE,
+            phase: egui::TouchPhase::Move,
+            source: egui::MouseWheelSource::Unknown,
+        },
+    ];
+    frame(&ctx, &mut e, 980., std::mem::take(&mut input));
+    let output = frame(&ctx, &mut e, 980., vec![]);
+    let offset = state(&ctx).1.y;
+    assert!(offset > 0.);
+    assert_eq!(text(&output, "Functions"), nav);
+    assert_eq!(text(&output, "Save shortcuts"), footer);
+    assert!(rect.top() > nav.bottom() && rect.bottom() < footer.top());
+    if let Ok(root) = std::env::var("CLIPCRAFT_HEADLESS_KEYBINDS_DIR") {
+        dump_meshes(&ctx, &root, "Functions-scrolled", first, output);
+    }
+    e.options.category = 0;
+    frame(
+        &ctx,
+        &mut e,
+        980.,
+        vec![egui::Event::PointerMoved(nav.center())],
+    );
+    assert_eq!(state(&ctx).1.y, 0.);
+    e.options.category = 2;
+    frame(&ctx, &mut e, 980., vec![]);
+    assert!(state(&ctx).1.y >= offset);
+    assert!(!e.capture_requested && !e.session.can_undo());
 }
 #[test]
 fn global_keybinds_work_from_options_but_wait_for_recording_and_ocr_dialogs() {
@@ -244,12 +308,14 @@ fn global_capture_dispatch_from_options_and_stale_input_focus_reaches_capture_re
 }
 
 #[test]
-fn inset_clear_has_its_own_hit_target_and_shortcut_columns_keep_a_gutter() {
+fn inset_clear_has_its_own_hit_target_and_category_rows_do_not_overlap() {
     let ctx = egui::Context::default();
     crate::shell::configure(&ctx);
+    crate::text_layout::configure(&ctx);
     let mut e = crate::canvas::tests::editor(&ctx);
     e.shell.backstage = Some(crate::backstage::Page::Options);
     e.options.tab = Tab::Keybinds;
+    e.options.category = 1;
     frame(&ctx, &mut e, 980., vec![]);
     frame(&ctx, &mut e, 980., vec![]);
     let rects = |name| {
@@ -261,11 +327,11 @@ fn inset_clear_has_its_own_hit_target_and_shortcut_columns_keep_a_gutter() {
             .unwrap()
         })
     };
-    let (whole, record, clear) = rects("Arrow");
-    let (next, _, _) = rects("Undo");
+    let (whole, record, clear) = rects("Lines");
+    let (next, _, _) = rects("Text");
     assert!(whole.contains_rect(clear));
     assert!(record.right() <= clear.left());
-    assert!(next.left() - whole.right() >= 20.);
+    assert!(next.top() >= whole.bottom() + 1.);
     click(&ctx, &mut e, clear);
     assert!(e.options.recording.is_none());
     assert!(
@@ -275,7 +341,7 @@ fn inset_clear_has_its_own_hit_target_and_shortcut_columns_keep_a_gutter() {
             .unwrap()
             .editor
             .get(capture_core::editor_keybinds::Action::Tool(
-                capture_core::toolbar::ToolId::Arrow
+                capture_core::toolbar::ToolId::Lines
             ))
             .is_none()
     );

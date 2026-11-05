@@ -29,7 +29,7 @@ For a portable package, write notes at `releases/<version>.json`, commit the
 exact source, then run:
 
 ```powershell
-./scripts/package-github.ps1 -Version 0.1.0-preview.1
+./scripts/package-github.ps1 -Version 1.0.0-beta.1
 ```
 
 The script checks source cleanliness, runs tests, builds binaries, checks PE
@@ -44,8 +44,10 @@ Windows SDK. Optional PNG/ICO regeneration uses `sharp` and
 headless mesh-image inspection uses Python, Pillow and NumPy with
 `scripts/render-egui-fixture.py`.
 
-Legacy website self-hosting scripts expect archived ZIPs and a host-specific
-configuration excluded from Git. GitHub release builds need only the checked-in
-feature/release inventories, not a running website or private host settings.
+The release source excludes the separate website and internal review tracker.
+The application build requires neither. Screenshots use synthetic test content.
 
-Portable builds include `install-start-menu.ps1` for per-user Editor and Capture Controller shortcuts. From a source checkout, pass `-Executable <path-to-ClipCraft.exe>`. No elevation or application launch is needed. The shortcuts use `--editor` and `--capture-controller` plus embedded icon resources 101 and 102. These arguments override the saved startup window for that launch; a compatible running app is reused.
+Portable builds include `install-start-menu.ps1` for one ClipCraft shortcut.
+Run `scripts/build-msi.ps1 -Package <clean-payload-folder> -Output <new.msi>
+-Version 1.0.0-beta.1` to build an unsigned per-user MSI with the pinned WiX toolset.
+The script downloads and verifies its build tool; it never installs the application.

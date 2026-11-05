@@ -13,30 +13,37 @@ use std::{
 };
 
 pub const MAX_PIXELS: u64 = 25_000_000;
-pub const MAX_PROJECT_VERSION: u32 = 30;
+pub const MAX_PROJECT_VERSION: u32 = 31;
 mod arrow;
 pub mod bitmap;
 pub mod callout;
+pub mod canvas_behavior;
 pub mod canvas_expansion;
 mod canvas_size;
 pub mod capture_options;
 pub mod captured_cursor;
 pub mod clipboard_payload;
-mod crop;
+pub mod crop;
 pub mod display;
 pub mod editor_keybinds;
 pub mod ellipse;
 pub mod export;
-mod flood_fill;
+pub mod focus;
 pub mod groups;
 pub mod guide_sections;
 pub mod history;
+pub mod icon_library;
 pub mod image_frame;
-mod image_transform;
+pub mod image_transform;
 pub mod keybinds;
 mod obscure;
-pub mod stamps;
+pub mod privacy;
+pub mod project_file;
+pub mod redaction_labels;
+pub mod reusable_presets;
+pub mod scroll_capture;
 pub mod templates;
+pub mod video;
 pub use image_transform::ImageTransform;
 #[cfg(test)]
 mod eraser_tests;
@@ -52,6 +59,7 @@ mod callout_tests;
 #[cfg(test)]
 mod canvas_size_tests;
 pub mod cut_out;
+mod flatten_pages;
 #[cfg(test)]
 mod flatten_tests;
 pub mod layout_selection;
@@ -59,8 +67,6 @@ pub mod line_style;
 pub mod multi_selection;
 pub mod object_state;
 pub mod object_styles;
-pub mod pixel_mask;
-pub mod pixels;
 pub mod polygon;
 pub mod quick_preferences;
 #[cfg(test)]
@@ -78,7 +84,6 @@ pub mod shadow;
 mod shape_fill;
 #[cfg(test)]
 mod shape_text_tests;
-pub mod simplify;
 pub mod snapping;
 #[cfg(test)]
 mod stacking_tests;
@@ -108,7 +113,6 @@ pub type Result<T> = std::result::Result<T, Error>;
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Kind {
-    Simplify,
     Image,
     Arrow,
     Line,
@@ -128,9 +132,8 @@ pub enum Kind {
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Annotation {
-    /// Invisible bounds of a live automatic Simplify group.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub analysis: Option<Box<simplify::Analysis>>,
+    pub focus: Option<focus::Focus>,
     #[serde(default, skip_serializing_if = "text::is_false")]
     pub highlighter_rect: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -144,6 +147,9 @@ pub struct Annotation {
     /// Clockwise orientation around the local body center. Geometry stays editable.
     #[serde(default, skip_serializing_if = "rounded::is_zero")]
     pub rotation_degrees: f32,
+    /// Reflect local content before rotation, without changing the source image or paths.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub mirror_x: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub group: Option<u64>,
     pub id: u64,
@@ -167,6 +173,8 @@ pub struct Annotation {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Document {
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub video: Option<video::editor::Project>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub guide: Option<guide_sections::Layout>,
     pub version: u32,
     pub width: u32,
@@ -185,6 +193,11 @@ pub struct Document {
     /// Absent in older projects; never infer it from transparent image pixels.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub auto_canvas_base: Option<[u32; 4]>,
+    #[serde(
+        default,
+        skip_serializing_if = "canvas_behavior::CanvasBehavior::is_default"
+    )]
+    pub canvas_behavior: canvas_behavior::CanvasBehavior,
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
     pub object_states: object_state::ObjectStates,
     pub annotations: Vec<Annotation>,
@@ -208,13 +221,15 @@ impl Document {
     pub fn blank(width: u32, height: u32) -> Result<Self> {
         validate_dimensions(width, height)?;
         Ok(Self {
-            version: 1,
+            video: None,
+            version: MAX_PROJECT_VERSION,
             width,
             height,
             source_png: String::new(),
             source_size: None,
             raster: None,
             auto_canvas_base: None,
+            canvas_behavior: Default::default(),
             guide: None,
             object_states: Default::default(),
             annotations: vec![],
@@ -226,13 +241,15 @@ impl Document {
         let mut data = Cursor::new(Vec::new());
         image.write_to(&mut data, ImageFormat::Png)?;
         Ok(Self {
-            version: 1,
+            video: None,
+            version: MAX_PROJECT_VERSION,
             width: image.width(),
             height: image.height(),
             source_png: STANDARD.encode(data.into_inner()),
             source_size: None,
             raster: None,
             auto_canvas_base: None,
+            canvas_behavior: Default::default(),
             guide: None,
             object_states: Default::default(),
             annotations: vec![],
@@ -280,182 +297,22 @@ impl Document {
         Self::from_image(image::open(path)?.into_rgba8())
     }
 
-    /// Promote documents that use newer editable annotation properties.
-    /// Old applications reject these projects instead of silently losing rules.
+    /// Current development format; old projects are intentionally unsupported.
     pub fn promote_features(&mut self) {
-        if self
-            .guide
-            .as_ref()
-            .and_then(|g| g.pages.as_ref())
-            .is_some_and(|p| !p.setup.is_empty())
-        {
-            self.version = self.version.max(30);
-        }
-        if self
-            .guide
-            .as_ref()
-            .and_then(|g| g.pages.as_ref())
-            .is_some_and(|p| p.horizontal)
-        {
-            self.version = self.version.max(29);
-        }
-        if self.guide.as_ref().is_some_and(|g| g.pages.is_some())
-            || self
-                .annotations
-                .iter()
-                .any(|a| a.is_shape() && a.image.is_some())
-        {
-            self.version = self.version.max(27);
-        }
-        if self.guide.as_ref().is_some_and(|g| {
-            g.sections
-                .iter()
-                .any(|s| s.kind == guide_sections::SectionKind::Blank)
-        }) {
-            self.version = self.version.max(26);
-        }
-        if self
-            .annotations
-            .iter()
-            .any(|a| a.image.as_ref().is_some_and(|b| b.is_placeholder()))
-        {
-            self.version = self.version.max(25);
-        }
-        if self
-            .annotations
-            .iter()
-            .any(|a| a.image.as_ref().is_some_and(|b| b.stamp_name().is_some()))
-        {
-            self.version = self.version.max(23);
-        }
-        if self
-            .annotations
-            .iter()
-            .any(|a| a.image.as_ref().is_some_and(|b| b.vector().is_some()))
-        {
-            self.version = self.version.max(22);
-        }
-        if self.annotations.iter().any(|a| {
-            a.text
-                .as_ref()
-                .is_some_and(|t| matches!(t.font, text::TextFont::System(_)))
-        }) {
-            self.version = self.version.max(21);
-        }
-        if self.annotations.iter().any(|a| a.analysis.is_some()) {
-            self.version = self.version.max(20);
-        }
-        if self
-            .annotations
-            .iter()
-            .any(|a| a.image.as_ref().is_some_and(|b| b.focus().is_some()))
-        {
-            self.version = self.version.max(19);
-        }
-        if self
-            .annotations
-            .iter()
-            .any(|a| a.text.as_ref().is_some_and(|s| s.typography.is_some()))
-        {
-            self.version = self.version.max(18);
-        }
-        if self.annotations.iter().any(|a| a.highlighter_rect) {
-            self.version = self.version.max(17);
-        }
-        if self.annotations.iter().any(|a| a.group.is_some()) {
-            self.version = self.version.max(16);
-        }
-        if self.annotations.iter().any(|a| a.line_style.is_some()) {
-            self.version = self.version.max(15);
-        }
-        if self.annotations.iter().any(|a| a.shadow.is_some()) {
-            self.version = self.version.max(14);
-        }
-        if self.annotations.iter().any(|a| a.kind == Kind::Simplify) {
-            self.version = self.version.max(13);
-        }
-        if self
-            .annotations
-            .iter()
-            .any(|a| a.text.as_ref().is_some_and(|s| s.outline.is_some()))
-        {
-            self.version = self.version.max(12);
-        }
-        if self.guide.as_ref().is_some_and(|g| g.template.is_some()) {
-            self.version = self.version.max(24);
-        }
-        if self.guide.is_some() {
-            self.version = self.version.max(11);
-        }
-        if self.annotations.iter().any(|a| {
-            a.kind == Kind::Image
-                && (a.corner_radius > 0. || a.image.as_ref().is_some_and(|b| b.has_view()))
-        }) {
-            self.version = self.version.max(10);
-        }
-        if self.annotations.iter().any(|a| a.image.is_some()) {
-            self.version = self.version.max(
-                if self
-                    .annotations
-                    .iter()
-                    .any(|a| a.image.as_ref().is_some_and(|b| b.is_cursor()))
-                {
-                    9
-                } else {
-                    8
-                },
-            );
-        }
-        if !self.object_states.is_empty() {
-            self.version = self.version.max(7);
-        }
-        if self.annotations.iter().any(|a| a.step_outline.is_some()) {
-            self.version = self.version.max(6);
-        }
-        if self
-            .annotations
-            .iter()
-            .any(|a| a.text.as_ref().is_some_and(text::TextStyle::decorated))
-        {
-            self.version = self.version.max(5);
-        }
+        self.version = MAX_PROJECT_VERSION;
     }
 
     pub fn validate(&self) -> Result<()> {
-        if !(1..=MAX_PROJECT_VERSION).contains(&self.version) {
-            return Err(Error::Invalid("Unsupported project version".into()));
+        if self.version != MAX_PROJECT_VERSION {
+            return Err(Error::Invalid(
+                "Unsupported development project format. Create a new project in this build."
+                    .into(),
+            ));
         }
         validate_dimensions(self.width, self.height)?;
-        if self.version < 23
-            && self
-                .annotations
-                .iter()
-                .any(|a| a.image.as_ref().is_some_and(|b| b.stamp_name().is_some()))
-        {
-            return Err(Error::Invalid(
-                "Named stamps require project version 23".into(),
-            ));
-        }
-        if self.version < 22
-            && self
-                .annotations
-                .iter()
-                .any(|a| a.image.as_ref().is_some_and(|b| b.vector().is_some()))
-        {
-            return Err(Error::Invalid(
-                "Vector stamps require project version 22".into(),
-            ));
-        }
-        if self.version < 21
-            && self.annotations.iter().any(|a| {
-                a.text
-                    .as_ref()
-                    .is_some_and(|t| matches!(t.font, text::TextFont::System(_)))
-            })
-        {
-            return Err(Error::Invalid(
-                "Installed fonts require project version 21".into(),
-            ));
+
+        if let Some(v) = &self.video {
+            v.validate(self)?;
         }
         self.validate_object_states()?;
         self.validate_groups()?;
@@ -466,17 +323,16 @@ impl Document {
             validate_dimensions(width, height)?;
         }
         if let Some(raster) = &self.raster {
-            if self.version < 2 || self.source_size.is_none() {
+            if self.source_size.is_none() {
                 return Err(Error::Invalid(
-                    "Canvas raster requires project version 2 and original dimensions".into(),
+                    "Canvas raster requires original dimensions".into(),
                 ));
             }
             validate_dimensions(raster.width, raster.height)?;
         }
         if let Some([x, y, width, height]) = self.auto_canvas_base {
             validate_dimensions(width, height)?;
-            if self.version < 4
-                || x.checked_add(width).is_none_or(|end| end > self.width)
+            if x.checked_add(width).is_none_or(|end| end > self.width)
                 || y.checked_add(height).is_none_or(|end| end > self.height)
             {
                 return Err(Error::Invalid(
@@ -511,104 +367,49 @@ impl Document {
         }
         let mut ids = std::collections::HashSet::new();
         for annotation in &self.annotations {
-            if let Some(analysis) = &annotation.analysis
-                && (self.version < 20
-                    || annotation.kind != Kind::Simplify
-                    || annotation.group.is_none()
-                    || annotation.rotation_degrees != 0.
-                    || analysis.detail > 100
-                    || analysis.colors.len() > 400)
-            {
-                return Err(Error::Invalid("Invalid live Simplify analysis area".into()));
+            if let Some(focus) = annotation.focus {
+                focus.validate(annotation.kind)?;
+                if annotation.image.is_some()
+                    || annotation.text.is_some()
+                    || annotation.fill.is_some()
+                {
+                    return Err(Error::Invalid(
+                        "Focus windows cannot contain text, images or a fill.".into(),
+                    ));
+                }
             }
-            if self.version < 18
-                && annotation
-                    .text
-                    .as_ref()
-                    .is_some_and(|s| s.typography.is_some())
-            {
+            if annotation.highlighter_rect && (annotation.kind != Kind::Highlighter) {
                 return Err(Error::Invalid(
-                    "Extended typography requires project version 18".into(),
-                ));
-            }
-            if annotation.highlighter_rect
-                && (self.version < 17 || annotation.kind != Kind::Highlighter)
-            {
-                return Err(Error::Invalid(
-                    "Rectangle highlighting requires a Highlighter and project version 17".into(),
+                    "Rectangle highlighting requires a Highlighter".into(),
                 ));
             }
             if let Some(style) = annotation.line_style {
-                style.validate()?;
-                if self.version < 15 || !matches!(annotation.kind, Kind::Arrow | Kind::Line) {
-                    return Err(Error::Invalid(
-                        "Line settings require a Line or Arrow and project version 15".into(),
-                    ));
-                }
+                style.validate_for(annotation.kind)?;
             }
             if let Some(shadow) = annotation.shadow {
                 shadow.validate()?;
                 shadow::validate_patch(annotation)?;
-                if self.version < 14 {
-                    return Err(Error::Invalid(
-                        "Object shadows require project version 14".into(),
-                    ));
-                }
             }
-            if annotation.kind == Kind::Simplify && self.version < 13 {
-                return Err(Error::Invalid(
-                    "Simplify objects require project version 13".into(),
-                ));
-            }
-            if self.version < 12
-                && annotation
-                    .text
-                    .as_ref()
-                    .is_some_and(|s| s.outline.is_some())
-            {
-                return Err(Error::Invalid(
-                    "Text outlines require project version 12".into(),
-                ));
-            }
+
             match (annotation.kind, &annotation.image) {
                 (_, Some(bitmap))
-                    if (annotation.kind == Kind::Image && self.version >= 8)
-                        || (annotation.is_shape() && self.version >= 27) =>
+                    if (annotation.kind == Kind::Image) || (annotation.is_shape()) =>
                 {
                     if annotation.is_shape()
-                        && (annotation.text.is_some() || bitmap.is_cursor() || bitmap.is_stamp())
+                        && (annotation.text.is_some() || bitmap.is_cursor() || bitmap.is_icon())
                     {
                         return Err(Error::Invalid(
                             "Shape frames contain an image instead of text".into(),
                         ));
                     }
-                    if bitmap.has_frame_opacity() && (!annotation.is_shape() || self.version < 27) {
+                    if bitmap.has_frame_opacity() && (!annotation.is_shape()) {
                         return Err(Error::Invalid(
                             "Separate image opacity requires a shape frame".into(),
                         ));
                     }
                     bitmap.validate_cursor()?;
                     bitmap.validate_view()?;
-                    if bitmap.is_placeholder() && self.version < 25 {
-                        return Err(Error::Invalid(
-                            "Image placeholders require project version 25".into(),
-                        ));
-                    }
-                    if bitmap.focus().is_some() && self.version < 19 {
-                        return Err(Error::Invalid(
-                            "Image focus requires project version 19".into(),
-                        ));
-                    }
-                    if (bitmap.has_view() || annotation.corner_radius > 0.) && self.version < 10 {
-                        return Err(Error::Invalid(
-                            "Image framing requires project version 10".into(),
-                        ));
-                    }
-                    if bitmap.is_cursor() && self.version < 9 {
-                        return Err(Error::Invalid(
-                            "Editable cursors require project version 9".into(),
-                        ));
-                    }
+
                     bitmap.pixels()?;
                     if annotation.start[0] == annotation.end[0]
                         || annotation.start[1] == annotation.end[1]
@@ -620,37 +421,25 @@ impl Document {
                 }
                 (Kind::Image, _) | (_, Some(_)) => {
                     return Err(Error::Invalid(
-                        "Embedded images require an Image object and project version 8".into(),
+                        "Embedded images require an Image object".into(),
                     ));
                 }
                 _ => {}
             }
             if let Some(outline) = &annotation.step_outline {
                 outline.validate()?;
-                if self.version < 6 || annotation.kind != Kind::Step {
-                    return Err(Error::Invalid(
-                        "Step outline requires a Step and project version 6".into(),
-                    ));
+                if annotation.kind != Kind::Step {
+                    return Err(Error::Invalid("Step outline requires a Step".into()));
                 }
             }
-            if self.version < 5
-                && annotation
-                    .text
-                    .as_ref()
-                    .is_some_and(text::TextStyle::decorated)
-            {
-                return Err(Error::Invalid(
-                    "Text decoration requires project version 5".into(),
-                ));
-            }
+
             if !annotation.rotation_degrees.is_finite()
                 || !(-180.0..180.0).contains(&annotation.rotation_degrees)
-                || (annotation.rotation_degrees != 0.0
-                    && (self.version < 3 || !annotation.can_rotate()))
+                || (annotation.rotation_degrees != 0.0 && (!annotation.can_rotate()))
+                || (annotation.mirror_x && !annotation.can_rotate())
             {
                 return Err(Error::Invalid(
-                    "Object rotation requires a supported vector object and project version 3"
-                        .into(),
+                    "Object rotation requires a supported vector object".into(),
                 ));
             }
             match (annotation.kind, &annotation.text) {
@@ -669,9 +458,11 @@ impl Document {
                 (_, None) => {}
             }
             match (annotation.kind, &annotation.callout) {
-                (Kind::Callout, Some(style)) => {
-                    style.validate(annotation, [self.width, self.height])?
-                }
+                (Kind::Callout, Some(style)) => style.validate(
+                    annotation,
+                    [self.width, self.height],
+                    self.canvas_behavior.allow_overflow,
+                )?,
                 (Kind::Callout, None) => {
                     return Err(Error::Invalid("Callout style is missing".into()));
                 }
@@ -695,7 +486,7 @@ impl Document {
                     "Only rectangles, ellipses and polygons may carry shape fill".into(),
                 ));
             }
-            if annotation.width == 0 || annotation.width > 32 {
+            if (annotation.width == 0 && annotation.focus.is_none()) || annotation.width > 32 {
                 return Err(Error::Invalid("Stroke width must be 1–32".into()));
             }
             if !annotation.corner_radius.is_finite()
@@ -717,6 +508,16 @@ impl Document {
             if !valid_path {
                 return Err(Error::Invalid("Strokes need 2-8192 points; polygons need 3-64; other objects cannot carry paths".into()));
             }
+            if self.canvas_behavior.allow_overflow {
+                let (lo, hi) = annotation.bounds();
+                if (0..2)
+                    .any(|i| !lo[i].is_finite() || !hi[i].is_finite() || hi[i] - lo[i] > 32768.)
+                {
+                    return Err(Error::Invalid(
+                        "Object dimensions exceed the supported editing range".into(),
+                    ));
+                }
+            }
             let bleed = self
                 .guide
                 .as_ref()
@@ -731,17 +532,31 @@ impl Document {
                 .iter()
                 .chain(&annotation.points)
             {
-                if !point.iter().all(|n| n.is_finite())
-                    || point[0] < -bleed
-                    || point[1] < -bleed
-                    || point[0] > self.width as f32 + bleed
-                    || point[1] > self.height as f32 + bleed
+                let overflow = self.canvas_behavior.allow_overflow;
+                if !point.iter().all(|n| n.is_finite() && n.abs() <= 1_000_000.)
+                    || (!overflow
+                        && (point[0] < -bleed
+                            || point[1] < -bleed
+                            || point[0] > self.width as f32 + bleed
+                            || point[1] > self.height as f32 + bleed))
                 {
                     return Err(Error::Invalid(
                         "Annotation coordinates are outside the image".into(),
                     ));
                 }
             }
+        }
+        if self
+            .canvas_behavior
+            .held
+            .iter()
+            .any(|id| !self.annotations.iter().any(|a| a.id == *id))
+            || self.canvas_behavior.page_owners.iter().any(|(id, p)| {
+                !self.annotations.iter().any(|a| a.id == *id)
+                    || self.guide.as_ref().is_none_or(|g| *p >= g.page_count())
+            })
+        {
+            return Err(Error::Invalid("Invalid pasteboard object ownership".into()));
         }
         Ok(())
     }
@@ -777,6 +592,34 @@ impl Document {
 
     pub fn render(&self) -> Result<RgbaImage> {
         let mut image = self.base_image()?;
+        if (!self.canvas_behavior.page_owners.is_empty()
+            || self.annotations.iter().any(|a| a.focus.is_some()))
+            && let Some(g) = &self.guide
+        {
+            let furniture = self.page_furniture();
+            for page in 0..g.page_count() {
+                let [x, y, w, h] = self.page_rect(page).map(|n| n as u32);
+                let mut pixels = image::imageops::crop_imm(&image, x, y, w, h).to_image();
+                let mut objects: Vec<_> = self
+                    .annotations
+                    .iter()
+                    .filter(|a| self.object_visible(a.id) && self.object_page(a) == page)
+                    .cloned()
+                    .collect();
+                objects.extend(
+                    furniture
+                        .iter()
+                        .filter(|a| g.page_at(a.start) == page)
+                        .cloned(),
+                );
+                for a in crate::canvas_expansion::translated(&objects, [-(x as f32), -(y as f32)])?
+                {
+                    render_annotation(&mut pixels, &a);
+                }
+                image::imageops::replace(&mut image, &pixels, x as i64, y as i64);
+            }
+            return Ok(image);
+        }
         for annotation in self
             .annotations
             .iter()
@@ -794,7 +637,11 @@ impl Document {
         if fs::metadata(path)?.len() > MAX_FILE_BYTES {
             return Err(Error::Invalid("Project file is too large".into()));
         }
-        let doc: Self = serde_json::from_slice(&fs::read(path)?)?;
+        let bytes = fs::read(path)?;
+        let mut doc: Self = serde_json::from_slice(&bytes).map_err(|e| {
+            if crate::project_file::is_video_project(path) && e.is_data() {Error::Invalid(format!("Unsupported or invalid development video project. Create a new video project in this build. {e}"))} else {Error::Json(e)}
+        })?;
+        video::project::resolve(&mut doc, path)?;
         doc.base_image()?;
         if doc.raster.is_some() {
             let mut original = doc.clone();
@@ -805,39 +652,20 @@ impl Document {
             // This temporary document validates only the original raster.
             // Section references belong to the current editable document.
             original.guide = None;
+            original.video = None;
+            original.canvas_behavior = Default::default();
             let [width, height] = original.source_size.take().unwrap();
             original.width = width;
             original.height = height;
             original.base_image()?;
-        }
-        // Earlier page previews stacked pages vertically. Upgrade their editor
-        // layout in memory, preserving object locks and the original file.
-        // If the horizontal extent exceeds the existing canvas limit, keep the
-        // valid original layout accessible instead of refusing to open it.
-        if doc
-            .guide
-            .as_ref()
-            .and_then(|g| g.pages.as_ref())
-            .is_some_and(|p| !p.horizontal || p.gap != guide_sections::PAGE_GAP)
-        {
-            let mut editable = doc.clone();
-            for state in editable.object_states.values_mut() {
-                state.locked = false;
-            }
-            if let Ok(mut horizontal) =
-                editable.edit_guide(&guide_sections::Action::MovePage { page: 0, index: 0 })
-            {
-                horizontal.object_states = doc.object_states.clone();
-                horizontal.validate()?;
-                return Ok(horizontal);
-            }
         }
         Ok(doc)
     }
 
     pub fn save(&self, path: &Path) -> Result<()> {
         self.validate()?;
-        let bytes = serde_json::to_vec(self)?;
+        let portable = video::project::portable(self, path)?;
+        let bytes = serde_json::to_vec(&portable)?;
         if bytes.len() as u64 > MAX_FILE_BYTES {
             return Err(Error::Invalid("The editable project exceeds the supported 160 MB file size. Export a flattened PNG instead.".into()));
         }
@@ -888,7 +716,8 @@ fn line_offset<I: image::GenericImage>(
 }
 
 fn render_annotation(image: &mut RgbaImage, a: &Annotation) {
-    if a.analysis.is_some() {
+    if a.focus.is_some() {
+        focus::render(image, a);
         return;
     }
     let patch = shadow::patch(a);
@@ -906,13 +735,15 @@ fn render_annotation(image: &mut RgbaImage, a: &Annotation) {
 }
 
 fn render_annotation_ink(image: &mut RgbaImage, a: &Annotation) {
+    if a.focus.is_some() {
+        focus::render(image, a);
+        return;
+    }
     if a.is_shape() && a.image.is_some() {
         display::render_rotated(image, a);
         return;
     }
-    if a.analysis.is_some() {
-        return;
-    }
+
     // Ordinary annotations share the viewport's continuous geometry, pixel-center
     // convention and coverage rasterizer. Pixel-reading effects retain their
     // native-resolution CPU processing and opaque redaction stays opaque.
@@ -932,7 +763,7 @@ fn render_annotation_ink(image: &mut RgbaImage, a: &Annotation) {
     let y1 = a.start[1].max(a.end[1]);
     let color = Rgba(a.color);
     match a.kind {
-        Kind::Image | Kind::Simplify => display::render_rotated(image, a),
+        Kind::Image => display::render_rotated(image, a),
         Kind::Text => text::render(image, a),
         Kind::Callout => callout::render(image, a),
         Kind::Step => steps::render(image, a),
@@ -981,6 +812,32 @@ fn atomic_write(path: &Path, bytes: &[u8]) -> Result<()> {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "command", rename_all = "snake_case")]
 pub enum Command {
+    /// Place objects with session motion defaults as one undoable action.
+    AddTimed {
+        annotations: Vec<Annotation>,
+        motion: std::collections::BTreeMap<u64, reusable_presets::Motion>,
+    },
+    VideoDeleteTrack {
+        layer: video::links::Layer,
+    },
+    VideoDeleteItems {
+        items: std::collections::BTreeSet<video::editing::Item>,
+    },
+    Video {
+        project: video::editor::Project,
+    },
+    VideoDuplicate {
+        id: u64,
+        timing: Option<video::editor::Timing>,
+    },
+    VideoResize {
+        width: u32,
+        height: u32,
+    },
+    VideoRemove {
+        start: u64,
+        end: u64,
+    },
     Guide {
         action: guide_sections::Action,
     },
@@ -1041,10 +898,6 @@ pub enum Command {
     GroupObjects {
         ids: Vec<u64>,
     },
-    ReplaceSimplifyGroup {
-        group: u64,
-        annotations: Vec<Annotation>,
-    },
     UngroupObjects {
         ids: Vec<u64>,
     },
@@ -1060,25 +913,8 @@ pub enum Command {
     /// The original source pixels are never rewritten by this command.
     RevertOriginal,
     FlattenAll,
-    /// Fill a connected region of the complete composite, preserving the
-    /// original source and flattening editable objects in one Undo operation.
-    FloodFill {
-        x: u32,
-        y: u32,
-        color: [u8; 4],
-        tolerance: u8,
-    },
-    /// Clear a rectangular pixel region of the rendered image with one Undo.
-    ClearPixels {
-        rect: pixels::PixelRect,
-    },
-    ClearMaskedPixels {
-        mask: pixel_mask::PixelMask,
-    },
-    /// Lift a masked composite into an editable image, clearing its original
-    /// pixels in the same transaction. The embedded source is preserved.
-    LiftMaskedPixels {
-        mask: pixel_mask::PixelMask,
+    FlattenPage {
+        page: usize,
     },
     /// Remove a complete horizontal/vertical strip and join its remaining sides.
     CutOut {
@@ -1086,16 +922,30 @@ pub enum Command {
         start: u32,
         end: u32,
     },
+    CutOutPages {
+        axis: cut_out::CutAxis,
+        start: u32,
+        end: u32,
+        page: usize,
+        all_pages: bool,
+    },
     /// Transform the complete rendered image in one reversible operation.
     TransformImage {
         transform: ImageTransform,
     },
-    /// Crop the complete composite in one reversible operation.
+    SetCanvasExpansion {
+        enabled: bool,
+    },
+    /// Crop the canvas in one reversible operation.
     CropImage {
         x: u32,
         y: u32,
         width: u32,
         height: u32,
+        #[serde(default)]
+        mode: crop::CropMode,
+        #[serde(default)]
+        page: usize,
     },
     ResizeImage {
         width: u32,
@@ -1149,6 +999,8 @@ impl Document {
 /// Undo snapshots share the unchanged source PNG in Document. Only editable
 /// state is retained, avoiding a large encoded-image copy for every command.
 struct EditState {
+    video: Option<video::editor::Project>,
+    canvas_behavior: canvas_behavior::CanvasBehavior,
     guide: Option<guide_sections::Layout>,
     object_states: object_state::ObjectStates,
     version: u32,
@@ -1162,6 +1014,8 @@ struct EditState {
 impl EditState {
     fn from_document(document: &Document) -> Self {
         Self {
+            video: document.video.clone(),
+            canvas_behavior: document.canvas_behavior.clone(),
             guide: document.guide.clone(),
             object_states: document.object_states.clone(),
             version: document.version,
@@ -1174,7 +1028,12 @@ impl EditState {
         }
     }
     fn matches(&self, document: &Document) -> bool {
-        self.guide == document.guide
+        (match (&self.video, &document.video) {
+            (Some(a), Some(b)) => a.same_edit(b),
+            (None, None) => true,
+            _ => false,
+        }) && self.canvas_behavior == document.canvas_behavior
+            && self.guide == document.guide
             && self.object_states == document.object_states
             && self.version == document.version
             && self.width == document.width
@@ -1186,6 +1045,8 @@ impl EditState {
     }
     fn restore(self, document: &mut Document) -> Self {
         Self {
+            video: std::mem::replace(&mut document.video, self.video),
+            canvas_behavior: std::mem::replace(&mut document.canvas_behavior, self.canvas_behavior),
             guide: std::mem::replace(&mut document.guide, self.guide),
             object_states: std::mem::replace(&mut document.object_states, self.object_states),
             version: std::mem::replace(&mut document.version, self.version),
@@ -1205,6 +1066,7 @@ impl EditState {
 pub struct Session {
     pub document: Document,
     saved_state: Option<EditState>,
+    gesture: Option<EditState>,
     undo: Vec<EditState>,
     redo: Vec<EditState>,
 }
@@ -1214,13 +1076,42 @@ impl Session {
         document.validate()?;
         Ok(Self {
             saved_state: Some(EditState::from_document(&document)),
+            gesture: None,
             document,
             undo: vec![],
             redo: vec![],
         })
     }
+    /// One pointer gesture may preview many validated edits but creates one Undo entry.
+    pub fn begin_gesture(&mut self) {
+        if self.gesture.is_none() {
+            self.gesture = Some(EditState::from_document(&self.document));
+        }
+    }
+    pub fn finish_gesture(&mut self) {
+        if let Some(before) = self.gesture.take()
+            && !before.matches(&self.document)
+        {
+            self.undo.push(before);
+            self.trim_history();
+            self.redo.clear();
+        }
+    }
+    pub fn cancel_edit_gesture(&mut self) {
+        if let Some(before) = self.gesture.take() {
+            before.restore(&mut self.document);
+        }
+    }
+    fn trim_history(&mut self) {
+        while self.undo.len() > 200 || raster_history_bytes(&self.undo) > 256 * 1024 * 1024 {
+            self.undo.remove(0);
+        }
+    }
     pub fn can_undo(&self) -> bool {
-        !self.undo.is_empty()
+        self.gesture
+            .as_ref()
+            .is_some_and(|s| !s.matches(&self.document))
+            || !self.undo.is_empty()
     }
     pub fn can_redo(&self) -> bool {
         !self.redo.is_empty()
@@ -1253,6 +1144,28 @@ impl Session {
             .saturating_add(1)
     }
     pub fn execute(&mut self, command: Command) -> Result<()> {
+        if matches!(command, Command::Undo | Command::Redo) {
+            self.finish_gesture();
+        }
+        if self.document.video.is_some()
+            && matches!(
+                command,
+                Command::Guide { .. }
+                    | Command::RevertOriginal
+                    | Command::FlattenAll
+                    | Command::FlattenPage { .. }
+                    | Command::CutOut { .. }
+                    | Command::CutOutPages { .. }
+                    | Command::TransformImage { .. }
+                    | Command::SetCanvasExpansion { .. }
+                    | Command::CropImage { .. }
+                    | Command::ResizeImage { .. }
+                    | Command::ResizeImageFlattened { .. }
+                    | Command::ResizeCanvas { .. }
+            )
+        {
+            return Err(Error::Invalid("Use the video timeline to trim, or Advanced video setup to change the frame. Image canvas commands do not alter a video clip.".into()));
+        }
         self.document.protect_locked_objects(&command)?;
         let canvas = [self.document.width, self.document.height];
         let command = match command {
@@ -1290,6 +1203,81 @@ impl Session {
             command => {
                 let previous = EditState::from_document(&self.document);
                 match command {
+                    Command::VideoDeleteItems { items } => {
+                        let v = self
+                            .document
+                            .video
+                            .as_mut()
+                            .ok_or_else(|| Error::Invalid("Open a video first.".into()))?;
+                        let expanded = v.linked_items(&items);
+                        if expanded.iter().any(|item| matches!(item, video::editing::Item::Annotation(id) if self.document.object_states.get(id).is_some_and(|s| s.locked))) {
+                            return Err(Error::Invalid("Unlock the selected objects before deleting them.".into()));
+                        }
+                        let removed = v.remove_items(&items);
+                        self.document
+                            .annotations
+                            .retain(|a| !removed.contains(&a.id));
+                    }
+                    Command::VideoDeleteTrack { layer } => {
+                        let v = self
+                            .document
+                            .video
+                            .as_mut()
+                            .ok_or_else(|| Error::Invalid("Open a video first.".into()))?;
+                        let removed = v.remove_layer(layer);
+                        self.document
+                            .annotations
+                            .retain(|a| !removed.contains(&a.id));
+                    }
+                    Command::Video { project } => {
+                        self.document.video = Some(project);
+                    }
+                    Command::VideoDuplicate { id, timing } => {
+                        if self.document.object_state(id).locked {
+                            return Err(Error::Invalid(
+                                "Unlock the object before duplicating it.".into(),
+                            ));
+                        }
+                        let original = self
+                            .document
+                            .video
+                            .as_ref()
+                            .and_then(|v| v.objects.get(&id))
+                            .cloned()
+                            .ok_or_else(|| {
+                                Error::Invalid("Select a video object to duplicate.".into())
+                            })?;
+                        let copy = self.document.duplicate_selection(&[id])?.remove(0);
+                        self.document
+                            .video
+                            .as_mut()
+                            .unwrap()
+                            .place(copy.id, timing.unwrap_or(original));
+                        self.document.annotations.push(copy);
+                    }
+                    Command::VideoResize { width, height } => {
+                        if self.document.video.is_none() {
+                            return Err(Error::Invalid("Open a video first.".into()));
+                        }
+                        self.document.source_size = Some(
+                            self.document
+                                .source_size
+                                .unwrap_or([self.document.width, self.document.height]),
+                        );
+                        self.document.width = width;
+                        self.document.height = height;
+                    }
+                    Command::VideoRemove { start, end } => {
+                        let removed = self
+                            .document
+                            .video
+                            .as_mut()
+                            .ok_or_else(|| Error::Invalid("Open a video first.".into()))?
+                            .remove_range(start, end)?;
+                        self.document
+                            .annotations
+                            .retain(|a| !removed.contains(&a.id));
+                    }
                     Command::Guide { action } => {
                         self.document = self.document.edit_guide(&action)?;
                         if previous.matches(&self.document) {
@@ -1325,28 +1313,20 @@ impl Session {
                     Command::CutOut { axis, start, end } => {
                         self.document.cut_out(axis, start, end)?;
                     }
-                    Command::ClearPixels { rect } => {
-                        if !self.document.clear_pixels(rect)? {
-                            return Ok(());
-                        }
-                    }
-                    Command::ClearMaskedPixels { mask } => {
-                        if !self.document.edit_masked_pixels(&mask, false)? {
-                            return Ok(());
-                        }
-                    }
-                    Command::LiftMaskedPixels { mask } => {
-                        if !self.document.edit_masked_pixels(&mask, true)? {
-                            return Ok(());
-                        }
-                    }
-                    Command::FloodFill {
-                        x,
-                        y,
-                        color,
-                        tolerance,
+                    Command::CutOutPages {
+                        axis,
+                        start,
+                        end,
+                        page,
+                        all_pages,
                     } => {
-                        if !self.document.flood_fill(x, y, color, tolerance)? {
+                        let mut next = self.document.clone();
+                        next.cut_out_pages(axis, start, end, page, all_pages)?;
+                        self.document = next;
+                    }
+
+                    Command::SetCanvasExpansion { enabled } => {
+                        if !self.document.set_canvas_expansion(enabled) {
                             return Ok(());
                         }
                     }
@@ -1355,15 +1335,25 @@ impl Session {
                         y,
                         width,
                         height,
+                        mode,
+                        page,
                     } => {
-                        if !self.document.crop_image(x, y, width, height)? {
+                        let mut cropped = self.document.clone();
+                        if !cropped.crop_image([x, y, width, height], mode, page)? {
                             return Ok(());
                         }
+                        self.document = cropped;
                     }
                     Command::TransformImage { transform } => {
                         if !self.document.transform_image(transform)? {
                             return Ok(());
                         }
+                    }
+                    Command::FlattenPage { page } => {
+                        self.document = self.document.flatten_pages(Some(page))?;
+                    }
+                    Command::FlattenAll if self.document.guide.is_some() => {
+                        self.document = self.document.flatten_pages(None)?;
                     }
                     Command::FlattenAll => {
                         if self.document.annotations.is_empty() && self.document.guide.is_none() {
@@ -1378,7 +1368,7 @@ impl Session {
                         );
                         self.document.raster = Some(raster);
                         self.document.auto_canvas_base = None;
-                        self.document.version = 2;
+                        self.document.version = MAX_PROJECT_VERSION;
                         self.document.annotations.clear();
                         self.document.guide = None;
                     }
@@ -1451,7 +1441,7 @@ impl Session {
                             || raster.is_some())
                         .then_some(original_size);
                         if raster.is_some() {
-                            self.document.version = 2;
+                            self.document.version = MAX_PROJECT_VERSION;
                         }
                         self.document.raster = raster;
                         self.document.auto_canvas_base = None;
@@ -1468,11 +1458,35 @@ impl Session {
                         self.document.annotations.clear();
                         self.document.raster = None;
                         self.document.auto_canvas_base = None;
-                        self.document.version = 1;
+                        self.document.version = MAX_PROJECT_VERSION;
                         if let Some([width, height]) = self.document.source_size.take() {
                             self.document.width = width;
                             self.document.height = height;
                         }
+                    }
+                    Command::AddTimed {
+                        annotations,
+                        motion,
+                    } => {
+                        let mut next = self.document.clone();
+                        let annotations = annotations
+                            .iter()
+                            .map(|a| a.fit_text_shape(canvas))
+                            .collect::<Result<Vec<_>>>()?;
+                        let plan = next.plan_expanding_move(&annotations, true)?;
+                        next = plan.apply(&next)?;
+                        let v = next
+                            .video
+                            .as_mut()
+                            .ok_or_else(|| Error::Invalid("Open a video first.".into()))?;
+                        v.sync(&next.annotations);
+                        for a in &annotations {
+                            if let Some(motion) = motion.get(&a.id) {
+                                motion.apply(a, v.objects.get_mut(&a.id).unwrap())?;
+                            }
+                        }
+                        next.validate()?;
+                        self.document = next;
                     }
                     Command::Add { annotation } => self.document.annotations.push(annotation),
                     Command::AddMany { annotations } => {
@@ -1534,9 +1548,7 @@ impl Session {
                             return Ok(());
                         }
                     }
-                    Command::ReplaceSimplifyGroup { group, annotations } => {
-                        self.document.replace_simplify_group(group, annotations)?;
-                    }
+
                     Command::UngroupObjects { ids } => {
                         if !self.document.group_objects(&ids, true)? {
                             return Ok(());
@@ -1571,9 +1583,13 @@ impl Session {
                     }
                     _ => {}
                 }
+                if let Some(v) = self.document.video.as_mut() {
+                    v.sync(&self.document.annotations);
+                }
                 self.document.prune_groups();
                 self.document.reconcile_guide();
                 self.document.prune_object_states();
+                self.document.prune_canvas_behavior();
                 self.document.promote_features();
                 if let Err(error) = self
                     .document
@@ -1583,12 +1599,11 @@ impl Session {
                     previous.restore(&mut self.document);
                     return Err(error);
                 }
-                self.undo.push(previous);
-                while self.undo.len() > 200 || raster_history_bytes(&self.undo) > 256 * 1024 * 1024
-                {
-                    self.undo.remove(0);
+                if self.gesture.is_none() {
+                    self.undo.push(previous);
+                    self.trim_history();
+                    self.redo.clear();
                 }
-                self.redo.clear();
             }
         }
         Ok(())
@@ -1652,10 +1667,13 @@ mod tests {
             step_outline: None,
             line_style: None,
             shadow: None,
-            analysis: None,
+
+            focus: None,
+
             highlighter_rect: false,
             group: None,
             rotation_degrees: 0.0,
+            mirror_x: false,
             id,
             kind: Kind::Redact,
             start: [2.0, 3.0],
@@ -1839,3 +1857,6 @@ mod tests {
     }
 }
 pub mod angle_snap;
+
+#[cfg(test)]
+mod capture_refinement_tests;

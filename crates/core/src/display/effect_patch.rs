@@ -39,6 +39,9 @@ fn reads(a: &Annotation, bounds: [u32; 4], canvas: [u32; 2]) -> [u32; 4] {
     ]
 }
 fn visible_bounds(a: &Annotation, canvas: [u32; 2]) -> Option<[u32; 4]> {
+    if a.focus.is_some() {
+        return Some([0, 0, canvas[0], canvas[1]]);
+    }
     let (mut lo, mut hi) = a.bounds();
     let margin = a.width as f32 * 4. + 2.;
     for i in 0..2 {
@@ -65,6 +68,26 @@ fn effect_bounds(a: &Annotation, canvas: [u32; 2]) -> Option<[u32; 4]> {
     }
 }
 impl Plan {
+    /// Cache Focus sampling independently of its movable window. The first
+    /// plan is the lower composite; the second treats every pixel as outside.
+    pub fn focus_surfaces(&self) -> Option<(Self, Self)> {
+        let last = self.objects.last()?;
+        last.focus?;
+        let mut lower = self.clone();
+        lower.objects.pop();
+        let mut outside = self.clone();
+        let a = outside.objects.last_mut()?;
+        a.start = [-4., -4.];
+        a.end = [-2., -2.];
+        a.kind = Kind::Rectangle;
+        a.corner_radius = 0.;
+        a.rotation_degrees = 0.;
+        a.mirror_x = false;
+        a.width = 0;
+        a.color = [0; 4];
+        a.line_style = None;
+        Some((lower, outside))
+    }
     pub fn new(objects: &[Annotation], index: usize, canvas: [u32; 2]) -> Option<Self> {
         let effect = objects.get(index)?;
         if !needs_pixels(effect) {
@@ -83,10 +106,7 @@ impl Plan {
         }
         let objects = objects[..=index]
             .iter()
-            .filter(|a| {
-                a.analysis.is_none()
-                    && visible_bounds(a, canvas).is_some_and(|b| intersects(b, work))
-            })
+            .filter(|a| visible_bounds(a, canvas).is_some_and(|b| intersects(b, work)))
             .cloned()
             .collect();
         Some(Self {
@@ -94,6 +114,19 @@ impl Plan {
             work,
             objects,
         })
+    }
+    pub fn clipped(mut self, bounds: [u32; 4]) -> Option<Self> {
+        let intersect = |r: [u32; 4]| {
+            let lo = [r[0].max(bounds[0]), r[1].max(bounds[1])];
+            let hi = [
+                (r[0] + r[2]).min(bounds[0] + bounds[2]),
+                (r[1] + r[3]).min(bounds[1] + bounds[3]),
+            ];
+            (hi[0] > lo[0] && hi[1] > lo[1]).then(|| [lo[0], lo[1], hi[0] - lo[0], hi[1] - lo[1]])
+        };
+        self.output = intersect(self.output)?;
+        self.work = intersect(self.work)?;
+        Some(self)
     }
     pub fn render(&self, base: &RgbaImage, offset: [i32; 2]) -> Result<RgbaImage> {
         let [x, y, w, h] = self.work;

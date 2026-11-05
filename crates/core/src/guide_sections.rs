@@ -123,8 +123,7 @@ impl Layout {
         if self
             .template
             .as_ref()
-            .is_some_and(|name| document.version < 24 || name.is_empty() || name.len() > 120)
-            || document.version < 11
+            .is_some_and(|name| name.is_empty() || name.len() > 120)
             || !self.top.is_finite()
             || self.top < 0.
             || self.sections.len() > 256
@@ -135,8 +134,7 @@ impl Layout {
         let mut sections = BTreeSet::new();
         let mut objects = BTreeSet::new();
         for s in &self.sections {
-            if (s.kind == SectionKind::Blank && document.version < 26)
-                || !sections.insert(s.id)
+            if !sections.insert(s.id)
                 || s.id == 0
                 || !s.height.is_finite()
                 || !(48.0..=32768.0).contains(&s.height)
@@ -162,10 +160,11 @@ impl Layout {
                 return Err(Error::Invalid("Invalid guide step marker".into()));
             }
         }
-        if self
-            .spans()
-            .last()
-            .is_some_and(|s| s.2 > document.height as f32 + 0.01)
+        if !document.canvas_behavior.allow_overflow
+            && self
+                .spans()
+                .last()
+                .is_some_and(|s| s.2 > document.height as f32 + 0.01)
         {
             return Err(Error::Invalid(
                 "Guide sections extend beyond the canvas".into(),
@@ -201,8 +200,17 @@ impl Document {
             for a in &self.annotations {
                 let (lo, hi) = a.bounds();
                 let mut winner = None;
+                let held_page = self
+                    .canvas_behavior
+                    .page_owners
+                    .get(&a.id)
+                    .copied()
+                    .filter(|_| self.canvas_behavior.held.contains(&a.id));
                 let mut area = 0.0_f32;
                 for ((id, top, bottom), section) in spans.iter().zip(&layout.sections) {
+                    if held_page.is_some_and(|p| p != section.page) {
+                        continue;
+                    }
                     let x = layout.page_offset(section.page)[0];
                     let overlap = (hi[0].min(
                         x + layout.page_size(section.page, [self.width, self.height])[0] as f32,
@@ -215,6 +223,9 @@ impl Document {
                         area = overlap;
                         winner = Some(*id);
                     }
+                }
+                if winner.is_none() && held_page.is_some() {
+                    winner = previous.get(&a.id).copied();
                 }
                 if let Some(id) = winner {
                     layout
@@ -332,10 +343,13 @@ impl Document {
                     step_outline: None,
                     line_style: None,
                     shadow: None,
-                    analysis: None,
+
+                    focus: None,
+
                     highlighter_rect: false,
                     group: None,
                     rotation_degrees: 0.,
+                    mirror_x: false,
                     callout: None,
                     text: Some(crate::text::TextStyle {
                         content: title.into(),
@@ -519,7 +533,9 @@ impl Document {
                 if let Some(a) = next.annotations.iter_mut().find(|a| a.id == id)
                     && let Some(text) = &mut a.text
                 {
+                    let old = text.content.clone();
                     text.content = number.to_string();
+                    crate::text::rich::rebase(text, &old, None);
                 }
             }
         }
@@ -547,7 +563,18 @@ impl Document {
         }
         crate::validate_dimensions(next.width, next.height)?;
         next.auto_canvas_base = None;
+        if !next.canvas_behavior.page_owners.is_empty() {
+            for section in &layout.sections {
+                for id in &section.objects {
+                    next.canvas_behavior.page_owners.insert(*id, section.page);
+                }
+            }
+        }
         next.guide = Some(layout);
+        next.prune_canvas_behavior();
+        if next.canvas_behavior.allow_overflow {
+            next.hold_outside_objects();
+        }
         next.prune_groups();
         next.prune_object_states();
         next.promote_features();

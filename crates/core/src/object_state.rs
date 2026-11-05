@@ -112,11 +112,6 @@ impl Document {
             .retain(|id, state| ids.contains(id) && *state != ObjectState::default());
     }
     pub(crate) fn validate_object_states(&self) -> Result<()> {
-        if !self.object_states.is_empty() && self.version < 7 {
-            return Err(Error::Invalid(
-                "Object visibility and locks require project version 7".into(),
-            ));
-        }
         self.validate_object_ids(&self.object_states.keys().copied().collect::<Vec<_>>())
     }
 }

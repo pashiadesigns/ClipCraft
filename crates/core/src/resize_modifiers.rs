@@ -19,7 +19,7 @@ impl Annotation {
         canvas: [u32; 2],
         mods: ResizeModifiers,
     ) -> Result<Self> {
-        if self.rotation_degrees != 0.0 {
+        if self.rotation_degrees != 0.0 || self.mirror_x {
             return self.resize_rotated(handle, point, canvas, mods);
         }
         let edge = matches!(
@@ -123,7 +123,7 @@ impl Annotation {
         }
         result.corner_radius = result.corner_radius.min(result.max_corner_radius());
         if let Some(callout) = &result.callout {
-            callout.validate(&result, canvas)?;
+            callout.validate(&result, canvas, true)?;
         }
         Ok(result)
     }
@@ -193,10 +193,13 @@ mod tests {
             step_outline: None,
             line_style: None,
             shadow: None,
-            analysis: None,
+
+            focus: None,
+
             highlighter_rect: false,
             group: None,
             rotation_degrees: 0.0,
+            mirror_x: false,
             id: 1,
             kind: Kind::Rectangle,
             start: [100.0, 100.0],

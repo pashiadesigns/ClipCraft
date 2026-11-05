@@ -1,12 +1,17 @@
 //! Event-driven Windows notification icon. The worker owns all native resources;
 //! editor commands run on the application's logic callback, even while hidden.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub(super) enum Action {
     Editor,
-    Controller,
-    Capture,
+    Clip,
+    CaptureClip,
+    Capture(capture_core::capture_options::Selection),
+    ToggleScrolling,
+    ToggleOpenAfter,
+    CaptureVideo,
     Exit,
     Unavailable,
+    Open(std::path::PathBuf),
 }
 
 pub(super) struct Tray {
@@ -41,6 +46,17 @@ pub(super) fn activate(window: capture_core::quick_preferences::StartupWindow) -
     #[cfg(not(windows))]
     {
         let _ = window;
+        false
+    }
+}
+pub(super) fn forward(request: &crate::launch::Request) -> bool {
+    #[cfg(windows)]
+    {
+        windows::forward(request)
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = request;
         false
     }
 }

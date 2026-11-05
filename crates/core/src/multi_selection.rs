@@ -51,7 +51,7 @@ impl Document {
             .iter()
             .any(|a| a.rotation_degrees != 0.0)
         {
-            candidate.version = candidate.version.max(3);
+            candidate.version = crate::MAX_PROJECT_VERSION;
         }
         candidate.promote_features();
         candidate.validate()?;
@@ -224,6 +224,13 @@ pub fn format_like_change(
         }
         if old.strikethrough != new.strikethrough {
             out.strikethrough = new.strikethrough;
+        }
+        if let Some(rich) = &mut out.rich {
+            let old = crate::text::rich::Format::from_style(old);
+            let new = crate::text::rich::Format::from_style(new);
+            for run in &mut rich.runs {
+                run.format.changed_fields(&old, &new);
+            }
         }
     }
     if let (Some(out), Some(old), Some(new)) =

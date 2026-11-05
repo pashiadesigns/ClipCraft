@@ -50,7 +50,7 @@ fn mixed_sizes_reorder_copy_delete_save_and_undo_preserve_settings_and_sources()
     assert_eq!(g.page_offset(1), [1060., 0.]);
     assert_eq!([s.document.width, s.document.height], [2260, 1600]);
     assert_eq!(g.page_setup(1), Some(&setup));
-    assert_eq!(s.document.version, 30);
+    assert_eq!(s.document.version, crate::MAX_PROJECT_VERSION);
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("mixed.capture.json");
     s.document.save(&path).unwrap();
@@ -162,10 +162,20 @@ fn applying_to_plain_capture_promotes_the_base_to_an_editable_object_once() {
     let image = image::RgbaImage::from_fn(300, 240, |x, _| image::Rgba([x as u8, 120, 200, 255]));
     let original = Document::from_image(image).unwrap();
     let mut session = Session::new(original.clone()).unwrap();
-    apply(&mut session, PageSetup::legacy([400, 500]), vec![0], false);
+    apply(
+        &mut session,
+        PageSetup::from_pixels([400, 500]),
+        vec![0],
+        false,
+    );
     assert_eq!(session.document.annotations.len(), 1);
     assert!(session.document.annotations[0].image.is_some());
-    apply(&mut session, PageSetup::legacy([450, 550]), vec![0], false);
+    apply(
+        &mut session,
+        PageSetup::from_pixels([450, 550]),
+        vec![0],
+        false,
+    );
     assert_eq!(session.document.annotations.len(), 1);
     session.execute(Command::Undo).unwrap();
     session.execute(Command::Undo).unwrap();

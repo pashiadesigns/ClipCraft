@@ -80,24 +80,6 @@ fn centered_single_row_survives_widths_views_and_scrolling_messages() {
             );
             assert!((controls.center().x - area.center().x).abs() < 0.1);
             assert!(status.right() < controls.left());
-            if !library {
-                let tabs =
-                    ctx.data(|d| d.get_temp::<Rect>(egui::Id::unique("footer-tabs")).unwrap());
-                assert!((tabs.right() - area.right()).abs() < 0.1);
-                assert!(controls.right() < tabs.left(), "{controls:?} {tabs:?}");
-                assert!(area.expand(0.1).contains_rect(tabs));
-                for label in ["Effects", "Properties"] {
-                    let actual = ctx.data(|d| {
-                        d.get_temp::<Rect>(egui::Id::unique(("footer-tab", label)))
-                            .unwrap()
-                    });
-                    assert!(
-                        area.contains_rect(actual),
-                        "{label} painted/hit area {actual:?} must fit {area:?}"
-                    );
-                    assert!(actual.top() >= area.top(), "upper padding");
-                }
-            }
             assert!(
                 controls.height() <= 48.1 && area.height() <= 48.1,
                 "{area:?}"
@@ -139,20 +121,9 @@ fn centered_footer_keeps_actions_and_status_details_interactive() {
     let ctx = egui::Context::default();
     crate::shell::configure(&ctx);
     let mut e = crate::canvas::tests::editor(&ctx);
-    e.shell.badges = false;
     let original = serde_json::to_vec(&e.session.document).unwrap();
     for _ in 0..5 {
         frame(&ctx, &mut e, 1920., vec![]);
-    }
-    for (label, effects) in [("Effects", true), ("Properties", false)] {
-        let pos = ctx.data(|d| {
-            d.get_temp::<Rect>(egui::Id::unique(("footer-tab", label)))
-                .unwrap()
-                .center()
-        });
-        click(&ctx, &mut e, pos);
-        assert!(e.shell.properties);
-        assert_eq!(e.shell.effects, effects);
     }
     let recent = ctx.data(|d| {
         d.get_temp::<Rect>(egui::Id::unique("footer-recent"))

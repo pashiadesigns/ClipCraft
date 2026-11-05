@@ -5,7 +5,7 @@ use capture_core::{
     clipboard_payload::ClipboardPayload,
     export::{self, Format, Options},
     history::{History, Origin},
-    stamps::vector::{Path as StampPath, VectorStamp},
+    icon_library::vector::{Path as IconPath, VectorIcon},
 };
 use image::{Rgba, RgbaImage};
 use serde_json::{Value, json};
@@ -129,22 +129,22 @@ fn library_index_rejects_path_traversal_before_accessing_user_files() {
 }
 
 #[test]
-fn vector_stamp_data_cannot_be_external_svg_or_unbounded_geometry() {
+fn vector_icon_data_cannot_be_external_svg_or_unbounded_geometry() {
     for data in [
         "<svg><script>alert(1)</script></svg>",
         "https://example.invalid/image.svg",
         "M 0 0 L 1e300 1e300",
         "M 0 0 L -100 50",
     ] {
-        let stamp = VectorStamp {
+        let icon = VectorIcon {
             colors: vec![[0, 0, 0, 255]],
-            paths: vec![StampPath {
+            paths: vec![IconPath {
                 data: data.into(),
                 color: 0,
                 stroke: None,
             }],
         };
-        assert!(stamp.validate().is_err(), "accepted {data}");
+        assert!(icon.validate().is_err(), "accepted {data}");
     }
 }
 

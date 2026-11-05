@@ -1,58 +1,36 @@
-# Releases and verification
+# Release verification
 
-Protected-branch pull requests run Rust formatting, tests, strict Clippy and a
-RustSec dependency scan. Immutable `v<version>` tags build an unsigned Windows x64
-portable ZIP and per-user NSIS setup EXE. The tag workflow tests the installer
-lifecycle on a fresh GitHub-hosted Windows runner, then creates a draft prerelease.
-Maintainers inspect its results and exact artifacts before publication.
+The 1.0.0-beta.1 release provides an unsigned Windows x64 **MSI installer**, a
+**portable ZIP**, and a source archive for the exact release commit. It replaces
+the previous development downloads; old project formats are not supported.
 
-Each package contains application/CLI executables, a synthetic example, release
-notes, third-party notices, an SPDX 2.3 inventory, committed-source SHA-256 manifest
-and build information. The inventory covers the resolved Windows workspace
-build/test graph and bundled assets, including the installer engine; not every
-component is linked into both executables. GitHub also provides source archives.
-
-SHA256SUMS.txt covers the public downloads. PACKAGE-SHA256SUMS.txt covers files
-inside the portable ZIP, excluding itself. SOURCE-SHA256SUMS.txt hashes committed
-Git blobs, so compare against an archive of the recorded commit rather than a
-checkout with Windows line-ending conversion.
-
-GitHub-hosted builds attest both setup EXE and ZIP provenance and their SPDX
-inventory. For either downloaded artifact:
+`SHA256SUMS.txt` identifies the published downloads. `PACKAGE-SHA256SUMS.txt`
+identifies every portable payload file except itself. `SOURCE-SHA256SUMS.txt`
+identifies committed Git blobs; compare with the source archive, since a checkout
+may convert line endings. `build-info.json` records the exact commit, compiler,
+target, lockfile hash and local build origin. This release is built locally and
+does not claim a GitHub-hosted build attestation or an Authenticode signature.
 
 ```powershell
-Get-FileHash ./clipcraft-0.2.0-beta.1-windows-x64-setup.exe -Algorithm SHA256
-gh attestation verify ./clipcraft-0.2.0-beta.1-windows-x64-setup.exe `
-  --repo pashiadesigns/ClipCraft --deny-self-hosted-runners `
-  --signer-workflow pashiadesigns/ClipCraft/.github/workflows/windows.yml `
-  --source-ref refs/tags/v0.2.0-beta.1
+Get-FileHash ./clipcraft-1.0.0-beta.1-windows-x64.msi -Algorithm SHA256
+Get-FileHash ./clipcraft-1.0.0-beta.1-windows-x64.zip -Algorithm SHA256
 ```
 
-Repeat with `--predicate-type https://spdx.dev/Document` for the inventory.
-Check the repository, source commit/tag and workflow. Checksums identify bytes;
-attestations establish origin. Neither is Authenticode, a security certification
-or a promise of bit-for-bit reproducible rebuilds. Runner/SDK and fonts may vary.
+The SPDX inventory covers the resolved Windows build/test dependency graph and
+bundled assets. It is not a runtime-only inventory. Packages retain license texts
+and provenance in `THIRD-PARTY-NOTICES.txt`.
 
-## Installer and signing policy
+Release preparation runs Rust formatting, tests and strict Clippy, rendering and
+export checks, Windows resource/import checks, a source publication audit and
+payload inspection. The MSI is built with a SHA-256-pinned WiX 3.14.1 toolset;
+its table validation and extracted payload are checked. These checks do not
+substitute for installation on every supported Windows/device configuration.
 
-See [installation](installing.md) for setup, update, removal and the exact scope
-of automated lifecycle tests. Setup uses pinned NSIS 3.13, verifies the compiler
-archive SHA-256 before execution and uses zlib compression. All installer source,
-scripts and required notices are in this repository.
+Public packaging starts from an explicit source/payload allowlist. Local Library
+files, recent items, settings, capture media, test launchers and internal review
+tracking are excluded. Synthetic source test fixtures are intentional; they are
+not loaded into the user's Library on startup.
 
-This beta includes an **unsigned** per-user installer. Microsoft signing is paused;
-there is no verified publisher certificate on these binaries. A signed installer
-is intended for later designated major releases; incremental source and portable
-ZIP releases can continue separately. MSI/all-user enterprise deployment and an
-in-app updater are future work. Existing releases remain immutable.
-
-A future signing workflow must use an approved publisher identity, narrowly scoped
-permissions, signatures and timestamps on the application and setup, signature
-verification, and checksums generated after signing. Signing identifies a publisher
-and detects tampering; it does not certify absence of vulnerabilities or guarantee
-immediate Windows reputation. The [dated security review](security-review-2026-11-01.md)
-records the previous preview's bounded findings, not a certification of this beta.
-
-Historical alpha downloads predate the public source import. Their assets and
-checksums are preserved; editorial release-note cleanup does not assert that
-those binaries came from a later public commit.
+See [installation and storage](installing.md), [known limitations](../README.md#beta-notes),
+and [the security model](security-model.md). Checksums identify bytes; they do not
+certify security or perceptual playback quality.

@@ -90,6 +90,61 @@ pub const ALL: &[Template] = &[
         side_text: true,
         timeline: true,
     },
+    Template {
+        id: "sop",
+        label: "Standard operating procedure",
+        category: "Business",
+        slots: 4,
+        columns: 1,
+        width: 900,
+        row_height: 275.,
+        side_text: true,
+        timeline: false,
+    },
+    Template {
+        id: "troubleshooting",
+        label: "Troubleshooting guide",
+        category: "Business",
+        slots: 3,
+        columns: 1,
+        width: 900,
+        row_height: 290.,
+        side_text: true,
+        timeline: false,
+    },
+    Template {
+        id: "onboarding",
+        label: "Onboarding checklist",
+        category: "Business",
+        slots: 4,
+        columns: 1,
+        width: 900,
+        row_height: 250.,
+        side_text: true,
+        timeline: false,
+    },
+    Template {
+        id: "quick-reference",
+        label: "Quick reference",
+        category: "Business",
+        slots: 4,
+        columns: 2,
+        width: 1200,
+        row_height: 320.,
+        side_text: false,
+        timeline: false,
+    },
+    Template {
+        id: "training",
+        label: "Training handout",
+        category: "Business",
+        slots: 3,
+        columns: 1,
+        width: 900,
+        row_height: 290.,
+        side_text: true,
+        timeline: false,
+    },
 ];
 pub fn find(id: &str) -> Option<&'static Template> {
     ALL.iter().find(|t| t.id == id)
@@ -164,10 +219,13 @@ pub(crate) fn text(id: u64, rect: [f32; 4], content: &str, size: f32, bold: bool
         step_outline: None,
         line_style: None,
         shadow: None,
-        analysis: None,
+
+        focus: None,
+
         highlighter_rect: false,
         group: None,
         rotation_degrees: 0.,
+        mirror_x: false,
         callout: None,
         text: Some(crate::text::TextStyle {
             content: content.into(),
@@ -219,7 +277,16 @@ pub fn build(id: &str, title: &str, images: &[Arc<Bitmap>], scale: Scale) -> Res
             text(
                 0,
                 [32., 92., t.width as f32 - 64., 35.],
-                "Add a subtitle or introduction",
+                match t.id {
+                    "sop" => "Purpose · Scope · Owner · Last reviewed",
+                    "troubleshooting" => {
+                        "Identify the symptom, check the cause, and verify the fix."
+                    }
+                    "onboarding" => "Name: ____________________   Team: ____________________",
+                    "quick-reference" => "Essential actions at a glance",
+                    "training" => "Learning objective · Audience · Prerequisites",
+                    _ => "Add a subtitle or introduction",
+                },
                 17.,
                 false,
             ),
@@ -273,7 +340,33 @@ pub fn build(id: &str, title: &str, images: &[Arc<Bitmap>], scale: Scale) -> Res
             };
             let caption_y = if side { top + 30. } else { top + image_h + 30. };
             let caption_w = if side { cw - image_w - 24. } else { cw };
-            let label = if t.id == "comparison" {
+            let label = if t.category == "Business" {
+                match t.id {
+                    "sop" => [
+                        "Purpose & prerequisites",
+                        "Prepare",
+                        "Perform the procedure",
+                        "Verify the result",
+                    ][index],
+                    "troubleshooting" => {
+                        ["Symptom", "Check the likely cause", "Resolve & verify"][index]
+                    }
+                    "onboarding" => [
+                        "Account & access",
+                        "Set up your workspace",
+                        "Practice the workflow",
+                        "Review & sign off",
+                    ][index],
+                    "quick-reference" => [
+                        "Navigation",
+                        "Common actions",
+                        "Keyboard shortcuts",
+                        "Get help",
+                    ][index],
+                    _ => ["Learn", "Practice", "Check your understanding"][index],
+                }
+                .into()
+            } else if t.id == "comparison" {
                 if index == 0 {
                     "Before".into()
                 } else {
@@ -282,7 +375,7 @@ pub fn build(id: &str, title: &str, images: &[Arc<Bitmap>], scale: Scale) -> Res
             } else {
                 format!("Step {}", index + 1)
             };
-            let marker_id = if t.category == "Steps" || t.timeline {
+            let marker_id = if t.category == "Steps" || t.timeline || t.category == "Business" {
                 let a = crate::steps::marker(
                     1,
                     [caption_x + 14., caption_y + 14.],
@@ -322,7 +415,25 @@ pub fn build(id: &str, title: &str, images: &[Arc<Bitmap>], scale: Scale) -> Res
                     text(
                         0,
                         [caption_x, caption_y + 46., caption_w, t.row_height - 110.],
-                        "Describe the action or key point.",
+                        match t.id {
+                            "sop" => {
+                                "Action: Describe what to do.
+Expected result: Explain how to confirm success."
+                            }
+                            "troubleshooting" => {
+                                "What to check: Describe the evidence.
+Next action: Explain the result and where to go next."
+                            }
+                            "onboarding" => {
+                                "Task: Describe the activity.
+Completed: __________  Reviewed by: __________"
+                            }
+                            "training" => {
+                                "Explain the concept and show an example.
+Practice: Add a task for the learner."
+                            }
+                            _ => "Describe the action or key point.",
+                        },
                         17.,
                         false,
                     ),
@@ -343,7 +454,11 @@ pub fn build(id: &str, title: &str, images: &[Arc<Bitmap>], scale: Scale) -> Res
         text(
             0,
             [32., height - 44., t.width as f32 - 64., 28.],
-            "Created with ClipCraft",
+            if t.category == "Business" {
+                "Owner: ____________________  ·  Version: ______  ·  Reviewed: __________"
+            } else {
+                "Created with ClipCraft"
+            },
             13.,
             false,
         ),
@@ -391,7 +506,7 @@ mod tests {
                     scale,
                 )
                 .unwrap();
-                assert_eq!(d.version, if 1 < t.slots { 25 } else { 24 });
+                assert_eq!(d.version, crate::MAX_PROJECT_VERSION);
                 assert_eq!(
                     d.annotations
                         .iter()

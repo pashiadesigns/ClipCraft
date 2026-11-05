@@ -48,13 +48,7 @@ impl Editor {
         });
     }
     pub(super) fn copy_canvas_selection(&mut self, cut: bool) {
-        if self.selected_pixels().is_some() {
-            if cut {
-                self.request_pixel_action(crate::pixel_selection::PixelAction::Cut)
-            } else {
-                self.copy_selected_pixels()
-            }
-        } else if self.selected_objects().is_empty() {
+        if self.selected_objects().is_empty() {
             if !cut {
                 self.copy_all();
             }
@@ -86,10 +80,6 @@ impl Editor {
             && !self.shell.help
             && !ctx.egui_wants_keyboard_input()
             && !egui::Popup::is_any_open(ctx)
-            && !self
-                .pixel_selection
-                .as_ref()
-                .is_some_and(|s| s.awaiting_action())
     }
     fn copy_objects_with(&mut self, cut: bool, transfer: &mut impl Transfer) {
         if !self.commit_text() {
@@ -169,10 +159,8 @@ impl Editor {
         self.extra_selected.extend(ids.iter().skip(1));
         self.selection_order = ids;
         self.tool = None;
-        self.fill_tool.active = false;
-        self.shell.planned_tool = None;
         self.shell.properties = true;
-        self.shell.effects = false;
+
         self.shell.annotations_hidden = false;
         self.status = format!(
             "Pasted {count} editable object(s). Drag or resize them; Undo removes this paste."

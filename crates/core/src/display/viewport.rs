@@ -62,8 +62,25 @@ impl DisplayList {
             replace(&mut image, &self.base, [0, 0], viewport);
             image
         };
+        let mut clip: Option<([u32; 4], RgbaImage)> = None;
         for layer in &self.layers {
             match layer {
+                Layer::BeginClip(rect) => clip = Some((*rect, result.clone())),
+                Layer::EndClip => {
+                    if let Some((r, before)) = clip.take() {
+                        for (x, y, p) in result.enumerate_pixels_mut() {
+                            let point = [
+                                viewport.origin[0] + (x as f64 + 0.5) / viewport.scale,
+                                viewport.origin[1] + (y as f64 + 0.5) / viewport.scale,
+                            ];
+                            if (0..2).any(|i| {
+                                point[i] < r[i] as f64 || point[i] >= (r[i] + r[i + 2]) as f64
+                            }) {
+                                *p = *before.get_pixel(x, y);
+                            }
+                        }
+                    }
+                }
                 Layer::Vector(annotation) => render_vector(&mut result, annotation, viewport),
                 Layer::Shadow(patch) => blend_patch(&mut result, patch, viewport),
                 Layer::ReplacePixels { origin, pixels } => {
@@ -110,6 +127,7 @@ fn object_transform(a: &Annotation) -> Affine {
     let rotation = a.rotation();
     Affine::translate((f64::from(rotation.center[0]), f64::from(rotation.center[1])))
         * Affine::rotate(f64::from(rotation.degrees).to_radians())
+        * Affine::scale_non_uniform(if a.mirror_x { -1. } else { 1. }, 1.)
         * Affine::translate((
             -f64::from(rotation.center[0]),
             -f64::from(rotation.center[1]),
@@ -128,9 +146,6 @@ pub(crate) fn render_rotated(image: &mut RgbaImage, a: &Annotation) {
 // Rasterize only the visible object's bounds. Normalize geometry before layout,
 // so adding integer canvas margins cannot change curve/glyph rounding.
 pub(crate) fn render_vector(image: &mut RgbaImage, a: &Annotation, viewport: Viewport) {
-    if a.analysis.is_some() {
-        return;
-    }
     if a.is_shape() && a.image.is_some() {
         let mut shell = a.clone();
         shell.image = None;
@@ -151,7 +166,7 @@ pub(crate) fn render_vector(image: &mut RgbaImage, a: &Annotation, viewport: Vie
     let margin = if a.kind == Kind::Arrow {
         a.width as f32 * 4.0 + 2.0
     } else {
-        a.width as f32 * 0.5 + 2.0
+        crate::line_style::stroke_reach(a) + 2.0
     };
     let low = [min[0] - margin, min[1] - margin];
     let high = [max[0] + margin, max[1] + margin];
@@ -405,10 +420,6 @@ pub(super) fn paint_annotation<P: super::vector::Painter>(
             .with_join(Join::Round),
     );
     match a.kind {
-        Kind::Simplify => {
-            context.fill_path(&body_path(a));
-            finish(context, a.color);
-        }
         Kind::Image => {
             if let Some(vector) = a.image.as_ref().and_then(|b| b.vector()) {
                 let sx = f64::from(max[0] - min[0]) / 128.;
@@ -468,7 +479,16 @@ pub(super) fn paint_annotation<P: super::vector::Painter>(
                     .filter(|_| a.kind == Kind::Callout)
                     .map(|s| s.outline)
                     .unwrap_or(a.color);
-                context.stroke_path(&path);
+                let pattern = a
+                    .line_style
+                    .map_or(crate::line_style::Pattern::Solid, |s| s.pattern);
+                context.set_stroke(
+                    Stroke::new(f64::from(a.width))
+                        .with_caps(Cap::Round)
+                        .with_join(Join::Round)
+                        .with_dashes(0., pattern.dashes(f64::from(a.width))),
+                );
+                context.stroke_path(&pattern.path(&path, a.width.into()));
                 finish(context, outline);
             }
         }
@@ -501,7 +521,7 @@ pub(super) fn paint_annotation<P: super::vector::Painter>(
         }
         Kind::Line | Kind::Arrow | Kind::Pen | Kind::Highlighter => {
             let mut path = if matches!(a.kind, Kind::Pen | Kind::Highlighter) {
-                polygon(&a.points, false)
+                polygon(&std::borrow::Cow::Borrowed(&a.points), false)
             } else {
                 polygon(&[a.start, a.end], false)
             };
@@ -531,6 +551,10 @@ pub(super) fn paint_annotation<P: super::vector::Painter>(
     } else {
         a
     };
+    if label.text.as_ref().is_some_and(|s| s.rich.is_some()) {
+        crate::text::rich::paint(context, label, tolerance, finish);
+        return;
+    }
     if let Some(ink) = crate::text::typography::highlight(context, label) {
         finish(context, ink);
     }
@@ -552,4 +576,5 @@ pub(super) fn paint_annotation<P: super::vector::Painter>(
     {
         finish(context, ink);
     }
+    crate::text::color_emoji::paint(context, label, tolerance, finish);
 }

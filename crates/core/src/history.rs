@@ -1,6 +1,7 @@
 //! Bounded local snapshots shared by desktop workflows and CLI tooling.
-//! The index is atomic; immutable documents and thumbnails never reference
-//! external user files. A process lock serializes index updates.
+//! The index is atomic. Image snapshots embed pixels; video snapshots retain
+//! local source-media references. Save .vclip to copy media for sharing.
+//! A process lock serializes index updates.
 pub mod import;
 mod manage;
 pub mod recovery;
@@ -17,6 +18,8 @@ use std::{
 };
 
 pub const MAX_ENTRIES: usize = 50;
+/// One master covers a 200% Library tile through 400% display scaling.
+pub const THUMBNAIL_SIZE: [u32; 2] = [1280, 768];
 pub const MAX_BYTES: u64 = 512_000_000;
 const MAX_INDEX_BYTES: u64 = 1_000_000;
 static SEQUENCE: AtomicU32 = AtomicU32::new(0);
@@ -28,6 +31,7 @@ pub enum MediaKind {
     Image,
     Steps,
     Template,
+    Video,
 }
 impl MediaKind {
     pub fn label(self) -> &'static str {
@@ -35,12 +39,16 @@ impl MediaKind {
             Self::Image => "Image",
             Self::Steps => "Step capture",
             Self::Template => "From Template",
+            Self::Video => "Video",
         }
     }
     fn is_image(&self) -> bool {
         *self == Self::Image
     }
     fn of(document: &Document) -> Self {
+        if document.video.is_some() {
+            return Self::Video;
+        }
         match document.guide.as_ref() {
             Some(guide) if guide.template.is_some() => Self::Template,
             Some(_) => Self::Steps,
@@ -295,18 +303,83 @@ impl History {
     }
     pub fn thumbnail(&self, id: &str) -> Result<RgbaImage> {
         let path = &self.known_paths(id)?[1];
-        if fs::metadata(path)?.len() > 200_000 {
+        if fs::metadata(path)?.len() > 5_000_000 {
             return Err(Error::Invalid("History thumbnail is too large.".into()));
         }
         let bytes = fs::read(path)?;
         let reader = image::ImageReader::with_format(Cursor::new(&bytes), ImageFormat::Png);
         let (w, h) = reader.into_dimensions()?;
-        if w == 0 || h == 0 || w > 160 || h > 100 {
+        if w == 0 || h == 0 || w > THUMBNAIL_SIZE[0] || h > THUMBNAIL_SIZE[1] {
             return Err(Error::Invalid(
                 "Invalid history thumbnail dimensions.".into(),
             ));
         }
         Ok(image::load_from_memory_with_format(&bytes, ImageFormat::Png)?.into_rgba8())
+    }
+    /// Upgrade old, small previews once without changing immutable snapshots or
+    /// their accounting. Call on a worker, never from a frame's paint path.
+    pub fn master_thumbnail(&self, id: &str) -> Result<RgbaImage> {
+        let entry = self
+            .index
+            .entries
+            .iter()
+            .find(|e| e.id == id)
+            .ok_or_else(|| Error::Invalid("This history item is no longer available.".into()))?;
+        let small = self.thumbnail(id)?;
+        let scale = (THUMBNAIL_SIZE[0] as f64 / entry.width as f64)
+            .min(THUMBNAIL_SIZE[1] as f64 / entry.height as f64)
+            .min(1.);
+        if small.width() as f64 + 1. >= entry.width as f64 * scale
+            && small.height() as f64 + 1. >= entry.height as f64 * scale
+        {
+            return Ok(small);
+        }
+        let cache = self.root.join("thumbnail-masters");
+        let path = cache.join(format!("{}.png", entry.storage_id()));
+        if let Ok(meta) = fs::metadata(&path)
+            && meta.len() <= 5_000_000
+            && let Ok(bytes) = fs::read(&path)
+            && let Ok((w, h)) =
+                image::ImageReader::with_format(Cursor::new(&bytes), ImageFormat::Png)
+                    .into_dimensions()
+            && w > 0
+            && h > 0
+            && w <= THUMBNAIL_SIZE[0]
+            && h <= THUMBNAIL_SIZE[1]
+            && let Ok(image) = image::load_from_memory_with_format(&bytes, ImageFormat::Png)
+        {
+            return Ok(image.into_rgba8());
+        }
+        let master = image::DynamicImage::ImageRgba8(self.load(id)?.render()?)
+            .thumbnail(
+                THUMBNAIL_SIZE[0].min(entry.width),
+                THUMBNAIL_SIZE[1].min(entry.height),
+            )
+            .into_rgba8();
+        let mut bytes = Cursor::new(Vec::new());
+        master.write_to(&mut bytes, ImageFormat::Png)?;
+        fs::create_dir_all(&cache)?;
+        // This derived cache is disposable and bounded independently of projects.
+        let mut files: Vec<_> = fs::read_dir(&cache)?
+            .filter_map(|e| e.ok())
+            .filter_map(|e| {
+                let m = e.metadata().ok()?;
+                (m.is_file() && e.path().extension().is_some_and(|e| e == "png"))
+                    .then(|| (m.modified().ok(), m.len(), e.path()))
+            })
+            .collect();
+        files.sort_by_key(|f| f.0);
+        let mut total = files.iter().map(|f| f.1).sum::<u64>() + bytes.get_ref().len() as u64;
+        for (_, size, old) in files {
+            if total <= 256 * 1024 * 1024 {
+                break;
+            }
+            if fs::remove_file(old).is_ok() {
+                total = total.saturating_sub(size);
+            }
+        }
+        atomic_write(&path, bytes.get_ref())?;
+        Ok(master)
     }
     /// Store an immutable snapshot. A failed write leaves the previous index
     /// and document intact. Missing old files do not prevent new captures.
@@ -547,7 +620,10 @@ impl History {
             None
         };
         let thumbnail = image::DynamicImage::ImageRgba8(document.render()?)
-            .thumbnail(160, 100)
+            .thumbnail(
+                THUMBNAIL_SIZE[0].min(document.width),
+                THUMBNAIL_SIZE[1].min(document.height),
+            )
             .into_rgba8();
         let mut thumbnail_bytes = Cursor::new(Vec::new());
         thumbnail.write_to(&mut thumbnail_bytes, ImageFormat::Png)?;
@@ -686,6 +762,32 @@ impl History {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn thumbnail_master_upgrades_once_without_rewriting_snapshots_and_recovers_cache_damage() {
+        let root = tempfile::tempdir().unwrap();
+        let mut store = History::open(root.path()).unwrap();
+        let doc = Document::canvas(1920, 1080, [180, 70, 30, 255]).unwrap();
+        let entry = store.create(&doc, "Large preview", Origin::Canvas).unwrap();
+        let paths = store.known_paths(&entry.id).unwrap();
+        // Simulate an older compatible Library entry's original 160px preview.
+        image::imageops::thumbnail(&doc.render().unwrap(), 160, 100)
+            .save(&paths[1])
+            .unwrap();
+        let originals = paths.each_ref().map(|p| fs::read(p).unwrap());
+        let master = store.master_thumbnail(&entry.id).unwrap();
+        assert_eq!(master.dimensions(), (1280, 720));
+        assert_eq!(originals, paths.each_ref().map(|p| fs::read(p).unwrap()));
+        let cache = root
+            .path()
+            .join("thumbnail-masters")
+            .join(format!("{}.png", entry.storage_id()));
+        fs::write(&cache, b"corrupt disposable cache").unwrap();
+        assert_eq!(store.master_thumbnail(&entry.id).unwrap(), master);
+        let source = fs::read(&paths[0]).unwrap();
+        fs::write(&paths[0], b"must not load source on cache hits").unwrap();
+        assert_eq!(store.master_thumbnail(&entry.id).unwrap(), master);
+        fs::write(&paths[0], source).unwrap();
+    }
     #[test]
     fn guide_type_migration_metadata_duplicate_and_autosave_preserve_library_identity() {
         use crate::step_capture::{Button, Gesture, Guide};
@@ -1030,11 +1132,14 @@ mod tests {
         assert_eq!(restored.annotations.len(), 7);
         assert_eq!(restored.render().unwrap(), expected);
         let thumb = reopened.thumbnail(&entry.id).unwrap();
-        assert_eq!(thumb.dimensions(), (160, 100));
+        assert_eq!(thumb.dimensions(), expected.dimensions());
         assert_eq!(
             thumb,
             image::DynamicImage::ImageRgba8(expected)
-                .thumbnail(160, 100)
+                .thumbnail(
+                    THUMBNAIL_SIZE[0].min(restored.width),
+                    THUMBNAIL_SIZE[1].min(restored.height)
+                )
                 .into_rgba8()
         );
         assert!(reopened.available(&entry.id));

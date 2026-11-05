@@ -72,10 +72,28 @@ pub struct Limits {
 impl Default for Limits {
     fn default() -> Self {
         Self {
-            entries: MAX_ENTRIES,
-            bytes: MAX_BYTES,
+            entries: HARD_ENTRIES,
+            bytes: HARD_BYTES,
         }
     }
+}
+#[test]
+fn fresh_library_uses_maximum_capacity_and_keeps_explicit_preferences() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut h = History::open(dir.path()).unwrap();
+    assert_eq!(
+        h.limits().unwrap(),
+        Limits {
+            entries: HARD_ENTRIES,
+            bytes: HARD_BYTES
+        }
+    );
+    let custom = Limits {
+        entries: 70,
+        bytes: 2_000_000_000,
+    };
+    h.set_limits(custom).unwrap();
+    assert_eq!(History::open(dir.path()).unwrap().limits().unwrap(), custom);
 }
 impl Limits {
     fn validate(self) -> Result<Self> {

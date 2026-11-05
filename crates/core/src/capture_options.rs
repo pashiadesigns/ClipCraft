@@ -11,54 +11,25 @@ pub enum Selection {
     Fullscreen,
     Steps,
     Scrolling,
-    AutomaticScrolling,
-    GrabText,
 }
 impl Selection {
-    pub const ALL: [Self; 7] = [
+    pub const ALL: [Self; 5] = [
         Self::Region,
         Self::Window,
         Self::Fullscreen,
         Self::Steps,
         Self::Scrolling,
-        Self::AutomaticScrolling,
-        Self::GrabText,
     ];
     pub fn label(self) -> &'static str {
         match self {
             Self::Region => "Region",
             Self::Window => "Window",
             Self::Fullscreen => "Fullscreen",
-            Self::Steps => "Steps",
+            Self::Steps => "Step by Step",
             Self::Scrolling => "Scrolling",
-            Self::AutomaticScrolling => "Automatic Scrolling",
-            Self::GrabText => "Grab Text",
-        }
-    }
-    pub fn available(self) -> bool {
-        matches!(
-            self,
-            Self::Region | Self::Window | Self::Fullscreen | Self::Steps | Self::GrabText
-        )
-    }
-}
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum Mode {
-    AllInOne,
-    #[default]
-    Image,
-    Video,
-}
-impl Mode {
-    pub fn label(self) -> &'static str {
-        match self {
-            Self::AllInOne => "All-in-One",
-            Self::Image => "Image",
-            Self::Video => "Video",
         }
     }
 }
-
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Settings {
@@ -68,11 +39,14 @@ pub struct Settings {
     pub cursor: bool,
     pub delay_seconds: u32,
     pub fullscreen: Fullscreen,
+    pub scroll_automatic: bool,
+    pub scrolling: bool,
 }
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Fullscreen {
     #[default]
+    Ask,
     Pointer,
     All,
     Display(String),
@@ -92,6 +66,9 @@ pub fn fullscreen_bounds(
         return Err(Error::Invalid("No display is available".into()));
     }
     match target {
+        Fullscreen::Ask => Err(Error::Invalid(
+            "Select a monitor in the capture preview.".into(),
+        )),
         Fullscreen::All => Ok([
             displays.iter().map(|d| d.bounds[0]).min().unwrap(),
             displays.iter().map(|d| d.bounds[1]).min().unwrap(),
@@ -131,14 +108,20 @@ impl Settings {
         Self {
             selection,
             preview: true,
-            clipboard: !matches!(selection, Selection::Steps | Selection::GrabText),
+            clipboard: !matches!(selection, Selection::Steps),
             cursor: selection == Selection::Steps,
             delay_seconds: 0,
-            fullscreen: Fullscreen::Pointer,
+            fullscreen: Fullscreen::Ask,
+            scroll_automatic: true,
+            scrolling: selection == Selection::Scrolling,
         }
     }
 }
 impl Settings {
+    pub fn is_scrolling(&self) -> bool {
+        self.selection == Selection::Scrolling
+            || self.scrolling && self.selection != Selection::Steps
+    }
     pub fn validate(&self) -> Result<()> {
         if let Fullscreen::Display(device) = &self.fullscreen
             && (device.is_empty() || device.len() > 128 || device.contains('\0'))
@@ -152,21 +135,16 @@ impl Settings {
         }
         Ok(())
     }
-    pub fn request(&self, mode: Mode) -> Result<Self> {
+    pub fn request(&self) -> Result<Self> {
         self.validate()?;
-        if mode != Mode::Image {
-            return Err(Error::Invalid(format!(
-                "{} capture is planned for a later version",
-                mode.label()
-            )));
+        let mut request = self.clone();
+        // Until fixed header/footer exclusion is available, scrolling always
+        // asks for an explicit content region, including saved older choices.
+        if request.is_scrolling() {
+            request.selection = Selection::Region;
+            request.scrolling = true;
         }
-        if !self.selection.available() {
-            return Err(Error::Invalid(format!(
-                "{} capture is not implemented yet",
-                self.selection.label()
-            )));
-        }
-        Ok(self.clone())
+        Ok(request)
     }
 }
 
@@ -203,13 +181,13 @@ mod tests {
             fullscreen_bounds(&Fullscreen::Display("missing".into()), &displays, [0, 0]).is_err()
         );
         let old: Settings = serde_json::from_str("{}").unwrap();
-        assert_eq!(old.fullscreen, Fullscreen::Pointer);
+        assert_eq!(old.fullscreen, Fullscreen::Ask);
     }
     #[test]
     fn capture_preferences_migrate_legacy_and_preserve_last_valid_settings() {
         use crate::quick_preferences::{Choice, Preferences, Store};
         let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("quick-controls.json");
+        let path = dir.path().join("quick-controls-v2.json");
         let mut old = serde_json::to_value(Preferences::default()).unwrap();
         old.as_object_mut().unwrap().remove("capture");
         std::fs::write(&path, serde_json::to_vec(&old).unwrap()).unwrap();
@@ -222,9 +200,11 @@ mod tests {
             cursor: true,
             delay_seconds: 5,
             fullscreen: Fullscreen::All,
+            scroll_automatic: false,
+            scrolling: false,
         };
         let saved = store.remember(Choice::Capture(settings.clone())).unwrap();
-        assert_eq!(saved.version, 10);
+        assert_eq!(saved.version, 12);
         assert_eq!(
             Store::open(dir.path()).unwrap().read().unwrap().capture,
             settings
@@ -238,29 +218,16 @@ mod tests {
         assert_eq!(std::fs::read(&path).unwrap(), before);
     }
     #[test]
-    fn future_modes_never_dispatch_and_requests_freeze_preferences() {
+    fn requests_freeze_preferences_and_validate_supported_modes() {
         let mut settings = Settings::default();
-        let request = settings.request(Mode::Image).unwrap();
+        let request = settings.request().unwrap();
         settings.cursor = true;
         settings.clipboard = true;
         settings.delay_seconds = 5;
         assert_eq!(request, Settings::default());
-        for mode in [Mode::AllInOne, Mode::Video] {
-            assert!(settings.request(mode).is_err());
-        }
         for selection in Selection::ALL {
             settings.selection = selection;
-            assert_eq!(
-                settings.request(Mode::Image).is_ok(),
-                matches!(
-                    selection,
-                    Selection::Region
-                        | Selection::Window
-                        | Selection::Fullscreen
-                        | Selection::Steps
-                        | Selection::GrabText
-                )
-            );
+            assert!(settings.request().is_ok());
         }
         settings.delay_seconds = 9;
         assert!(settings.validate().is_err());
@@ -304,7 +271,7 @@ mod tests {
         let mut bad = reopened.clone();
         bad.capture_profiles.push(region.clone());
         std::fs::write(
-            dir.path().join("quick-controls.json"),
+            dir.path().join("quick-controls-v2.json"),
             serde_json::to_vec(&bad).unwrap(),
         )
         .unwrap();

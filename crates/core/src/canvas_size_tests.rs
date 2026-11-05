@@ -72,10 +72,10 @@ fn all_placements_expand_and_crop_exact_pixels_without_resampling_or_hidden_rgb_
             session.execute(Command::Undo).unwrap();
             assert_eq!(session.document.render().unwrap(), pixels);
             assert!(!session.is_modified());
-            assert_eq!(session.document.version, 1);
+            assert_eq!(session.document.version, crate::MAX_PROJECT_VERSION);
             session.execute(Command::Redo).unwrap();
             assert_eq!(session.document.render().unwrap(), rendered);
-            assert_eq!(session.document.version, 2);
+            assert_eq!(session.document.version, crate::MAX_PROJECT_VERSION);
         }
     }
 }
@@ -89,10 +89,13 @@ fn canvas_preserves_editable_styles_and_pointer_geometry_then_reverts_original_a
         step_outline: None,
         line_style: None,
         shadow: None,
-        analysis: None,
+
+        focus: None,
+
         highlighter_rect: false,
         group: None,
         rotation_degrees: 0.0,
+        mirror_x: false,
         id: 1,
         kind: Kind::Callout,
         start: [20.0, 20.0],
@@ -161,10 +164,13 @@ fn canvas_invalid_inputs_clipped_objects_and_noop_preserve_saved_state_and_redo(
         step_outline: None,
         line_style: None,
         shadow: None,
-        analysis: None,
+
+        focus: None,
+
         highlighter_rect: false,
         group: None,
         rotation_degrees: 0.0,
+        mirror_x: false,
         id: 1,
         kind: Kind::Arrow,
         start: [1.0, 1.0],
@@ -219,10 +225,13 @@ fn repeated_canvas_edits_use_current_pixels_while_history_shares_rasters() {
                 step_outline: None,
                 line_style: None,
                 shadow: None,
-                analysis: None,
+
+                focus: None,
+
                 highlighter_rect: false,
                 group: None,
                 rotation_degrees: 0.0,
+                mirror_x: false,
                 id: 1,
                 kind: Kind::Rectangle,
                 start: [1.0, 1.0],

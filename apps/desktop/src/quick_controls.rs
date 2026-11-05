@@ -2,6 +2,7 @@ use crate::{Command, Editor, egui};
 use capture_core::{
     layout_selection::LayoutAction as L,
     quick_preferences::{Choice, Justification as J, Preferences, Store},
+    toolbar::ToolId,
 };
 
 #[cfg(test)]
@@ -23,6 +24,24 @@ pub(super) struct QuickControls {
     pub(super) format_locked: bool,
 }
 impl QuickControls {
+    pub(crate) fn audio_outputs(&self) -> capture_core::quick_preferences::AudioOutputs {
+        self.prefs.audio_outputs.clone()
+    }
+    pub(crate) fn remember_audio_outputs(
+        &mut self,
+        value: capture_core::quick_preferences::AudioOutputs,
+    ) {
+        self.remember(Choice::AudioOutputs(value));
+    }
+    pub(super) fn recent_drawing_kind(&self, tool: ToolId) -> Option<crate::Kind> {
+        self.prefs
+            .drawing_styles
+            .iter()
+            .rev()
+            .find(|s| Editor::tool_for_kind(Some(s.kind)) == tool)
+            .map(|s| s.kind)
+    }
+
     #[cfg(test)]
     pub(super) fn test_lifecycle(
         &mut self,
@@ -69,6 +88,12 @@ impl QuickControls {
     pub(super) fn thumbnail_details(&self) -> bool {
         self.prefs.thumbnail_details
     }
+    pub(super) fn library_pinned(&self) -> bool {
+        self.prefs.library_pinned
+    }
+    pub(super) fn set_library_pinned(&mut self, value: bool) {
+        self.remember(Choice::LibraryPinned(value));
+    }
     pub(super) fn set_thumbnail_details(&mut self, value: bool) {
         self.remember(Choice::ThumbnailDetails(value));
     }
@@ -89,8 +114,14 @@ impl QuickControls {
     ) {
         self.remember(Choice::Folder(kind, path));
     }
+    pub(super) fn video_settings(&self) -> capture_core::video::Options {
+        self.prefs.video.clone()
+    }
+    pub(super) fn remember_video(&mut self, options: capture_core::video::Options) {
+        self.remember(Choice::Video(options));
+    }
     pub(super) fn capture_settings(&self) -> capture_core::capture_options::Settings {
-        self.prefs.capture.clone()
+        self.prefs.capture.request().unwrap_or_default()
     }
     pub(super) fn capture_for(
         &self,
@@ -138,9 +169,7 @@ impl QuickControls {
     ) -> capture_core::toolbar::Group {
         capture_core::toolbar::group(tool, &self.prefs.favorite_tools)
     }
-    pub(super) fn canvas_tool(&self) -> capture_core::toolbar::ToolId {
-        self.prefs.canvas_tool
-    }
+
     pub(super) fn change_toolbar(&mut self, choice: Choice) -> Result<bool, String> {
         let mut next = self.prefs.clone();
         next.choose(choice.clone()).map_err(|e| e.to_string())?;
@@ -150,8 +179,7 @@ impl QuickControls {
             next = store.remember(choice).map_err(|e| e.to_string())?;
         }
         let changed = next.toolbar_order != self.prefs.toolbar_order
-            || next.favorite_tools != self.prefs.favorite_tools
-            || next.canvas_tool != self.prefs.canvas_tool;
+            || next.favorite_tools != self.prefs.favorite_tools;
         self.prefs = next;
         Ok(changed)
     }
@@ -485,6 +513,15 @@ impl TextAction {
             _ => {
                 if let Some(text) = a.text.as_mut() {
                     self.apply(text);
+                    if let Some(rich) = &mut text.rich {
+                        for run in &mut rich.runs {
+                            let link = run.format.link.clone();
+                            let mut s = run.format.style();
+                            self.apply(&mut s);
+                            run.format = capture_core::text::rich::Format::from_style(&s);
+                            run.format.link = link;
+                        }
+                    }
                     text.validate()?;
                 }
                 a.fit_text_shape(canvas)
@@ -516,7 +553,11 @@ impl TextAction {
                 t.highlight = highlight;
                 text.set_typography(t);
             }
-            Self::Case(case) => text.content = case.apply(&text.content),
+            Self::Case(case) => {
+                let old = text.content.clone();
+                text.content = case.apply(&old);
+                capture_core::text::rich::rebase(text, &old, None);
+            }
             Self::Clear => {
                 let content = std::mem::take(&mut text.content);
                 *text = capture_core::text::TextStyle {
@@ -645,7 +686,6 @@ impl Editor {
             || self.text_draft.is_some()
             || ctx.egui_wants_keyboard_input()
             || egui::Popup::is_any_open(ctx)
-            || self.selected_pixels().is_some()
             || !self.shell.canvas_enabled()
         {
             return;
@@ -674,7 +714,7 @@ impl Editor {
         let objects = self.selected_objects();
         if objects.len() == 1 {
             self.cancel_gesture();
-            self.fill_tool.active = false;
+
             self.quick_controls.format_source = objects.into_iter().next();
             self.status="Format Painter: click a target to apply its supported formatting. Double-click Format for repeated use.".into();
         }
@@ -784,10 +824,35 @@ impl Editor {
     }
     pub(super) fn apply_quick_justification(&mut self, choice: J) {
         let (horizontal, vertical) = choice.alignments();
+        let update = |text: &mut capture_core::text::TextStyle, range: std::ops::Range<usize>| {
+            if text.rich.is_some() {
+                capture_core::text::rich::paragraph_range(text, range, |p| {
+                    p.alignment = match horizontal {
+                        capture_core::text::HorizontalAlignment::Left => {
+                            capture_core::text::rich::Alignment::Left
+                        }
+                        capture_core::text::HorizontalAlignment::Center => {
+                            capture_core::text::rich::Alignment::Center
+                        }
+                        capture_core::text::HorizontalAlignment::Right => {
+                            capture_core::text::rich::Alignment::Right
+                        }
+                    }
+                });
+            }
+            text.horizontal = horizontal;
+            text.vertical = vertical;
+        };
         if let Some(draft) = self.text_draft.as_mut() {
             if let Some(text) = draft.preview.text.as_mut() {
-                text.horizontal = horizontal;
-                text.vertical = vertical;
+                let range = if draft.selection_active
+                    && (!draft.selection.is_empty() || self.rich_text.caret_formatting)
+                {
+                    draft.selection.clone()
+                } else {
+                    0..text.content.chars().count()
+                };
+                update(text, range);
                 self.needs_render = true;
             }
             self.quick_controls.remember(Choice::Justification(choice));
@@ -798,18 +863,85 @@ impl Editor {
             .into_iter()
             .filter_map(|mut a| {
                 let text = a.text.as_mut()?;
-                text.horizontal = horizontal;
-                text.vertical = vertical;
+                update(text, 0..text.content.chars().count());
                 Some(a)
             })
             .collect();
         self.execute(Command::UpdateMany { annotations });
         self.quick_controls.remember(Choice::Justification(choice));
     }
+    pub(super) fn inline_format_shortcuts(&mut self, ctx: &egui::Context) {
+        let Some(draft) = &self.text_draft else {
+            return;
+        };
+        if !ctx.memory(|m| m.has_focus(egui::Id::unique(("text_content", draft.preview.id)))) {
+            return;
+        }
+        let Some(text) = &draft.preview.text else {
+            return;
+        };
+        let f = draft
+            .typing
+            .clone()
+            .unwrap_or_else(|| capture_core::text::rich::format_at(text, draft.selection.start));
+        for (key, action) in [
+            (egui::Key::B, TextAction::Bold(!f.bold)),
+            (egui::Key::I, TextAction::Italic(!f.italic)),
+            (egui::Key::U, TextAction::Underline(!f.underline)),
+        ] {
+            if ctx.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, key)) {
+                self.apply_quick_text(action);
+            }
+        }
+    }
     fn apply_quick_text(&mut self, action: TextAction) {
         self.commit_property_preview();
         let canvas = [self.session.document.width, self.session.document.height];
         if let Some(draft) = &mut self.text_draft {
+            if draft.selection_active
+                && (!draft.selection.is_empty() || self.rich_text.caret_formatting)
+                && let Some(text) = &mut draft.preview.text
+            {
+                let range = draft.selection.clone();
+                if matches!(action, TextAction::Case(_)) {
+                    if let TextAction::Case(case) = action {
+                        let before = text.content.clone();
+                        let selected = before
+                            .chars()
+                            .skip(range.start)
+                            .take(range.len())
+                            .collect::<String>();
+                        if !selected.is_empty() {
+                            text.content = before
+                                .chars()
+                                .take(range.start)
+                                .chain(case.apply(&selected).chars())
+                                .chain(before.chars().skip(range.end))
+                                .collect();
+                            capture_core::text::rich::rebase(text, &before, None);
+                        }
+                    }
+                } else {
+                    let change = |f: &mut capture_core::text::rich::Format| {
+                        let link = f.link.clone();
+                        let mut s = f.style();
+                        action.apply(&mut s);
+                        *f = capture_core::text::rich::Format::from_style(&s);
+                        f.link = link;
+                    };
+                    if range.is_empty() {
+                        let mut f = draft.typing.clone().unwrap_or_else(|| {
+                            capture_core::text::rich::format_at(text, range.start.saturating_sub(1))
+                        });
+                        change(&mut f);
+                        draft.typing = Some(f);
+                    } else {
+                        capture_core::text::rich::format_range(text, range, change);
+                    }
+                }
+                self.needs_render = true;
+                return;
+            }
             match action.apply_annotation(draft.preview.clone(), canvas) {
                 Ok(preview) => {
                     draft.preview = preview;
@@ -948,24 +1080,35 @@ impl Editor {
 
     pub(super) fn show_font_controls(&mut self, ui: &mut egui::Ui, sidebar: bool) {
         use capture_core::text::TextFont;
-        let objects = self
+        let mut objects = self
             .property_preview
             .as_ref()
             .map_or_else(|| self.selected_objects(), |p| p.batch_preview.clone());
+        if let Some(draft) = &self.text_draft {
+            objects = vec![draft.preview.clone()];
+            if let Some(text) = objects.first_mut().and_then(|a| a.text.as_mut()) {
+                let format = draft.typing.clone().unwrap_or_else(|| {
+                    capture_core::text::rich::format_at(text, draft.selection.start)
+                });
+                format.apply(text);
+            }
+        }
         let enabled = !objects.is_empty() && objects.iter().all(|a| a.text.is_some());
         let first = objects.first().and_then(|a| a.text.as_ref());
         ui.vertical(|ui| {
-            ui.spacing_mut().item_spacing = egui::vec2(3.0, 4.0);
-            ui.spacing_mut().interact_size.y = 24.0;
+            ui.spacing_mut().item_spacing = if sidebar { egui::vec2(6.,8.) } else { egui::vec2(3.0,4.0) };
+            ui.spacing_mut().interact_size.y = if sidebar {28.}else{24.};
             ui.spacing_mut().button_padding = egui::vec2(4.0, 3.0);
+            let row_width=ui.available_width();
             ui.add_enabled_ui(enabled, |ui| {
                 ui.horizontal_wrapped(|ui| {
                     let font = first.map(|t| t.font);
                     let mixed = objects
                         .iter()
                         .any(|a| a.text.as_ref().map(|t| t.font) != font);
-                    egui::ComboBox::from_id_salt("ribbon_font")
-                        .width(if sidebar { 148.0 } else { 128.0 })
+                    let font_button = egui::ComboBox::from_id_salt("ribbon_font")
+                        .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
+                        .width(if sidebar { row_width } else { 128.0 })
                         .selected_text(if mixed {
                             "Mixed fonts"
                         } else {
@@ -974,7 +1117,10 @@ impl Editor {
                         .show_ui(ui, |ui| {
                             let key=egui::Id::unique("font-search");
                             let mut query=ui.ctx().data_mut(|d|d.get_temp::<String>(key).unwrap_or_default());
-                            ui.add(egui::TextEdit::singleline(&mut query).hint_text("Search installed fonts"));
+                            let input = ui.add(crate::unicode_input::TextEdit::singleline(&mut query).hint_text("Search installed fonts"));
+                            #[cfg(test)]
+                            ui.ctx().data_mut(|d| d.insert_temp(egui::Id::unique("font-search-input"),input.rect));
+                            let _ = input;
                             ui.ctx().data_mut(|d|d.insert_temp(key,query.clone()));
                             for f in [TextFont::UbuntuLight, TextFont::HackRegular].into_iter().chain(capture_core::text::system_fonts::choices()).filter(|f|f.label().to_lowercase().contains(&query.to_lowercase())) {
                                 if ui
@@ -988,15 +1134,35 @@ impl Editor {
                         })
                         .response
                         .on_hover_text("Installed font family. Other computers need the same font; missing fonts use Ubuntu.");
+                    #[cfg(test)]
+                    ui.ctx().data_mut(|d| d.insert_temp(egui::Id::unique("font-search-button"),font_button.rect));
+                    let _ = font_button;
+                    if sidebar {
+                        use capture_core::text::editing::Preset;
+                        let selected=first.and_then(|s| Preset::ALL.into_iter().find(|p| {let f=p.format(s.font);f.size==s.size_points&&f.bold==s.bold&&f.italic==s.italic}));
+                        egui::ComboBox::from_id_salt("sidebar-text-preset").width((row_width-85.).max(85.)).selected_text(selected.map_or("Custom style",|p|p.label())).show_ui(ui,|ui| {
+                            for preset in Preset::ALL {
+                                let f=preset.format(first.map_or(TextFont::UbuntuLight,|s|s.font));
+                                let mut label=egui::RichText::new(preset.label()).size(f.size.min(24.));
+                                if f.bold{label=label.strong();}
+                                if f.italic{label=label.italics();}
+                                if ui.selectable_label(selected==Some(preset),label).clicked() {
+                                    if let Some(mut a)=self.selected_annotation() {if let Some(s)=&mut a.text {f.apply(s);}self.update_text_sidebar(a,false);}
+                                    ui.close();
+                                }
+                            }
+                        }).response.on_hover_text("Text style");
+                    }
                     let mut size = first.map_or(24.0, |t| t.size_points);
                     let mixed = objects
                         .iter()
                         .any(|a| a.text.as_ref().is_some_and(|t| t.size_points != size));
                     let r = ui.add_sized(
-                        [52.0, 24.0],
+                        [if sidebar {72.}else{52.}, if sidebar {28.}else{24.}],
                         egui::DragValue::new(&mut size)
                             .range(6.0..=144.0)
                             .speed(0.25)
+                            .suffix(if sidebar {" pt"}else{""})
                             .max_decimals(1)
                             .update_while_editing(false),
                     );
@@ -1014,7 +1180,7 @@ impl Editor {
                     if !sidebar {
                         self.font_size_buttons(ui, enabled);
                     }
-                    if text_button(
+                    if !sidebar && text_button(
                         ui,
                         egui::RichText::new("A").size(13.0),
                         "Clear text formatting",
@@ -1066,6 +1232,7 @@ impl Editor {
                 }
                 if sidebar {
                     self.font_size_buttons(ui, enabled);
+                    if text_button(ui,egui::RichText::new("A"),"Clear text formatting",enabled,false) {self.apply_quick_text(TextAction::Clear);}
                 }
                 if !sidebar {
                     self.typography_controls(ui, &objects, enabled, true);
@@ -1102,7 +1269,7 @@ impl Editor {
                             .clicked()
                         {
                             self.shell.properties = true;
-                            self.shell.effects = false;
+
                             self.shell.property_tab = crate::shell::PropertyTab::Tool;
                         }
                     });
@@ -1371,7 +1538,7 @@ mod tests {
             .unwrap();
         lock.try_lock().unwrap();
         let choice = Choice::MoveTool {
-            tool: ToolId::Step,
+            tool: ToolId::Steps,
             before: Some(ToolId::Text),
         };
         assert!(controls.change_toolbar(choice.clone()).is_err());
@@ -1382,7 +1549,7 @@ mod tests {
         assert!(controls.change_toolbar(choice).unwrap());
         assert!(controls.prefs.auto_switch_tool);
         assert!(!controls.prefs.canvas_snapping);
-        assert_eq!(controls.prefs.toolbar_order[0], ToolId::Step);
+        assert_eq!(controls.prefs.toolbar_order[1], ToolId::Steps);
         assert_eq!(
             Store::open(directory.path()).unwrap().read().unwrap(),
             controls.prefs
@@ -1564,7 +1731,10 @@ mod tests {
         };
         click(&mut e, "Underline");
         assert!(read("Underline").1);
-        assert_eq!(e.session.document.version, 5);
+        assert_eq!(
+            e.session.document.version,
+            capture_core::MAX_PROJECT_VERSION
+        );
         assert!(
             e.selected_objects()
                 .iter()
@@ -1572,7 +1742,10 @@ mod tests {
         );
         e.execute(Command::Undo);
         assert_eq!(e.session.document.annotations, before);
-        assert_eq!(e.session.document.version, 1);
+        assert_eq!(
+            e.session.document.version,
+            capture_core::MAX_PROJECT_VERSION
+        );
         assert!(!e.session.can_undo());
         click(&mut e, "Underline");
         click(&mut e, "Strikethrough");
@@ -1744,7 +1917,12 @@ mod tests {
         e.execute(Command::Add {
             annotation: rectangle.clone(),
         });
-        e.choose_tool(15); // Line
+        e.choose_tool(
+            crate::shell::TOOLS
+                .iter()
+                .position(|t| t.id == ToolId::Lines)
+                .unwrap(),
+        ); // Line
         let mut line = e.new_annotation(crate::Kind::Line, [220.0, 180.0], [410.0, 230.0]);
         line.color = [10, 80, 240, 255];
         line.width = 3;
@@ -1768,8 +1946,18 @@ mod tests {
         e.execute(Command::Update {
             annotation: rectangle.clone(),
         });
-        e.choose_tool(15);
-        e.choose_tool(4);
+        e.choose_tool(
+            crate::shell::TOOLS
+                .iter()
+                .position(|t| t.id == ToolId::Lines)
+                .unwrap(),
+        );
+        e.choose_tool(
+            crate::shell::TOOLS
+                .iter()
+                .position(|t| t.id == ToolId::Shape)
+                .unwrap(),
+        );
         e.select_only(None);
         let next = e.new_annotation(crate::Kind::Rectangle, [210.0, 220.0], [380.0, 330.0]);
         assert_eq!(next.fill, None);
@@ -1780,18 +1968,28 @@ mod tests {
         assert_eq!(next.color, preset.color);
         assert_eq!(next.fill, preset.fill);
         let loaded = Store::open(directory.path()).unwrap();
-        assert_eq!(loaded.read().unwrap().version, 8);
+        assert_eq!(loaded.read().unwrap().version, 12);
         let mut restarted = crate::canvas::tests::editor(&ctx);
         restarted.quick_controls = QuickControls {
             prefs: loaded.read().unwrap(),
             store: Some(loaded),
             ..Default::default()
         };
-        restarted.choose_tool(4);
+        restarted.choose_tool(
+            crate::shell::TOOLS
+                .iter()
+                .position(|t| t.id == ToolId::Shape)
+                .unwrap(),
+        );
         let next = restarted.new_annotation(crate::Kind::Rectangle, [210.0, 220.0], [380.0, 330.0]);
         assert_eq!(next.color, preset.color);
         assert_eq!(next.fill, preset.fill);
-        restarted.choose_tool(15);
+        restarted.choose_tool(
+            crate::shell::TOOLS
+                .iter()
+                .position(|t| t.id == ToolId::Lines)
+                .unwrap(),
+        );
         let next = restarted.new_annotation(crate::Kind::Line, [20.0, 20.0], [160.0, 120.0]);
         assert_eq!(next.color, [10, 80, 240, 255]);
         assert_eq!(next.width, 3);

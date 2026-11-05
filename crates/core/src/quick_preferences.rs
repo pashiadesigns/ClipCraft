@@ -46,29 +46,30 @@ impl Justification {
 pub enum StartupWindow {
     Editor,
     #[default]
-    CaptureController,
+    Clip,
 }
-// Preferences written before startup selection existed retain their old behavior.
-fn legacy_startup_window() -> StartupWindow {
-    StartupWindow::Editor
-}
-
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Preferences {
+    #[serde(default)]
+    pub audio_outputs: AudioOutputs,
     #[serde(default = "snapping_default")]
     pub close_to_tray: bool,
-    #[serde(default = "legacy_startup_window")]
+    #[serde(default)]
     pub startup_window: StartupWindow,
     #[serde(default)]
     pub keybinds: crate::keybinds::Keybinds,
     #[serde(default)]
     pub capture: crate::capture_options::Settings,
+    #[serde(default)]
+    pub video: crate::video::Options,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub capture_profiles: Vec<crate::capture_options::Settings>,
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
     pub folders: std::collections::BTreeMap<Folder, PathBuf>,
     #[serde(default)]
     pub thumbnail_details: bool,
+    #[serde(default)]
+    pub library_pinned: bool,
     pub version: u32,
     pub alignment: LayoutAction,
     pub distribution: LayoutAction,
@@ -85,28 +86,27 @@ pub struct Preferences {
     pub toolbar_order: Vec<crate::toolbar::ToolId>,
     #[serde(default)]
     pub favorite_tools: Vec<crate::toolbar::ToolId>,
-    #[serde(default = "default_canvas_tool")]
-    pub canvas_tool: crate::toolbar::ToolId,
     #[serde(default)]
     pub drawing_styles: Vec<crate::object_styles::ObjectStyle>,
 }
 fn snapping_default() -> bool {
     true
 }
-fn default_canvas_tool() -> crate::toolbar::ToolId {
-    crate::toolbar::ToolId::Crop
-}
+
 impl Default for Preferences {
     fn default() -> Self {
         Self {
-            version: 8,
+            audio_outputs: AudioOutputs::default(),
+            version: 12,
             close_to_tray: true,
-            startup_window: StartupWindow::CaptureController,
+            startup_window: StartupWindow::Clip,
             keybinds: Default::default(),
             capture: Default::default(),
+            video: Default::default(),
             capture_profiles: Vec::new(),
             folders: Default::default(),
             thumbnail_details: false,
+            library_pinned: false,
             alignment: LayoutAction::HorizontalCenter,
             distribution: LayoutAction::HorizontalGaps,
             justification: Justification::CenterMiddle,
@@ -116,7 +116,6 @@ impl Default for Preferences {
             auto_switch_tool: false,
             toolbar_order: crate::toolbar::default_order(),
             favorite_tools: crate::toolbar::default_favorites(),
-            canvas_tool: default_canvas_tool(),
             drawing_styles: vec![],
         }
     }
@@ -136,37 +135,40 @@ impl Preferences {
 
     pub fn choose(&mut self, choice: Choice) -> Result<()> {
         match choice {
+            Choice::AudioOutputs(value) => {
+                if [&value.speakers, &value.headphones]
+                    .iter()
+                    .any(|id| id.len() > 2048 || id.contains('\0'))
+                {
+                    return Err(Error::Invalid("Choose a valid audio output device.".into()));
+                }
+                self.audio_outputs = value;
+            }
             Choice::ThumbnailDetails(value) => {
                 self.thumbnail_details = value;
-                self.version = self.version.max(11);
             }
+            Choice::LibraryPinned(value) => self.library_pinned = value,
             Choice::Folder(kind, path) => {
                 validate_folder(&path)?;
                 self.folders.insert(kind, path);
-                self.version = self.version.max(11);
             }
             Choice::CloseToTray(value) => {
                 self.close_to_tray = value;
-                self.version = self.version.max(8);
             }
             Choice::StartupWindow(value) => {
                 self.startup_window = value;
-                self.version = self.version.max(8);
             }
             Choice::Keybinds(keys) => {
                 keys.validate()?;
                 self.keybinds = keys;
-                self.version = self.version.max(
-                    if self.keybinds.editor == crate::editor_keybinds::Keybinds::default() {
-                        6
-                    } else {
-                        7
-                    },
-                );
+            }
+            Choice::Video(options) => {
+                options.validate()?;
+                self.video = options;
             }
             Choice::Capture(settings) => {
                 settings.validate()?;
-                // Retain the legacy/current mode before switching to another.
+                // Retain the current mode before switching to another.
                 if !self
                     .capture_profiles
                     .iter()
@@ -178,7 +180,6 @@ impl Preferences {
                     .retain(|p| p.selection != settings.selection);
                 self.capture_profiles.push(settings.clone());
                 self.capture = settings;
-                self.version = self.version.max(10);
             }
             Choice::Alignment(action) if action.minimum_objects() == 2 => self.alignment = action,
             Choice::Distribution(action) if action.minimum_objects() == 3 => {
@@ -188,40 +189,33 @@ impl Preferences {
             Choice::CanvasSnapping(value) => self.canvas_snapping = value,
             Choice::SnappingLimit(value) => {
                 self.snapping_limit = value;
-                self.version = self.version.max(9);
             }
             Choice::AutoSwitchTool(value) => self.auto_switch_tool = value,
             Choice::DrawingStyle(style) => {
                 style.validate()?;
                 self.drawing_styles.retain(|s| !s.same_variant(&style));
                 self.drawing_styles.push(style);
-                self.version = self.version.max(3);
             }
             Choice::MoveTool { tool, before } => {
                 crate::toolbar::move_before(&mut self.toolbar_order, tool, before)?;
                 // Older apps must not silently drop a customized order when
                 // rewriting their known preference fields.
-                self.version = self.version.max(2);
             }
             Choice::ResetToolbar => {
                 self.toolbar_order = crate::toolbar::default_order();
                 // Preserve membership; reset only each section's ordering.
                 self.favorite_tools
                     .sort_by_key(|t| self.toolbar_order.iter().position(|id| id == t));
-                self.version = self.version.max(2);
             }
             Choice::FavoriteTool { tool, favorite } => {
                 let tool = crate::toolbar::slot(tool);
-                if tool == crate::toolbar::ToolId::Favorites {
-                    return Err(Error::Invalid("Favorites is a section, not a tool".into()));
-                }
+
                 if favorite && !self.favorite_tools.contains(&tool) {
                     self.favorite_tools.push(tool);
                 }
                 if !favorite {
                     self.favorite_tools.retain(|t| *t != tool);
                 }
-                self.version = self.version.max(4);
             }
             Choice::MoveSectionTool { tool, before } => {
                 crate::toolbar::move_in_group(
@@ -230,16 +224,6 @@ impl Preferences {
                     tool,
                     before,
                 )?;
-                self.version = self.version.max(4);
-            }
-            Choice::CanvasTool(tool)
-                if matches!(
-                    tool,
-                    crate::toolbar::ToolId::Crop | crate::toolbar::ToolId::CutOut
-                ) =>
-            {
-                self.canvas_tool = tool;
-                self.version = self.version.max(4);
             }
             Choice::Style { category, name } => {
                 validate_style_choice(&category, &name)?;
@@ -255,32 +239,15 @@ impl Preferences {
         Ok(())
     }
     fn validate(&self) -> Result<()> {
-        if !matches!(self.version, 1..=11)
-            || (self.version < 11 && (!self.folders.is_empty() || self.thumbnail_details))
+        self.video.validate()?;
+        if self.version != 12
             || self.folders.len() > 3
             || self.snapping_limit.is_some_and(|n| n == 0 || n > 10000)
-            || (self.version < 10 && !self.capture_profiles.is_empty())
             || self.capture_profiles.len() > crate::capture_options::Selection::ALL.len()
-            || (self.version < 9 && self.snapping_limit.is_some())
-            || (self.version < 8
-                && (!self.close_to_tray || self.startup_window != StartupWindow::Editor))
-            || (self.version < 7
-                && self.keybinds.editor != crate::editor_keybinds::Keybinds::default())
-            || (self.version < 6
-                && self.keybinds != crate::keybinds::Keybinds::default()
-                && !self.keybinds.is_legacy_default())
-            || (self.version < 5 && self.capture != crate::capture_options::Settings::default())
-            || (self.version < 4
-                && (!self.favorite_tools.is_empty() || self.canvas_tool != default_canvas_tool()))
-            || !matches!(
-                self.canvas_tool,
-                crate::toolbar::ToolId::Crop | crate::toolbar::ToolId::CutOut
-            )
             || self.alignment.minimum_objects() != 2
             || self.distribution.minimum_objects() != 3
             || self.style_choices.len() > 24
             || self.drawing_styles.len() > 21
-            || (self.version < 3 && !self.drawing_styles.is_empty())
         {
             return Err(Error::Invalid(
                 "Unsupported quick control preferences; file preserved".into(),
@@ -334,12 +301,15 @@ fn validate_style_choice(category: &str, name: &str) -> Result<()> {
 }
 #[derive(Clone)]
 pub enum Choice {
+    AudioOutputs(AudioOutputs),
     Folder(Folder, PathBuf),
     ThumbnailDetails(bool),
+    LibraryPinned(bool),
     CloseToTray(bool),
     StartupWindow(StartupWindow),
     Keybinds(crate::keybinds::Keybinds),
     Capture(crate::capture_options::Settings),
+    Video(crate::video::Options),
     Alignment(LayoutAction),
     Distribution(LayoutAction),
     Justification(Justification),
@@ -360,11 +330,25 @@ pub enum Choice {
         tool: crate::toolbar::ToolId,
         before: Option<crate::toolbar::ToolId>,
     },
-    CanvasTool(crate::toolbar::ToolId),
     Style {
         category: String,
         name: String,
     },
+}
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AudioOutputs {
+    pub speakers: String,
+    pub headphones: String,
+    pub use_headphones: bool,
+}
+impl AudioOutputs {
+    pub fn selected(&self) -> &str {
+        if self.use_headphones {
+            &self.headphones
+        } else {
+            &self.speakers
+        }
+    }
 }
 
 pub struct Store {
@@ -380,7 +364,7 @@ impl Store {
         Ok(store)
     }
     pub fn read(&self) -> Result<Preferences> {
-        let path = self.root.join("quick-controls.json");
+        let path = self.root.join("quick-controls-v2.json");
         let metadata = match fs::metadata(&path) {
             Ok(m) => m,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Preferences::default()),
@@ -414,7 +398,7 @@ impl Store {
                 "Quick control preferences exceed storage limit".into(),
             ));
         }
-        atomic_write(&self.root.join("quick-controls.json"), &bytes)?;
+        atomic_write(&self.root.join("quick-controls-v2.json"), &bytes)?;
         Ok(next)
     }
 }
@@ -427,10 +411,7 @@ mod tests {
         let mut p = super::Preferences::default();
         for selection in Selection::ALL {
             let s = p.capture_for(selection);
-            assert_eq!(
-                s.clipboard,
-                !matches!(selection, Selection::Steps | Selection::GrabText)
-            );
+            assert_eq!(s.clipboard, !matches!(selection, Selection::Steps));
             assert_eq!(s.cursor, selection == Selection::Steps);
         }
         p.choose(super::Choice::Capture(Settings {
@@ -459,22 +440,10 @@ mod tests {
         );
         store.remember(Choice::Keybinds(keys.clone())).unwrap();
         let loaded = Store::open(temp.path()).unwrap().read().unwrap();
-        assert_eq!(loaded.version, 8);
+        assert_eq!(loaded.version, 12);
         assert_eq!(loaded.keybinds, keys);
         assert_eq!(loaded.keybinds.bindings, capture);
         assert_eq!(loaded.favorite_tools, crate::toolbar::default_favorites());
-        let mut legacy = serde_json::to_value(&loaded).unwrap();
-        legacy["version"] = 6.into();
-        legacy["startup_window"] = serde_json::json!("editor");
-        legacy["keybinds"].as_object_mut().unwrap().remove("editor");
-        legacy["favorite_tools"] = serde_json::json!([]);
-        let restored: Preferences = serde_json::from_value(legacy).unwrap();
-        restored.validate().unwrap();
-        assert_eq!(
-            restored.keybinds.editor,
-            crate::editor_keybinds::Keybinds::default()
-        );
-        assert!(restored.favorite_tools.is_empty());
     }
     #[test]
     fn drawing_defaults_merge_by_kind_and_reject_invalid_data_without_losing_saved_styles() {
@@ -487,9 +456,9 @@ mod tests {
         b.remember(Choice::DrawingStyle(text.clone())).unwrap();
         a.remember(Choice::ResetToolbar).unwrap();
         let loaded = b.read().unwrap();
-        assert_eq!(loaded.version, 8);
+        assert_eq!(loaded.version, 12);
         assert_eq!(loaded.drawing_styles, [rectangle.clone(), text]);
-        let path = temp.path().join("quick-controls.json");
+        let path = temp.path().join("quick-controls-v2.json");
         let bytes = fs::read(&path).unwrap();
         let mut invalid = rectangle.clone();
         invalid.width = 0;
@@ -529,7 +498,7 @@ mod tests {
         assert_eq!(p.style_choices["text_mono"], "Ocean");
         assert!(!p.canvas_snapping);
         assert!(p.auto_switch_tool);
-        let path = temp.path().join("quick-controls.json");
+        let path = temp.path().join("quick-controls-v2.json");
         let bytes = fs::read(&path).unwrap();
         for (category, name) in [
             ("../../file", "Coral"),
@@ -545,7 +514,7 @@ mod tests {
             );
             assert_eq!(fs::read(&path).unwrap(), bytes);
         }
-        let legacy=br#"{"version":1,"alignment":"left","distribution":"horizontal_gaps","justification":"center_middle"}"#;
+        let legacy=br#"{"version":12,"alignment":"left","distribution":"horizontal_gaps","justification":"center_middle"}"#;
         fs::write(&path, legacy).unwrap();
         let p = a.read().unwrap();
         assert!(p.style_choices.is_empty());
@@ -568,13 +537,13 @@ mod tests {
         assert_eq!(loaded.distribution, LayoutAction::VerticalGaps);
         assert_eq!(loaded.justification, Justification::BottomCenter);
         assert!(!loaded.canvas_snapping);
-        let bytes = fs::read(temp.path().join("quick-controls.json")).unwrap();
+        let bytes = fs::read(temp.path().join("quick-controls-v2.json")).unwrap();
         assert!(
             a.remember(Choice::Alignment(LayoutAction::HorizontalGaps))
                 .is_err()
         );
         assert_eq!(
-            fs::read(temp.path().join("quick-controls.json")).unwrap(),
+            fs::read(temp.path().join("quick-controls-v2.json")).unwrap(),
             bytes
         );
         a.remember(Choice::Alignment(LayoutAction::BottomRight))
@@ -587,7 +556,7 @@ mod tests {
     #[test]
     fn invalid_preferences_are_preserved_instead_of_silently_replaced() {
         let temp = tempfile::tempdir().unwrap();
-        let path = temp.path().join("quick-controls.json");
+        let path = temp.path().join("quick-controls-v2.json");
         for bytes in [b"{broken".to_vec(),vec![b'x';16385],br#"{"version":99,"alignment":"left","distribution":"horizontal_gaps","justification":"center_middle"}"#.to_vec()] {
             fs::write(&path,&bytes).unwrap();assert!(Store::open(temp.path()).is_err());assert_eq!(fs::read(&path).unwrap(),bytes);
         }
@@ -618,7 +587,7 @@ mod lifecycle_tests {
         let store = Store::open(root.path()).unwrap();
         let original = store.read().unwrap();
         assert!(original.close_to_tray);
-        assert_eq!(original.startup_window, StartupWindow::CaptureController);
+        assert_eq!(original.startup_window, StartupWindow::Clip);
         let mut legacy = serde_json::to_value(&original).unwrap();
         legacy.as_object_mut().unwrap().remove("close_to_tray");
         legacy.as_object_mut().unwrap().remove("startup_window");
@@ -632,7 +601,7 @@ mod lifecycle_tests {
         let next = Store::open(root.path()).unwrap().read().unwrap();
         assert!(!next.close_to_tray);
         assert_eq!(next.startup_window, StartupWindow::Editor);
-        assert_eq!(next.version, 8);
+        assert_eq!(next.version, 12);
         assert_eq!(next.keybinds, original.keybinds);
         assert_eq!(next.favorite_tools, original.favorite_tools);
         assert_eq!(next.toolbar_order, original.toolbar_order);
@@ -642,6 +611,9 @@ mod lifecycle_tests {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Folder {
+    ManagedProjects,
+    Templates,
+    Presets,
     Open,
     Project,
     Export,
@@ -669,12 +641,15 @@ mod folder_tests {
         }
         store.remember(Choice::CanvasSnapping(false)).unwrap();
         store.remember(Choice::ThumbnailDetails(true)).unwrap();
+        store.remember(Choice::LibraryPinned(true)).unwrap();
         let reopened = Store::open(dir.path()).unwrap().read().unwrap();
         assert_eq!(reopened.folders.len(), 3);
         assert!(reopened.thumbnail_details);
+        assert!(reopened.library_pinned);
+        assert!(!Preferences::default().library_pinned);
         assert!(!Preferences::default().thumbnail_details);
         assert!(!reopened.canvas_snapping);
-        let before = std::fs::read(dir.path().join("quick-controls.json")).unwrap();
+        let before = std::fs::read(dir.path().join("quick-controls-v2.json")).unwrap();
         assert!(
             store
                 .remember(Choice::Folder(Folder::Open, "relative".into()))
@@ -682,7 +657,7 @@ mod folder_tests {
         );
         assert_eq!(
             before,
-            std::fs::read(dir.path().join("quick-controls.json")).unwrap()
+            std::fs::read(dir.path().join("quick-controls-v2.json")).unwrap()
         );
     }
 }

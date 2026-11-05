@@ -1,0 +1,34 @@
+{
+  "version": "1.0.0-beta.1",
+  "date": "2026-11-05",
+  "channel": "beta",
+  "title": "ClipCraft 1.0 beta",
+  "summary": "Capture, annotate and explain in one local Windows workspace: editable image guides, multitrack video, narration and live audio effects.",
+  "changes": {
+    "Image capture and editing": [
+      "Region, window, fullscreen, Region-only manual/automatic scrolling, and editable Step by Step guides.",
+      "Rich text, Lines, shapes/callouts, Icons, Steps, Penlighter, Obfuscate, crop and editable frames.",
+      "Multipage Page Setup, reusable templates/presets, OCR and local Library organization.",
+      "Focus windows combine outside blur/darken while retaining editable geometry and upper annotations."
+    ],
+    "Video and narration": [
+      "Screen/window video with microphone and system audio, optional webcam narration and linked clips.",
+      "Multiple media/annotation tracks, trim/split/link, fades, motion presets, editable Zoom/Focus and frame styling.",
+      "Per-clip/per-track EQ, compression, clarity, de-essing, leveling and limiting with local Analyze Voice suggestions."
+    ],
+    "Beta finishing repairs": [
+      "Focus movement reuses its underlying image instead of rebuilding the full canvas.",
+      "Reduced-resolution framed crossfades no longer suppress the whole preview; upper annotations remain visible.",
+      "Focus appears in video Insert; capture tray toggles remain open, including Open ClipCraft after capture.",
+      "Fresh Libraries default to 1,000 items / 16 GB. Clean MSI/ZIP packages include no personal projects or settings."
+    ]
+  },
+  "limitations": [
+    "Unsigned Windows 10/11 x64 beta. Old development project formats are unsupported; back up work before updating.",
+    "Framed crossfades involving rotation, transparency, different frames or fit-mode can still preview less smoothly. Export uses the full-resolution compositor.",
+    "Video redactions do not automatically track moving information. Inspect every frame; editable projects retain original content and must not be shared as sanitized documents. Focus is not a privacy tool; blur/pixelation may leave information inferable.",
+    "Scrolling capture is Region-only; exclude fixed headers/footers. Automatic cursor choreography and tracked video redaction are deferred.",
+    "Complex effects and high-resolution webcam previews can be slower on some systems. Device/driver behavior varies.",
+    "PDF text is outlined, not searchable. No automatic updater. MSI extraction/table validation is checked; clean-machine installation across Windows configurations remains a review limitation."
+  ]
+}

@@ -30,15 +30,14 @@ fn drawing_shift(ui: &egui::Ui) -> bool {
 
 impl Editor {
     pub(super) fn cancel_gesture(&mut self) {
-        self.stamps.cancel_drag();
+        self.icon_library.cancel_drag();
         self.marquee = None;
         self.quick_controls.format_source = None;
         self.quick_controls.format_locked = false;
         self.snapping_guides = [None; 2];
         self.crop = None;
         self.cut_out = None;
-        self.pixel_selection = None;
-        self.fill_tool.pending = None;
+
         let property = self.property_preview.take().is_some();
         if self.guide_drag.take().is_some()
             | self.rotation_drag.take().is_some()
@@ -61,27 +60,44 @@ impl Editor {
     pub(super) fn tool_matches(tool: Option<Kind>, kind: Kind) -> bool {
         match tool {
             None => true,
-            Some(Kind::Rectangle | Kind::Ellipse | Kind::Polygon) => {
-                matches!(kind, Kind::Rectangle | Kind::Ellipse | Kind::Polygon)
+            Some(Kind::Rectangle | Kind::Ellipse | Kind::Polygon | Kind::Callout) => {
+                matches!(
+                    kind,
+                    Kind::Rectangle | Kind::Ellipse | Kind::Polygon | Kind::Callout
+                )
             }
-            Some(Kind::Blur | Kind::Pixelate) => matches!(kind, Kind::Blur | Kind::Pixelate),
+            Some(Kind::Blur | Kind::Pixelate | Kind::Redact) => {
+                matches!(kind, Kind::Blur | Kind::Pixelate | Kind::Redact)
+            }
+            Some(Kind::Arrow | Kind::Line) => matches!(kind, Kind::Arrow | Kind::Line),
+            Some(Kind::Pen | Kind::Highlighter) => matches!(kind, Kind::Pen | Kind::Highlighter),
             Some(active) => kind == active,
         }
     }
 
     pub(super) fn tool_hit(&self, point: [f32; 2], tolerance: f32) -> Option<u64> {
-        self.session
-            .document
-            .annotations
-            .iter()
-            .rev()
+        let mut candidates: Vec<_> = self.session.document.annotations.iter().rev().collect();
+        if let Some(p) = &self.session.document.video {
+            // Topmost timeline track wins, then the last object within it.
+            candidates.sort_by_key(|a| {
+                p.objects.get(&a.id).map_or(usize::MAX, |t| {
+                    p.layer_index(capture_core::video::links::Layer::Annotation(t.track))
+                })
+            });
+        }
+        candidates
+            .into_iter()
             .find(|a| {
                 self.session.document.object_editable(a.id)
-                    && (!self.stamps.active || a.image.as_ref().is_some_and(|b| b.is_stamp()))
+                    && self.video_object_active(a.id)
+                    && (!self.icon_library.active || a.image.as_ref().is_some_and(|b| b.is_icon()))
                     && (self.quick_controls.auto_switch_tool()
                         || self.editing_group.is_some()
                         || Self::tool_matches(self.tool, a.kind))
-                    && a.hit_test(point, tolerance)
+                    && {
+                        let (point, tolerance) = self.video_object_point(a.id, point, tolerance);
+                        a.hit_test(point, tolerance)
+                    }
             })
             .map(|a| a.id)
     }
@@ -89,7 +105,7 @@ impl Editor {
     pub(super) fn selected_annotation(&self) -> Option<Annotation> {
         if self
             .selected
-            .is_some_and(|id| !self.session.document.object_editable(id))
+            .is_some_and(|id| self.session.document.object_state(id).locked)
         {
             return None;
         }
@@ -120,7 +136,12 @@ impl Editor {
             self.session.document.width as f32,
             self.session.document.height as f32,
         );
-        let viewport = ui.available_rect_before_wrap();
+        let mut viewport = ui.available_rect_before_wrap();
+        if self.crop.is_some() {
+            // Keep drawing, navigation and crop handles above the dock. The
+            // parent UI still owns the full area for the controls below it.
+            viewport.max.y = (viewport.max.y - 160.).max(viewport.min.y + 32.);
+        }
         // Reserve workspace gutters for guide section actions; never place
         // those buttons over the screenshot or include them in its export.
         let image_viewport = if self.session.document.guide.is_some() {
@@ -128,7 +149,17 @@ impl Editor {
         } else {
             viewport
         };
-        let navigation_enabled = self.pending.is_none()
+        let pointer_on_canvas_layer = ui
+            .input(|i| i.pointer.interact_pos().or(i.pointer.hover_pos()))
+            .is_none_or(|p| {
+                ui.ctx()
+                    .layer_id_at(p)
+                    .is_none_or(|layer| layer == ui.layer_id())
+            });
+        let navigation_enabled = pointer_on_canvas_layer
+            && !self.video.export_dialog
+            && self.video.still_frame.is_none()
+            && self.pending.is_none()
             && self.new_image.is_none()
             && self.resize_image.is_none()
             && self.resize_canvas.is_none()
@@ -152,6 +183,15 @@ impl Editor {
             ui.scope_id().with("canvas"),
             egui::Sense::click_and_drag(),
         );
+        if interactive
+            && self.is_video()
+            && response.hovered()
+            && ui.input(|i| i.pointer.button_pressed(egui::PointerButton::Primary))
+        {
+            self.video.pause();
+        }
+        interactive &= !self.zoom_canvas_input(ui, transform, interactive);
+        interactive &= !self.video_frame_input(ui, transform, interactive);
         self.frame_context(ui, &response, transform);
         let gesture_idle = self.guide_drag.is_none()
             && self.rotation_drag.is_none()
@@ -161,7 +201,6 @@ impl Editor {
             && self.marquee.is_none()
             && self.drag_start.is_none()
             && !self.crop.as_ref().is_some_and(|crop| crop.dragging())
-            && !self.pixel_selection.as_ref().is_some_and(|s| s.dragging())
             && !self.cut_out.as_ref().is_some_and(|s| s.dragging());
         let stroke_wheel = self.stroke_wheel(
             ui,
@@ -174,9 +213,29 @@ impl Editor {
                 && self.rotation_drag.is_none(),
         );
         if navigation_enabled && gesture_idle {
-            if self.text_draft.is_none() && response.hovered() && !stroke_wheel {
-                let (zoom_delta, scroll, pointer) =
-                    ui.input(|i| (i.zoom_delta(), i.smooth_scroll_delta, i.pointer.hover_pos()));
+            if viewport.contains(
+                ui.input(|i| i.pointer.hover_pos())
+                    .unwrap_or(egui::Pos2::ZERO),
+            ) && !stroke_wheel
+            {
+                let wheel = self.gesture_wheel(ui, crate::gesture_input::Gesture::CanvasZoom);
+                let (pinch, scroll, pointer) = ui.input(|i| {
+                    (
+                        i.events
+                            .iter()
+                            .filter_map(|e| {
+                                if let egui::Event::Zoom(z) = e {
+                                    Some(*z)
+                                } else {
+                                    None
+                                }
+                            })
+                            .product::<f32>(),
+                        i.smooth_scroll_delta,
+                        i.pointer.hover_pos(),
+                    )
+                });
+                let zoom_delta = pinch * (wheel * 0.0025).exp();
                 if zoom_delta != 1.0 {
                     self.view.apply(
                         crate::canvas_view::ZoomAction::Set(crate::canvas_view::ZoomMode::Manual(
@@ -184,7 +243,7 @@ impl Editor {
                         )),
                         pointer,
                     );
-                } else if scroll != egui::Vec2::ZERO {
+                } else if self.text_draft.is_none() && scroll != egui::Vec2::ZERO {
                     self.view.pan_by(scroll);
                     ui.input_mut(|i| i.smooth_scroll_delta = egui::Vec2::ZERO);
                 }
@@ -256,13 +315,17 @@ impl Editor {
                 }
             }
         }
+        if self.session.document.canvas_behavior.allow_overflow {
+            self.paint_page_surrounds(ui, display_transform);
+        }
         self.paint_canvas_display(ui, display_transform);
-        self.paint_page_surrounds(ui, display_transform);
+        if !self.session.document.canvas_behavior.allow_overflow {
+            self.paint_page_surrounds(ui, display_transform);
+        }
+        self.paint_crop_overflow(ui, display_transform);
         if interactive && ui.input(|i| i.key_pressed(egui::Key::Escape)) {
             self.cancel_gesture();
-            self.stamps.active = false;
-            self.fill_tool.active = false;
-            self.shell.planned_tool = None;
+            self.icon_library.active = false;
             self.tool = None;
             self.select_only(None);
             ui.ctx().request_repaint();
@@ -272,9 +335,15 @@ impl Editor {
         // tool armed, and leave image-only tool gestures inside the image.
         if interactive
             && response.clicked()
-            && response
-                .interact_pointer_pos()
-                .is_some_and(|p| !visible.contains(p))
+            && response.interact_pointer_pos().is_some_and(|p| {
+                !visible.contains(p)
+                    && !(self.session.document.canvas_behavior.allow_overflow
+                        && self
+                            .session
+                            .document
+                            .hit_test(transform.image_point(p), 7.0 / scale)
+                            .is_some())
+            })
         {
             self.select_only(None);
             return;
@@ -304,28 +373,49 @@ impl Editor {
             self.canvas_pointer(ui, &response, transform, interactive);
             return;
         }
-        if self.pixel_selection.is_some() {
-            self.pixel_selection_canvas(ui, &response, transform, interactive);
-            self.canvas_pointer(ui, &response, transform, interactive);
-            return;
-        }
-        if self.fill_tool.active {
-            self.fill_canvas(ui, &response, transform, interactive);
-            self.canvas_pointer(ui, &response, transform, interactive);
-            return;
-        }
+
         if self.crop.is_some() {
             self.crop_canvas(ui, &response, transform, interactive);
             self.canvas_pointer(ui, &response, transform, interactive);
             return;
         }
+        let base_transform = transform;
+        // Resolve a drag's coordinate system at its press origin, before the
+        // pointer can leave a small animated object during egui's threshold.
+        let transform = self.video_annotation_transform(
+            transform,
+            ui.input(|i| {
+                if i.pointer.primary_down() {
+                    i.pointer.press_origin().or(i.pointer.interact_pos())
+                } else {
+                    i.pointer.interact_pos()
+                }
+            }),
+        );
+        let scale = transform.scale;
         if self.redact_placement_input(ui, &response, transform, interactive) {
             return;
         }
-        if self.stamp_placement_input(ui, &response, transform, interactive) {
+        if self.icon_placement_input(ui, &response, transform, interactive) {
             return;
         }
-        let interaction_area = if self.tool.is_none() {
+        let selected_handle = |position: egui::Pos2| {
+            self.selected_annotation()
+                .filter(|a| {
+                    self.session.document.object_editable(a.id)
+                        && Self::tool_matches(self.tool, a.kind)
+                })
+                .filter(|a| {
+                    a.hit_handle(transform.image_point(position), 7. / transform.scale)
+                        .is_some()
+                })
+                .map(|a| a.id)
+        };
+        let near_handle = ui
+            .input(|i| i.pointer.interact_pos())
+            .and_then(selected_handle)
+            .is_some();
+        let interaction_area = if self.tool.is_none() || near_handle {
             viewport
         } else {
             visible
@@ -337,29 +427,33 @@ impl Editor {
         let tolerance = 7.0 / scale;
         // A quick drag can arrive entirely between frames while the previous
         // composite renders. egui then has no held press/drag state to retain.
-        let completed_drag = ui.input(|i| {
-            let mut start = None;
-            let mut completed = None;
-            for event in &i.events {
-                if let egui::Event::PointerButton {
-                    pos,
-                    button: egui::PointerButton::Primary,
-                    pressed,
-                    ..
-                } = event
-                {
-                    if *pressed {
-                        start = interaction_area.contains(*pos).then_some(*pos);
-                    } else if let Some(from) = start.take()
-                        && viewport.contains(*pos)
-                        && from.distance(*pos) > 6.0
-                    {
-                        completed = Some((from, *pos));
+        let completed_drag = interactive
+            .then(|| {
+                ui.input(|i| {
+                    let mut start = None;
+                    let mut completed = None;
+                    for event in &i.events {
+                        if let egui::Event::PointerButton {
+                            pos,
+                            button: egui::PointerButton::Primary,
+                            pressed,
+                            ..
+                        } = event
+                        {
+                            if *pressed {
+                                start = interaction_area.contains(*pos).then_some(*pos);
+                            } else if let Some(from) = start.take()
+                                && viewport.contains(*pos)
+                                && from.distance(*pos) > 6.0
+                            {
+                                completed = Some((from, *pos));
+                            }
+                        }
                     }
-                }
-            }
-            completed
-        });
+                    completed
+                })
+            })
+            .flatten();
         let escaped = interactive && ui.input(|i| i.key_pressed(egui::Key::Escape));
         if escaped {
             self.cancel_gesture();
@@ -371,7 +465,8 @@ impl Editor {
             && let Some(p) = response
                 .interact_pointer_pos()
                 .filter(|p| interaction_area.contains(*p))
-            && let Some(id) = self.session.document.hit_test(point(p), tolerance)
+            && let Some(id) =
+                self.tool_hit(base_transform.image_point(p), 7. / base_transform.scale)
         {
             self.paint_format_to(id);
         }
@@ -383,7 +478,7 @@ impl Editor {
             && !painting
             && interactive
             && !escaped
-            && self.step_placement_input(ui, &response, transform);
+            && self.step_placement_input(ui, &response, transform, base_transform);
         if interactive
             && !escaped
             && !rotating
@@ -400,7 +495,17 @@ impl Editor {
                     .filter(|p| interaction_area.contains(*p))
             {
                 let additive = ui.input(|i| i.modifiers.shift || i.modifiers.command);
-                let hit = self.tool_hit(point(p), tolerance);
+                let hit = self
+                    .selected_annotation()
+                    .filter(|a| {
+                        self.session.document.object_editable(a.id)
+                            && Self::tool_matches(self.tool, a.kind)
+                            && a.hit_handle(point(p), 7. / scale).is_some()
+                    })
+                    .map(|a| a.id)
+                    .or_else(|| {
+                        self.tool_hit(base_transform.image_point(p), 7. / base_transform.scale)
+                    });
                 entered_group = response.double_clicked()
                     && !additive
                     && hit.is_some_and(|id| self.enter_group_child(id));
@@ -429,6 +534,10 @@ impl Editor {
                     ui.ctx()
                         .data_mut(|d| d.insert_temp(egui::Id::unique("frame-content-mode"), a.id));
                     self.shell.property_tab = crate::shell::PropertyTab::Tool;
+                } else if !entered_group
+                    && self.selected_annotation().is_some_and(|a| a.text.is_some())
+                {
+                    self.begin_text_edit();
                 } else if entered_group || self.tool.is_none() {
                     self.activate_selected_tool();
                     // Text editing is explicit on a subsequent double click;
@@ -468,20 +577,37 @@ impl Editor {
                                     pressed: true,
                                     modifiers,
                                     ..
-                                } => Some(modifiers.alt),
+                                } => Some(self.gesture_matches(
+                                    crate::gesture_input::Gesture::DuplicateDrag,
+                                    *modifiers,
+                                )),
                                 _ => None,
                             })
-                            .unwrap_or(i.modifiers.alt)
+                            .unwrap_or_else(|| {
+                                self.gesture_matches(
+                                    crate::gesture_input::Gesture::DuplicateDrag,
+                                    i.modifiers,
+                                )
+                            })
                     });
                     let selected = self
                         .selected_annotation()
+                        .filter(|a| self.session.document.object_editable(a.id))
                         .filter(|a| duplicate || Self::tool_matches(self.tool, a.kind));
-                    let multiple = self.selected_objects().len() > 1
-                        || self.selected_objects().iter().any(|a| a.analysis.is_some());
+                    let multiple = self.selected_objects().len() > 1;
                     let handle = selected
                         .as_ref()
                         .filter(|_| !multiple)
-                        .and_then(|a| a.hit_handle(origin, tolerance))
+                        .and_then(|a| {
+                            a.hit_handle(
+                                origin,
+                                if a.kind == Kind::Callout {
+                                    9. / scale
+                                } else {
+                                    tolerance
+                                },
+                            )
+                        })
                         .filter(|handle| !duplicate || *handle != Handle::Bend);
                     let hit = if duplicate {
                         self.session
@@ -489,11 +615,21 @@ impl Editor {
                             .annotations
                             .iter()
                             .rev()
-                            .find(|a| a.hit_test(origin, tolerance))
+                            .find(|a| {
+                                let (local, tolerance) = self.video_object_point(
+                                    a.id,
+                                    base_transform.image_point(transform.screen_point(origin)),
+                                    7. / base_transform.scale,
+                                );
+                                self.video_object_active(a.id) && a.hit_test(local, tolerance)
+                            })
                             .map(|a| a.id)
                             .or_else(|| handle.and_then(|_| selected.as_ref().map(|a| a.id)))
                     } else {
-                        self.tool_hit(origin, tolerance)
+                        self.tool_hit(
+                            base_transform.image_point(transform.screen_point(origin)),
+                            7. / base_transform.scale,
+                        )
                     };
                     if self.tool.is_none() && hit.is_none() && handle.is_none() {
                         self.marquee = Some(crate::move_tool::Marquee {
@@ -643,19 +779,59 @@ impl Editor {
                     });
                     self.update_creation(start, pointer, kind, drawing_shift(ui), alt);
                 }
+                let motion_scale = self
+                    .selected
+                    .map_or(1., |id| self.video_object_motion(id).1);
                 if let Some(drag) = &mut self.group_drag {
-                    let result = crate::canvas_expansion::move_with_candidates(
-                        &self.session.document,
-                        &drag.originals,
-                        [pointer[0] - drag.from[0], pointer[1] - drag.from[1]],
-                        self.quick_controls.snapping().then_some(6.0 / scale),
-                        drag.duplicate,
-                        self.quick_controls.snap_candidates(),
-                    )
-                    .map(|result| {
-                        self.snapping_guides = result.guides;
-                        result.annotations
-                    });
+                    let result = if let Some(p) = self
+                        .session
+                        .document
+                        .video
+                        .as_ref()
+                        .filter(|p| !p.zooms.is_empty())
+                    {
+                        let delta = [
+                            (pointer[0] - drag.from[0]) * transform.scale / base_transform.scale,
+                            (pointer[1] - drag.from[1]) * transform.scale / base_transform.scale,
+                        ];
+                        drag.originals
+                            .iter()
+                            .map(|a| {
+                                let track = p.objects.get(&a.id).map_or_else(
+                                    || {
+                                        p.annotation_track
+                                            .or_else(|| p.tracks.first().copied())
+                                            .unwrap_or(0)
+                                    },
+                                    |t| t.track,
+                                );
+                                let view = p.layer_view(
+                                    capture_core::video::links::Layer::Annotation(track),
+                                    canvas,
+                                    p.cursor,
+                                );
+                                a.translated([delta[0] / view.scale, delta[1] / view.scale], canvas)
+                            })
+                            .collect::<capture_core::Result<Vec<_>>>()
+                    } else {
+                        crate::canvas_expansion::move_with_candidates(
+                            &self.session.document,
+                            &drag.originals,
+                            [
+                                (pointer[0] - drag.from[0]) * motion_scale,
+                                (pointer[1] - drag.from[1]) * motion_scale,
+                            ],
+                            self.quick_controls
+                                .snapping()
+                                .then_some(6.0 * motion_scale / scale),
+                            drag.duplicate,
+                            self.quick_controls.snap_candidates(),
+                        )
+                        .map(|result| {
+                            self.snapping_guides = result.guides;
+                            result.annotations
+                        })
+                    };
                     match result {
                         Ok(preview) if preview != drag.preview => {
                             drag.preview = preview;
@@ -689,8 +865,13 @@ impl Editor {
                             None => crate::canvas_expansion::move_with_candidates(
                                 &self.session.document,
                                 std::slice::from_ref(&drag.original),
-                                [pointer[0] - drag.from[0], pointer[1] - drag.from[1]],
-                                self.quick_controls.snapping().then_some(6.0 / scale),
+                                [
+                                    (pointer[0] - drag.from[0]) * motion_scale,
+                                    (pointer[1] - drag.from[1]) * motion_scale,
+                                ],
+                                self.quick_controls
+                                    .snapping()
+                                    .then_some(6.0 * motion_scale / scale),
                                 false,
                                 self.quick_controls.snap_candidates(),
                             )
@@ -719,6 +900,9 @@ impl Editor {
                 if response.drag_stopped_by(egui::PointerButton::Primary)
                     || completed_drag.is_some()
                 {
+                    let before_commit_size =
+                        [self.session.document.width, self.session.document.height];
+                    let before_commit_image = self.view.current_transform().map(|t| t.image);
                     self.finish_marquee();
                     if let Some(drag) = self.group_drag.take() {
                         if drag.duplicate {
@@ -772,19 +956,25 @@ impl Editor {
                             {
                                 let id = annotation.id;
                                 let kind = annotation.kind;
-                                if self.creation.simplify_candidates.is_some() {
-                                    let blocks = std::mem::take(&mut self.creation.simplified);
-                                    self.commit_simplify(blocks, annotation.body_bounds());
-                                } else {
-                                    self.execute(Command::Add { annotation });
-                                    self.select_only(Some(id));
-                                }
+
+                                self.execute(Command::Add { annotation });
+                                self.select_only(Some(id));
+
                                 if matches!(kind, Kind::Text | Kind::Callout) {
                                     self.begin_text_edit();
                                 }
                             }
                         }
                         self.creation = Default::default();
+                    }
+                    if before_commit_size
+                        != [self.session.document.width, self.session.document.height]
+                        || before_commit_image != self.view.current_transform().map(|t| t.image)
+                    {
+                        // This pass already painted the old document. Do not
+                        // present it with the new selection/origin on release.
+                        ui.ctx()
+                            .request_discard("canvas dimensions changed during drag commit");
                     }
                     ui.ctx().request_repaint();
                 }
@@ -821,11 +1011,29 @@ impl Editor {
             }
         }
         self.paint_hover_annotation(ui, &response, transform, interactive);
-        self.selection_outlines(&painter, transform);
+        self.selection_outlines(&painter, base_transform);
+        let transform = self
+            .selected
+            .and_then(|id| {
+                self.session
+                    .document
+                    .video
+                    .as_ref()
+                    .and_then(|p| p.objects.get(&id))
+            })
+            .map_or(transform, |timing| {
+                self.video_layer_transform(
+                    base_transform,
+                    capture_core::video::links::Layer::Annotation(timing.track),
+                )
+            });
+        let screen = |p: [f32; 2]| transform.screen_point(p);
+        self.paint_group_feedback(ui, transform);
         self.paint_marquee(&painter, transform);
         if self.selected_objects().len() < 2
-            && let Some(annotation) = self.selected_annotation()
-            && annotation.analysis.is_none()
+            && let Some(annotation) = self
+                .selected_annotation()
+                .filter(|a| self.session.document.object_editable(a.id))
         {
             let color = egui::Color32::from_rgb(189, 245, 69);
             crate::line_properties::paint_selection(&painter, &annotation, transform, color);
@@ -887,6 +1095,7 @@ impl Editor {
         self.show_inline_text(ui, transform);
         self.paint_rotation_node(ui, transform);
         self.paint_group_handles(ui, transform);
+        self.paint_zoom_focus(ui, base_transform);
         if self.view.panning {
             ui.ctx().set_cursor_icon(egui::CursorIcon::Grabbing);
         }
@@ -900,13 +1109,14 @@ pub(crate) mod tests {
 
     pub(crate) fn editor(ctx: &egui::Context) -> Editor {
         Editor {
+            project_sessions: Default::default(),
+            video: Default::default(),
+            group_feedback: None,
             lifecycle: Default::default(),
             editing_group: None,
-            simplify_palette: vec![],
-            simplify_auto: true,
-            simplify_detail: 50,
+
             quick_controls: crate::quick_controls::QuickControls::default(),
-            quick_styles: crate::quick_styles::QuickStyles::default(),
+            presets: crate::presets::Presets::default(),
             history: crate::history::HistoryPanel::default(),
             autosave: Default::default(),
             shell: crate::shell::Shell::default(),
@@ -935,12 +1145,12 @@ pub(crate) mod tests {
             resize_canvas: None,
             export_dialog: None,
             export_preferences: Default::default(),
-            stamps: Default::default(),
+            icon_library: Default::default(),
             image_transform: None,
             crop: None,
-            pixel_selection: None,
+
             cut_out: None,
-            fill_tool: crate::fill_tool::FillTool::default(),
+
             color: [255, 0, 0],
             width: 3,
             drag_start: None,
@@ -962,8 +1172,10 @@ pub(crate) mod tests {
             allow_close: false,
             last_title: String::new(),
             capture_requested: false,
-            capture_controller: Default::default(),
+            clip: Default::default(),
             ocr: Default::default(),
+            privacy_review: Default::default(),
+            rich_text: Default::default(),
             capture_result: None,
             global_capture: None,
             global_capture_status: String::new(),
@@ -1125,7 +1337,10 @@ pub(crate) mod tests {
             assert!((capture_core::line_style::bend_point(&preview)[1] - 170.).abs() < 0.1);
             frame(&ctx, &mut e, vec![button(to, false)]);
             assert_eq!(e.session.document.annotations, [preview]);
-            assert_eq!(e.session.document.version, 15);
+            assert_eq!(
+                e.session.document.version,
+                capture_core::MAX_PROJECT_VERSION
+            );
             e.execute(Command::Undo);
             assert_eq!(e.session.document.annotations, [a]);
             assert!(!e.session.can_undo());
@@ -1202,10 +1417,13 @@ pub(crate) mod tests {
                 step_outline: None,
                 line_style: None,
                 shadow: None,
-                analysis: None,
+
+                focus: None,
+
                 highlighter_rect: false,
                 group: None,
                 rotation_degrees: 0.0,
+                mirror_x: false,
                 id: 1,
                 kind,
                 start,
@@ -1229,7 +1447,7 @@ pub(crate) mod tests {
                     .then(|| capture_core::callout::CalloutStyle::for_box(start, end, [640, 400])),
             };
             e.session = crate::Session::new(crate::Document {
-                version: if kind == Kind::Image { 8 } else { 1 },
+                version: capture_core::MAX_PROJECT_VERSION,
                 annotations: vec![a.clone()],
                 ..crate::Document::blank(640, 400).unwrap()
             })
@@ -1372,10 +1590,13 @@ pub(crate) mod tests {
                 step_outline: None,
                 line_style: None,
                 shadow: None,
-                analysis: None,
+
+                focus: None,
+
                 highlighter_rect: false,
                 group: None,
                 rotation_degrees: 0.0,
+                mirror_x: false,
                 id: 1,
                 kind: Kind::Rectangle,
                 start: [100.0, 100.0],
@@ -1437,10 +1658,13 @@ pub(crate) mod tests {
                     step_outline: None,
                     line_style: None,
                     shadow: None,
-                    analysis: None,
+
+                    focus: None,
+
                     highlighter_rect: false,
                     group: None,
                     rotation_degrees: 0.0,
+                    mirror_x: false,
                     id: 1,
                     kind: Kind::Rectangle,
                     start: [100.0, 100.0],
@@ -1556,10 +1780,13 @@ pub(crate) mod tests {
                 step_outline: None,
                 line_style: None,
                 shadow: None,
-                analysis: None,
+
+                focus: None,
+
                 highlighter_rect: false,
                 group: None,
                 rotation_degrees: 0.0,
+                mirror_x: false,
                 id: 1,
                 kind: Kind::Rectangle,
                 start: [100.0, 100.0],
@@ -1637,7 +1864,7 @@ pub(crate) mod tests {
             shape.corner_radius = 12.0;
             shape.rotation_degrees = degrees;
             e.session.document.annotations = vec![shape.clone()];
-            e.session.document.version = 3;
+            e.session.document.version = capture_core::MAX_PROJECT_VERSION;
             e.session.document.promote_features();
             e.session.document.validate().unwrap();
             e.select_only(Some(shape.id));
@@ -1737,7 +1964,7 @@ pub(crate) mod tests {
         let mut editor = editor(&ctx);
         editor.tool = Some(Kind::Eraser);
         editor.width = 24;
-        editor.quick_styles.alpha = 255;
+        editor.presets.alpha = 255;
         let original = editor.session.document.render().unwrap();
         let transform = frame(&ctx, &mut editor, vec![]);
         let start = transform.screen_point([100.0, 100.0]);
@@ -1892,10 +2119,10 @@ pub(crate) mod tests {
         let mut e = editor(&ctx);
         e.tool = Some(Kind::Highlighter);
         let mut groups = capture_core::object_styles::groups(Kind::Highlighter);
-        let mut pen = groups[0].styles.remove(1);
+        let mut pen = groups[1].styles.remove(1);
         pen.width = 21;
         e.apply_object_template(&pen, false);
-        let mut rect = groups[1].styles.remove(3);
+        let mut rect = groups[2].styles.remove(3);
         rect.color = [250, 220, 25, 90];
         e.apply_object_template(&rect, false);
         let t = frame(&ctx, &mut e, vec![]);
@@ -1960,16 +2187,11 @@ pub(crate) mod tests {
                         ..Default::default()
                     },
                     |ui| {
-                        e.quick_styles_header(ui, Some(Kind::Highlighter));
+                        e.presets_header(ui, Some(Kind::Highlighter));
                         e.object_templates(ui, Kind::Highlighter);
-                        crate::property_layout::section(ui, "Tool Properties");
+                        crate::property_layout::section(ui, "Properties");
                         let mut a = preview.clone();
-                        crate::property_layout::annotation_properties(
-                            ui,
-                            &mut a,
-                            false,
-                            [640, 400],
-                        );
+                        crate::property_layout::annotation_properties(ui, &mut a, [640, 400]);
                     },
                 ))
             };
@@ -2554,7 +2776,10 @@ pub(crate) mod tests {
             Kind::Highlighter,
         ] {
             assert!(Editor::tool_matches(Some(kind), kind));
-            assert!(!Editor::tool_matches(Some(kind), Kind::Ellipse));
+            assert_eq!(
+                Editor::tool_matches(Some(kind), Kind::Ellipse),
+                kind == Kind::Callout
+            );
         }
     }
     #[test]
@@ -2967,7 +3192,7 @@ pub(crate) mod tests {
             .unwrap()
             .rect();
         assert!(
-            bounds.width() <= 281.0 && bounds.height() <= 205.0,
+            bounds.width() <= 305.0 && bounds.height() <= 215.0,
             "{bounds:?}"
         );
         let outside = egui::pos2(10.0, 10.0);

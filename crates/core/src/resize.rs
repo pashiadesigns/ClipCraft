@@ -53,6 +53,7 @@ impl Document {
                     typo.spacing *= style_scale;
                 }
                 style.size_points *= style_scale;
+                crate::text::rich::scale_runs(style, style_scale);
                 style.padding *= style_scale;
                 style.validate().map_err(|_| Error::Invalid("This resize exceeds the supported text size or padding. Choose dimensions closer to the current size.".into()))?;
             }
@@ -61,7 +62,7 @@ impl Document {
                 style.padding *= style_scale;
             }
             if let Some(style) = &annotation.callout {
-                style.validate(annotation, [width, height]).map_err(|_| Error::Invalid("This resize exceeds supported callout padding or geometry. Choose dimensions closer to the current size.".into()))?;
+                style.validate(annotation, [width, height], self.canvas_behavior.allow_overflow).map_err(|_| Error::Invalid("This resize exceeds supported callout padding or geometry. Choose dimensions closer to the current size.".into()))?;
             }
         }
         Ok(annotations)

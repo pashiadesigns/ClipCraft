@@ -29,7 +29,8 @@ impl Editor {
                     .iter()
                     .rev()
                     .find(|a| {
-                        (a.is_shape() || a.is_image_frame())
+                        a.focus.is_none()
+                            && (a.is_shape() || a.is_image_frame())
                             && self.session.document.object_editable(a.id)
                             && a.hit_test(transform.image_point(p), 2. / transform.scale)
                     })
@@ -61,15 +62,15 @@ impl Editor {
         let mut action = None;
         response.context_menu(|ui| {
             if !a.is_image_frame() {
-                if ui.button("Convert to image frame").clicked() {
+                if crate::controls::menu_action(ui, "Convert to image frame").clicked() {
                     action = Some("Convert to image frame");
                     ui.close();
                 }
                 return;
             }
-            ui.menu_button("Replace Image", |ui| {
+            crate::controls::menu_submenu(ui, "Replace Image", |ui| {
                 for label in ["From File…", "From Clipboard", "From Library…"] {
-                    if ui.button(label).clicked() {
+                    if crate::controls::menu_action(ui, label).clicked() {
                         action = Some(label);
                         ui.close();
                     }
@@ -81,18 +82,27 @@ impl Editor {
                 ("Crop Image", !empty),
                 ("Reset Crop", !empty),
                 ("Copy Image", !empty),
+                ("Grab Text", !empty),
                 ("Convert to basic shape", true),
                 ("Delete Frame", true),
             ] {
-                if ui.add_enabled(enabled, egui::Button::new(label)).clicked() {
+                if ui
+                    .add_enabled_ui(enabled, |ui| crate::controls::menu_action(ui, label))
+                    .inner
+                    .clicked()
+                {
                     action = Some(label);
                     ui.close();
                 }
             }
         });
-        self.frame_action(ui, id, action);
+        if action == Some("Grab Text") {
+            self.grab_canvas_text(ui.ctx());
+        } else {
+            self.frame_action(ui, id, action);
+        }
     }
-    pub(super) fn choose_frame_source(
+    pub(crate) fn choose_frame_source(
         &mut self,
         ui: &mut egui::Ui,
         response: &egui::Response,
@@ -101,15 +111,19 @@ impl Editor {
         let mut action = None;
         egui::Popup::menu(response).show(|ui| {
             for label in ["From File…", "From Clipboard", "From Library…"] {
-                if ui.button(label).clicked() {
+                if crate::controls::menu_action(ui, label).clicked() {
                     action = Some(label);
                     ui.close();
                 }
             }
         });
-        self.frame_action(ui, id, action);
+        if action == Some("Grab Text") {
+            self.grab_canvas_text(ui.ctx());
+        } else {
+            self.frame_action(ui, id, action);
+        }
     }
-    fn frame_action(&mut self, ui: &mut egui::Ui, id: u64, action: Option<&str>) {
+    pub(crate) fn frame_action(&mut self, ui: &mut egui::Ui, id: u64, action: Option<&str>) {
         let Some(a) = self
             .session
             .document
@@ -258,11 +272,14 @@ impl Editor {
             .and_then(|root| capture_core::history::History::open(&root).ok());
         let mut selected = None;
         let mut cancel = false;
-        let modal = egui::Modal::new(key).show(ctx, |ui| {
+        let modal = crate::controls::Modal::new(key).show(ctx, |ui| {
             ui.set_width(560.);
             ui.heading("Replace Image from Library");
             ui.label("Search");
-            let r = ui.add(egui::TextEdit::singleline(&mut p.query).desired_width(f32::INFINITY));
+            let r = ui.add(
+                crate::unicode_input::TextEdit::singleline(&mut p.query)
+                    .desired_width(f32::INFINITY),
+            );
             crate::controls::focus_once(&r, &mut p.focus);
             egui::ScrollArea::vertical()
                 .auto_shrink([false, false])
@@ -586,6 +603,22 @@ mod tests {
             ))
         };
         let mut initial = picker(&mut e, vec![]);
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
+        while !initial
+            .0
+            .textures_delta
+            .set
+            .iter()
+            .any(|(id, _)| *id != egui::TextureId::default())
+            && std::time::Instant::now() < deadline
+        {
+            std::thread::sleep(std::time::Duration::from_millis(10));
+            let next = picker(&mut e, vec![]);
+            initial
+                .0
+                .textures_delta
+                .append(next.0.textures_delta.clone());
+        }
         let out = picker(&mut e, vec![]);
         let target = ctx
             .data(|d| d.get_temp::<egui::Rect>(egui::Id::unique(("frame-library-card", &entry.id))))

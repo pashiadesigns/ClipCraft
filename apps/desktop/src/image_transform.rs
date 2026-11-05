@@ -14,7 +14,25 @@ fn label(transform: ImageTransform) -> &'static str {
 impl Editor {
     pub(super) fn begin_image_transform(&mut self, transform: ImageTransform) {
         self.cancel_gesture();
-        if self.session.document.annotations.is_empty() {
+        let objects = self.selected_objects();
+        if !objects.is_empty() {
+            match capture_core::image_transform::transform_objects(&objects, transform) {
+                Ok(annotations) => {
+                    if let Some(view) = self.view.current_transform() {
+                        self.commit_expanding_move(annotations, false, view);
+                    } else {
+                        self.execute(Command::MoveAndExpand {
+                            annotations,
+                            duplicate: false,
+                        });
+                    }
+                    self.needs_render = true;
+                }
+                Err(error) => self.status = error.to_string(),
+            }
+        } else if self.selected.is_some() {
+            self.status = "Unlock the selected object before transforming it.".into();
+        } else if self.session.document.annotations.is_empty() {
             self.finish_image_transform(transform);
         } else {
             self.image_transform = Some(transform);
@@ -43,15 +61,21 @@ impl Editor {
         };
         let mut confirm = false;
         let mut cancel = false;
-        let modal = egui::Modal::new(egui::Id::unique("image_transform")).show(ctx, |ui| {
-            ui.set_width(370.0);
-            ui.heading(label(transform));
-            ui.separator();
-            ui.label("This transforms the complete image, including every object.");
-            ui.label("Objects will be flattened. Undo restores their editability.");
-            (confirm, cancel) =
-                crate::controls::dialog_actions(ui, "Flatten and transform", "Cancel", true, false);
-        });
+        let modal =
+            crate::controls::Modal::new(egui::Id::unique("image_transform")).show(ctx, |ui| {
+                ui.set_width(370.0);
+                ui.heading(label(transform));
+                ui.separator();
+                ui.label("This transforms the complete image, including every object.");
+                ui.label("Objects will be flattened. Undo restores their editability.");
+                (confirm, cancel) = crate::controls::dialog_actions(
+                    ui,
+                    "Flatten and transform",
+                    "Cancel",
+                    true,
+                    false,
+                );
+            });
         cancel |= modal.is_top_modal
             && !modal.any_popup_open
             && ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape));
@@ -66,6 +90,27 @@ impl Editor {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn selected_objects_transform_without_flattening_or_confirmation() {
+        let ctx = egui::Context::default();
+        let mut e = crate::canvas::tests::editor(&ctx);
+        e.session = crate::Session::new(crate::Document::blank(640, 400).unwrap()).unwrap();
+        let a = e.new_annotation(crate::Kind::Rectangle, [150., 100.], [250., 180.]);
+        let id = a.id;
+        e.execute(Command::Add { annotation: a });
+        e.select_only(Some(id));
+        let original = e.session.document.annotations.clone();
+        e.begin_image_transform(ImageTransform::FlipHorizontal);
+        assert!(e.image_transform.is_none());
+        assert!(e.session.document.raster.is_none());
+        assert!(e.session.document.annotations[0].mirror_x);
+        assert_eq!(e.selected, Some(id));
+        e.execute(Command::Undo);
+        assert_eq!(e.session.document.annotations, original);
+        e.begin_image_transform(ImageTransform::Clockwise);
+        assert_eq!(e.session.document.annotations[0].rotation_degrees, 90.);
+        assert!(e.image_transform.is_none());
+    }
 
     #[test]
     fn image_transform_confirmation_escape_preserves_objects_and_history() {

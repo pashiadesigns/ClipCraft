@@ -8,6 +8,7 @@ pub(super) struct Lifecycle {
     pub hidden: bool,
     startup_pending: bool,
     pub error: String,
+    incoming: std::collections::VecDeque<std::path::PathBuf>,
 }
 impl Lifecycle {
     pub fn new(ctx: egui::Context) -> Self {
@@ -45,18 +46,9 @@ impl Editor {
         }
         ctx.request_repaint_of(egui::ViewportId::ROOT);
     }
-    pub(super) fn show_controller_window(&mut self, ctx: &egui::Context) {
-        self.open_capture_controller();
-        // The controller may not exist yet. One hidden UI pass creates it
-        // without briefly exposing the editor or painting a continuous loop.
-        ctx.send_viewport_cmd_to(
-            egui::ViewportId::ROOT,
-            egui::ViewportCommand::RequestPaintWhileHidden,
-        );
-        // The viewport applies its icon/identity before showing or focusing it.
-        // Issuing Visible here can expose a newly created window too early.
-        self.capture_controller.focus_requested = true;
-        ctx.request_repaint_of(egui::ViewportId::ROOT);
+    pub(super) fn show_clip(&mut self, ctx: &egui::Context) {
+        self.open_clip();
+        self.show_editor_window(ctx);
     }
     pub(super) fn close_editor_window(&mut self, ctx: &egui::Context) {
         ctx.send_viewport_cmd_to(egui::ViewportId::ROOT, egui::ViewportCommand::CancelClose);
@@ -93,15 +85,12 @@ impl Editor {
         self.status =
             "ClipCraft is running in the system tray. Capture shortcuts remain active.".into();
     }
-    pub(super) fn close_controller_window(&mut self, ctx: &egui::Context) {
-        self.capture_controller.open = false;
-        if self.lifecycle.hidden
-            && (!self.quick_controls.close_to_tray() || !self.lifecycle.available)
-        {
-            self.request_action(FileAction::Close, ctx);
-        }
-    }
     pub(super) fn tray_action(&mut self, action: tray::Action, ctx: &egui::Context) {
+        if let tray::Action::Open(path) = &action {
+            self.lifecycle.incoming.push_back(path.clone());
+            self.show_editor_window(ctx);
+            return;
+        }
         if action == tray::Action::Unavailable {
             self.lifecycle.available = false;
             self.lifecycle.error =
@@ -115,9 +104,35 @@ impl Editor {
         }
         match action {
             tray::Action::Editor => self.show_editor_window(ctx),
-            tray::Action::Controller => self.show_controller_window(ctx),
-            tray::Action::Capture if self.accepts_global_capture(ctx) => {
+            tray::Action::Clip => self.show_clip(ctx),
+            tray::Action::CaptureClip if self.accepts_global_capture(ctx) => {
                 self.request_keybind_capture(capture_core::keybinds::Action::Saved, ctx)
+            }
+            tray::Action::Capture(selection) if self.accepts_global_capture(ctx) => {
+                let mut settings = self.quick_controls.capture_for(selection);
+                settings.scrolling = selection == capture_core::capture_options::Selection::Region
+                    && self.quick_controls.capture_settings().is_scrolling();
+                self.request_action(FileAction::StartCapture(settings), ctx);
+            }
+            tray::Action::ToggleScrolling => {
+                let enabled = !self.quick_controls.capture_settings().is_scrolling();
+                let mut settings = self.quick_controls.capture_settings();
+                if enabled {
+                    settings = self
+                        .quick_controls
+                        .capture_for(capture_core::capture_options::Selection::Region);
+                }
+                settings.scrolling = enabled;
+                self.quick_controls.remember_capture(settings);
+            }
+            tray::Action::ToggleOpenAfter => {
+                let mut settings = self.quick_controls.capture_settings();
+                settings.preview = !settings.preview;
+                self.quick_controls.remember_capture(settings);
+            }
+            tray::Action::CaptureVideo if self.accepts_global_capture(ctx) => {
+                self.show_editor_window(ctx);
+                self.open_video_capture();
             }
             tray::Action::Exit => self.request_action(FileAction::Close, ctx),
             _ => (),
@@ -129,19 +144,22 @@ impl Editor {
         explicit_file: bool,
         window: StartupWindow,
     ) {
-        if self.lifecycle.available && !explicit_file && window == StartupWindow::CaptureController
-        {
-            self.lifecycle.hidden = true;
-            ctx.send_viewport_cmd_to(
-                egui::ViewportId::ROOT,
-                egui::ViewportCommand::Visible(false),
-            );
-            self.show_controller_window(ctx);
-        } else {
-            self.show_editor_window(ctx);
+        if !explicit_file && window == StartupWindow::Clip {
+            self.open_clip();
         }
+        self.show_editor_window(ctx);
     }
     pub(super) fn background_logic(&mut self, ctx: &egui::Context) {
+        ctx.data_mut(|d| {
+            d.insert_temp(
+                egui::Id::unique("tray-scrolling"),
+                self.quick_controls.capture_settings().is_scrolling(),
+            );
+            d.insert_temp(
+                egui::Id::unique("tray-open-after"),
+                self.quick_controls.capture_settings().preview,
+            );
+        });
         if self.lifecycle.startup_pending {
             self.lifecycle.startup_pending = false;
             let launch = crate::launch::Request::read();
@@ -162,16 +180,11 @@ impl Editor {
         }
         let was_capturing = self.capture_result.is_some();
         self.receive_capture();
-        if was_capturing && self.capture_result.is_none() {
-            if self.capture_controller.restore_focus == Some(true) || self.ocr.is_open() {
-                self.show_editor_window(ctx);
-            }
-            if self.capture_controller.open {
-                ctx.send_viewport_cmd_to(
-                    egui::ViewportId::ROOT,
-                    egui::ViewportCommand::RequestPaintWhileHidden,
-                );
-            }
+        if was_capturing
+            && self.capture_result.is_none()
+            && (self.clip.restore_focus == Some(true) || self.ocr.is_open())
+        {
+            self.show_editor_window(ctx);
         }
         if let Some(binding) = self.global_capture.as_ref().and_then(|h| h.take_pressed()) {
             if self.options.recording.is_some() {
@@ -182,6 +195,14 @@ impl Editor {
         }
         self.autosave_tick(ctx, false);
         self.finish_autosave_action(ctx);
+        if self.pending.is_none()
+            && self.autosave.action.is_none()
+            && self.accepts_global_capture(ctx)
+            && let Some(path) = self.lifecycle.incoming.pop_front()
+        {
+            self.show_editor_window(ctx);
+            self.request_action(FileAction::OpenPath(path), ctx);
+        }
         // An autosave failure must never leave a confirmation in a hidden window.
         if self.pending.is_some() && self.lifecycle.hidden {
             self.show_editor_window(ctx);

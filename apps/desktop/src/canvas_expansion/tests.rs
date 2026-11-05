@@ -211,6 +211,16 @@ fn live_drag_expands_all_edges_and_commits_one_undo_without_screen_jump() {
             checkpoint.annotations
         );
         let after = frame(&ctx, &mut e, vec![button(q, false, false)], true);
+        let release_transform = e.view.current_transform().unwrap();
+        assert_eq!(
+            release_transform.image, after.image,
+            "release must retain the committed boundary immediately"
+        );
+        let settled = frame(&ctx, &mut e, vec![], true);
+        assert_eq!(
+            release_transform.image, settled.image,
+            "the next painted frame must not flash the old boundary"
+        );
         assert_eq!(e.session.document.annotations, plan.annotations);
         assert_eq!(
             [e.session.document.width, e.session.document.height],

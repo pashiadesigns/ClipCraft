@@ -7,7 +7,7 @@ pub(crate) fn is_zero(value: &f32) -> bool {
 
 impl Annotation {
     pub fn supports_rounding(&self) -> bool {
-        matches!(self.kind, Kind::Rectangle | Kind::Callout | Kind::Simplify)
+        matches!(self.kind, Kind::Rectangle | Kind::Callout)
             || (self.kind == Kind::Image && self.image.as_ref().is_some_and(|b| !b.is_cursor()))
     }
 
@@ -127,10 +127,13 @@ mod tests {
                 step_outline: None,
                 line_style: None,
                 shadow: None,
-                analysis: None,
+
+                focus: None,
+
                 highlighter_rect: false,
                 group: None,
                 rotation_degrees: 0.0,
+                mirror_x: false,
                 id: 1,
                 kind,
                 start: [20.0, 20.0],

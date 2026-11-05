@@ -293,7 +293,7 @@ fn hex_input(ui: &mut egui::Ui, draft: &mut ColorDraft, opaque: bool) {
         let label = ui.label("Hex");
         let input = ui
             .add(
-                egui::TextEdit::singleline(&mut draft.hex)
+                crate::unicode_input::TextEdit::singleline(&mut draft.hex)
                     .desired_width(110.0)
                     .char_limit(9),
             )
@@ -448,7 +448,8 @@ fn rgba_styled(
     layout: preview::Layout,
 ) -> egui::Response {
     let size = if layout == preview::Layout::Property {
-        egui::vec2(56., 64.)
+        let width = crate::property_layout::swatch_width(ui);
+        egui::vec2(width, width + 8.)
     } else if matches!(preview, Preview::Text | Preview::Stroke) {
         ui.spacing().interact_size.max(egui::vec2(44., 24.))
     } else {

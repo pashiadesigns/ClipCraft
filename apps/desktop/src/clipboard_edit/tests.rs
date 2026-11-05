@@ -83,7 +83,10 @@ fn focused_guide_screenshot_copies_only_selected_child_and_preserves_crop() {
             annotations: vec![screenshot.clone(), other],
         })
         .unwrap();
-    assert_eq!(e.session.document.version, 19);
+    assert_eq!(
+        e.session.document.version,
+        capture_core::MAX_PROJECT_VERSION
+    );
     e.enter_group_child(1);
     let mut clipboard = MemoryClipboard::default();
     e.copy_objects_with(false, &mut clipboard);
@@ -262,7 +265,6 @@ fn pasted_image_properties_and_render_are_visible_without_unusable_drawing_prese
     let ctx = egui::Context::default();
     crate::shell::configure(&ctx);
     let mut e = setup(&ctx);
-    e.shell.badges = false;
     e.paste_canvas_with(&mut image_clipboard());
     let frame = |e: &mut Editor| {
         PaintedOutput(ctx.run_ui(
@@ -283,8 +285,8 @@ fn pasted_image_properties_and_render_are_visible_without_unusable_drawing_prese
     let output = frame(&mut e);
     let text = |needle| crate::color_widgets::tests::text_rect(&output.shapes, needle);
     assert!(text("Opacity").is_some());
-    assert!(text("Tool Properties").is_some());
-    assert!(text("Quick Styles").is_none());
+    assert!(text("Properties").is_some());
+    assert!(text("Presets").is_none());
     if let Ok(dir) = std::env::var("CLIPCRAFT_HEADLESS_CLIPBOARD_DIR") {
         std::fs::create_dir_all(&dir).unwrap();
         e.session

@@ -1,9 +1,11 @@
-//! A temporary mouse-only hook feeds a bounded background capture writer.
-//! The hook never captures pixels, blocks on a queue, records keys or saves data.
+//! Temporary input hooks enqueue bounded semantic activity. No raw typed text
+//! is logged; a background worker reads only non-password accessibility fields.
 use super::*;
 use crate::capture::step_pipeline::{self, Area, Input};
 use windows_sys::Win32::UI::Controls::*;
 mod session;
+#[path = "step_recorder/composition.rs"]
+pub(super) mod visual;
 use capture_core::{history::History, step_capture::Button};
 use session::{Session, controller_position};
 use std::{
@@ -19,6 +21,11 @@ use std::{
 
 struct HookState {
     tracker: Session,
+    caption: Option<mpsc::Receiver<step_pipeline::Caption>>,
+    last_point: Option<[i32; 2]>,
+    typed: Option<Instant>,
+    scroll: Option<([i32; 2], i32, Instant)>,
+    held_keys: std::collections::BTreeSet<u32>,
     sender: SyncSender<Input>,
     failure: Arc<Mutex<Option<String>>>,
 }
@@ -37,7 +44,7 @@ unsafe extern "system" fn mouse(code: i32, wparam: WPARAM, lparam: LPARAM) -> LR
         let message = wparam as u32;
         if matches!(
             message,
-            WM_LBUTTONDOWN | WM_LBUTTONUP | WM_RBUTTONDOWN | WM_RBUTTONUP
+            WM_LBUTTONDOWN | WM_LBUTTONUP | WM_RBUTTONDOWN | WM_RBUTTONUP | WM_MOUSEWHEEL
         ) {
             // Data is valid only for this callback. Copy coordinates immediately.
             let data = unsafe { &*(lparam as *const MSLLHOOKSTRUCT) };
@@ -51,19 +58,32 @@ unsafe extern "system" fn mouse(code: i32, wparam: WPARAM, lparam: LPARAM) -> LR
                     let button = if matches!(message, WM_LBUTTONDOWN | WM_LBUTTONUP) { Button::Left } else { Button::Right };
                     let point = [data.pt.x, data.pt.y];
                     let result = (|| -> Result<(), String> {
-                        if matches!(message, WM_LBUTTONDOWN | WM_RBUTTONDOWN) {
+                        if message == WM_MOUSEWHEEL {
+                            let area = monitor_at(point)?.0;
+                            if state.tracker.down(point, Button::Left, area)? { let _=state.sender.try_send(Input::Screen(area)); }
+                            state.tracker.cancel_gesture();
+                            if state.tracker.activity(point).is_some() {
+                                let delta=(data.mouseData>>16) as i16 as i32;
+                                let prior=state.scroll.map_or(0,|(_,d,_)|d);
+                                state.scroll=Some((point, prior+delta, Instant::now()));
+                            }
+                        } else if matches!(message, WM_LBUTTONDOWN | WM_RBUTTONDOWN) {
+                            flush_activity(state, true);
+                            state.last_point=Some(point);
+                            state.caption=Some(super::step_context::describe(point, super::step_context::Activity::Click));
                             let area = monitor_at(point)?.0;
                             if state.tracker.down(point, button, area)? {
                                 state.sender.try_send(Input::Screen(area)).map_err(|_| "Cannot start the recording monitor".to_string())?;
                             }
                         } else if let Some(gesture) = state.tracker.up(point, button) {
-                            state.sender.try_send(Input::Capture {gesture, at: Instant::now()}).map_err(|_| "Recording stopped: clicks arrived faster than capture could save them. Earlier steps are preserved.".to_string())?;
+                            let event = if let Some(caption)=state.caption.take() {Input::Described {gesture,at:Instant::now(),caption,optional:false}} else {Input::Capture {gesture, at:Instant::now()}};
+                            state.sender.try_send(event).map_err(|_| "An action was missed while capture was busy. Repeat it before finishing.".to_string())?;
                         }
                         Ok(())
                     })();
                     if let Err(e) = result {
                         *state.failure.lock().unwrap_or_else(|e| e.into_inner()) = Some(e);
-                        state.tracker.finish();
+                        state.tracker.cancel_gesture();
                     }
                 });
             }
@@ -72,8 +92,111 @@ unsafe extern "system" fn mouse(code: i32, wparam: WPARAM, lparam: LPARAM) -> LR
     unsafe { CallNextHookEx(null_mut(), code, wparam, lparam) }
 }
 
+fn send_activity(state: &mut HookState, point: [i32; 2], activity: super::step_context::Activity) {
+    if let Some(gesture) = state.tracker.activity(point) {
+        let caption = super::step_context::describe(point, activity);
+        let input = Input::Described {
+            gesture,
+            at: Instant::now(),
+            caption,
+            optional: matches!(activity, super::step_context::Activity::Type),
+        };
+        if state.sender.try_send(input).is_err() {
+            *state.failure.lock().unwrap_or_else(|e| e.into_inner()) = Some(
+                "An action was missed while capture was busy. Repeat it before finishing.".into(),
+            );
+            state.tracker.cancel_gesture();
+        }
+    }
+}
+fn flush_activity(state: &mut HookState, force: bool) {
+    if state
+        .typed
+        .is_some_and(|at| force || at.elapsed() >= Duration::from_millis(700))
+    {
+        state.typed = None;
+        if let Some(point) = state.last_point {
+            send_activity(state, point, super::step_context::Activity::Type);
+        }
+    }
+    if let Some((point, delta, at)) = state.scroll
+        && (force || at.elapsed() >= Duration::from_millis(300))
+    {
+        state.scroll = None;
+        if delta != 0 {
+            send_activity(
+                state,
+                point,
+                super::step_context::Activity::Scroll(delta < 0),
+            );
+        }
+    }
+}
+unsafe extern "system" fn keyboard(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
+    if code == HC_ACTION as i32 && matches!(wparam as u32, WM_KEYDOWN | WM_SYSKEYDOWN | WM_KEYUP) {
+        let key = unsafe { &*(lparam as *const KBDLLHOOKSTRUCT) };
+        if key.flags & LLKHF_INJECTED == 0 {
+            INPUT.with(|v| {
+                let mut value = v.borrow_mut();
+                let Some(state) = value.as_mut() else {
+                    return;
+                };
+                let repeated = if wparam as u32 == WM_KEYUP {
+                    state.held_keys.remove(&key.vkCode);
+                    false
+                } else {
+                    !state.held_keys.insert(key.vkCode)
+                };
+                let Some(point) = state.last_point else {
+                    return;
+                };
+                if state.tracker.activity(point).is_none() {
+                    state.typed = None;
+                    return;
+                }
+                let mut pid = 0;
+                unsafe {
+                    GetWindowThreadProcessId(GetForegroundWindow(), &mut pid);
+                }
+                if pid == std::process::id() {
+                    return;
+                }
+                let name = match key.vkCode {
+                    13 => Some("Enter"),
+                    9 => Some("Tab"),
+                    27 => Some("Escape"),
+                    _ => None,
+                };
+                if wparam as u32 != WM_KEYUP
+                    && !repeated
+                    && let Some(name) = name
+                {
+                    flush_activity(state, true);
+                    send_activity(state, point, super::step_context::Activity::Key(name));
+                } else if wparam as u32 == WM_KEYUP
+                    && ((0x30..=0x5a).contains(&key.vkCode)
+                        || (0x60..=0x6f).contains(&key.vkCode)
+                        || (0xba..=0xe2).contains(&key.vkCode)
+                        || [8, 32, 46].contains(&key.vkCode))
+                {
+                    state.typed = Some(Instant::now());
+                }
+            });
+        }
+    }
+    unsafe { CallNextHookEx(null_mut(), code, wparam, lparam) }
+}
+
 struct Dialog {
     count: usize,
+    undo: HWND,
+    expanded: bool,
+    expansion: crate::motion::Tween,
+    expansion_value: f32,
+    last_hover: Instant,
+    began: Instant,
+    animate: bool,
+    dpi: i32,
     hover: u32,
     tooltip: HWND,
     pause: HWND,
@@ -105,32 +228,20 @@ unsafe extern "system" fn procedure(
                     let mut ps = PAINTSTRUCT::default();
                     let dc = BeginPaint(hwnd, &mut ps);
                     if !dc.is_null() {
-                        paint_bar(dc, state.count, state.paused, state.finish);
+                        visual::present(hwnd, state, state.expansion_value);
                     }
                     EndPaint(hwnd, &ps);
                     return 0;
                 }
-                WM_DRAWITEM => {
-                    let item =
-                        &*(lparam as *const windows_sys::Win32::UI::Controls::DRAWITEMSTRUCT);
-                    paint_button(
-                        item.hDC,
-                        item.rcItem,
-                        item.CtlID,
-                        state.paused,
-                        item.itemState & 0x10 != 0 || state.hover == item.CtlID,
-                    );
-                    return 1;
-                }
-                WM_NCHITTEST => {
-                    let mut point = POINT {
-                        x: lparam as u16 as i16 as i32,
-                        y: (lparam >> 16) as u16 as i16 as i32,
-                    };
-                    ScreenToClient(hwnd, &mut point);
-                    if point.x >= 98 && point.x < 230 && point.y >= 0 && point.y < 52 {
-                        return HTCAPTION as LRESULT;
+                // Layered composition owns all pixels; children retain semantics.
+                WM_DRAWITEM => return 1,
+                WM_MOUSEACTIVATE => return MA_NOACTIVATE as LRESULT,
+                WM_COMMAND if wparam & 0xffff == 5 => {
+                    if state.count > 0 && state.pending.is_none() {
+                        state.pending = Some(Input::Undo);
+                        pause_tracker(true);
                     }
+                    return 0;
                 }
                 WM_CLOSE => {
                     state.confirm_action = Some(false);
@@ -234,6 +345,23 @@ pub(super) fn record(owner: HWND, cursor: bool, root: Option<PathBuf>) -> Captur
             .map_err(Clone::clone)?;
         let mut state = Box::new(Dialog {
             count: 0,
+            undo: null_mut(),
+            expanded: false,
+            expansion: crate::motion::Tween::new(0.),
+            expansion_value: 0.,
+            last_hover: Instant::now() - Duration::from_secs(1),
+            began: Instant::now(),
+            animate: {
+                let mut enabled = 1i32;
+                SystemParametersInfoW(
+                    SPI_GETCLIENTAREAANIMATION,
+                    0,
+                    (&mut enabled as *mut i32).cast(),
+                    0,
+                );
+                enabled != 0
+            },
+            dpi: 96,
             hover: 0,
             tooltip: null_mut(),
             pause: null_mut(),
@@ -246,14 +374,14 @@ pub(super) fn record(owner: HWND, cursor: bool, root: Option<PathBuf>) -> Captur
             cancel: null_mut(),
         });
         let hwnd = CreateWindowExW(
-            WS_EX_TOPMOST | WS_EX_TOOLWINDOW,
+            WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_LAYERED,
             w!("ClipCraftStepRecorder"),
-            w!("ClipCraft Steps"),
+            w!("ClipCraft Step by Step"),
             WS_POPUP | WS_CLIPCHILDREN,
             position[0],
             position[1],
-            340,
-            52,
+            368,
+            114,
             owner,
             null_mut(),
             GetModuleHandleW(null()),
@@ -270,70 +398,40 @@ pub(super) fn record(owner: HWND, cursor: bool, root: Option<PathBuf>) -> Captur
                 "Windows cannot exclude Steps controls from capture",
             ));
         }
-        state.pause = CreateWindowExW(
-            0,
-            w!("BUTTON"),
-            w!("Pause recording"),
-            WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_OWNERDRAW as u32,
-            4,
-            4,
-            44,
-            44,
-            hwnd,
-            1usize as HMENU,
-            GetModuleHandleW(null()),
-            null(),
-        );
-        let stop = CreateWindowExW(
-            0,
-            w!("BUTTON"),
-            w!("Finish guide"),
-            WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_OWNERDRAW as u32,
-            56,
-            4,
-            36,
-            44,
-            hwnd,
-            2usize as HMENU,
-            GetModuleHandleW(null()),
-            null(),
-        );
-        state.stop = stop;
-        state.restart = CreateWindowExW(
-            0,
-            w!("BUTTON"),
-            w!("Restart capture"),
-            WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_OWNERDRAW as u32,
-            236,
-            4,
-            44,
-            44,
-            hwnd,
-            3usize as HMENU,
-            GetModuleHandleW(null()),
-            null(),
-        );
-        state.cancel = CreateWindowExW(
-            0,
-            w!("BUTTON"),
-            w!("Cancel capture"),
-            WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_OWNERDRAW as u32,
-            288,
-            4,
-            44,
-            44,
-            hwnd,
-            4usize as HMENU,
-            GetModuleHandleW(null()),
-            null(),
-        );
-        if state.pause.is_null()
-            || stop.is_null()
-            || state.restart.is_null()
-            || state.cancel.is_null()
-        {
-            return Err(win_error("Cannot create Steps controls"));
+        for (id, label) in [
+            (1, w!("Pause recording")),
+            (2, w!("Finish guide")),
+            (3, w!("Restart recording")),
+            (4, w!("Cancel recording")),
+            (5, w!("Undo step")),
+        ] {
+            let button = CreateWindowExW(
+                WS_EX_NOACTIVATE,
+                w!("BUTTON"),
+                label,
+                WS_CHILD | BS_OWNERDRAW as u32,
+                0,
+                0,
+                40,
+                40,
+                hwnd,
+                id as HMENU,
+                GetModuleHandleW(null()),
+                null(),
+            );
+            if button.is_null() {
+                return Err(win_error("Cannot create recorder controls"));
+            }
+            match id {
+                1 => state.pause = button,
+                2 => state.stop = button,
+                3 => state.restart = button,
+                4 => state.cancel = button,
+                _ => state.undo = button,
+            }
         }
+        let stop = state.stop;
+        layout(hwnd, &mut state, false);
         state.tooltip = CreateWindowExW(
             WS_EX_TOPMOST | WS_EX_NOACTIVATE,
             TOOLTIPS_CLASSW,
@@ -356,11 +454,12 @@ pub(super) fn record(owner: HWND, cursor: bool, root: Option<PathBuf>) -> Captur
             (state.pause, w!("Pause recording")),
             (stop, w!("Finish guide")),
             (state.restart, w!("Restart capture")),
-            (state.cancel, w!("Cancel capture")),
+            (state.cancel, w!("Cancel recording")),
+            (state.undo, w!("Undo last step")),
         ] {
             tooltip_label(state.tooltip, hwnd, button, label, true);
         }
-        if SetTimer(hwnd, 1, 16, None) == 0 {
+        if SetTimer(hwnd, 1, 33, None) == 0 {
             return Err(win_error("Cannot start Steps refresh timer"));
         }
         let (sender, inputs) = mpsc::sync_channel(4);
@@ -369,6 +468,11 @@ pub(super) fn record(owner: HWND, cursor: bool, root: Option<PathBuf>) -> Captur
         INPUT.with(|v| {
             *v.borrow_mut() = Some(HookState {
                 tracker,
+                caption: None,
+                last_point: None,
+                typed: None,
+                scroll: None,
+                held_keys: Default::default(),
                 sender,
                 failure: failure.clone(),
             })
@@ -379,6 +483,12 @@ pub(super) fn record(owner: HWND, cursor: bool, root: Option<PathBuf>) -> Captur
             return Err(win_error("Cannot start Steps mouse capture"));
         }
         let mut hook = Some(Hook(hook));
+        let key_hook =
+            SetWindowsHookExW(WH_KEYBOARD_LL, Some(keyboard), GetModuleHandleW(null()), 0);
+        if key_hook.is_null() {
+            return Err(win_error("Cannot start Steps keyboard capture"));
+        }
+        let mut key_hook = Some(Hook(key_hook));
         let c = count.clone();
         let f = failure.clone();
         let worker = std::thread::Builder::new()
@@ -390,10 +500,10 @@ pub(super) fn record(owner: HWND, cursor: bool, root: Option<PathBuf>) -> Captur
                     return Err(win_error("Cannot set Steps capture DPI"));
                 }
                 let _dpi = DpiContext(prior);
-                let labels = std::cell::RefCell::new(super::step_context::Collector::default());
+
                 step_pipeline::run_context(
                     inputs,
-                    |Area { origin, size }, gesture, index| {
+                    |Area { origin, size }, gesture, _index| {
                         let shot = Snapshot::capture_rect(origin, size, cursor, false)?;
                         let mut frame = shot.frame(Region {
                             x: 0,
@@ -401,10 +511,19 @@ pub(super) fn record(owner: HWND, cursor: bool, root: Option<PathBuf>) -> Captur
                             width: size[0],
                             height: size[1],
                         })?;
-                        frame.context =
-                            labels
-                                .borrow_mut()
-                                .offer(index, origin, gesture, &frame.image);
+                        let point = POINT {
+                            x: origin[0] + gesture.end[0] as i32,
+                            y: origin[1] + gesture.end[1] as i32,
+                        };
+                        frame.context.bounds =
+                            window_bounds(GetAncestor(WindowFromPoint(point), GA_ROOT)).map(|b| {
+                                [
+                                    b[0] - origin[0],
+                                    b[1] - origin[1],
+                                    b[2] - origin[0],
+                                    b[3] - origin[1],
+                                ]
+                            });
                         Ok(frame)
                     },
                     root,
@@ -412,7 +531,7 @@ pub(super) fn record(owner: HWND, cursor: bool, root: Option<PathBuf>) -> Captur
                     f,
                     step_pipeline::Enrichment {
                         date: super::step_context::date(),
-                        finish: Box::new(|g| labels.borrow_mut().finish(g)),
+                        finish: Box::new(|_| {}),
                     },
                 )
             })
@@ -421,6 +540,11 @@ pub(super) fn record(owner: HWND, cursor: bool, root: Option<PathBuf>) -> Captur
         let mut message = MSG::default();
         let mut positioned = None;
         loop {
+            INPUT.with(|v| {
+                if let Some(h) = v.borrow_mut().as_mut() {
+                    flush_activity(h, false);
+                }
+            });
             if intro.as_ref().is_some_and(|cue| !cue.tick()) {
                 intro.take();
             }
@@ -431,21 +555,42 @@ pub(super) fn record(owner: HWND, cursor: bool, root: Option<PathBuf>) -> Captur
                     let work = monitor_at(area.origin)?.1;
                     let [x, y] = controller_position(work);
                     SetWindowPos(hwnd, HWND_TOPMOST, x, y, 0, 0, SWP_NOSIZE | SWP_NOACTIVATE);
+                    let expanded = state.expanded;
+                    layout(hwnd, &mut state, expanded);
                 }
             }
             let mut pointer = POINT::default();
             GetCursorPos(&mut pointer);
             let under = WindowFromPoint(pointer);
-            let buttons = [state.pause, stop, state.restart, state.cancel];
+            let buttons = [state.pause, stop, state.restart, state.cancel, state.undo];
             let hovered = buttons
                 .iter()
-                .position(|b| *b == under)
-                .map_or(0, |i| i as u32 + 1);
+                .find(|b| **b == under)
+                .map_or(0, |b| GetDlgCtrlID(*b) as u32);
+            let inside = under == hwnd || buttons.contains(&under);
+            if inside {
+                state.last_hover = Instant::now();
+            }
+            let expanded = inside
+                || state.last_hover.elapsed() < Duration::from_millis(280)
+                || state.confirm_action.is_some();
+            let value = state.expansion.advance(
+                if expanded { 1. } else { 0. },
+                state.began.elapsed().as_secs_f64(),
+                if state.animate { 0.180 } else { 0. },
+            );
+            if state.expanded != expanded || state.expansion_value != value {
+                state.expansion_value = value;
+                layout(hwnd, &mut state, expanded);
+            }
             if hovered != state.hover {
                 state.hover = hovered;
                 for button in buttons {
                     InvalidateRect(button, null(), 0);
                 }
+            }
+            if state.animate && !state.paused {
+                InvalidateRect(state.pause, null(), 0);
             }
             if let Some(restart) = state.confirm_action.take() {
                 match super::restart::confirm(hwnd, restart) {
@@ -464,16 +609,24 @@ pub(super) fn record(owner: HWND, cursor: bool, root: Option<PathBuf>) -> Captur
             }
             if let Some(command) = state.pending.take() {
                 let cancel = matches!(command, Input::Cancel);
+                let undo = matches!(command, Input::Undo);
                 let sent = INPUT.with(|v| v.borrow().as_ref().map(|h| h.sender.try_send(command)));
                 match sent {
                     Some(Ok(())) => {
                         if cancel {
                             state.finish = true;
+                        } else if undo {
+                            pause_tracker(state.paused);
                         } else {
                             state.paused = false;
                             INPUT.with(|v| {
                                 if let Some(h) = v.borrow_mut().as_mut() {
                                     h.tracker = Session::default();
+                                    h.caption = None;
+                                    h.last_point = None;
+                                    h.typed = None;
+                                    h.scroll = None;
+                                    h.held_keys.clear();
                                 }
                             });
                             tooltip_label(
@@ -492,13 +645,37 @@ pub(super) fn record(owner: HWND, cursor: bool, root: Option<PathBuf>) -> Captur
                     }
                 }
             }
-            for button in [state.pause, stop, state.restart, state.cancel] {
-                EnableWindow(button, (!state.finish && state.pending.is_none()) as i32);
+            for button in [state.pause, stop, state.restart, state.cancel, state.undo] {
+                EnableWindow(
+                    button,
+                    (!state.finish
+                        && state.pending.is_none()
+                        && (button != state.undo || state.count > 0)) as i32,
+                );
             }
+            // A bounded queue warning is not a Finish command. Keep the
+            // controller available; fatal worker errors still exit below.
             if !state.finish && failure.lock().unwrap_or_else(|e| e.into_inner()).is_some() {
-                state.finish = true;
+                SetWindowTextW(
+                    hwnd,
+                    w!("Step by Step — an action was missed; repeat it before Finish"),
+                );
+                tooltip_label(
+                    state.tooltip,
+                    hwnd,
+                    state.pause,
+                    w!("An action was missed while capture was busy. Repeat it before Finish."),
+                    false,
+                );
             }
             if state.finish {
+                INPUT.with(|v| {
+                    if let Some(h) = v.borrow_mut().as_mut() {
+                        flush_activity(h, true);
+                        h.tracker.finish();
+                    }
+                });
+                key_hook.take();
                 hook.take();
                 EnableWindow(state.pause, 0);
                 EnableWindow(stop, 0);
@@ -511,8 +688,15 @@ pub(super) fn record(owner: HWND, cursor: bool, root: Option<PathBuf>) -> Captur
             if worker.is_finished() {
                 break;
             }
+            visual::present(hwnd, &state, state.expansion_value);
             let code = GetMessageW(&mut message, null_mut(), 0, 0);
             if code <= 0 {
+                INPUT.with(|v| {
+                    if let Some(h) = v.borrow_mut().as_mut() {
+                        flush_activity(h, true);
+                    }
+                });
+                key_hook.take();
                 hook.take();
                 break;
             }
@@ -529,169 +713,54 @@ pub(super) fn record(owner: HWND, cursor: bool, root: Option<PathBuf>) -> Captur
     }
 }
 
-fn paint_bar(dc: HDC, count: usize, paused: bool, finish: bool) {
+unsafe fn layout(hwnd: HWND, state: &mut Dialog, expanded: bool) {
     unsafe {
-        let background = Bitmap(CreateSolidBrush(0x0023211d));
-        let pen = Bitmap(CreatePen(PS_SOLID, 2, 0x00b98b00));
-        let oldb = SelectObject(dc, background.0);
-        let oldp = SelectObject(dc, pen.0);
-        RoundRect(dc, 0, 0, 340, 52, 12, 12);
-        let font = Bitmap(CreateFontW(
-            -14,
-            0,
-            0,
-            0,
-            400,
-            0,
-            0,
-            0,
-            DEFAULT_CHARSET as u32,
-            OUT_DEFAULT_PRECIS as u32,
-            CLIP_DEFAULT_PRECIS as u32,
-            CLEARTYPE_QUALITY as u32,
-            DEFAULT_PITCH as u32,
-            w!("Segoe UI"),
-        ));
-        let oldf = SelectObject(dc, font.0);
-        SetBkMode(dc, TRANSPARENT as i32);
-        SetTextColor(dc, 0x00ffffff);
-        let mut text: Vec<u16> = if finish {
-            "Finishing…".into()
-        } else if paused {
-            format!("{count} Steps · Paused")
-        } else {
-            format!("{count} Steps")
-        }
-        .encode_utf16()
-        .collect();
-        DrawTextW(
-            dc,
-            text.as_mut_ptr(),
-            text.len() as i32,
-            &mut RECT {
-                left: 100,
-                top: 4,
-                right: 228,
-                bottom: 48,
-            },
-            DT_CENTER | DT_VCENTER | DT_SINGLELINE,
+        state.expanded = expanded;
+        state.dpi = windows_sys::Win32::UI::HiDpi::GetDpiForWindow(hwnd).max(96) as i32;
+        let px = |n: i32| (n * state.dpi + 48) / 96;
+        let mut info = MONITORINFO {
+            cbSize: size_of::<MONITORINFO>() as u32,
+            ..Default::default()
+        };
+        GetMonitorInfoW(MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST), &mut info);
+        let x = info.rcWork.left + (info.rcWork.right - info.rcWork.left - px(368)) / 2;
+        SetWindowPos(
+            hwnd,
+            HWND_TOPMOST,
+            x,
+            info.rcWork.top + px(12),
+            px(368),
+            px(114),
+            SWP_NOACTIVATE,
         );
-        SelectObject(dc, oldf);
-        SelectObject(dc, oldp);
-        SelectObject(dc, oldb);
-    }
-}
-fn paint_button(dc: HDC, rect: RECT, id: u32, paused: bool, focus: bool) {
-    unsafe {
-        let width = rect.right - rect.left;
-        let height = rect.bottom - rect.top;
-        let buffer = MemoryDc(CreateCompatibleDC(dc));
-        let bitmap = Bitmap(CreateCompatibleBitmap(dc, width * 4, height * 4));
-        if buffer.0.is_null() || bitmap.0.is_null() {
-            paint_button_raw(dc, rect, id, paused, focus);
-            return;
+        for (button, x, w) in [
+            (state.undo, 23, 52),
+            (state.restart, 81, 52),
+            (state.pause, 156, 56),
+            (state.cancel, 235, 52),
+            (state.stop, 293, 52),
+        ] {
+            SetWindowPos(
+                button,
+                null_mut(),
+                px(x),
+                px(if button == state.pause { 14 } else { 23 }),
+                px(w),
+                px(if button == state.pause { 56 } else { 62 }),
+                SWP_NOZORDER | SWP_NOACTIVATE,
+            );
+            ShowWindow(
+                button,
+                if expanded || button == state.pause {
+                    SW_SHOWNOACTIVATE
+                } else {
+                    SW_HIDE
+                },
+            );
         }
-        let old = SelectObject(buffer.0, bitmap.0);
-        SetMapMode(buffer.0, MM_ANISOTROPIC);
-        SetWindowExtEx(buffer.0, 1, 1, null_mut());
-        SetViewportExtEx(buffer.0, 4, 4, null_mut());
-        paint_button_raw(
-            buffer.0,
-            RECT {
-                left: 0,
-                top: 0,
-                right: width,
-                bottom: height,
-            },
-            id,
-            paused,
-            focus,
-        );
-        SetMapMode(buffer.0, MM_TEXT);
-        let mode = SetStretchBltMode(dc, HALFTONE);
-        StretchBlt(
-            dc,
-            rect.left,
-            rect.top,
-            width,
-            height,
-            buffer.0,
-            0,
-            0,
-            width * 4,
-            height * 4,
-            SRCCOPY,
-        );
-        SetStretchBltMode(dc, mode);
-        SelectObject(buffer.0, old);
-    }
-}
-
-fn paint_button_raw(dc: HDC, rect: RECT, id: u32, paused: bool, focus: bool) {
-    unsafe {
-        let background = Bitmap(CreateSolidBrush(0x0023211d));
-        FillRect(dc, &rect, background.0);
-        let brush = Bitmap(CreateSolidBrush(if id == 1 {
-            if focus { 0x004c48de } else { 0x00302ec1 }
-        } else if focus {
-            0x00554d42
-        } else {
-            0x0023211d
-        }));
-        let border = Bitmap(CreatePen(
-            PS_SOLID,
-            1,
-            if focus {
-                0x00ffffff
-            } else if id == 1 {
-                0x00302ec1
-            } else {
-                0x0023211d
-            },
-        ));
-        let oldb = SelectObject(dc, brush.0);
-        let oldp = SelectObject(dc, border.0);
-        RoundRect(dc, rect.left, rect.top, rect.right, rect.bottom, 9, 9);
-        let ink = Bitmap(CreateSolidBrush(0x00ffffff));
-        SelectObject(dc, ink.0);
-        let pen = Bitmap(CreatePen(PS_SOLID, 1, 0x00ffffff));
-        SelectObject(dc, pen.0);
-        let x = (rect.left + rect.right) / 2;
-        let y = (rect.top + rect.bottom) / 2;
-        if id == 2 {
-            RoundRect(dc, x - 7, y - 7, x + 7, y + 7, 4, 4);
-        } else if id == 3 {
-            let stroke = Bitmap(CreatePen(PS_SOLID, 2, 0x00ffffff));
-            SelectObject(dc, stroke.0);
-            let hollow = SelectObject(dc, GetStockObject(HOLLOW_BRUSH));
-            let direction = SetArcDirection(dc, AD_CLOCKWISE);
-            Arc(dc, x - 8, y - 8, x + 8, y + 8, x - 6, y - 6, x - 8, y + 1);
-            SetArcDirection(dc, direction);
-            SelectObject(dc, hollow);
-            let points = [
-                POINT { x: x - 8, y: y - 9 },
-                POINT { x: x - 8, y: y - 1 },
-                POINT { x, y: y - 5 },
-            ];
-            Polygon(dc, points.as_ptr(), 3);
-            SelectObject(dc, pen.0);
-        } else if id == 4 {
-            RoundRect(dc, x - 5, y - 5, x + 5, y + 8, 2, 2);
-            Rectangle(dc, x - 7, y - 8, x + 7, y - 6);
-            Rectangle(dc, x - 2, y - 10, x + 2, y - 8);
-        } else if paused {
-            let points = [
-                POINT { x: x - 5, y: y - 9 },
-                POINT { x: x + 8, y },
-                POINT { x: x - 5, y: y + 9 },
-            ];
-            Polygon(dc, points.as_ptr(), 3);
-        } else {
-            RoundRect(dc, x - 7, y - 8, x - 3, y + 8, 2, 2);
-            RoundRect(dc, x + 3, y - 8, x + 7, y + 8, 2, 2);
-        }
-        SelectObject(dc, oldp);
-        SelectObject(dc, oldb);
+        // Alpha edges replace the hard-edged Win32 region used by the old bar.
+        SetWindowRgn(hwnd, null_mut(), 0);
+        InvalidateRect(hwnd, null(), 0);
     }
 }
 
@@ -755,98 +824,10 @@ unsafe fn tooltip_label(
 fn pause_tracker(paused: bool) {
     INPUT.with(|v| {
         if let Some(h) = v.borrow_mut().as_mut() {
+            if paused {
+                flush_activity(h, true);
+            }
             h.tracker.pause(paused);
         }
     });
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn compact_steps_toolbar_renders_offscreen() {
-        unsafe {
-            let dc = MemoryDc(CreateCompatibleDC(null_mut()));
-            let mut bits = null_mut();
-            let bitmap = Bitmap(CreateDIBSection(
-                dc.0,
-                &bitmap_info([340, 52]),
-                DIB_RGB_COLORS,
-                &mut bits,
-                null_mut(),
-                0,
-            ));
-            assert!(!bitmap.0.is_null());
-            let old = SelectObject(dc.0, bitmap.0);
-            paint_bar(dc.0, 4, false, false);
-            paint_button(
-                dc.0,
-                RECT {
-                    left: 4,
-                    top: 4,
-                    right: 48,
-                    bottom: 48,
-                },
-                1,
-                false,
-                false,
-            );
-            paint_button(
-                dc.0,
-                RECT {
-                    left: 56,
-                    top: 4,
-                    right: 92,
-                    bottom: 48,
-                },
-                2,
-                false,
-                false,
-            );
-            paint_button(
-                dc.0,
-                RECT {
-                    left: 236,
-                    top: 4,
-                    right: 280,
-                    bottom: 48,
-                },
-                3,
-                false,
-                false,
-            );
-            paint_button(
-                dc.0,
-                RECT {
-                    left: 288,
-                    top: 4,
-                    right: 332,
-                    bottom: 48,
-                },
-                4,
-                false,
-                false,
-            );
-            GdiFlush();
-            SelectObject(dc.0, old);
-            let bytes = std::slice::from_raw_parts(bits.cast::<u8>(), 340 * 52 * 4);
-            let image = crop_bgra(
-                bytes,
-                [340, 52],
-                Region {
-                    x: 0,
-                    y: 0,
-                    width: 340,
-                    height: 52,
-                },
-            )
-            .unwrap();
-            assert_eq!(image.get_pixel(10, 26).0, [193, 46, 48, 255]);
-            if let Some(dir) = std::env::var_os("CLIPCRAFT_CURSOR_EVIDENCE_DIR") {
-                image
-                    .save(std::path::PathBuf::from(dir).join("steps-toolbar.png"))
-                    .unwrap();
-            }
-        }
-    }
 }

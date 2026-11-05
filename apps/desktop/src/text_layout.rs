@@ -33,6 +33,14 @@ pub(super) fn available_family(ctx: &egui::Context, style: &TextStyle) -> egui::
                     priority: egui::FontPriority::Highest,
                 }],
             });
+            ctx.add_font(egui::FontInsert {
+                name: "ClipCraft Emoji".into(),
+                data: egui::FontData::from_static(TextFont::Emoji.bytes(false, false)),
+                families: vec![egui::InsertFontFamily {
+                    family: family.clone(),
+                    priority: egui::FontPriority::Lowest,
+                }],
+            });
             ctx.request_repaint();
             return egui::FontFamily::Proportional;
         }
@@ -61,6 +69,15 @@ pub(super) fn configure(ctx: &egui::Context) {
             fonts.families.insert(key.clone(), vec![name.to_string()]);
         }
     }
+    fonts.font_data.insert(
+        "ClipCraft Emoji".into(),
+        Arc::new(egui::FontData::from_static(
+            TextFont::Emoji.bytes(false, false),
+        )),
+    );
+    for family in fonts.families.values_mut() {
+        family.push("ClipCraft Emoji".into());
+    }
     ctx.set_fonts(fonts);
 }
 
@@ -87,10 +104,12 @@ pub(super) fn galley(
         result.mesh_bounds = egui::Rect::NOTHING;
         result.num_vertices = 0;
         result.num_indices = 0;
-        let height = layout.line_height * scale;
         for (index, row) in layout.rows.iter().enumerate() {
+            let height = row.height.unwrap_or(layout.line_height) * scale;
+            let ascent = row.ascent.unwrap_or(layout.ascent) * scale;
             let mut placed = seed.rows[0].clone();
-            placed.pos = egui::pos2(0.0, index as f32 * height);
+            let origin = row.start_x.unwrap_or(0.) * scale;
+            placed.pos = egui::pos2(origin, row.y.map_or(index as f32 * height, |y| y * scale));
             placed.ends_with_newline = row.ends_with_newline;
             let output = Arc::make_mut(&mut placed.row);
             output.glyphs.clear();
@@ -101,7 +120,12 @@ pub(super) fn galley(
                 capture_core::text::HorizontalAlignment::Right => width,
             };
             output.size = egui::vec2(
-                row.characters.last().map_or(empty_x, |c| c.x + c.advance) * scale,
+                (row.characters
+                    .last()
+                    .map_or(row.start_x.unwrap_or(empty_x), |c| c.x + c.advance)
+                    * scale
+                    - origin)
+                    .max(0.),
                 height,
             );
             for character in &row.characters {
@@ -118,13 +142,13 @@ pub(super) fn galley(
                 });
                 let source_row = &source.rows[0];
                 let mut glyph = source_row.glyphs[0];
-                let position = egui::pos2(character.x * scale, layout.ascent * scale);
+                let position = egui::pos2(character.x * scale - origin, ascent);
                 let delta = position - glyph.pos;
                 glyph.chr = character.character;
                 glyph.pos = position;
                 glyph.advance_width = character.advance * scale;
                 glyph.line_height = height;
-                glyph.font_ascent = layout.ascent * scale;
+                glyph.font_ascent = ascent;
                 glyph.font_height = height;
                 glyph.font_face_ascent = glyph.font_ascent;
                 glyph.font_face_height = height;
@@ -155,7 +179,13 @@ pub(super) fn galley(
         }
         result.rect = egui::Rect::from_min_size(
             egui::Pos2::ZERO,
-            egui::vec2(width * scale, layout.rows.len() as f32 * height),
+            egui::vec2(
+                width * scale,
+                layout.rows.last().map_or(0., |r| {
+                    r.y.unwrap_or((layout.rows.len() - 1) as f32 * layout.line_height)
+                        + r.height.unwrap_or(layout.line_height)
+                }) * scale,
+            ),
         );
         Arc::new(result)
     })

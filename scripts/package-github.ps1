@@ -7,13 +7,14 @@ $notesPath = Join-Path $root "releases/$Version.json"
 $notes = Get-Content -Raw -LiteralPath $notesPath | ConvertFrom-Json
 if ($notes.version -ne $Version -or $notes.limitations -isnot [Array]) { throw 'Release notes/version/limitations are required.' }
 $manifest = Get-Content -Raw -LiteralPath Cargo.toml
-if ($manifest -notmatch ('(?m)^version\s*=\s*"' + [regex]::Escape($Version.Split('-')[0]) + '"')) { throw 'Release and workspace base versions differ.' }
+if ($manifest -notmatch ('(?m)^version\s*=\s*"(?:' + [regex]::Escape($Version) + '|' + [regex]::Escape($Version.Split('-')[0]) + ')"')) { throw 'Release and workspace versions differ.' }
 $dirty = & git -c $trust status --porcelain --untracked-files=normal
 if ($LASTEXITCODE -ne 0 -or $dirty) { throw 'Commit the exact audited source before packaging.' }
 $release = Join-Path $root "artifacts/github/releases/$Version"
 if (Test-Path -LiteralPath $release) { throw 'Release staging already exists; inspect it or choose a new version. Never overwrite a published package.' }
 $env:CARGO_BUILD_JOBS = '2'
 $env:RUST_TEST_THREADS = '2'
+$env:CARGO_ENCODED_RUSTFLAGS = @("--remap-path-prefix=$env:USERPROFILE=/build-user", "--remap-path-prefix=$root=/clipcraft") -join [char]31
 $pwsh = (Get-Process -Id $PID).Path
 $targetRoot = if ($env:CARGO_TARGET_DIR) { [IO.Path]::GetFullPath($env:CARGO_TARGET_DIR) } else { Join-Path $root 'target' }
 $desktopExe = Join-Path $targetRoot 'release/capture-desktop.exe'
@@ -39,27 +40,28 @@ Copy-Item -LiteralPath $cliExe -Destination $package
 $fixture = Join-Path $release 'fixture'
 & (Join-Path $package 'capture-cli.exe') demo --out-dir $fixture
 if ($LASTEXITCODE -ne 0) { throw 'Demo generation failed.' }
-& (Join-Path $package 'capture-cli.exe') render (Join-Path $fixture 'demo.capture.json') --out (Join-Path $fixture 'roundtrip.png')
+& (Join-Path $package 'capture-cli.exe') render (Join-Path $fixture 'demo.iclip') --out (Join-Path $fixture 'roundtrip.png')
 if ($LASTEXITCODE -ne 0) { throw 'Project reopen/render failed.' }
 & (Join-Path $package 'capture-cli.exe') compare (Join-Path $fixture 'demo.png') (Join-Path $fixture 'roundtrip.png')
 if ($LASTEXITCODE -ne 0) { throw 'Export roundtrip differs.' }
-Copy-Item -LiteralPath (Join-Path $fixture 'demo.capture.json') -Destination (Join-Path $package 'example.capture.json')
 Copy-Item -LiteralPath LICENSE,NOTICE,SECURITY.md,README.md -Destination $package
-Copy-Item -LiteralPath scripts/install-start-menu.ps1 -Destination $package
+Copy-Item -LiteralPath scripts/install-start-menu.ps1,scripts/register-project-files.ps1 -Destination $package
 Copy-Item -LiteralPath $notesPath -Destination (Join-Path $package 'release-notes.json')
 $packageDocs = Join-Path $package 'docs'
 New-Item -ItemType Directory -Path $packageDocs -Force | Out-Null
 Copy-Item -LiteralPath docs/building.md,docs/security-model.md,docs/github-releases.md,docs/installing.md,docs/licensing.md -Destination $packageDocs
+Copy-Item -LiteralPath docs/images -Destination $packageDocs -Recurse
 @"
 ClipCraft $Version - unsigned Windows x64 beta
 
 Extract the entire ZIP and run ClipCraft.exe. No ClipCraft account is required.
-Optional: run install-start-menu.ps1 for separate Editor and Capture Controller
-Start menu shortcuts with their own icons.
-Open example.capture.json for a synthetic editable document. Use the File menu
-for exports, printing and options. See release-notes.md for pending checks.
+Optional: run install-start-menu.ps1 for a ClipCraft
+Start menu entry. Run register-project-files.ps1 to associate .iclip projects
+with this portable copy; Windows preserves existing default-app choices.
+Use the File menu for new projects, exports, printing and options.
+The Library starts empty; no projects or preferences are bundled.
 
-The ZIP contains portable executables. An unsigned per-user setup EXE is also
+The ZIP contains portable executables. An unsigned per-user MSI is also
 available on the same GitHub release. See docs/installing.md.
 Library/settings are stored in your Windows user profile by default. See
 docs/security-model.md for data handling and docs/github-releases.md for
@@ -75,11 +77,11 @@ $packageHashes = Get-ChildItem -LiteralPath $package -Recurse -File | Sort-Objec
 $packageHashes | Set-Content -LiteralPath (Join-Path $package 'PACKAGE-SHA256SUMS.txt') -Encoding utf8
 $zip = Join-Path $public "clipcraft-$Version-windows-x64.zip"
 Compress-Archive -Path (Join-Path $package '*') -DestinationPath $zip -CompressionLevel Optimal
-$installer = Join-Path $public "clipcraft-$Version-windows-x64-setup.exe"
-& $pwsh -NoProfile -File scripts/build-installer.ps1 -Package $package -Output $installer -Version $Version
+$installer = Join-Path $public "clipcraft-$Version-windows-x64.msi"
+& $pwsh -NoProfile -File scripts/build-msi.ps1 -Package $package -Output $installer -Version $Version
 if ($LASTEXITCODE -ne 0) { throw 'Installer build failed.' }
 if ($env:GITHUB_ACTIONS -eq 'true') {
-    & $pwsh -NoProfile -File scripts/test-installer.ps1 -Package $package -Installer $installer -Version $Version
+    & $pwsh -NoProfile -File scripts/test-msi.ps1 -Package $package -Installer $installer
     if ($LASTEXITCODE -ne 0) { throw 'Installer lifecycle checks failed.' }
     Copy-Item -LiteralPath artifacts/installer-test/result.json -Destination (Join-Path $public 'installer-checks.json')
 }

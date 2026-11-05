@@ -2,6 +2,7 @@ pub(super) mod actions;
 pub(crate) mod autosave;
 mod import;
 mod library;
+mod library_icons;
 mod manage;
 mod recovery;
 use crate::{Editor, FileAction, egui};
@@ -20,6 +21,13 @@ pub struct HistoryPanel {
     store: Option<History>,
     error: String,
     textures: HashMap<String, Option<egui::TextureHandle>>,
+    thumbnail_versions: HashMap<String, String>,
+    thumbnail_pending_versions: HashMap<String, String>,
+    thumbnail_jobs: HashMap<String, std::sync::mpsc::Receiver<Option<image::RgbaImage>>>,
+    thumbnail_use: HashMap<String, u64>,
+    thumbnail_clock: u64,
+    thumbnail_scale: u16,
+    thumbnail_workers: std::sync::Arc<std::sync::atomic::AtomicUsize>,
     availability: HashMap<String, bool>,
     query: String,
     library: library::View,
@@ -29,6 +37,7 @@ pub struct HistoryPanel {
     pub(crate) active: Option<String>,
     pub recent: bool,
 }
+
 impl HistoryPanel {
     pub(crate) fn root(&self) -> Option<PathBuf> {
         self.store.as_ref().map(|s| s.root().to_owned())
@@ -41,12 +50,14 @@ impl HistoryPanel {
         }
     }
     pub fn new() -> Self {
-        let root = std::env::var_os("CLIPCRAFT_HISTORY_DIR")
-            .map(PathBuf::from)
-            .or_else(|| {
-                std::env::var_os("LOCALAPPDATA")
-                    .map(|p| PathBuf::from(p).join("ClipCraft").join("history-v1"))
-            });
+        let root = crate::storage_locations::configured(
+            capture_core::quick_preferences::Folder::ManagedProjects,
+        )
+        .or_else(|| std::env::var_os("CLIPCRAFT_HISTORY_DIR").map(PathBuf::from))
+        .or_else(|| {
+            std::env::var_os("LOCALAPPDATA")
+                .map(|p| PathBuf::from(p).join("ClipCraft").join("history-v1"))
+        });
         match root.map(|root| History::open(&root).map_err(|e| e.to_string())) {
             Some(Ok(store)) => Self {
                 store: Some(store),
@@ -79,7 +90,13 @@ impl HistoryPanel {
                 Err(e) => self.error = e.to_string(),
             }
         }
-        self.textures.clear();
+        let ids: std::collections::HashSet<_> = self.entries().into_iter().map(|e| e.id).collect();
+        self.textures.retain(|id, _| ids.contains(id));
+        self.thumbnail_jobs.retain(|id, _| ids.contains(id));
+        self.thumbnail_use.retain(|id, _| ids.contains(id));
+        self.thumbnail_versions.retain(|id, _| ids.contains(id));
+        self.thumbnail_pending_versions
+            .retain(|id, _| ids.contains(id));
         self.availability.clear();
     }
     pub(crate) fn entry(&self, id: &str) -> Option<Entry> {
@@ -119,27 +136,127 @@ impl HistoryPanel {
         Ok(())
     }
     fn thumbnail(&mut self, entry: &Entry, ctx: &egui::Context) -> Option<egui::TextureHandle> {
-        if let Some(texture) = self.textures.get(&entry.id) {
+        // Disk masters cover 200% tile zoom at 400% display scaling. Upload once
+        // for this display's maximum tile size, independent of Library zoom.
+        let scale = (ctx.pixels_per_point().clamp(1., 4.) * 100.).round() as u16;
+        if self.thumbnail_scale != scale {
+            self.thumbnail_scale = scale;
+            self.textures.clear();
+            self.thumbnail_jobs.clear();
+            self.thumbnail_use.clear();
+        }
+        self.finish_thumbnails(ctx);
+        self.thumbnail_clock = self.thumbnail_clock.wrapping_add(1);
+        self.thumbnail_use
+            .insert(entry.id.clone(), self.thumbnail_clock);
+        if let Some(texture) = self.textures.get(&entry.id)
+            && self
+                .thumbnail_versions
+                .get(&entry.id)
+                .is_some_and(|v| v == entry.storage_id())
+        {
             return texture.clone();
         }
-        let image = match self.store.as_ref()?.thumbnail(&entry.id) {
-            Ok(image) => image,
-            Err(_) => {
-                self.textures.insert(entry.id.clone(), None);
-                return None;
+        if !self.thumbnail_jobs.contains_key(&entry.id) {
+            // Bounded asynchronous decode: never block a wheel/drag frame on a
+            // document render or PNG decode, and never launch a thread per tile.
+            if self.thumbnail_jobs.len() >= 2 {
+                ctx.request_repaint_after(std::time::Duration::from_millis(30));
+                return self.textures.get(&entry.id).cloned().flatten();
             }
-        };
-        let texture = ctx.load_texture(
-            format!("history-{}", entry.id),
-            egui::ColorImage::from_rgba_unmultiplied(
-                [image.width() as usize, image.height() as usize],
-                image.as_raw(),
-            ),
-            egui::TextureOptions::LINEAR,
-        );
-        self.textures
-            .insert(entry.id.clone(), Some(texture.clone()));
-        Some(texture)
+            use std::sync::atomic::Ordering;
+            if self
+                .thumbnail_workers
+                .try_update(Ordering::AcqRel, Ordering::Acquire, |n| {
+                    (n < 2).then_some(n + 1)
+                })
+                .is_err()
+            {
+                ctx.request_repaint_after(std::time::Duration::from_millis(30));
+                return self.textures.get(&entry.id).cloned().flatten();
+            }
+            let workers = self.thumbnail_workers.clone();
+            let root = self.store.as_ref()?.root().to_owned();
+            let id = entry.id.clone();
+            let wake = ctx.clone();
+            let (tx, rx) = std::sync::mpsc::channel();
+            self.thumbnail_jobs.insert(id.clone(), rx);
+            self.thumbnail_pending_versions
+                .insert(id.clone(), entry.storage_id().into());
+            std::thread::spawn(move || {
+                struct Active(std::sync::Arc<std::sync::atomic::AtomicUsize>);
+                impl Drop for Active {
+                    fn drop(&mut self) {
+                        self.0.fetch_sub(1, Ordering::AcqRel);
+                    }
+                }
+                let _active = Active(workers);
+                let result = History::open(&root)
+                    .ok()
+                    .and_then(|store| store.master_thumbnail(&id).ok())
+                    .map(|master| {
+                        image::imageops::thumbnail(
+                            &master,
+                            (320 * u32::from(scale) / 100).min(master.width()),
+                            (192 * u32::from(scale) / 100).min(master.height()),
+                        )
+                    });
+                let _ = tx.send(result);
+                wake.request_repaint();
+            });
+        }
+        self.textures.get(&entry.id).cloned().flatten()
+    }
+    fn finish_thumbnails(&mut self, ctx: &egui::Context) {
+        let ready: Vec<_> = self
+            .thumbnail_jobs
+            .iter()
+            .filter_map(|(id, rx)| match rx.try_recv() {
+                Ok(image) => Some((id.clone(), image)),
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => Some((id.clone(), None)),
+                Err(std::sync::mpsc::TryRecvError::Empty) => None,
+            })
+            .collect();
+        for (id, image) in ready {
+            self.thumbnail_jobs.remove(&id);
+            if let Some(version) = self.thumbnail_pending_versions.remove(&id) {
+                self.thumbnail_versions.insert(id.clone(), version);
+            }
+            let Some(image) = image else {
+                self.textures.entry(id).or_insert(None);
+                continue;
+            };
+            while self
+                .textures
+                .values()
+                .filter_map(|t| t.as_ref())
+                .map(|t| t.size()[0] * t.size()[1] * 4)
+                .sum::<usize>()
+                + image.as_raw().len()
+                > 192 * 1024 * 1024
+            {
+                let victim = self
+                    .textures
+                    .keys()
+                    .min_by_key(|id| self.thumbnail_use.get(*id).copied().unwrap_or(0))
+                    .cloned();
+                if let Some(id) = victim {
+                    self.textures.remove(&id);
+                    self.thumbnail_use.remove(&id);
+                } else {
+                    break;
+                }
+            }
+            let texture = ctx.load_texture(
+                format!("history-{}", id),
+                egui::ColorImage::from_rgba_unmultiplied(
+                    [image.width() as usize, image.height() as usize],
+                    image.as_raw(),
+                ),
+                egui::TextureOptions::LINEAR,
+            );
+            self.textures.insert(id.clone(), Some(texture.clone()));
+        }
     }
     pub(super) fn available(&mut self, id: &str) -> bool {
         *self
@@ -167,6 +284,30 @@ fn age(created_ms: u64) -> String {
 }
 impl Editor {
     pub(crate) fn record_history(&mut self, label: &str, origin: Origin) {
+        // Reopening an unchanged local project reuses its existing Library
+        // snapshot. Explicit Duplicate continues through its separate action.
+        if origin == Origin::Project
+            && self.session.document.video.is_none()
+            && let Ok(bytes) = serde_json::to_vec(&self.session.document)
+            && let Some(store) = &self.history.store
+            && let Some(entry) = self
+                .history
+                .entries()
+                .into_iter()
+                .filter(|e| e.label == label && e.origin == origin)
+                .find(|entry| {
+                    store
+                        .load(&entry.id)
+                        .ok()
+                        .and_then(|doc| serde_json::to_vec(&doc).ok())
+                        .is_some_and(|saved| saved == bytes)
+                })
+        {
+            self.history.active = Some(entry.id.clone());
+            self.autosave
+                .reset(&self.session.document, Some(entry), label, origin);
+            return;
+        }
         self.history.active = None;
         self.autosave
             .reset(&self.session.document, None, label, origin);
@@ -221,7 +362,6 @@ impl Editor {
         let ctx = ui.ctx().clone();
         let active = action.is_none() && self.history.active.as_deref() == Some(&entry.id);
         let available = self.history.available(&entry.id);
-        let texture = self.history.thumbnail(entry, &ctx);
         let label = if entry.label.is_empty() {
             entry.origin.label()
         } else {
@@ -257,6 +397,7 @@ impl Editor {
             )
         });
         if ui.is_rect_visible(rect) {
+            let texture = self.history.thumbnail(entry, &ctx);
             let painter = ui.painter();
             painter.rect_filled(rect, 4, egui::Color32::from_gray(47));
             if let Some(texture) = &texture {
@@ -290,6 +431,8 @@ impl Editor {
             {
                 let badge = if !available {
                     "MISSING"
+                } else if entry.kind == capture_core::history::MediaKind::Video {
+                    "VIDEO"
                 } else if entry.kind == capture_core::history::MediaKind::Steps {
                     "STEPS"
                 } else if entry.kind == capture_core::history::MediaKind::Template {
@@ -369,12 +512,62 @@ impl Editor {
             self.open_history(&id, &ui.ctx().clone());
         }
     }
+    pub(crate) fn set_recent_visible(&mut self, visible: bool) {
+        self.history.recent = visible;
+        if visible && self.is_video() {
+            self.video.collapsed = true;
+        }
+    }
     pub(crate) fn show_recent_history(&mut self, ui: &mut egui::Ui) {
+        if self.history.recent && self.is_video() {
+            // A restored video session must also honor the current dock choice.
+            self.video.collapsed = true;
+        }
         if self.history.recent && !self.shell.library_open() {
             egui::Panel::bottom("recent_history")
                 .default_size(112.0)
                 .resizable(false)
-                .show(ui, |ui| self.show_history(ui, true));
+                .show(ui, |ui| {
+                    #[cfg(test)]
+                    ui.ctx().data_mut(|d| {
+                        d.insert_temp(egui::Id::unique("recent-panel"), ui.max_rect())
+                    });
+                    self.show_history(ui, true);
+                });
         }
+    }
+}
+
+#[cfg(test)]
+mod roundup_tests {
+    use super::*;
+    #[test]
+    fn reopening_same_project_reuses_entry_and_refresh_keeps_texture_alive() {
+        let dir = tempfile::tempdir().unwrap();
+        let ctx = egui::Context::default();
+        let mut e = crate::canvas::tests::editor(&ctx);
+        e.history = HistoryPanel::isolated(dir.path());
+        let id = e
+            .history
+            .store
+            .as_mut()
+            .unwrap()
+            .record(&e.session.document, "review-guide.iclip", Origin::Project)
+            .unwrap()
+            .id;
+        let image = ctx.load_texture(
+            "cached-preview",
+            egui::ColorImage::filled([16, 16], egui::Color32::BLUE),
+            Default::default(),
+        );
+        e.history.textures.insert(id.clone(), Some(image.clone()));
+        e.record_history("review-guide.iclip", Origin::Project);
+        assert_eq!(e.history.active, Some(id.clone()));
+        assert_eq!(e.history.store.as_ref().unwrap().entries().len(), 1);
+        e.history.refresh();
+        assert_eq!(e.history.textures[&id].as_ref().unwrap().id(), image.id());
+        e.session.document.width += 1;
+        e.record_history("review-guide.iclip", Origin::Project);
+        assert!(e.history.active.is_none());
     }
 }

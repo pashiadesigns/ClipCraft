@@ -138,6 +138,18 @@ fn color_name(c: [u8; 4]) -> &'static str {
     }
 }
 fn label(a: &Annotation) -> String {
+    if a.focus.is_some() {
+        return format!(
+            "Focus · {}",
+            if a.kind == Kind::Ellipse {
+                "Circle"
+            } else if a.corner_radius > 0. {
+                "Rounded rectangle"
+            } else {
+                "Rectangle"
+            }
+        );
+    }
     if a.is_shape() && a.is_image_frame() {
         return format!(
             "{} image frame",
@@ -150,8 +162,8 @@ fn label(a: &Annotation) -> String {
     }
     match a.kind {
         Kind::Image => {
-            if let Some(b) = a.image.as_ref().filter(|b| b.is_stamp()) {
-                return format!("Stamp: {}", b.stamp_name().unwrap_or("Imported stamp"));
+            if let Some(b) = a.image.as_ref().filter(|b| b.is_icon()) {
+                return format!("Icon: {}", b.icon_name().unwrap_or("Imported icon"));
             }
             let size = a.image.as_ref().map(|b| b.size()).unwrap_or([0; 2]);
             format!(
@@ -250,11 +262,6 @@ fn control(ui: &mut egui::Ui, rect: Rect, id: egui::Id, eye: bool, active: bool)
 
 impl Editor {
     pub(super) fn show_objects(&mut self, ui: &mut egui::Ui) {
-        crate::property_layout::section_help(
-            ui,
-            "Objects",
-            "Frontmost first. Drag a row to arrange it; Shift-click to select multiple objects. The eye hides an object and the lock protects it from editing. Show All and Hide All affect visibility; Select type selects visible, unlocked objects matching the current object.",
-        );
         let ids: Vec<_> = self
             .session
             .document
@@ -265,7 +272,22 @@ impl Editor {
         let mut command = None;
         ui.horizontal(|ui| {
             for (name, visible) in [("Show All", true), ("Hide All", false)] {
-                let r = ui.add_enabled(!ids.is_empty(), egui::Button::new(name));
+                let r = ui
+                    .add_enabled_ui(!ids.is_empty(), |ui| {
+                        crate::video_editor::ui::button(
+                            ui,
+                            if visible {
+                                "Show annotations"
+                            } else {
+                                "Hide annotations"
+                            },
+                            "",
+                            32.,
+                            false,
+                        )
+                    })
+                    .inner
+                    .on_hover_text(name);
                 #[cfg(test)]
                 ui.ctx()
                     .data_mut(|d| d.insert_temp(egui::Id::unique(("object-all", name)), r.rect));
@@ -278,7 +300,10 @@ impl Editor {
             }
             let kind = self.selected_annotation().map(|a| a.kind);
             let r = ui
-                .add_enabled(kind.is_some(), egui::Button::new("Select type"))
+                .add_enabled_ui(kind.is_some(), |ui| {
+                    crate::video_editor::ui::button(ui, "Selection", "", 32., false)
+                })
+                .inner
                 .on_hover_text("Select all visible, unlocked objects of the same type");
             #[cfg(test)]
             ui.ctx()
@@ -347,13 +372,7 @@ impl Editor {
             };
             if let Some(group) = a.group {
                 let key = egui::Id::unique(("object-group-expanded", group));
-                let automatic = objects
-                    .iter()
-                    .any(|a| a.group == Some(group) && a.analysis.is_some());
-                let mut expanded = ui
-                    .ctx()
-                    .data(|d| d.get_temp::<bool>(key))
-                    .unwrap_or(!automatic);
+                let mut expanded = ui.ctx().data(|d| d.get_temp::<bool>(key)).unwrap_or(true);
                 if seen.insert(group) {
                     let members = self.session.document.group_members(a.id);
                     let hidden = members
@@ -413,11 +432,7 @@ impl Editor {
                         rect.max - egui::vec2(0., 2.),
                     );
                     let eye = lock.translate(egui::vec2(-24., 0.));
-                    let name = if automatic {
-                        format!("Simplify · {} blocks", members.len().saturating_sub(1))
-                    } else {
-                        format!("Group · {} objects", members.len())
-                    };
+                    let name = format!("Group · {} objects", members.len());
                     let label = Rect::from_min_max(
                         rect.min + egui::vec2(25., 0.),
                         egui::pos2(eye.left() - 3., rect.bottom()),
@@ -467,9 +482,7 @@ impl Editor {
                     continue;
                 }
             }
-            if a.analysis.is_some() {
-                continue;
-            }
+
             ui.push_id(("object-row", a.id), |ui| {
                 let state = self.session.document.object_state(a.id);
                 let (mut rect, response) = ui.allocate_exact_size(
@@ -517,8 +530,18 @@ impl Editor {
                 );
                 let eye_rect = lock_rect.translate(egui::vec2(-24., 0.));
                 let text_rect = Rect::from_min_max(
-                    rect.min + egui::vec2(if a.group.is_some() { 32. } else { 18. }, 0.),
+                    rect.min + egui::vec2(if a.group.is_some() { 54. } else { 40. }, 0.),
                     egui::pos2(eye_rect.left() - 2., rect.bottom()),
+                );
+                let icon_left = rect.left() + if a.group.is_some() { 32. } else { 18. };
+                crate::video_editor::ui::icon(
+                    ui.painter(),
+                    Rect::from_center_size(
+                        egui::pos2(icon_left + 8., rect.center().y),
+                        egui::vec2(16., 16.),
+                    ),
+                    crate::image_properties::identity(a).0,
+                    Color32::from_rgb(169, 196, 207),
                 );
                 let name = label(a);
                 let color = if state.hidden {

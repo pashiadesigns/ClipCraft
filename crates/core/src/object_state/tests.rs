@@ -94,7 +94,7 @@ fn visibility_order_lock_state_roundtrip_render_and_undo_are_atomic() {
         visible: false,
     })
     .unwrap();
-    assert_eq!(s.document.version, 7);
+    assert_eq!(s.document.version, crate::MAX_PROJECT_VERSION);
     let mut expected = original.clone();
     expected.annotations.retain(|a| !hide.contains(&a.id));
     let rendered = s.document.render().unwrap();
@@ -173,7 +173,8 @@ fn visibility_order_lock_state_roundtrip_render_and_undo_are_atomic() {
     let payload = crate::clipboard_payload::ObjectPayload::capture(&s.document, &ids[..1]).unwrap();
     payload.validate().unwrap();
     assert_eq!(
-        payload.document_version, 6,
+        payload.document_version,
+        crate::MAX_PROJECT_VERSION,
         "document-local lock state is not pasted into another project"
     );
     s.execute(Command::SetObjectsLocked {

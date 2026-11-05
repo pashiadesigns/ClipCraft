@@ -18,6 +18,69 @@ fn payload() -> ImagePayload {
 }
 
 #[test]
+fn aligned_image_copy_matches_reference_sampler_for_alpha_crop_outline_and_rounding() {
+    for alpha in [true, false] {
+        let pixels = RgbaImage::from_fn(32, 24, |x, y| {
+            Rgba([
+                x as u8 * 7,
+                y as u8 * 9,
+                123,
+                if alpha {
+                    ((x + y) * 17 % 256) as u8
+                } else {
+                    255
+                },
+            ])
+        });
+        let a = ImagePayload::from_rgba(32, 24, pixels.into_raw())
+            .unwrap()
+            .into_objects()
+            .unwrap()
+            .objects
+            .remove(0);
+        for opacity in [0, 73, 255] {
+            for rounded in [0., 5.] {
+                for crop in [false, true] {
+                    for origin in [[0., 0.], [-4., -7.], [6., 8.]] {
+                        let mut a = a.clone();
+                        a.color[3] = opacity;
+                        a.width = 7;
+                        a.corner_radius = rounded;
+                        a.kind = Kind::Rectangle;
+                        let (size, view) = if crop {
+                            (
+                                [16., 12.],
+                                crate::image_frame::ImageView {
+                                    rect: [0.25, 0.25, 0.5, 0.5],
+                                },
+                            )
+                        } else {
+                            ([32., 24.], Default::default())
+                        };
+                        a = a.with_image_view(Some(view)).unwrap();
+                        a.start = origin;
+                        a.end = [origin[0] + size[0], origin[1] + size[1]];
+                        let view = Viewport {
+                            size: [48, 40],
+                            origin: [0., 0.],
+                            scale: 1.,
+                        };
+                        let mut fast = RgbaImage::from_pixel(48, 40, Rgba([91, 132, 64, 123]));
+                        let mut reference = fast.clone();
+                        render_impl(&mut fast, &a, view, true);
+                        render_impl(&mut reference, &a, view, false);
+                        assert_eq!(
+                            fast, reference,
+                            "alpha={alpha} opacity={opacity} rounded={rounded} crop={crop} origin={origin:?}"
+                        );
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[test]
 fn paste_transform_save_library_undo_retains_original_pixels() {
     let source = payload();
     let pixels = source.decode().unwrap();
@@ -31,7 +94,7 @@ fn paste_transform_save_library_undo_retains_original_pixels() {
     .unwrap();
     let a = s.document.annotations[0].clone();
     assert_eq!(a.kind, Kind::Image);
-    assert_eq!(s.document.version, 8);
+    assert_eq!(s.document.version, crate::MAX_PROJECT_VERSION);
     assert_eq!(a.start, [14., 11.]);
     assert_eq!(a.end, [26., 19.]);
     assert_eq!(**a.image.as_ref().unwrap().pixels().unwrap(), pixels);
@@ -95,7 +158,7 @@ fn paste_transform_save_library_undo_retains_original_pixels() {
     );
     // Portable copying preserves the bitmap and transforms, not source pixels.
     let copy = ObjectPayload::capture(&loaded, &[a.id]).unwrap();
-    assert_eq!(copy.document_version, 8);
+    assert_eq!(copy.document_version, crate::MAX_PROJECT_VERSION);
     let json = serde_json::to_vec(&copy).unwrap();
     assert!(!String::from_utf8_lossy(&json).contains("source_png"));
     s.execute(Command::RemoveMany { ids: vec![a.id] }).unwrap();
@@ -175,18 +238,18 @@ fn bitmap_validation_and_cache_are_bounded_without_redecoding() {
         bitmap.pixels().unwrap()
     ));
     let mut d = Document::blank(20, 20).unwrap();
-    d.version = 8;
+    d.version = crate::MAX_PROJECT_VERSION;
     d.annotations.push(image.clone());
     assert!(d.validate().is_ok());
     for version in 1..8 {
         d.version = version;
         assert!(d.validate().is_err());
     }
-    d.version = 8;
+    d.version = crate::MAX_PROJECT_VERSION;
     d.annotations[0].image = None;
     assert!(d.validate().is_err());
     d.annotations[0] = image.clone();
-    d.annotations[0].kind = Kind::Rectangle;
+    d.annotations[0].kind = Kind::Pen;
     assert!(d.validate().is_err());
     let mut value = serde_json::to_value(&image).unwrap();
     value["image"]["raster"]["width"] = 13.into();
@@ -254,5 +317,35 @@ fn upright_screenshot_fast_path_matches_general_sampler_exactly() {
                 );
             }
         }
+    }
+}
+#[test]
+fn opaque_shaped_sampling_matches_general_path_at_fractional_origins() {
+    let source = Arc::new(RgbaImage::from_fn(90, 70, |x, y| {
+        Rgba([x as u8, y as u8, 120, 255])
+    }));
+    for kind in [crate::Kind::Ellipse, crate::Kind::Polygon] {
+        let frame = crate::video::frame::Frame {
+            shape: kind,
+            ..Default::default()
+        };
+        let a = frame
+            .annotation(source.clone(), [0.11, 0.13, 0.6, 0.7], [160, 100], 1)
+            .unwrap();
+        let view = Viewport {
+            size: [160, 100],
+            origin: [0., 0.],
+            scale: 1.,
+        };
+        let mut fast = RgbaImage::new(160, 100);
+        let mut expected = fast.clone();
+        super::render_impl(&mut fast, &a, view, true);
+        super::render_impl(&mut expected, &a, view, false);
+        assert!(
+            fast.as_raw()
+                .iter()
+                .zip(expected.as_raw())
+                .all(|(a, b)| a.abs_diff(*b) <= 1)
+        );
     }
 }

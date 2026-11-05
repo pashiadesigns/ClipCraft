@@ -10,6 +10,7 @@ use std::{
 
 #[derive(Clone, PartialEq)]
 struct State {
+    video: Option<capture_core::video::editor::Project>,
     guide: Option<capture_core::guide_sections::Layout>,
     object_states: capture_core::object_state::ObjectStates,
     version: u32,
@@ -23,6 +24,7 @@ impl State {
     // state avoids hashing/serializing/cloning the original PNG every frame.
     fn capture(doc: &Document, draft: Option<&Annotation>) -> Self {
         let mut state = Self {
+            video: doc.video.clone(),
             guide: doc.guide.clone(),
             object_states: doc.object_states.clone(),
             version: doc.version,
@@ -39,7 +41,11 @@ impl State {
         state
     }
     fn matches(&self, doc: &Document, draft: Option<&Annotation>) -> bool {
-        self.guide == doc.guide
+        (match (&self.video, &doc.video) {
+            (Some(a), Some(b)) => a.same_edit(b),
+            (None, None) => true,
+            _ => false,
+        }) && self.guide == doc.guide
             && self.object_states == doc.object_states
             && self.version == doc.version
             && self.size == [doc.width, doc.height]
@@ -204,6 +210,19 @@ impl Editor {
         self.autosave.expected = Some(entry);
     }
     pub(super) fn detach_deleted_history(&mut self) {
+        self.project_sessions
+            .forget_active(self.history.active.as_deref());
+        self.video.leave_project();
+        self.cancel_gesture();
+        self.session = capture_core::Session::new(
+            capture_core::Document::blank(1920, 1080).expect("valid blank canvas"),
+        )
+        .expect("valid session");
+        self.path = None;
+        self.select_only(None);
+        self.reset_document_tools();
+        self.view = Default::default();
+        self.needs_render = true;
         self.history.active = None;
         self.autosave.expected = None;
         self.autosave.durable = Some(State::capture(&self.session.document, None));

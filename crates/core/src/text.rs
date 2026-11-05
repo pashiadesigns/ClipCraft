@@ -5,15 +5,22 @@ use image::{Rgba, RgbaImage};
 use serde::{Deserialize, Serialize};
 use std::sync::OnceLock;
 
+pub mod clipboard;
+pub mod color_emoji;
 pub mod decoration;
 #[cfg(test)]
 mod decoration_workflow_tests;
+pub mod editing;
 pub mod outline;
 #[cfg(test)]
 mod outline_workflow_tests;
 pub mod recognition;
+pub mod rich;
+#[cfg(test)]
+mod rich_workflow_tests;
 pub mod system_fonts;
 pub mod typography;
+pub mod unicode;
 
 pub const MAX_TEXT_CHARS: usize = 4096;
 
@@ -23,6 +30,7 @@ pub enum TextFont {
     #[default]
     UbuntuLight,
     HackRegular,
+    Emoji,
     System(u64),
 }
 
@@ -31,6 +39,13 @@ impl TextFont {
         match self {
             Self::UbuntuLight => "Ubuntu Light",
             Self::HackRegular => "Hack Regular",
+            Self::Emoji => {
+                if color_emoji::font_bytes().is_some() {
+                    "Segoe UI Emoji"
+                } else {
+                    "Noto Emoji"
+                }
+            }
             Self::System(id) => {
                 system_fonts::label(id).unwrap_or("Unavailable font (Ubuntu fallback)")
             }
@@ -39,6 +54,9 @@ impl TextFont {
 
     pub fn bytes(self, bold: bool, italic: bool) -> &'static [u8] {
         match (self, bold, italic) {
+            (Self::Emoji, _, _) => {
+                color_emoji::font_bytes().unwrap_or(include_bytes!("../assets/fonts/NotoEmoji.ttf"))
+            }
             (Self::System(id), bold, italic) => system_fonts::bytes(id, bold, italic)
                 .unwrap_or_else(|| Self::UbuntuLight.bytes(bold, italic)),
             (Self::UbuntuLight, false, false) => epaint_default_fonts::UBUNTU_LIGHT,
@@ -58,6 +76,13 @@ impl TextFont {
         }
     }
     fn face(self, bold: bool, italic: bool) -> &'static FontRef<'static> {
+        if self == Self::Emoji {
+            static EMOJI: OnceLock<FontRef<'static>> = OnceLock::new();
+            return EMOJI.get_or_init(|| {
+                FontRef::try_from_slice(Self::Emoji.bytes(false, false))
+                    .expect("bundled emoji font")
+            });
+        }
         if let Self::System(id) = self {
             return system_fonts::face(id, bold, italic)
                 .unwrap_or_else(|| Self::UbuntuLight.face(bold, italic));
@@ -67,6 +92,7 @@ impl TextFont {
             Self::UbuntuLight => 0,
             Self::HackRegular => 4,
             Self::System(_) => unreachable!(),
+            Self::Emoji => unreachable!(),
         };
         FACES[family + usize::from(bold) * 2 + usize::from(italic)].get_or_init(|| {
             FontRef::try_from_slice(self.bytes(bold, italic)).expect("bundled font is valid")
@@ -154,6 +180,8 @@ pub fn wrap_default() -> bool {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct TextStyle {
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rich: Option<rich::RichText>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub typography: Option<typography::Typography>,
     pub content: String,
     pub font: TextFont,
@@ -199,6 +227,7 @@ impl Default for TextStyle {
     fn default() -> Self {
         Self {
             typography: None,
+            rich: None,
             content: "Add text here".into(),
             font: TextFont::default(),
             size_points: 18.0,
@@ -219,10 +248,18 @@ impl Default for TextStyle {
 
 impl TextStyle {
     pub fn decorated(&self) -> bool {
-        self.underline || self.strikethrough || self.outline.is_some() || self.typography.is_some()
+        unicode::needs_fallback(self)
+            || self.rich.is_some()
+            || self.underline
+            || self.strikethrough
+            || self.outline.is_some()
+            || self.typography.is_some()
     }
 
     pub fn validate(&self) -> Result<()> {
+        if let Some(rich) = &self.rich {
+            rich.validate(self)?;
+        }
         if let Some(t) = self.typography {
             t.validate()?;
         }
@@ -245,10 +282,12 @@ impl TextStyle {
             if matches!(ch, '\n' | '\r' | '\t') {
                 continue;
             }
-            if ch.is_control() || self.font.face(self.bold, self.italic).glyph_id(ch).0 == 0 {
+            if ch.is_control()
+                || (ch as u32 & 0xffff) >= 0xfffe
+                || (0xfdd0..=0xfdef).contains(&(ch as u32))
+            {
                 return Err(Error::Invalid(format!(
-                    "{} does not support U+{:04X}; choose another font or character",
-                    self.font.label(),
+                    "Control character U+{:04X} cannot be used in text",
                     ch as u32
                 )));
             }
@@ -258,6 +297,7 @@ impl TextStyle {
 }
 
 struct Positioned {
+    font: TextFont,
     glyph: Glyph,
     character: char,
     row: usize,
@@ -283,8 +323,12 @@ pub struct EditingCharacter {
 
 #[derive(Default)]
 pub struct EditingRow {
+    pub start_x: Option<f32>,
     pub characters: Vec<EditingCharacter>,
     pub ends_with_newline: bool,
+    pub y: Option<f32>,
+    pub height: Option<f32>,
+    pub ascent: Option<f32>,
 }
 
 pub struct EditingLayout {
@@ -323,6 +367,34 @@ fn normalized_text(text: &str) -> (String, Vec<usize>) {
 /// source character (tabs and CRLF included) so selection/cursor indexes match
 /// the original editable string without inserting artificial line breaks.
 pub fn editing_layout(style: &TextStyle, width: f32) -> EditingLayout {
+    if style.rich.is_some() {
+        let layout = rich::layout(style, width);
+        let rows = layout
+            .rows
+            .into_iter()
+            .map(|r| EditingRow {
+                start_x: Some(r.start_x),
+                characters: r
+                    .cells
+                    .into_iter()
+                    .map(|c| EditingCharacter {
+                        character: c.character,
+                        x: c.x,
+                        advance: c.advance,
+                    })
+                    .collect(),
+                ends_with_newline: r.newline,
+                y: Some(r.y),
+                height: Some(r.height),
+                ascent: Some(r.ascent),
+            })
+            .collect();
+        return EditingLayout {
+            rows,
+            line_height: 0.,
+            ascent: 0.,
+        };
+    }
     let layout = layout(style, [0.0, 0.0], [width.max(0.0), 0.0]);
     let (_, indices) = normalized_text(&style.content);
     let mut source: Vec<Option<(usize, f32, f32)>> = vec![None; style.content.chars().count()];
@@ -356,6 +428,9 @@ pub fn editing_layout(style: &TextStyle, width: f32) -> EditingLayout {
 }
 
 fn layout(style: &TextStyle, min: [f32; 2], max: [f32; 2]) -> Layout {
+    if unicode::needs_fallback(style) {
+        return unicode::layout(style, min, max);
+    }
     let font = style.font.face(style.bold, style.italic);
     let pixels_per_em = style.size_points * (96.0 / 72.0);
     let scale = font.height_unscaled() * pixels_per_em / font.units_per_em().unwrap_or(1000.0);
@@ -386,6 +461,7 @@ fn layout(style: &TextStyle, min: [f32; 2], max: [f32; 2]) -> Layout {
     for (line_index, line) in normalized.split('\n').enumerate() {
         if line_index != 0 {
             positioned.push(Positioned {
+                font: style.font,
                 glyph: GlyphId(0).with_scale_and_position(scale, point(x, baseline)),
                 character: '\n',
                 row,
@@ -420,6 +496,7 @@ fn layout(style: &TextStyle, min: [f32; 2], max: [f32; 2]) -> Layout {
                 if style.wrap && x > min[0] && x + kern + advance > max[0] {
                     if ch.is_whitespace() {
                         positioned.push(Positioned {
+                            font: style.font,
                             glyph: id.with_scale_and_position(scale, point(x, baseline)),
                             character: ch,
                             row,
@@ -435,6 +512,7 @@ fn layout(style: &TextStyle, min: [f32; 2], max: [f32; 2]) -> Layout {
                     kern = 0.0;
                 }
                 positioned.push(Positioned {
+                    font: style.font,
                     glyph: id.with_scale_and_position(scale, point(x + kern, baseline)),
                     character: ch,
                     row,
@@ -475,6 +553,9 @@ fn layout(style: &TextStyle, min: [f32; 2], max: [f32; 2]) -> Layout {
 /// Resolve overflow without changing the user's requested font size. Both the
 /// inline caret layout and exported pixels consume this result.
 pub fn fitted_style(style: &TextStyle, size: [f32; 2]) -> TextStyle {
+    if style.rich.is_some() {
+        return rich::fitted(style, size);
+    }
     let mut resolved = style.clone();
     if style.fit != TextFit::Shrink || size.iter().any(|v| !v.is_finite() || *v <= 0.0) {
         return resolved;
@@ -516,6 +597,16 @@ impl Annotation {
             size
         })
         .clamp(6.0, 144.0);
+        if let Some(rich) = &mut next.text.as_mut().unwrap().rich {
+            for run in &mut rich.runs {
+                run.format.size = (if relative {
+                    run.format.size + size
+                } else {
+                    size
+                })
+                .clamp(6., 144.);
+            }
+        }
         next.fit_text_shape(canvas)
     }
 
@@ -538,16 +629,21 @@ impl Annotation {
         let padding = (inner[0] - min[0]).max(0.0);
         let width = (max[0] - min[0]).max(2.0 * padding + 1.0);
         let measured = layout(style, [0.0; 2], [width - 2.0 * padding, 0.0]);
+        let rich_measured = style
+            .rich
+            .as_ref()
+            .map(|_| rich::layout(style, width - 2. * padding));
+        let measured_width = rich_measured.as_ref().map_or(measured.width, |r| r.width);
+        let measured_height = rich_measured
+            .as_ref()
+            .map_or(measured.rows as f32 * measured.line_height, |r| r.height);
         let size = [
             if style.wrap {
                 width
             } else {
-                measured.width.ceil().max(1.0) + 2.0 * padding
+                measured_width.ceil().max(1.0) + 2.0 * padding
             },
-            (measured.rows as f32 * measured.line_height)
-                .ceil()
-                .max(1.0)
-                + 2.0 * padding,
+            measured_height.ceil().max(1.0) + 2.0 * padding,
         ];
         if size
             .iter()
@@ -621,13 +717,13 @@ pub(crate) fn render_in_bounds(
         return;
     }
     let style = fitted_style(style, [max[0] - min[0], max[1] - min[1]]);
-    let font = style.font.face(style.bold, style.italic);
     // Rasterize near the text box's origin. Adding an integer canvas offset
     // to every glyph first changes f32 rounding and can alter anti-aliasing.
     let origin = [min[0].floor(), min[1].floor()];
     let local_min = [min[0] - origin[0], min[1] - origin[1]];
     let local_max = [max[0] - origin[0], max[1] - origin[1]];
     for positioned in layout(&style, local_min, local_max).glyphs {
+        let font = positioned.font.face(style.bold, style.italic);
         if positioned.character.is_whitespace() {
             continue;
         }
@@ -685,16 +781,19 @@ fn vector_geometry(
         return None;
     }
     let style = fitted_style(style, [max[0] - min[0], max[1] - min[1]]);
-    let font = style.font.face(style.bold, style.italic);
     let origin = [min[0].floor(), min[1].floor()];
     let local_min = [min[0] - origin[0], min[1] - origin[1]];
     let local_max = [max[0] - origin[0], max[1] - origin[1]];
     let mut path = BezPath::new();
     for positioned in layout(&style, local_min, local_max).glyphs {
+        let font = positioned.font.face(style.bold, style.italic);
         if positioned.character.is_whitespace() {
             continue;
         }
         let glyph = positioned.glyph;
+        if color_emoji::has_color(positioned.font, glyph.id) {
+            continue;
+        }
         let Some(outline) = font.outline(glyph.id) else {
             continue;
         };
@@ -759,8 +858,26 @@ pub(crate) fn paint_vector_coverage(
     strikethrough: bool,
     tolerance: f64,
 ) -> Option<[u8; 4]> {
+    paint_vector_coverage_clipped(
+        context,
+        annotation,
+        underline,
+        strikethrough,
+        tolerance,
+        None,
+    )
+}
+pub(crate) fn paint_vector_coverage_clipped(
+    context: &mut impl crate::display::vector::Painter,
+    annotation: &Annotation,
+    underline: bool,
+    strikethrough: bool,
+    tolerance: f64,
+    parent_clip: Option<vello_cpu::kurbo::Rect>,
+) -> Option<[u8; 4]> {
     use vello_cpu::kurbo::{Rect, Shape};
     let (path, clip, ink) = vector_path(annotation)?;
+    let clip = parent_clip.unwrap_or(clip);
     context.push_clip_path(&clip.to_path(tolerance));
     context.fill_path(&path);
     if underline || strikethrough {
@@ -812,10 +929,13 @@ mod tests {
             step_outline: None,
             line_style: None,
             shadow: None,
-            analysis: None,
+
+            focus: None,
+
             highlighter_rect: false,
             group: None,
             rotation_degrees: 0.0,
+            mirror_x: false,
             id: 1,
             kind: Kind::Text,
             start: [10.0, 10.0],
@@ -895,8 +1015,8 @@ mod tests {
     }
 
     #[test]
-    fn old_projects_and_new_text_roundtrip_without_pixel_changes() {
-        let old: Document = serde_json::from_str(r#"{"version":1,"width":20,"height":20,"source_png":"","annotations":[{"id":1,"kind":"rectangle","start":[1,1],"end":[15,15],"color":[255,0,0,255],"width":2}]}"#).unwrap();
+    fn current_projects_and_text_roundtrip_without_pixel_changes() {
+        let old: Document = serde_json::from_str(r#"{"version":31,"width":20,"height":20,"source_png":"","annotations":[{"id":1,"kind":"rectangle","start":[1,1],"end":[15,15],"color":[255,0,0,255],"width":2}]}"#).unwrap();
         assert!(old.annotations[0].text.is_none());
         old.render().unwrap();
         let old_style: TextStyle =

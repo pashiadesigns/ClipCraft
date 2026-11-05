@@ -73,7 +73,7 @@ impl Editor {
             .and_then(|g| g.page_setup(current))
             .cloned()
             .unwrap_or_else(|| {
-                PageSetup::legacy(g.map_or([doc.width, doc.height], |g| {
+                PageSetup::from_pixels(g.map_or([doc.width, doc.height], |g| {
                     g.page_size(current, [doc.width, doc.height])
                 }))
             });
@@ -154,7 +154,7 @@ impl Editor {
         );
         let mut apply = false;
         let mut cancel = false;
-        let modal = egui::Modal::new(egui::Id::unique("page-setup-window"))
+        let modal = crate::controls::Modal::new(egui::Id::unique("page-setup-window"))
             .area(
                 egui::Modal::default_area(egui::Id::unique("page-setup-window")).anchor(
                     egui::Align2::CENTER_TOP,
@@ -226,13 +226,13 @@ impl Editor {
                                         .corner_radius(egui::CornerRadius {
                                             nw: 5,
                                             ne: 5,
-                                            sw: 0,
-                                            se: 0,
+                                            sw: 5,
+                                            se: 5,
                                         }),
                                 );
                                 let text = ui.painter().layout_no_wrap(
                                     (*label).into(),
-                                    egui::FontId::proportional(13.),
+                                    crate::panel_ui::font(13.),
                                     egui::Color32::WHITE,
                                 );
                                 let left = r.rect.center().x - (text.size().x + 23.) / 2.;
@@ -347,7 +347,7 @@ impl Editor {
                                 });
                             if d.scope == 2 {
                                 ui.add(
-                                    egui::TextEdit::singleline(&mut d.range)
+                                    crate::unicode_input::TextEdit::singleline(&mut d.range)
                                         .hint_text("1, 3-5")
                                         .desired_width(100.),
                                 );
@@ -772,7 +772,7 @@ mod tests {
             ctx.data_mut(|data| {
                 let mut d = data.get_temp::<Draft>(key()).unwrap();
                 d.tab = 0;
-                d.settings = PageSetup::legacy([1000, 1400]);
+                d.settings = PageSetup::from_pixels([1000, 1400]);
                 d.settings.numbers = true;
                 data.insert_temp(key(), d);
             });
@@ -906,12 +906,11 @@ mod tests {
         assert_eq!(pages(&d).unwrap(), vec![0, 2, 3, 4]);
     }
     #[test]
-    fn large_page_setup_replaces_step_guide_and_anchors_to_the_ribbon_right() {
+    fn large_page_setup_precedes_all_other_advanced_controls() {
         let ctx = egui::Context::default();
         crate::shell::configure(&ctx);
         let mut e = crate::canvas::tests::editor(&ctx);
-        e.shell.ribbon_tab = crate::ribbon::RibbonTab::ToolSettings;
-        e.shell.badges = false;
+        e.shell.ribbon_tab = crate::ribbon::RibbonTab::Advanced;
         for _ in 0..3 {
             let output = PaintedOutput(ctx.run_ui(
                 egui::RawInput {
@@ -932,7 +931,7 @@ mod tests {
                 .unwrap()
         });
         assert!(
-            rect.height() >= 64. && rect.right() > 1850. && rect.right() < 1920.,
+            rect.height() >= 64. && rect.left() < 20. && rect.right() < 130.,
             "{rect:?}"
         );
     }

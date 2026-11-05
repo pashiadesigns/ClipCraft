@@ -5,7 +5,7 @@ const sharp = require('sharp');
 const root = path.resolve(__dirname, '..');
 const dir = path.join(root, 'apps/desktop/assets/brand');
 const name = process.argv[2] || 'clipcraft';
-if (!['clipcraft', 'capture-controller'].includes(name)) throw new Error('Unknown brand asset');
+if (name !== 'clipcraft') throw new Error('Unknown brand asset');
 async function main() {
   const source = fs.readFileSync(path.join(dir, `${name}.svg`), 'utf8');
   // Give percentage-sized SVG exports a bounded raster viewport without changing

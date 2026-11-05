@@ -17,4 +17,6 @@ imageproc = { version = "0.25", default-features = false }
 tempfile = "3"
 ab_glyph = "0.2.32"
 epaint_default_fonts = { version = "0.37", default-features = false }
+harfrust = "0.12"
+unicode-segmentation = "1.13"
 vello_cpu = { version = "0.2.0", default-features = false, features = ["std", "u8_pipeline"] }

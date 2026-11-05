@@ -1,6 +1,133 @@
 use super::*;
 use crate::property_layout::tests::{PaintedOutput, dump_meshes};
 
+#[test]
+fn focus_drag_resize_rotation_and_zoom_reuse_lower_pixels() {
+    for blur in [0., 8.] {
+        let mut d = fixture([1920, 1080], Kind::Rectangle);
+        d.annotations[1].focus = Some(capture_core::focus::Focus {
+            blur,
+            ..Default::default()
+        });
+        let ctx = egui::Context::default();
+        let mut scene = Scene::default();
+        let mut first = paint(&ctx, &mut scene, &d, 0.7);
+        let key = scene.effects[&2].tiles[0].1.id();
+        let clear = scene.effects[&2].clear.as_ref().unwrap()[0].1.id();
+        let now = std::time::Instant::now();
+        for i in 0..40 {
+            d.annotations[1].start[0] += 1.25;
+            d.annotations[1].end[0] += 1.75;
+            d.annotations[1].rotation_degrees = i as f32;
+            d.annotations[1].corner_radius = i as f32;
+            let frame = paint(&ctx, &mut scene, &d, 0.7 + i as f32 * 0.001);
+            first
+                .0
+                .textures_delta
+                .append(frame.0.textures_delta.clone());
+            assert_eq!(
+                scene.effects[&2].tiles[0].1.id(),
+                key,
+                "drag rebuilt the effect"
+            );
+            assert_eq!(scene.effects[&2].clear.as_ref().unwrap()[0].1.id(), clear);
+        }
+        eprintln!(
+            "Focus blur {blur}: retained drag CPU {:.3} ms/update",
+            now.elapsed().as_secs_f64() * 1000. / 40.
+        );
+        if let Ok(root) = std::env::var("CLIPCRAFT_PUBLIC_UI") {
+            let last = paint(&ctx, &mut scene, &d, 0.7);
+            dump_meshes(&ctx, &root, &format!("focus-drag-{blur}"), first, last);
+            d.render()
+                .unwrap()
+                .save(std::path::Path::new(&root).join(format!("focus-exact-{blur}.png")))
+                .unwrap();
+        }
+        d.annotations[0].start[0] += 5.;
+        paint(&ctx, &mut scene, &d, 0.7);
+        assert_ne!(
+            scene.effects[&2].tiles[0].1.id(),
+            key,
+            "changed lower pixels were stale"
+        );
+    }
+}
+
+#[test]
+fn reduced_crossfade_surface_keeps_background_and_upper_annotations() {
+    let ctx = egui::Context::default();
+    let mut scene = Scene::default();
+    let mut d = Document::blank(1920, 1080).unwrap();
+    let project =
+        capture_core::video::editor::Project::new("synthetic.mp4".into(), [1920, 1080], 4000, 30);
+    let pixels = std::sync::Arc::new(image::RgbaImage::from_pixel(
+        480,
+        270,
+        image::Rgba([25, 130, 210, 255]),
+    ));
+    let layer = std::sync::Arc::new(capture_core::bitmap::Bitmap::transient(pixels).unwrap());
+    d.video = Some(project.clone());
+    d.annotations = capture_core::video::frame::ordered_objects(
+        &d,
+        &[(project.media_tracks[0], layer)],
+        1000,
+        false,
+    );
+    let mut top = capture_core::steps::marker(
+        5,
+        [400., 200.],
+        80,
+        [220, 30, 40, 255],
+        (1, false),
+        [1920, 1080],
+    )
+    .unwrap();
+    top.kind = Kind::Rectangle;
+    top.text = None;
+    top.fill = Some(top.color);
+    d.annotations.push(top);
+    d.video = None;
+    let mut draw = || {
+        PaintedOutput(ctx.run_ui(
+            egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    egui::vec2(960., 540.),
+                )),
+                ..Default::default()
+            },
+            |ui| {
+                scene
+                    .paint_video(
+                        ui,
+                        &d,
+                        Transform {
+                            viewport: ui.clip_rect(),
+                            image: egui::Rect::from_min_size(
+                                egui::Pos2::ZERO,
+                                egui::vec2(960., 540.),
+                            ),
+                            scale: 0.5,
+                            zoom: 0.5,
+                        },
+                        None,
+                        1,
+                        &project,
+                    )
+                    .unwrap();
+            },
+        ))
+    };
+    let first = draw();
+    let last = draw();
+    assert!(scene.vectors.contains_key(&5));
+    assert!(!scene.images.is_empty());
+    if let Ok(root) = std::env::var("CLIPCRAFT_PUBLIC_UI") {
+        dump_meshes(&ctx, &root, "reduced-crossfade-upper", first, last);
+    }
+}
+
 fn fixture(size: [u32; 2], kind: Kind) -> Document {
     let mut d =
         Document::from_capture_image(image::RgbaImage::from_fn(size[0], size[1], |x, y| {
@@ -76,6 +203,51 @@ fn paint(ctx: &egui::Context, scene: &mut Scene, d: &Document, zoom: f32) -> Pai
                 .unwrap();
         },
     ))
+}
+#[test]
+fn page_cut_flatten_undo_restores_retained_text_shapes_and_frames() {
+    use capture_core::{Command, Session, cut_out::CutAxis, guide_sections::Action, templates};
+    let ctx = egui::Context::default();
+    let mut scene = Scene::default();
+    let mut session =
+        Session::new(templates::build("three-steps", "Guide", &[], templates::Scale::Fit).unwrap())
+            .unwrap();
+    session
+        .execute(Command::Guide {
+            action: Action::AddPage {
+                page: 0,
+                copy: true,
+            },
+        })
+        .unwrap();
+    let mut all = paint(&ctx, &mut scene, &session.document, 0.5);
+    let before = paint(&ctx, &mut scene, &session.document, 0.5);
+    let vector_count = scene.vectors.len();
+    assert!(vector_count > 6);
+    if let Ok(root) = std::env::var("CLIPCRAFT_PAGE_UNDO_UI") {
+        dump_meshes(&ctx, &root, "Before", PaintedOutput(all.0.clone()), before);
+    }
+    for command in [
+        Command::CutOutPages {
+            axis: CutAxis::Horizontal,
+            start: 180,
+            end: 200,
+            page: 0,
+            all_pages: false,
+        },
+        Command::FlattenPage { page: 0 },
+        Command::Undo,
+        Command::Undo,
+    ] {
+        session.execute(command).unwrap();
+        let frame = paint(&ctx, &mut scene, &session.document, 0.5);
+        all.0.textures_delta.append(frame.0.textures_delta.clone());
+    }
+    let after = paint(&ctx, &mut scene, &session.document, 0.5);
+    assert_eq!(scene.vectors.len(), vector_count);
+    if let Ok(root) = std::env::var("CLIPCRAFT_PAGE_UNDO_UI") {
+        dump_meshes(&ctx, &root, "After", all, after);
+    }
 }
 #[test]
 fn effects_retain_pixels_across_zoom_and_unrelated_edits_but_invalidate_dependencies() {

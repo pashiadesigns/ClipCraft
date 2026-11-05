@@ -72,7 +72,10 @@ impl CanvasView {
         let min = old.image.min - vec2(offset[0] as f32, offset[1] as f32) * old.scale;
         let size = vec2(dimensions[0] as f32, dimensions[1] as f32) * old.scale;
         self.pan = min + size * 0.5 - old.viewport.center();
-        self.last = None;
+        self.last = Some(Transform {
+            image: Rect::from_min_size(min, size),
+            ..old
+        });
     }
 
     pub fn label(&self) -> String {
@@ -156,6 +159,9 @@ impl CanvasView {
             ),
         };
         if let ZoomMode::Manual(zoom) = self.mode {
+            if anchor.is_some() {
+                self.free_pan = true;
+            }
             let zoom = zoom.clamp(0.1, 16.0);
             self.mode = ZoomMode::Manual(zoom);
             if let Some(old) = self.last {
@@ -184,6 +190,7 @@ impl CanvasView {
             && (last.image.width() > last.viewport.width()
                 || last.image.height() > last.viewport.height())
         {
+            self.free_pan = false;
             self.mode = ZoomMode::Manual(last.zoom);
             self.pan += delta;
         }
@@ -299,10 +306,13 @@ mod tests {
                         step_outline: None,
                         line_style: None,
                         shadow: None,
-                        analysis: None,
+
+                        focus: None,
+
                         highlighter_rect: false,
                         group: None,
                         rotation_degrees: 0.0,
+                        mirror_x: false,
                         id: 1,
                         kind: Kind::Rectangle,
                         start: transform.image_point(transform.screen_point([180.0, 160.0])),
