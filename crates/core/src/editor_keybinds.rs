@@ -34,9 +34,10 @@ pub enum Function {
     ToggleRecent,
     ToggleAnnotations,
     FitCanvas,
+    JumpToObject,
 }
 impl Function {
-    pub const ALL: [Self; 28] = [
+    pub const ALL: [Self; 29] = [
         Self::Undo,
         Self::Redo,
         Self::Save,
@@ -65,6 +66,7 @@ impl Function {
         Self::ToggleRecent,
         Self::ToggleAnnotations,
         Self::FitCanvas,
+        Self::JumpToObject,
     ];
     pub fn label(self) -> &'static str {
         match self {
@@ -72,6 +74,7 @@ impl Function {
             Self::ToggleRecent => "Show / hide Recent Clips",
             Self::ToggleAnnotations => "Show / hide annotations",
             Self::FitCanvas => "Fit canvas to view",
+            Self::JumpToObject => "Jump to Object in the timeline",
             Self::Undo => "Undo",
             Self::Redo => "Redo",
             Self::Save => "Save",
@@ -130,6 +133,7 @@ impl Function {
             Self::ZoomOut => (0xbd, 2),
             Self::ActualSize => (0x30, 2),
             Self::VideoPlayback => (0x20, 0),
+            Self::JumpToObject => (0x46, 0),
         };
         Chord { key, modifiers }
     }
@@ -196,6 +200,12 @@ impl<'de> Deserialize<'de> for Keybinds {
                     keys.set(Action::Function(f), Some(f.default_chord()));
                 }
             }
+        }
+        // Jump to Object (bg-proposal) joins existing preferences when F is free.
+        let jump = Function::JumpToObject;
+        if keys.get(Action::Function(jump)).is_none() && keys.action(jump.default_chord()).is_none()
+        {
+            keys.set(Action::Function(jump), Some(jump.default_chord()));
         }
         Ok(keys)
     }

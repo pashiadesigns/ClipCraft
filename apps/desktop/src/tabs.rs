@@ -1,5 +1,6 @@
 //! Shared compact tab treatment: dark parent, icon and a filled active tab.
 use crate::egui;
+use crate::tips::Tip as _;
 use egui::{Color32, Response, Stroke};
 
 pub(super) const ACTIVE_BLUE: Color32 = Color32::from_rgb(24, 145, 193);
@@ -117,5 +118,5 @@ pub(super) fn tab(ui: &mut egui::Ui, label: &str, selected: bool, width: f32) ->
         egui::FontId::proportional(13.0),
         Color32::WHITE,
     );
-    response.on_hover_text(label)
+    response.tip_title(label)
 }

@@ -1,3 +1,4 @@
+use crate::tips::Tip as _;
 use crate::{Command, Editor, egui};
 
 #[derive(Clone, Copy, PartialEq)]
@@ -148,16 +149,17 @@ impl Editor {
             ui.set_max_width(196.0);
             ui.style_mut().override_font_id = Some(egui::FontId::proportional(12.0));
             ui.spacing_mut().item_spacing = egui::vec2(6.0, 7.0);
+            ui.label(crate::panel_ui::title("Resize Image", 16.));
             let old_dimensions=draft.dimensions().ok();
             let mut units=draft.units;
             ui.add_enabled_ui(old_dimensions.is_some(),|ui| {
                 ui.horizontal(|ui| {
-                    let label=ui.label("Units:");
+                    let label=ui.label("Units");
                     egui::ComboBox::from_id_salt("resize_units").width(145.0).selected_text(units.label()).show_ui(ui,|ui| {
                         ui.selectable_value(&mut units,Units::Pixels,"Pixels");
                         for name in ["Inches", "Centimeters"] {
                             ui.horizontal(|ui| {
-                                ui.add_enabled(false, egui::Button::selectable(false,name)).on_disabled_hover_text("Print units and DPI are planned.");
+                                ui.add_enabled(false, egui::Button::selectable(false,name)).tip_disabled("Print units and DPI are planned.");
 
                             });
                         }
@@ -170,11 +172,11 @@ impl Editor {
                 if lock_toggle(ui,&mut draft.locked).changed() && draft.locked {draft.link(true);}
                 egui::Grid::new("resize_dimensions").show(ui,|ui| {
                     let suffix=if draft.units==Units::Pixels {"px"} else {"%"};
-                    let label=ui.label("Width:");
+                    let label=ui.label("Width");
                     let input=ui.add(crate::unicode_input::TextEdit::singleline(&mut draft.width).desired_width(86.0).min_size(egui::vec2(86.0,20.0)).align(egui::Align2::RIGHT_CENTER)).labelled_by(label.id);crate::controls::focus_once(&input,&mut draft.focus_pending);if input.changed(){draft.link(true);}
                     ui.label(suffix);
                     ui.end_row();
-                    let label=ui.label("Height:");
+                    let label=ui.label("Height");
                     if ui.add(crate::unicode_input::TextEdit::singleline(&mut draft.height).desired_width(86.0).min_size(egui::vec2(86.0,20.0)).align(egui::Align2::RIGHT_CENTER)).labelled_by(label.id).changed() {draft.link(false);}
                     ui.label(suffix);
                     ui.end_row();
@@ -192,13 +194,13 @@ impl Editor {
             if draft.advanced {
                 ui.add_enabled_ui(false,|ui| {
                     ui.horizontal(|ui| {
-                        ui.label("Resolution:");
+                        ui.label("Resolution");
                         let mut planned_resolution="96".to_owned();
                         ui.add(crate::unicode_input::TextEdit::singleline(&mut planned_resolution).desired_width(65.0));
                         ui.label("dpi");
                     });
                     crate::controls::toggle(ui, &mut true, "Use resampling");
-                }).response.on_disabled_hover_text("Resolution metadata and the resampling toggle are planned. Current resizing always resamples pixels; editable objects require flattening confirmation.");
+                }).response.tip_disabled("Resolution metadata and the resampling toggle are planned. Current resizing always resamples pixels; editable objects require flattening confirmation.");
             }
             let spec=draft.dimensions();
             if let Err(error)=&spec {
@@ -252,11 +254,7 @@ impl Editor {
         let modal = crate::controls::Modal::new(egui::Id::unique("resize_flatten_confirmation"))
             .show(ctx, |ui| {
                 ui.set_width(406.0);
-                ui.vertical_centered(|ui| {
-                    ui.heading("Flatten Objects");
-                });
-                ui.separator();
-                ui.add_space(8.0);
+                crate::controls::dialog_title(ui, "Flatten Objects");
                 ui.horizontal(|ui| {
                     let (icon, _) =
                         ui.allocate_exact_size(egui::vec2(34.0, 44.0), egui::Sense::hover());
@@ -358,7 +356,7 @@ fn lock_toggle(ui: &mut egui::Ui, locked: &mut bool) -> egui::Response {
         ],
         stroke,
     );
-    response.on_hover_text("Lock aspect ratio")
+    response.tip("Lock aspect ratio")
 }
 
 #[cfg(test)]

@@ -16,8 +16,39 @@ impl Drop for Icon {
 pub(super) struct Painter {
     original: usize,
     cached: Option<Cursor>,
+    /// A cursor handle whose artwork could not be read. It is not retried on
+    /// every frame (costly GDI work), and the previous artwork stays in use.
+    failed: usize,
 }
 impl Painter {
+    pub(super) fn snapshot(&mut self) -> Option<Cursor> {
+        let mut c = CURSORINFO {
+            cbSize: size_of::<CURSORINFO>() as u32,
+            ..Default::default()
+        };
+        if unsafe { GetCursorInfo(&mut c) } == 0
+            || c.flags & CURSOR_SHOWING == 0
+            || c.hCursor.is_null()
+        {
+            return None;
+        }
+        let handle = c.hCursor as usize;
+        if (self.original != handle || self.cached.is_none()) && self.failed != handle {
+            match extract(c.hCursor, [0, 0]) {
+                Ok(cursor) => {
+                    self.cached = Some(cursor);
+                    self.original = handle;
+                    self.failed = 0;
+                }
+                Err(_) => self.failed = handle,
+            }
+        }
+        let mut out = self.cached.clone()?;
+        out.position[0] += c.ptScreenPos.x;
+        out.position[1] += c.ptScreenPos.y;
+        Some(out)
+    }
+
     pub fn draw(&mut self, bgra: &mut [u8], origin: [i32; 2], source: [u32; 2], size: [u32; 2]) {
         let mut c = CURSORINFO {
             cbSize: size_of::<CURSORINFO>() as u32,
@@ -29,14 +60,21 @@ impl Painter {
         {
             return;
         }
-        if self.original != c.hCursor as usize || self.cached.is_none() {
-            let Ok(cursor) = extract(c.hCursor, [0, 0]) else {
-                return;
-            };
-            self.original = c.hCursor as usize;
-            self.cached = Some(cursor);
+        let handle = c.hCursor as usize;
+        if (self.original != handle || self.cached.is_none()) && self.failed != handle {
+            match extract(c.hCursor, [0, 0]) {
+                Ok(cursor) => {
+                    self.original = handle;
+                    self.cached = Some(cursor);
+                    self.failed = 0;
+                }
+                // Keep drawing the previous artwork rather than dropping the cursor.
+                Err(_) => self.failed = handle,
+            }
         }
-        let cursor = self.cached.as_ref().unwrap();
+        let Some(cursor) = self.cached.as_ref() else {
+            return;
+        };
         let Ok(pixels) = cursor.bitmap.pixels() else {
             return;
         };

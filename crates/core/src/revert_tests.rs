@@ -80,6 +80,7 @@ fn fixture() -> Document {
             focus: None,
 
             highlighter_rect: false,
+            hard_edge: false,
             group: None,
             rotation_degrees: 0.0,
             mirror_x: false,
@@ -159,6 +160,7 @@ fn empty_revert_preserves_redo_and_import_unsaved_status() {
                 focus: None,
 
                 highlighter_rect: false,
+                hard_edge: false,
                 group: None,
                 rotation_degrees: 0.0,
                 mirror_x: false,

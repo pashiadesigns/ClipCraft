@@ -2,6 +2,8 @@
 use crate::{Error, Result};
 use serde::{Deserialize, Serialize};
 pub mod audio;
+#[cfg(test)]
+mod ba_review_tests;
 pub mod editing;
 pub mod editor;
 #[cfg(test)]
@@ -9,34 +11,116 @@ mod editor_tests;
 pub mod effects;
 pub mod frame;
 pub mod frame_cache;
+pub mod instruction;
+pub mod keyframes;
 pub mod links;
+pub mod motion_path;
 pub mod project;
+pub mod recording_file;
+pub mod split;
+pub mod templates;
 pub mod wav;
+pub mod webcam;
+/// Recordings stop at this size, whichever quality they use.
+pub const RECORDING_LIMIT_BYTES: u64 = 4_000_000_000;
+/// How much data a recording or an export keeps per second.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Quality {
+    #[default]
+    Standard,
+    High,
+    Maximum,
+}
+impl Quality {
+    pub const ALL: [Self; 3] = [Self::Standard, Self::High, Self::Maximum];
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Standard => "Standard",
+            Self::High => "High",
+            Self::Maximum => "Maximum",
+        }
+    }
+    pub fn purpose(self) -> &'static str {
+        match self {
+            Self::Standard => "Good for tutorials and screen walkthroughs.",
+            Self::High => "Good for video on screen and most games.",
+            Self::Maximum => "Closest to the original, for fast games.",
+        }
+    }
+    /// Bits per second at 15, 30 or 60 frames per second.
+    pub fn bitrate(self, fps: u32) -> u32 {
+        let mbps = match (self, fps) {
+            (Self::Standard, _) => 8,
+            (Self::High, ..=15) => 10,
+            (Self::High, ..=30) => 16,
+            (Self::High, _) => 25,
+            (Self::Maximum, ..=15) => 20,
+            (Self::Maximum, ..=30) => 32,
+            (Self::Maximum, _) => 50,
+        };
+        mbps * 1_000_000
+    }
+    /// Estimated size in megabytes of a video this long.
+    pub fn megabytes(self, fps: u32, milliseconds: u64) -> u64 {
+        u64::from(self.bitrate(fps)) * milliseconds / 8_000 / 1_000_000
+    }
+    pub fn lower(self) -> Option<Self> {
+        match self {
+            Self::Standard => None,
+            Self::High => Some(Self::Standard),
+            Self::Maximum => Some(Self::High),
+        }
+    }
+    /// Minutes until the size limit, when that comes before the one-hour limit.
+    pub fn limit_minutes(self, fps: u32) -> Option<u64> {
+        let minutes = RECORDING_LIMIT_BYTES * 8 / u64::from(self.bitrate(fps)) / 60;
+        (minutes < 60).then_some(minutes)
+    }
+}
+/// "60 MB", or "1.5 GB" from a thousand megabytes up.
+pub fn size_text(megabytes: u64) -> String {
+    if megabytes >= 1000 {
+        format!("{:.1} GB", megabytes as f64 / 1000.)
+    } else {
+        format!("{megabytes} MB")
+    }
+}
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Options {
+    pub instruction: instruction::Options,
     pub fps: u32,
+    pub quality: Quality,
     pub microphone: bool,
     pub system_audio: bool,
     pub cursor: bool,
     pub preview: bool,
     pub open_folder: bool,
+    /// Open Find Sensitive Info when the recording arrives in the editor.
+    pub find_sensitive: bool,
     pub pause_on_focus_loss: bool,
     pub countdown: bool,
     pub selection: crate::capture_options::Selection,
+    /// Webcam picture-in-picture (AS13).
+    pub webcam: webcam::Webcam,
 }
 impl Default for Options {
     fn default() -> Self {
         Self {
+            instruction: Default::default(),
             fps: 30,
+            quality: Quality::Standard,
             microphone: false,
             system_audio: false,
             cursor: true,
             preview: true,
             open_folder: false,
+            find_sensitive: false,
             pause_on_focus_loss: false,
             countdown: false,
             selection: crate::capture_options::Selection::Region,
+            webcam: Default::default(),
         }
     }
 }
@@ -107,9 +191,9 @@ impl Settings {
             || w % 2 != 0
             || h % 2 != 0
             || ![15, 30, 60].contains(&self.fps)
-            || !(500_000..=40_000_000).contains(&self.bitrate)
+            || !(500_000..=50_000_000).contains(&self.bitrate)
         {
-            return Err(Error::Invalid("Video needs even dimensions from 64 × 64 through 3840 × 2160, 15/30/60 fps and a bitrate of 0.5–40 Mbps.".into()));
+            return Err(Error::Invalid("Video needs even dimensions from 64 × 64 through 3840 × 2160, 15/30/60 fps and a bitrate of 0.5–50 Mbps.".into()));
         }
         match &self.source {
             Source::Display(id) if id.is_empty() || id.len() > 256 || id.contains('\0') => {
@@ -145,6 +229,7 @@ pub struct Session {
     paused: u64,
     last_frame: Option<u64>,
     frames: u64,
+    dropped: u64,
 }
 impl Session {
     pub fn new(settings: Settings) -> Result<Self> {
@@ -158,6 +243,7 @@ impl Session {
             paused: 0,
             last_frame: None,
             frames: 0,
+            dropped: 0,
         })
     }
     pub fn phase(&self) -> Phase {
@@ -213,15 +299,36 @@ impl Session {
         }
         self.check(now)?;
         let pts = now - self.origin - self.paused;
-        if self
-            .last_frame
-            .is_some_and(|t| pts.saturating_sub(t) < 10_000_000 / self.settings.fps as u64)
-        {
-            return Ok(None);
+        let interval = 10_000_000 / self.settings.fps as u64;
+        if let Some(last) = self.last_frame {
+            let gap = pts.saturating_sub(last) / interval;
+            if gap == 0 {
+                return Ok(None);
+            }
+            self.dropped += gap - 1;
         }
         self.last_frame = Some(pts);
         self.frames += 1;
         Ok(Some(pts))
+    }
+    /// What to try next time, when more than 2% of the frames were late.
+    pub fn frame_advice(&self, quality: Quality) -> Option<String> {
+        if self.dropped * 50 <= self.frames + self.dropped {
+            return None;
+        }
+        match quality.lower() {
+            Some(lower) => Some(format!(
+                "Some frames were dropped at {} quality. Try {} next time.",
+                quality.label(),
+                lower.label()
+            )),
+            None => (self.settings.fps > 15).then(|| {
+                format!(
+                    "Some frames were dropped at {} fps. Try a lower frame rate next time.",
+                    self.settings.fps
+                )
+            }),
+        }
     }
     pub fn finish(&mut self) -> Result<()> {
         if !matches!(self.phase, Phase::Recording | Phase::Paused) || self.frames == 0 {

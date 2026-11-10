@@ -1,4 +1,5 @@
 //! One row: left confirmations, centered document controls, right properties tabs.
+use crate::tips::Tip as _;
 use crate::{Editor, egui, shell};
 use egui::{Color32, Rect};
 
@@ -41,7 +42,8 @@ impl Editor {
                 // so the other controls remain centered across the whole window.
                 let side_space = 96.;
                 let width = measured.min((area.width() - side_space * 2.).max(1.));
-                let controls = Rect::from_center_size(area.center(), egui::vec2(width, 48.));
+                // A 38 px band centered top to bottom keeps the buttons centered.
+                let controls = Rect::from_center_size(area.center(), egui::vec2(width, 38.));
                 let status =
                     Rect::from_min_max(area.min, egui::pos2(controls.left() - 8., area.bottom()));
                 let content = ui
@@ -53,7 +55,13 @@ impl Editor {
                             .id_salt("footer-controls")
                             .auto_shrink([false, false])
                             .show(ui, |ui| {
-                                ui.horizontal(|ui| self.footer_controls(ui)).response.rect
+                                // Buttons sit centered top to bottom in the footer.
+                                ui.with_layout(
+                                    egui::Layout::left_to_right(egui::Align::Center),
+                                    |ui| self.footer_controls(ui),
+                                )
+                                .response
+                                .rect
                             })
                     })
                     .inner;
@@ -66,6 +74,12 @@ impl Editor {
                     ui.set_clip_rect(status.intersect(ui.clip_rect()));
                     self.footer_confirmation(ui);
                 });
+                // Hide UI lives in the footer's reserved right-hand space.
+                let hide = Rect::from_center_size(
+                    egui::pos2(area.right() - 44., area.center().y),
+                    egui::vec2(80., 30.),
+                );
+                self.show_ui_button(ui, hide);
                 #[cfg(test)]
                 ui.ctx().data_mut(|d| {
                     d.insert_temp(
@@ -130,8 +144,7 @@ impl Editor {
                 (text_rect, offset, distance),
             )
         });
-        let response =
-            response.on_hover_text(format!("{save}\n{}\nClick for details", self.status));
+        let response = response.tip(format!("{save}\n{}\nClick for details", self.status));
         egui::Popup::from_toggle_button_response(&response).show(|ui| {
             ui.set_width(320.);
             ui.label(&self.status);
@@ -152,7 +165,7 @@ impl Editor {
                 "Show Recent Clips"
             };
             let recent = icon_caption_button(ui, recent_label, recent_label)
-                .on_hover_text("Show or hide recent clips");
+                .tip("Show or hide recent clips");
             #[cfg(test)]
             ui.ctx()
                 .data_mut(|d| d.insert_temp(egui::Id::unique("footer-recent"), recent.rect));
@@ -169,7 +182,7 @@ impl Editor {
             } else {
                 "Hide annotations"
             };
-            let annotations=icon_caption_button(ui,annotations_label,"").on_hover_text(format!("{annotations_label} · compare the underlying image without changing saved objects or exports."));
+            let annotations=icon_caption_button(ui,annotations_label,"").tip(format!("{annotations_label} · compare the underlying image without changing saved objects or exports."));
             #[cfg(test)]
             ui.ctx().data_mut(|d| {
                 d.insert_temp(egui::Id::unique("footer-annotations"), annotations.rect)
@@ -187,7 +200,7 @@ impl Editor {
                     "{} × {} px",
                     self.session.document.width, self.session.document.height
                 ))
-                .on_hover_text("Resize Image");
+                .tip("Resize Image");
             self.shell.resize_anchor = Some(dimensions.rect);
             if dimensions.clicked() {
                 self.begin_resize();

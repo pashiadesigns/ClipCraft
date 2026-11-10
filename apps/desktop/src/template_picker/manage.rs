@@ -121,10 +121,6 @@ impl Editor {
                     ctx.data_mut(|data| {
                         data.remove::<Catalog>(egui::Id::unique("template-catalog"))
                     });
-                    if let Some(picker) = &mut self.template_picker {
-                        picker.catalog = None;
-                        picker.selected = 0;
-                    }
                     self.status = "Local templates updated.".into();
                     return;
                 }

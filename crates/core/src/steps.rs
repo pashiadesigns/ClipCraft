@@ -78,6 +78,7 @@ pub fn marker(
         focus: None,
 
         highlighter_rect: false,
+        hard_edge: false,
         group: None,
         rotation_degrees: 0.0,
         mirror_x: false,
@@ -95,7 +96,7 @@ pub fn marker(
             content: label(sequence.0, sequence.1)?,
             horizontal: HorizontalAlignment::Center,
             vertical: VerticalAlignment::Middle,
-            size_points: (size * 0.4).clamp(6.0, 64.0),
+            size_points: label_size(size),
             ..TextStyle::default()
         }),
     })
@@ -126,7 +127,43 @@ pub fn resized_marker(a: &Annotation, diameter: f32, canvas: [u32; 2]) -> Result
             ((min[axis] + max[axis] - size) / 2.0).clamp(0.0, canvas[axis] as f32 - size);
         out.end[axis] = out.start[axis] + size;
     }
+    // The label and its stroke grow and shrink with the marker (BJ10).
+    scale_label(&mut out, size / (max[0] - min[0]).max(1.0));
     Ok(out)
+}
+/// Scales a marker's label and its stroke.
+pub fn scale_label(a: &mut Annotation, ratio: f32) {
+    if let Some(t) = a.text.as_mut() {
+        t.size_points = (t.size_points * ratio).clamp(6.0, text::MAX_SIZE_POINTS);
+        if let Some(o) = t.outline.as_mut() {
+            o.width *= ratio;
+        }
+        if let Some(rich) = t.rich.as_mut() {
+            for run in &mut rich.runs {
+                run.format.size = (run.format.size * ratio).clamp(6.0, text::MAX_SIZE_POINTS);
+                if let Some(o) = run.format.outline.as_mut() {
+                    o.width *= ratio;
+                }
+            }
+        }
+    }
+}
+/// After a handle drag from `original` to `resized`, the label follows the
+/// marker. Other objects are returned unchanged.
+pub fn label_follows(original: &Annotation, mut resized: Annotation) -> Annotation {
+    if original.kind == Kind::Step {
+        let side = |a: &Annotation| {
+            let (min, max) = a.body_bounds();
+            (max[0] - min[0]).min(max[1] - min[1]).max(1.0)
+        };
+        let ratio = side(&resized) / side(original);
+        scale_label(&mut resized, ratio);
+    }
+    resized
+}
+/// The label size a marker of this diameter starts with.
+pub fn label_size(diameter: f32) -> f32 {
+    (diameter * 0.4).clamp(6.0, text::MAX_SIZE_POINTS)
 }
 
 /// Read the labels themselves, including manual edits and gaps in the sequence.
@@ -193,6 +230,28 @@ pub fn foreground(annotation: &Annotation) -> Annotation {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn resizing_a_marker_scales_its_label_with_it() {
+        let a = marker(1, [100., 100.], 40, [0; 4], (1, false), [400, 400]).unwrap();
+        let size = a.text.as_ref().unwrap().size_points;
+        let body = a.body_bounds();
+        let side = body.1[0] - body.0[0];
+        let big = resized_marker(&a, side * 2., [400, 400]).unwrap();
+        let grown = big.text.as_ref().unwrap();
+        assert!((grown.size_points - size * 2.).abs() < 0.01);
+        assert_eq!(grown.content, a.text.as_ref().unwrap().content);
+        let back = resized_marker(&big, side, [400, 400]).unwrap();
+        assert!((back.text.as_ref().unwrap().size_points - size).abs() < 0.01);
+    }
+    #[test]
+    fn a_handle_drag_scales_the_label_with_the_marker() {
+        let a = marker(1, [100., 100.], 40, [0; 4], (1, false), [400, 400]).unwrap();
+        let size = a.text.as_ref().unwrap().size_points;
+        let mut big = a.clone();
+        big.end = [big.start[0] + 120., big.start[1] + 120.];
+        let big = label_follows(&a, big);
+        assert!((big.text.as_ref().unwrap().size_points - size * 3.).abs() < 0.01);
+    }
     use crate::{Command, Session};
     #[test]
     fn sequence_boundaries_editing_undo_and_persistence() {

@@ -1,6 +1,7 @@
 //! Video-only controls share the centered, single-row application footer.
 use super::*;
 use crate::canvas_view::{ZoomAction, ZoomMode};
+use crate::tips::Tip as _;
 
 fn control(
     ui: &mut egui::Ui,
@@ -15,7 +16,7 @@ fn control(
     #[cfg(test)]
     ui.ctx()
         .data_mut(|d| d.insert_temp(egui::Id::unique(key), response.rect));
-    response.on_hover_text(hint)
+    response.tip(hint)
 }
 
 fn divider(ui: &mut egui::Ui) {
@@ -54,19 +55,6 @@ impl Editor {
                 self.history.refresh();
             }
         }
-        let timeline = !self.video.collapsed && !self.shell.preview_ui;
-        if control(
-            ui,
-            "footer-timeline",
-            "Timeline",
-            timeline,
-            "Show/Hide Timeline · opening it hides Recent Clips",
-        )
-        .clicked()
-        {
-            self.set_timeline_expanded(!timeline);
-            self.shell.preview_ui = false;
-        }
         let annotations = if self.shell.annotations_hidden {
             "Show annotations"
         } else {
@@ -83,28 +71,6 @@ impl Editor {
         {
             self.toggle_annotations();
         }
-        let priority = self.video.properties_priority;
-        if control(
-            ui,
-            "footer-priority",
-            if priority {
-                "Expand Timeline"
-            } else {
-                "Expand Properties pane"
-            },
-            priority,
-            if priority {
-                "Expand Timeline · Properties docks above it"
-            } else {
-                "Expand Properties pane · timeline docks beside it"
-            },
-        )
-        .clicked()
-        {
-            self.video.properties_priority = !priority;
-            self.shell.properties = true;
-            self.shell.preview_ui = false;
-        }
         divider(ui);
         if control(
             ui,
@@ -116,6 +82,18 @@ impl Editor {
         .clicked()
         {
             self.video.snap = !self.video.snap;
+        }
+        if control(
+            ui,
+            "footer-follow",
+            "Follow playhead",
+            self.video.follow_playhead,
+            "Scroll the timeline to keep the playhead in view.",
+        )
+        .tip_title("Follow playhead")
+        .clicked()
+        {
+            self.video.follow_playhead = !self.video.follow_playhead;
         }
         divider(ui);
         let mut action = None;
@@ -130,9 +108,7 @@ impl Editor {
                 }
             }
             let response = super::ui::button(ui, "Down", &self.view.label(), 76., false)
-                .on_hover_text(
-                    "Canvas zoom · Configured zoom modifier + wheel to zoom · middle-drag to pan",
-                );
+                .tip("Canvas zoom · Configured zoom modifier + wheel to zoom · middle-drag to pan");
             egui::Popup::menu(&response).show(|ui| {
                 for percent in [10, 25, 50, 75, 100, 125, 150, 200, 300, 400, 800, 1600] {
                     let mode = ZoomMode::Manual(percent as f32 / 100.);
@@ -158,7 +134,7 @@ impl Editor {
             self.session.document.width, self.session.document.height
         );
         let response = super::ui::button(ui, "Video Setup", &dimensions, 130., false)
-            .on_hover_text("Video Setup · resolution and frame rate");
+            .tip("Video Setup · resolution and frame rate");
         #[cfg(test)]
         ui.ctx()
             .data_mut(|d| d.insert_temp(egui::Id::unique("footer-video-setup"), response.rect));

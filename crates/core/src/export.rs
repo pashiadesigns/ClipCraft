@@ -260,6 +260,8 @@ pub struct Options {
     pub quality: u8,
     pub background: [u8; 3],
     pub page: PageSettings,
+    /// Laid over the output on export, copy and print (FX-003).
+    pub watermark: Option<crate::watermark::Watermark>,
 }
 impl Default for Options {
     fn default() -> Self {
@@ -269,6 +271,7 @@ impl Default for Options {
             quality: 92,
             background: [255; 3],
             page: PageSettings::default(),
+            watermark: None,
         }
     }
 }
@@ -305,10 +308,17 @@ pub fn save(document: &Document, path: &Path, options: &Options) -> Result<()> {
 pub fn encode_document(document: &Document, options: &Options) -> Result<Vec<u8>> {
     let prepared = crate::redaction_labels::decorate(document.clone(), options.redaction_labels)?;
     let document = &prepared;
-    if options.format == Format::Pdf {
+    // A tilted image is one picture, so its PDF holds the tilted pixels.
+    if options.format == Format::Pdf
+        && document.canvas_behavior.perspective.is_none()
+        && document.canvas_behavior.finish.is_none()
+        && options.watermark.is_none()
+    {
         vector_pdf::encode(document, options)
     } else {
-        encode(&document.render()?, options)
+        let mut pixels = document.render()?;
+        crate::watermark::apply(&mut pixels, options.watermark.as_ref())?;
+        encode(&pixels, options)
     }
 }
 pub fn write(path: &Path, bytes: &[u8]) -> Result<()> {

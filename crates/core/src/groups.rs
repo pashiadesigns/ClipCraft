@@ -145,7 +145,7 @@ impl Document {
     }
 }
 /// Duplicate/import groups independently. Partial groups are deliberately ungrouped.
-pub(crate) fn freshen(objects: &mut [Annotation], target: &Document) -> Result<()> {
+pub fn freshen(objects: &mut [Annotation], target: &Document) -> Result<()> {
     let mut counts = BTreeMap::new();
     for a in objects.iter() {
         if let Some(g) = a.group {

@@ -225,6 +225,100 @@ fn refinement_production_layouts_fit_and_render() {
 }
 
 #[test]
+fn capture_video_dialog_tabs_keep_size_and_icon_toggles_work() {
+    use crate::property_layout::tests::PaintedOutput;
+    let ctx = egui::Context::default();
+    let mut e = super::repair_tests::editor(&ctx);
+    e.open_video_capture();
+    let draw = |e: &mut Editor, events: Vec<egui::Event>| {
+        let mut out = ctx.run_ui(
+            egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    egui::vec2(1100., 900.),
+                )),
+                events,
+                focused: true,
+                ..Default::default()
+            },
+            |ui| e.video_capture_dialog(ui.ctx()),
+        );
+        out.textures_delta.clear();
+        PaintedOutput(out)
+    };
+    let find = |out: &PaintedOutput, label: &str| {
+        out.shapes.iter().find_map(|s| match &s.shape {
+            egui::Shape::Text(t) if t.galley.text() == label => {
+                Some(egui::Rect::from_min_size(t.pos, t.galley.size()).center())
+            }
+            _ => None,
+        })
+    };
+    let area = |ctx: &egui::Context| {
+        ctx.memory(|m| {
+            m.layer_ids()
+                .filter(|l| l.order == egui::Order::Foreground || l.order == egui::Order::Middle)
+                .filter_map(|l| m.area_rect(l.id))
+                .map(|r| r.size())
+                .max_by(|a, b| (a.x * a.y).total_cmp(&(b.x * b.y)))
+        })
+    };
+    draw(&mut e, vec![]);
+    let general = draw(&mut e, vec![]);
+    let general_size = area(&ctx);
+    // General holds capture area, recording, Include and After recording, in that order.
+    let y = |label: &str| {
+        find(&general, label)
+            .unwrap_or_else(|| panic!("{label} drawn"))
+            .y
+    };
+    assert!(
+        y("CAPTURE AREA") < y("RECORDING")
+            && y("RECORDING") < y("INCLUDE")
+            && y("INCLUDE") < y("AFTER RECORDING")
+    );
+    // Icon toggles flip their settings.
+    let mic = e.clip.video_options.as_ref().unwrap().microphone;
+    let at = find(&general, "Microphone").unwrap();
+    draw(&mut e, super::repair_tests::press(at, true));
+    draw(&mut e, super::repair_tests::press(at, false));
+    assert_eq!(e.clip.video_options.as_ref().unwrap().microphone, !mic);
+    // Step by Step tab: turning it on locks Cursor on and shows the On badge.
+    let tab = ctx
+        .data(|d| d.get_temp::<egui::Rect>(egui::Id::unique(("capture-tab", "Step by Step"))))
+        .unwrap();
+    draw(&mut e, super::repair_tests::press(tab.center(), true));
+    draw(&mut e, super::repair_tests::press(tab.center(), false));
+    assert!(e.clip.video_steps_tab);
+    e.clip.video_options.as_mut().unwrap().instruction.enabled = true;
+    e.clip.video_options.as_mut().unwrap().cursor = false;
+    let steps = draw(&mut e, vec![]);
+    let steps = {
+        let _ = steps;
+        draw(&mut e, vec![])
+    };
+    assert!(
+        find(&steps, "Move before click").is_some(),
+        "lead time shown for direct paths"
+    );
+    assert!(find(&steps, "Follow the cursor between clicks").is_some());
+    assert!(
+        e.clip.video_options.as_ref().unwrap().cursor,
+        "Step by Step keeps the cursor on"
+    );
+    assert!(
+        ctx.data(|d| d.get_temp::<egui::Rect>(egui::Id::unique("capture-steps-badge")))
+            .is_some()
+    );
+    // The dialog keeps its size between tabs.
+    let steps_size = area(&ctx);
+    let (a, b) = (general_size.unwrap(), steps_size.unwrap());
+    assert!(
+        (a.x - b.x).abs() < 1. && (a.y - b.y).abs() < 1.,
+        "{a:?} vs {b:?}"
+    );
+}
+#[test]
 fn audio_block_double_click_opens_its_workstation_without_seeking() {
     let ctx = egui::Context::default();
     let mut e = editor(&ctx);

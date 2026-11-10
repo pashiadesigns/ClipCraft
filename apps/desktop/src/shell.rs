@@ -15,6 +15,7 @@ pub struct Tool {
     kind: Option<Kind>,
 }
 pub const TOOLS: &[Tool] = &[
+    // Keep the established leading eight video annotation slots unchanged.
     Tool {
         id: ToolId::Move,
         name: "Move",
@@ -86,6 +87,11 @@ pub const TOOLS: &[Tool] = &[
         name: "Focus",
         kind: Some(Kind::Rectangle),
     },
+    Tool {
+        id: ToolId::MagnifiedCallout,
+        name: "Magnify",
+        kind: Some(Kind::Rectangle),
+    },
 ];
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
@@ -108,12 +114,27 @@ pub struct Shell {
     pub(super) properties: bool,
     pub(super) property_tab: PropertyTab,
     pub(super) ribbon_tab: crate::ribbon::RibbonTab,
+    pub tilt_flat: bool,
+    /// Selected tilted image objects the canvas shows flat.
+    pub flat_objects: Vec<u64>,
+    /// The image object whose Perspective controls are in use.
+    pub perspective_adjusting: Option<u64>,
+    /// A Free perspective corner is being dragged.
+    pub perspective_drag: bool,
+    /// A tool was chosen, so Free perspective corners stop showing.
+    pub end_free_perspective: bool,
 
     pub(super) library: bool,
     pub(super) library_tab_rect: Option<egui::Rect>,
     pub(super) backstage: Option<crate::backstage::Page>,
     pub(super) recent_query: String,
     pub(super) recent_limit: usize,
+    /// File > Info rename field: (draft, error) while open (FILE-007).
+    pub(super) rename: Option<(String, String)>,
+    /// The Help window (HELP-001).
+    pub(crate) help_window: crate::help::State,
+    /// The name an unsaved project takes until its first Save.
+    pub(super) untitled_name: Option<String>,
     pub(crate) help: bool,
 }
 impl Default for Shell {
@@ -131,12 +152,20 @@ impl Default for Shell {
             properties: true,
             property_tab: PropertyTab::Tool,
             ribbon_tab: crate::ribbon::RibbonTab::Insert,
+            tilt_flat: false,
+            flat_objects: Vec::new(),
+            perspective_adjusting: None,
+            perspective_drag: false,
+            end_free_perspective: false,
 
             library: false,
             library_tab_rect: None,
             backstage: None,
             recent_query: String::new(),
             recent_limit: 10,
+            rename: None,
+            help_window: Default::default(),
+            untitled_name: None,
             help: false,
         }
     }
@@ -156,6 +185,8 @@ impl Shell {
 }
 
 pub fn configure(ctx: &egui::Context) {
+    crate::tips::install(ctx);
+    crate::native_cursor::install_hands(ctx);
     ctx.options_mut(|options| options.zoom_with_keyboard = false);
     ctx.set_theme(egui::Theme::Dark);
     let mut style = (*ctx.style_of(egui::Theme::Dark)).clone();
@@ -283,6 +314,7 @@ pub(super) fn tool_button_label(
 
 impl Editor {
     pub(super) fn choose_tool(&mut self, index: usize) {
+        self.shell.end_free_perspective = true;
         if self.is_video()
             && matches!(
                 TOOLS[index].id,
@@ -308,12 +340,20 @@ impl Editor {
         self.shell.properties = true;
         self.shell.property_tab = PropertyTab::Tool;
         let tool = TOOLS[index];
-        self.shell.focus.active = tool.id == ToolId::Focus;
+        self.shell.focus.active = matches!(tool.id, ToolId::Focus | ToolId::MagnifiedCallout);
         self.icon_library.active = tool.id == ToolId::Icons;
         if !self.icon_library.active {
             self.icon_library.disarm();
         }
-        if tool.id == ToolId::Focus {
+        if self.shell.focus.active {
+            let magnify = tool.id == ToolId::MagnifiedCallout;
+            if magnify != self.shell.focus.effect.magnify.is_some() {
+                self.shell.focus.effect = capture_core::focus::Focus {
+                    darken: if magnify { 0. } else { 0.6 },
+                    magnify: magnify.then(Default::default),
+                    ..Default::default()
+                };
+            }
             self.tool = Some(if self.shell.focus.shape == 2 {
                 Kind::Ellipse
             } else {
@@ -402,7 +442,11 @@ impl Editor {
         let id = if self.shell.focus.active
             && matches!(self.tool, Some(Kind::Rectangle | Kind::Ellipse))
         {
-            ToolId::Focus
+            if self.shell.focus.effect.magnify.is_some() {
+                ToolId::MagnifiedCallout
+            } else {
+                ToolId::Focus
+            }
         } else if self.icon_library.active {
             ToolId::Icons
         } else if self.cut_out.is_some() {
@@ -420,6 +464,12 @@ impl Editor {
             self.video.pause();
         }
         self.preview_ui_input(ui.ctx());
+        self.rename_shortcuts(&ui.ctx().clone());
+        self.sync_workspace(ui.ctx());
+        self.show_preferences(ui.ctx());
+        if crate::color_widgets::take_image_request(ui.ctx()) {
+            self.palette_from_image(ui.ctx());
+        }
         self.show_quick_access(ui);
         if self.shell.backstage.is_some() {
             self.show_backstage(ui);
@@ -454,7 +504,13 @@ impl Editor {
             } else {
                 "properties"
             })
-            .default_size(390.)
+            .default_size(
+                self.quick_controls
+                    .workspace()
+                    .panel_width
+                    .filter(|_| self.quick_controls.workspace().remember_view)
+                    .unwrap_or(390.),
+            )
             .min_size(260.)
             .max_size(460.)
             .resizable(true)
@@ -463,6 +519,7 @@ impl Editor {
                 ui.ctx().data_mut(|d| {
                     d.insert_temp(egui::Id::unique("properties-panel"), ui.max_rect())
                 });
+                self.preferences.panel_width = Some(ui.max_rect().width().round());
                 if self.is_video() {
                     self.video_properties_pane(ui);
                     return;
@@ -674,7 +731,7 @@ impl Editor {
         } else if self.tool != Some(Kind::Redact) {
             crate::property_layout::slider(
                 ui,
-                "Width",
+                "Thickness",
                 egui::Slider::new(
                     &mut self.width,
                     1..=if matches!(
@@ -711,13 +768,6 @@ impl Editor {
                 ui.selectable_value(&mut kind, Some(Kind::Polygon), "Polygon");
             });
 
-            if self.tool == Some(Kind::Polygon) {
-                crate::property_layout::slider(
-                    ui,
-                    "New sides",
-                    egui::Slider::new(&mut self.shape_sides, 3..=12),
-                );
-            }
             if kind != self.tool {
                 self.cancel_gesture();
                 self.tool = kind;
@@ -726,6 +776,12 @@ impl Editor {
                 self.status =
                     "Drag to draw the selected shape. Move edits its handles live.".into();
             }
+        }
+        if self.tool == Some(Kind::Callout) {
+            crate::appearance::callout_pointer(ui, &mut self.tool_shapes.tail);
+        }
+        if self.tool == Some(Kind::Eraser) {
+            crate::controls::toggle(ui, &mut self.tool_shapes.eraser_hard, "Hard edge");
         }
         if before_defaults.3 == self.tool
             && (before_defaults.0, before_defaults.1, before_defaults.2)

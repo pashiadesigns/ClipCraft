@@ -3,6 +3,11 @@
 use crate::{Annotation, Command, Document, Error, Kind, Result};
 use std::ops::Range;
 mod identifiers;
+pub mod scan;
+#[cfg(test)]
+mod scan_stress;
+pub mod stable;
+pub mod tracking;
 
 #[derive(Clone, Debug)]
 pub struct Word {
@@ -12,6 +17,8 @@ pub struct Word {
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Category {
+    Name,
+    UserId,
     Email,
     Phone,
     Phrase,
@@ -22,6 +29,8 @@ pub enum Category {
 impl Category {
     pub fn label(self) -> &'static str {
         match self {
+            Self::Name => "Possible person name",
+            Self::UserId => "User ID",
             Self::Email => "Email",
             Self::Phone => "Phone",
             Self::Phrase => "Custom phrase",
@@ -39,6 +48,8 @@ pub struct Finding {
 }
 #[derive(Clone, Debug)]
 pub struct Options {
+    pub names: bool,
+    pub user_ids: bool,
     pub emails: bool,
     pub phones: bool,
     pub phrases: Vec<String>,
@@ -49,6 +60,8 @@ pub struct Options {
 impl Default for Options {
     fn default() -> Self {
         Self {
+            names: true,
+            user_ids: true,
             emails: true,
             phones: true,
             phrases: Vec::new(),
@@ -81,6 +94,24 @@ fn email(s: &str) -> bool {
             .next()
             .is_some_and(|p| p.len() >= 2 && p.chars().all(|c| c.is_ascii_alphabetic()))
 }
+/// An address cut off before its top-level domain, as in a narrow window tab or
+/// title bar (`name@exampled`). It needs a local part, so `@mentions` don't match.
+fn partial_email(s: &str) -> bool {
+    let Some((local, domain)) = s.split_once('@') else {
+        return false;
+    };
+    local.len() >= 2
+        && !local.starts_with('.')
+        && !domain.contains('@')
+        && domain.len() >= 3
+        && domain
+            .chars()
+            .next()
+            .is_some_and(|c| c.is_ascii_alphanumeric())
+        && domain
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '.')
+}
 fn matches(text: &str, options: &Options) -> Vec<(Category, Range<usize>)> {
     let chars: Vec<_> = text.char_indices().collect();
     let mut out = Vec::new();
@@ -94,11 +125,60 @@ fn matches(text: &str, options: &Options) -> Vec<(Category, Range<usize>)> {
             let a = chars[start].0;
             let b = chars.get(i).map_or(text.len(), |p| p.0);
             let candidate = text[a..b].trim_end_matches('.');
-            if options.emails && email(candidate) {
+            if options.emails && (email(candidate) || partial_email(candidate)) {
                 out.push((Category::Email, a..a + candidate.len()));
             }
         } else {
             i += 1;
+        }
+    }
+    if options.names || options.user_ids {
+        let words: Vec<_> = text
+            .split_whitespace()
+            .scan(0usize, |offset, w| {
+                let start = text[*offset..].find(w)? + *offset;
+                *offset = start + w.len();
+                Some((start, w))
+            })
+            .collect();
+        for (i, (at, w)) in words.iter().enumerate() {
+            let key = w.trim_matches([':', '=', '"']).to_lowercase();
+            let name_label = matches!(
+                key.as_str(),
+                "name" | "patient" | "employee" | "customer" | "author"
+            );
+            let id_label = matches!(
+                key.as_str(),
+                "username" | "userid" | "user_id" | "login" | "handle" | "account"
+            );
+            if (options.names && name_label || options.user_ids && id_label)
+                && let Some((start, value)) = words.get(i + 1)
+            {
+                let mut end = start + value.len();
+                if name_label
+                    && let Some((next, value)) = words.get(i + 2)
+                    && value.chars().next().is_some_and(char::is_uppercase)
+                {
+                    end = next + value.len();
+                }
+                out.push((
+                    if name_label {
+                        Category::Name
+                    } else {
+                        Category::UserId
+                    },
+                    *start..end,
+                ));
+            }
+            if options.user_ids
+                && w.starts_with('@')
+                && w.len() > 2
+                && w[1..]
+                    .chars()
+                    .all(|c| c.is_alphanumeric() || "_.-".contains(c))
+            {
+                out.push((Category::UserId, *at..at + w.len()));
+            }
         }
     }
     out.extend(identifiers::find(text, options));
@@ -242,37 +322,53 @@ pub fn detect(words: &[Word], options: &Options, dimensions: [u32; 2]) -> Result
     }
     Ok(findings)
 }
-pub fn redact(document: &Document, findings: impl IntoIterator<Item = Finding>) -> Command {
-    let mut id = document.annotations.iter().map(|a| a.id).max().unwrap_or(0);
-    let mut annotations = Vec::new();
-    for finding in findings {
-        for b in finding.bounds {
-            id += 1;
-            annotations.push(Annotation {
-                id,
-                kind: Kind::Redact,
-                start: [b[0], b[1]],
-                end: [b[0] + b[2], b[1] + b[3]],
-                color: [0, 0, 0, 255],
-                width: 1,
-                focus: None,
-                highlighter_rect: false,
-                image: None,
-                step_outline: None,
-                line_style: None,
-                shadow: None,
-                rotation_degrees: 0.,
-                mirror_x: false,
-                group: None,
-                corner_radius: 0.,
-                fill: None,
-                points: vec![],
-                text: None,
-                callout: None,
-            });
-        }
+/// A cover of `kind` for each box, numbered after `last_id`.
+pub fn covers(
+    last_id: u64,
+    boxes: impl IntoIterator<Item = [f32; 4]>,
+    kind: Kind,
+    width: u32,
+) -> Vec<Annotation> {
+    boxes
+        .into_iter()
+        .enumerate()
+        .map(|(i, b)| Annotation {
+            id: last_id + i as u64 + 1,
+            kind,
+            start: [b[0], b[1]],
+            end: [b[0] + b[2], b[1] + b[3]],
+            color: [0, 0, 0, 255],
+            width,
+            focus: None,
+            highlighter_rect: false,
+            hard_edge: false,
+            image: None,
+            step_outline: None,
+            line_style: None,
+            shadow: None,
+            rotation_degrees: 0.,
+            mirror_x: false,
+            group: None,
+            corner_radius: 0.,
+            fill: None,
+            points: vec![],
+            text: None,
+            callout: None,
+        })
+        .collect()
+}
+/// Covers every finding, in one Undo step.
+pub fn cover(
+    document: &Document,
+    findings: impl IntoIterator<Item = Finding>,
+    kind: Kind,
+    width: u32,
+) -> Command {
+    let last = document.annotations.iter().map(|a| a.id).max().unwrap_or(0);
+    let boxes = findings.into_iter().flat_map(|f| f.bounds);
+    Command::AddMany {
+        annotations: covers(last, boxes, kind, width),
     }
-    Command::AddMany { annotations }
 }
 
 #[cfg(test)]
@@ -290,6 +386,21 @@ mod tests {
         assert_eq!(m.len(), 4);
         assert_eq!(&text[m[0].1.clone()], "a.person+tag@example.co.uk");
         assert_eq!(&text[m[1].1.clone()], "+1 (312) 555-0182");
+    }
+    #[test]
+    fn addresses_cut_off_in_a_window_tab_are_still_found() {
+        let o = Options::default();
+        let text = "so the reality is that jo@exampled";
+        let m = matches(text, &o);
+        assert_eq!(m.len(), 1);
+        assert_eq!(&text[m[0].1.clone()], "jo@exampled");
+        // Mentions and lone @ signs are not addresses (mentions are user IDs).
+        let emails_only = Options {
+            names: false,
+            user_ids: false,
+            ..Default::default()
+        };
+        assert!(matches("ping @team at 5 @ noon", &emails_only).is_empty());
     }
     #[test]
     fn bounds_cover_whole_words_clip_and_merge_per_line() {

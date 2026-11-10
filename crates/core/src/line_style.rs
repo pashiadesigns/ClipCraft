@@ -182,7 +182,7 @@ impl Style {
         }
         if matches!(
             kind,
-            Kind::Rectangle | Kind::Ellipse | Kind::Polygon | Kind::Callout
+            Kind::Rectangle | Kind::Ellipse | Kind::Polygon | Kind::Callout | Kind::Step
         ) && (Self {
             pattern: Pattern::Solid,
             ..self

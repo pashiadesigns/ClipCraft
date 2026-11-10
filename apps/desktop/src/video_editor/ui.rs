@@ -1,8 +1,291 @@
 //! Shared video controls: fixed-height actions and crisp, font-independent marks.
 use super::*;
+use crate::tips::Tip as _;
 use egui::{Color32, Rect, Stroke};
 
+/// Line icons drawn with the painter on a 24-unit grid, for glyphs the bundled
+/// icon set does not include. Returns false for names it does not draw.
+fn drawn(p: &egui::Painter, rect: Rect, name: &str, color: Color32) -> bool {
+    let at =
+        |x: f32, y: f32| rect.min + egui::vec2(x * rect.width() / 24., y * rect.height() / 24.);
+    let s = rect.width() / 24.;
+    let stroke = Stroke::new(1.6 * s.max(0.75), color);
+    let line = |pts: &[(f32, f32)]| {
+        egui::Shape::line(pts.iter().map(|(x, y)| at(*x, *y)).collect(), stroke)
+    };
+    let rr = |x: f32, y: f32, w: f32, h: f32, r: f32| {
+        p.rect_stroke(
+            Rect::from_min_max(at(x, y), at(x + w, y + h)),
+            r * s,
+            stroke,
+            egui::StrokeKind::Middle,
+        )
+    };
+    match name {
+        "Duplicate" => {
+            rr(8.5, 8.5, 12., 12., 2.);
+            p.add(line(&[
+                (15.5, 5.5),
+                (15.5, 4.5),
+                (14., 3.5),
+                (5., 3.5),
+                (3.5, 5.),
+                (3.5, 14.),
+                (5., 15.5),
+                (5.5, 15.5),
+            ]));
+        }
+        "Chevron left" => {
+            p.add(line(&[(15., 5.), (8., 12.), (15., 19.)]));
+        }
+        "Chevron right" => {
+            p.add(line(&[(9., 5.), (16., 12.), (9., 19.)]));
+        }
+        "More" => {
+            for x in [5., 12., 19.] {
+                p.circle_filled(at(x, 12.), 1.8 * s, color);
+            }
+        }
+        "Chain" => {
+            p.add(line(&[(6., 4.), (6., 13.), (8., 16.), (19., 16.)]));
+            p.add(line(&[(15., 12.), (19., 16.), (15., 20.)]));
+        }
+        "Folder" => {
+            p.add(line(&[
+                (3., 7.),
+                (9., 7.),
+                (11., 9.),
+                (21., 9.),
+                (21., 19.),
+                (3., 19.),
+                (3., 7.),
+            ]));
+        }
+        "Shape rectangle" => {
+            rr(4., 6.5, 16., 11., 0.);
+        }
+        "Shape rounded" => {
+            rr(4., 6.5, 16., 11., 3.5);
+        }
+        "Shape circle" => {
+            p.circle_stroke(at(12., 12.), 7.5 * s, stroke);
+        }
+        "Keyframe" | "Keyframe filled" => {
+            let pts = vec![at(12., 4.), at(20., 12.), at(12., 20.), at(4., 12.)];
+            p.add(egui::Shape::convex_polygon(
+                pts,
+                if name == "Keyframe filled" {
+                    color
+                } else {
+                    Color32::TRANSPARENT
+                },
+                stroke,
+            ));
+        }
+        "Region" => {
+            let dashed = Stroke::new(stroke.width, color);
+            for (a, b) in [
+                ((4., 5.), (20., 5.)),
+                ((20., 5.), (20., 19.)),
+                ((20., 19.), (4., 19.)),
+                ((4., 19.), (4., 5.)),
+            ] {
+                p.extend(egui::Shape::dashed_line(
+                    &[at(a.0, a.1), at(b.0, b.1)],
+                    dashed,
+                    3. * s,
+                    2. * s,
+                ));
+            }
+        }
+        "Window" => {
+            rr(3., 4.5, 18., 15., 2.);
+            p.add(line(&[(3., 8.5), (21., 8.5)]));
+        }
+        "Fullscreen" => {
+            for pts in [
+                [(4., 9.), (4., 4.), (9., 4.)],
+                [(15., 4.), (20., 4.), (20., 9.)],
+                [(20., 15.), (20., 20.), (15., 20.)],
+                [(9., 20.), (4., 20.), (4., 15.)],
+            ] {
+                p.add(line(&pts));
+            }
+        }
+        "Open editor" => {
+            rr(3., 4.5, 18., 15., 2.);
+            p.add(line(&[(3., 8.5), (21., 8.5)]));
+            p.add(line(&[(9., 13.5), (15., 13.5)]));
+        }
+        "System audio" => {
+            p.add(line(&[
+                (4., 10.),
+                (4., 14.),
+                (8., 14.),
+                (13., 18.),
+                (13., 6.),
+                (8., 10.),
+                (4., 10.),
+            ]));
+            p.add(line(&[(16., 9.), (17.5, 12.), (16., 15.)]));
+            p.add(line(&[(18.5, 6.5), (21., 12.), (18.5, 17.5)]));
+        }
+        "Video file" => {
+            p.add(line(&[
+                (3., 7.),
+                (9., 7.),
+                (11., 9.),
+                (21., 9.),
+                (21., 19.),
+                (3., 19.),
+                (3., 7.),
+            ]));
+            p.add(line(&[
+                (10.5, 11.5),
+                (14.5, 14.),
+                (10.5, 16.5),
+                (10.5, 11.5),
+            ]));
+        }
+        "Video template" => {
+            rr(3., 4., 18., 16., 2.);
+            p.add(line(&[(3., 9.), (21., 9.)]));
+            p.add(line(&[(10.5, 12.), (14.5, 14.5), (10.5, 17.), (10.5, 12.)]));
+        }
+        "Tutorial" => {
+            p.add(line(&[
+                (3., 9.),
+                (12., 4.5),
+                (21., 9.),
+                (12., 13.5),
+                (3., 9.),
+            ]));
+            p.add(line(&[
+                (7., 11.),
+                (7., 16.),
+                (12., 18.5),
+                (17., 16.),
+                (17., 11.),
+            ]));
+        }
+        "Product walkthrough" => {
+            p.add(line(&[(4., 18.), (8., 11.), (12., 14.), (17., 6.)]));
+            p.circle_stroke(at(18., 5.5), 1.8 * s, stroke);
+            p.add(line(&[(3., 20.), (21., 20.)]));
+        }
+        "Announcement" => {
+            p.add(line(&[
+                (4., 10.),
+                (4., 14.),
+                (8., 14.),
+                (15., 19.),
+                (15., 5.),
+                (8., 10.),
+                (4., 10.),
+            ]));
+            p.add(line(&[(18., 9.), (19.5, 12.), (18., 15.)]));
+        }
+        "Blank page" => {
+            p.add(line(&[
+                (6., 3.),
+                (14., 3.),
+                (19., 8.),
+                (19., 21.),
+                (6., 21.),
+                (6., 3.),
+            ]));
+            p.add(line(&[(14., 3.), (14., 8.), (19., 8.)]));
+        }
+        "New transparent" => {
+            for (x, y) in [(4., 4.), (15., 4.), (9.5, 9.5), (4., 15.), (15., 15.)] {
+                p.rect_filled(Rect::from_min_max(at(x, y), at(x + 5., y + 5.)), 0., color);
+            }
+        }
+        "New custom size" => {
+            rr(3.5, 6., 17., 12., 1.);
+            p.add(line(&[(7.5, 12.), (16.5, 12.)]));
+            p.add(line(&[(10., 9.5), (7.5, 12.), (10., 14.5)]));
+            p.add(line(&[(14., 9.5), (16.5, 12.), (14., 14.5)]));
+        }
+        "New clipboard" => {
+            rr(5.5, 5., 13., 16., 1.8);
+            p.add(line(&[(9., 5.), (9., 3.), (15., 3.), (15., 5.)]));
+        }
+        "Template steps" => {
+            for y in [3.5, 9.75, 16.] {
+                rr(4., y, 16., 4.5, 1.);
+            }
+        }
+        "Template list" => {
+            for y in [6., 12., 18.] {
+                p.circle_filled(at(5., y), 1.2 * s, color);
+                p.add(line(&[(9.5, y), (20., y)]));
+            }
+        }
+        "Template comparison" => {
+            rr(3., 5., 18., 14., 1.5);
+            p.add(line(&[(12., 5.), (12., 19.)]));
+        }
+        "Template overview" | "Template saved" => {
+            rr(3., 3.5, 18., 17., 1.8);
+            p.add(line(&[(3., 9.), (21., 9.)]));
+            p.add(line(&[(9.5, 9.), (9.5, 20.5)]));
+        }
+        "Template timeline" => {
+            p.add(line(&[(3., 12.), (21., 12.)]));
+            for x in [6., 12., 18.] {
+                p.circle_filled(at(x, 12.), 2.2 * s, color);
+            }
+        }
+        "Template document" => {
+            rr(5., 3., 14., 18., 1.);
+            for (y, end) in [(8., 16.), (12., 16.), (16., 13.)] {
+                p.add(line(&[(8., y), (end, y)]));
+            }
+        }
+        "Template wrench" => {
+            p.circle_stroke(at(15.5, 8.5), 4.5 * s, stroke);
+            p.add(line(&[(12.3, 11.7), (4.5, 19.5)]));
+            p.add(line(&[(4.5, 19.5), (5.5, 20.5)]));
+        }
+        "Template people" => {
+            p.circle_stroke(at(9., 8.5), 3. * s, stroke);
+            p.add(line(&[
+                (3., 19.5),
+                (4., 16.5),
+                (6.5, 14.5),
+                (9., 14.),
+                (11.5, 14.5),
+                (14., 16.5),
+                (15., 19.5),
+            ]));
+            p.circle_stroke(at(17., 9.), 2.4 * s, stroke);
+            p.add(line(&[(16.5, 14.), (19., 14.7), (20.5, 16.5), (21., 18.5)]));
+        }
+        _ => return false,
+    }
+    true
+}
+
 pub(crate) fn icon(p: &egui::Painter, rect: Rect, name: &str, color: Color32) {
+    if crate::help::draw_glyph(p, rect, name, color) || drawn(p, rect, name, color) {
+        return;
+    }
+    if name == "Keyframes" {
+        let c = rect.center();
+        let d = rect.width() * 0.36;
+        p.add(egui::Shape::convex_polygon(
+            vec![
+                c + egui::vec2(0., -d),
+                c + egui::vec2(d, 0.),
+                c + egui::vec2(0., d),
+                c + egui::vec2(-d, 0.),
+            ],
+            Color32::TRANSPARENT,
+            Stroke::new(1.7, color),
+        ));
+        return;
+    }
     if name == "Sensitive search" {
         let at =
             |x: f32, y: f32| rect.min + egui::vec2(x * rect.width() / 24., y * rect.height() / 24.);
@@ -173,6 +456,35 @@ pub(crate) fn icon(p: &egui::Painter, rect: Rect, name: &str, color: Color32) {
         p.line_segment([at(22., 9.), at(16., 15.)], stroke);
         return;
     }
+    if name == "Jump to Object" {
+        // Locate: a ring with four ticks and a center dot.
+        let stroke = Stroke::new(1.4, color);
+        let c = rect.center();
+        let r = rect.width().min(rect.height()) * 0.3;
+        p.circle_stroke(c, r, stroke);
+        p.circle_filled(c, 1.6, color);
+        for d in [
+            egui::vec2(1., 0.),
+            egui::vec2(-1., 0.),
+            egui::vec2(0., 1.),
+            egui::vec2(0., -1.),
+        ] {
+            p.line_segment([c + d * (r - 2.), c + d * (r + 4.)], stroke);
+        }
+        return;
+    }
+    if name == "Follow playhead" {
+        let stroke = Stroke::new(1.4, color);
+        let c = rect.center();
+        let h = rect.height() * 0.42;
+        p.line_segment([c + egui::vec2(-3., -h), c + egui::vec2(-3., h)], stroke);
+        p.line_segment([c + egui::vec2(-6., -h), c + egui::vec2(0., -h)], stroke);
+        for x in [2., 6.] {
+            p.line_segment([c + egui::vec2(x, -3.), c + egui::vec2(x + 3., 0.)], stroke);
+            p.line_segment([c + egui::vec2(x + 3., 0.), c + egui::vec2(x, 3.)], stroke);
+        }
+        return;
+    }
     if name == "Timing" {
         let stroke = Stroke::new(1.4, color);
         let c = rect.center();
@@ -251,6 +563,13 @@ pub(crate) fn icon(p: &egui::Painter, rect: Rect, name: &str, color: Color32) {
         "Zoom preview out" => "zoom-out",
         "Fit preview" => "scan",
         "Video Setup" => "monitor-cog",
+        "Steps tab" => "list-ordered",
+        "Open editor" => "panels-top-left",
+        "Folder" => "external-link",
+        "Clipboard" => "file",
+        "Auto-scroll" => "chevrons-up-down",
+        "Webcam" => "camera",
+        "Hide tracks" => "eye-off",
         "Plus" => "plus",
         "Minus" => "minus",
         _ => {
@@ -341,7 +660,7 @@ pub(crate) fn button(
             Color32::WHITE,
         );
     }
-    response.on_hover_text(if label.is_empty() { glyph } else { label })
+    response.tip(if label.is_empty() { glyph } else { label })
 }
 
 pub(super) fn section(ui: &mut egui::Ui, name: &str) {

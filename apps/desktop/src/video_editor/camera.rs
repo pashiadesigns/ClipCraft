@@ -74,7 +74,7 @@ unsafe fn string(a: &IMFAttributes, key: &windows::core::GUID) -> WinResult<Stri
         Ok(text)
     }
 }
-pub(super) fn devices() -> Result<Vec<(String, String)>, String> {
+pub(crate) fn devices() -> Result<Vec<(String, String)>, String> {
     unsafe {
         let mut attrs = None;
         MFCreateAttributes(&mut attrs, 1).map_err(|e| e.to_string())?;
@@ -110,7 +110,7 @@ pub(super) fn devices() -> Result<Vec<(String, String)>, String> {
         Ok(out)
     }
 }
-pub(super) struct Source {
+pub(crate) struct Source {
     source: IMFMediaSource,
     reader: IMFSourceReader,
     rx: mpsc::Receiver<Packet>,
@@ -357,10 +357,10 @@ impl Source {
         Ok(Some((at, packed)))
     }
 }
-pub(super) fn clock() -> u64 {
+pub(crate) fn clock() -> u64 {
     unsafe { MFGetSystemTime().max(0) as u64 }
 }
-pub(super) struct Recording {
+pub(crate) struct Recording {
     encoder: media::Encoder,
     path: tempfile::TempPath,
     epoch: u64,

@@ -85,6 +85,7 @@ mod tests {
         let original = e.session.document.clone();
         e.execute(Command::CutOutPages {
             axis: CutAxis::Horizontal,
+            edge: Default::default(),
             start: 180,
             end: 200,
             page: 0,

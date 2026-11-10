@@ -4,7 +4,9 @@ mod import;
 mod library;
 mod library_icons;
 mod manage;
+mod recent;
 mod recovery;
+use crate::tips::Tip as _;
 use crate::{Editor, FileAction, egui};
 use capture_core::{
     Session,
@@ -18,7 +20,7 @@ use std::{
 
 #[derive(Default)]
 pub struct HistoryPanel {
-    store: Option<History>,
+    pub(crate) store: Option<History>,
     error: String,
     textures: HashMap<String, Option<egui::TextureHandle>>,
     thumbnail_versions: HashMap<String, String>,
@@ -313,6 +315,7 @@ impl Editor {
             .reset(&self.session.document, None, label, origin);
     }
     pub(crate) fn open_history(&mut self, id: &str, ctx: &egui::Context) {
+        self.reopen_in_recent(id);
         if self.history.active.as_deref() == Some(id) {
             self.shell.return_to_editor();
             return;
@@ -430,28 +433,31 @@ impl Editor {
             }
             {
                 let badge = if !available {
-                    "MISSING"
+                    "Missing"
                 } else if entry.kind == capture_core::history::MediaKind::Video {
-                    "VIDEO"
+                    "Video"
                 } else if entry.kind == capture_core::history::MediaKind::Steps {
-                    "STEPS"
+                    "Step guide"
                 } else if entry.kind == capture_core::history::MediaKind::Template {
-                    "Template"
+                    "From template"
                 } else if matches!(entry.origin, Origin::Project | Origin::Saved) {
-                    "CLIP"
+                    "Clip"
                 } else {
-                    "IMAGE"
+                    "Image"
                 };
-                let badge_rect = egui::Rect::from_min_size(
-                    rect.left_bottom() + egui::vec2(5.0, -18.0),
-                    egui::vec2(52.0, 14.0),
+                let text = painter.layout_no_wrap(
+                    badge.to_owned(),
+                    egui::FontId::proportional(10.5),
+                    egui::Color32::WHITE,
                 );
-                painter.rect_filled(badge_rect, 2, egui::Color32::from_black_alpha(210));
-                painter.text(
-                    badge_rect.center(),
-                    egui::Align2::CENTER_CENTER,
-                    badge,
-                    egui::FontId::proportional(10.0),
+                let badge_rect = egui::Rect::from_min_size(
+                    rect.left_bottom() + egui::vec2(6.0, -20.0),
+                    egui::vec2(text.size().x + 12.0, 15.0),
+                );
+                painter.rect_filled(badge_rect, 4, egui::Color32::from_black_alpha(170));
+                painter.galley(
+                    badge_rect.center() - text.size() / 2.0,
+                    text,
                     egui::Color32::WHITE,
                 );
             }
@@ -477,14 +483,14 @@ impl Editor {
                 }
             }
         }
-        response.on_hover_text(&detail)
+        response.tip(&detail)
     }
     pub(crate) fn show_history(&mut self, ui: &mut egui::Ui, compact: bool) {
         if !compact {
             self.show_library(ui);
             return;
         }
-        let entries = self.history.entries();
+        let entries = recent::recent_order(self.history.entries());
         if !self.history.error.is_empty() {
             ui.colored_label(egui::Color32::LIGHT_RED, &self.history.error);
         }
@@ -502,6 +508,7 @@ impl Editor {
                         let response = self.history_card(ui, entry, egui::vec2(160.0, 96.0));
                         let available = self.history.available(&entry.id);
                         self.history_context(&response, entry, available);
+                        self.recent_marks(ui, &response, entry);
                         if response.clicked() && self.history.available(&entry.id) {
                             open = Some(entry.id.clone());
                         }

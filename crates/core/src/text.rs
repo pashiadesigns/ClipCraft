@@ -24,6 +24,9 @@ pub mod unicode;
 
 pub const MAX_TEXT_CHARS: usize = 4096;
 
+/// The largest text size. Step labels grow with very large markers; the text
+/// controls stop at 144.
+pub const MAX_SIZE_POINTS: f32 = 2048.0;
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum TextFont {
@@ -269,8 +272,10 @@ impl TextStyle {
         if !self.padding.is_finite() || !(0.0..=128.0).contains(&self.padding) {
             return Err(Error::Invalid("Text padding must be 0–128 pixels".into()));
         }
-        if !self.size_points.is_finite() || !(6.0..=144.0).contains(&self.size_points) {
-            return Err(Error::Invalid("Text size must be 6–144 points".into()));
+        if !self.size_points.is_finite() || !(6.0..=MAX_SIZE_POINTS).contains(&self.size_points) {
+            return Err(Error::Invalid(format!(
+                "Text size must be 6–{MAX_SIZE_POINTS} points"
+            )));
         }
         if self.content.len() > MAX_TEXT_CHARS * 4 || self.content.chars().count() > MAX_TEXT_CHARS
         {
@@ -933,6 +938,7 @@ mod tests {
             focus: None,
 
             highlighter_rect: false,
+            hard_edge: false,
             group: None,
             rotation_degrees: 0.0,
             mirror_x: false,
@@ -1080,7 +1086,7 @@ mod tests {
                 ..TextStyle::default()
             },
             TextStyle {
-                size_points: 145.0,
+                size_points: MAX_SIZE_POINTS + 1.0,
                 ..TextStyle::default()
             },
             TextStyle {

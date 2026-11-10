@@ -36,6 +36,8 @@ pub struct Settings {
     pub selection: Selection,
     pub preview: bool,
     pub clipboard: bool,
+    /// Open Find Sensitive Info when the capture opens in the editor.
+    pub find_sensitive: bool,
     pub cursor: bool,
     pub delay_seconds: u32,
     pub fullscreen: Fullscreen,
@@ -109,6 +111,7 @@ impl Settings {
             selection,
             preview: true,
             clipboard: !matches!(selection, Selection::Steps),
+            find_sensitive: false,
             cursor: selection == Selection::Steps,
             delay_seconds: 0,
             fullscreen: Fullscreen::Ask,
@@ -197,6 +200,7 @@ mod tests {
             selection: Selection::Steps,
             preview: false,
             clipboard: true,
+            find_sensitive: false,
             cursor: true,
             delay_seconds: 5,
             fullscreen: Fullscreen::All,
@@ -243,6 +247,7 @@ mod tests {
         assert!(!defaults.capture_for(Selection::Window).cursor);
         let region = Settings {
             clipboard: true,
+            find_sensitive: false,
             delay_seconds: 3,
             ..Default::default()
         };

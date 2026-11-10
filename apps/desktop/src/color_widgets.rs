@@ -1,10 +1,12 @@
 use crate::egui;
+use crate::tips::Tip as _;
 pub(crate) mod eyedropper;
 #[cfg(test)]
 mod independence_tests;
 mod preview;
 mod shelf;
 pub(super) use preview::Preview;
+pub(crate) use shelf::{create_palette, take_image_request};
 
 #[derive(Clone, Default)]
 struct ColorDraft {
@@ -127,7 +129,7 @@ fn palette(ui: &mut egui::Ui, draft: &mut ColorDraft, opaque: bool, size: f32) -
                 hsv.s = ((p.x - square.left()) / square.width()).clamp(0.0, 1.0);
                 hsv.v = ((square.bottom() - p.y) / square.height()).clamp(0.0, 1.0);
             }
-            response.on_hover_text("Choose saturation and brightness");
+            response.tip("Choose saturation and brightness");
             // An original mesh keeps visual controls independent of numeric inputs.
             let mut mesh = egui::Mesh::default();
             const N: u32 = 24;
@@ -318,28 +320,6 @@ fn hex_input(ui: &mut egui::Ui, draft: &mut ColorDraft, opaque: bool) {
     });
 }
 
-fn preset_swatches(ui: &mut egui::Ui, draft: &mut ColorDraft, opaque: bool) {
-    ui.horizontal(|ui| {
-        ui.spacing_mut().item_spacing.x = 5.0;
-        for (label, color) in [
-            ("White", [255, 255, 255, 255]),
-            ("Gray", [145, 150, 151, 255]),
-            ("Red", [237, 32, 36, 255]),
-            ("Blue", [29, 160, 231, 255]),
-            ("Black", [0, 0, 0, 255]),
-            ("Green", [83, 191, 62, 255]),
-            ("Yellow", [255, 222, 28, 255]),
-        ] {
-            if color_swatch(ui, color, label, draft.color == color).clicked() {
-                draft.set_color(color);
-            }
-        }
-        if !opaque && color_swatch(ui, [0; 4], "Transparent", draft.color[3] == 0).clicked() {
-            draft.set_color([0; 4]);
-        }
-    });
-}
-
 fn color_swatch(ui: &mut egui::Ui, color: [u8; 4], label: &str, selected: bool) -> egui::Response {
     let (rect, r) = ui.allocate_exact_size(egui::vec2(22.0, 22.0), egui::Sense::click());
     #[cfg(test)]
@@ -369,7 +349,7 @@ fn color_swatch(ui: &mut egui::Ui, color: [u8; 4], label: &str, selected: bool) 
     r.widget_info(|| {
         egui::WidgetInfo::selected(egui::Role::Button, ui.is_enabled(), selected, label)
     });
-    r.on_hover_text(label)
+    r.tip_title(label)
 }
 
 /// Exact byte/hex input never roundtrips through the palette conversion.
@@ -524,7 +504,7 @@ fn rgba_styled(
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     if ui
                         .selectable_label(draft.advanced, "Advanced")
-                        .on_hover_text("Show exact RGB and alpha channels")
+                        .tip("Show exact RGB and alpha channels")
                         .clicked()
                     {
                         draft.advanced = !draft.advanced;
@@ -532,7 +512,7 @@ fn rgba_styled(
                     eyedropper::button(ui, popup_id, draft_id);
                 });
             });
-            preset_swatches(ui, &mut draft, opaque);
+            shelf::palette(ui, &mut draft, opaque);
             ui.horizontal_top(|ui| {
                 ui.vertical(|ui| {
                     ui.set_width(size + 32.0);
@@ -597,6 +577,14 @@ fn rgba_styled(
         let draft = ui
             .ctx()
             .data_mut(|data| data.remove_temp::<ColorDraft>(draft_id));
+        // A color kept when the picker closes goes to Recent (bi-proposal 3).
+        if !cancelled
+            && let Some(draft) = &draft
+            && draft.color != draft.original
+            && *color == draft.color
+        {
+            shelf::push_recent(ui.ctx(), draft.color);
+        }
         if cancelled
             && let Some(draft) = draft
             && *color != draft.original
@@ -613,7 +601,7 @@ fn rgba_styled(
         layout,
         egui::Popup::is_id_open(ui.ctx(), popup_id),
     );
-    response.on_hover_text(format!(
+    response.tip(format!(
         "{} · choose from the palette or enter exact RGBA channels",
         preview.label()
     ))

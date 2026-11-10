@@ -1,3 +1,4 @@
+use crate::tips::Tip as _;
 use crate::{Annotation, egui, property_layout};
 use capture_core::shadow::Shadow;
 
@@ -37,7 +38,7 @@ pub(super) fn show(ui: &mut egui::Ui, a: &mut Annotation) {
                 };
                 let r = ui
                     .interact(cell, ui.scope_id().with(i), egui::Sense::click())
-                    .on_hover_text(format!("Shadow: {}", names[i]));
+                    .tip(format!("Shadow: {}", names[i]));
                 ui.painter().rect(
                     cell.shrink(0.5),
                     1.,

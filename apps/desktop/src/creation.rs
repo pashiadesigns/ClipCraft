@@ -9,9 +9,17 @@ pub(super) struct Creation {
     pub annotation: Option<Annotation>,
 
     box_end: Option<[f32; 2]>,
+    /// Snapping is off for this drag.
+    pub bypass: bool,
     tail: Option<[f32; 2]>,
     texture: Option<egui::TextureHandle>,
     key: Option<(Annotation, Viewport)>,
+}
+/// What the next object drawn with a tool will look like, beyond its preset.
+#[derive(Clone, Copy, Debug, Default)]
+pub(super) struct ToolShapes {
+    pub tail: capture_core::callout::CalloutTail,
+    pub eraser_hard: bool,
 }
 // Bound uploads to the backend limit and a modest interactive pixel budget.
 // The screen rectangle stays exact; very large previews temporarily use a
@@ -24,12 +32,46 @@ fn preview_resolution(size: egui::Vec2, max_side: usize) -> (egui::Vec2, f32) {
     ((size * factor).ceil().max(egui::Vec2::splat(1.0)), factor)
 }
 impl Editor {
+    /// The region the chosen Blur or Pixelate preset draws.
+    pub(super) fn remembered_region(&self, kind: Kind) -> capture_core::obscure::Region {
+        use capture_core::object_styles::Outline;
+        self.presets
+            .drawing_styles
+            .iter()
+            .rev()
+            .find(|s| s.kind == kind && s.focus.is_none())
+            .or_else(|| {
+                self.quick_controls
+                    .drawing_style(kind)
+                    .filter(|s| s.focus.is_none())
+            })
+            .and_then(|s| match s.outline_shape {
+                Some(Outline::Region(region)) => Some(region),
+                _ => None,
+            })
+            .unwrap_or_default()
+    }
+    pub(super) fn drawing_freehand_region(&self) -> bool {
+        self.tool.is_some_and(|kind| {
+            matches!(kind, Kind::Blur | Kind::Pixelate)
+                && self.remembered_region(kind) == capture_core::obscure::Region::Freehand
+        })
+    }
     pub(super) fn new_annotation(&self, kind: Kind, start: [f32; 2], end: [f32; 2]) -> Annotation {
         let rectangle = kind == Kind::Highlighter && self.drawing_rectangle_highlighter();
         let points = if !rectangle && matches!(kind, Kind::Pen | Kind::Highlighter | Kind::Eraser) {
             self.stroke_points.clone()
         } else if kind == Kind::Polygon {
+            // The chosen Other shapes preset reshapes this when it is applied.
             capture_core::polygon::outline(start, end, self.shape_sides)
+        } else if matches!(kind, Kind::Blur | Kind::Pixelate) {
+            use capture_core::obscure::Region;
+            match self.remembered_region(kind) {
+                Region::Rectangle => vec![],
+                Region::Ellipse => capture_core::obscure::ellipse_region(start, end),
+                Region::Freehand if self.stroke_points.len() >= 3 => self.stroke_points.clone(),
+                Region::Freehand => vec![],
+            }
         } else {
             vec![]
         };
@@ -43,6 +85,7 @@ impl Editor {
             focus: None,
 
             highlighter_rect: rectangle,
+            hard_edge: kind == Kind::Eraser && self.tool_shapes.eraser_hard,
             group: None,
             rotation_degrees: 0.0,
             mirror_x: false,
@@ -69,8 +112,9 @@ impl Editor {
                     ..Default::default()
                 }
             }),
-            callout: (kind == Kind::Callout).then(|| {
-                capture_core::callout::CalloutStyle::for_box(
+            callout: (kind == Kind::Callout).then(|| capture_core::callout::CalloutStyle {
+                tail: self.tool_shapes.tail,
+                ..capture_core::callout::CalloutStyle::for_box(
                     start,
                     end,
                     [self.session.document.width, self.session.document.height],
@@ -79,11 +123,45 @@ impl Editor {
         });
         if self.shell.focus.active && matches!(kind, Kind::Rectangle | Kind::Ellipse) {
             self.shell.focus.apply(&mut annotation);
+            capture_core::magnified::place_on_canvas(
+                &mut annotation,
+                [self.session.document.width, self.session.document.height],
+            );
         }
         if annotation.highlighter_rect {
             annotation.points.clear();
         }
         annotation
+    }
+    /// Shapes begin and end on edges, objects and the grid. Freehand tools don't.
+    fn snap_drawing(
+        &mut self,
+        kind: Kind,
+        start: [f32; 2],
+        pointer: [f32; 2],
+    ) -> ([f32; 2], [f32; 2]) {
+        let freehand = matches!(kind, Kind::Pen | Kind::Eraser)
+            || (kind == Kind::Highlighter && !self.drawing_rectangle_highlighter())
+            || self.drawing_freehand_region();
+        if freehand || self.creation.bypass {
+            self.snapping_guides = [None; 2];
+            return (start, pointer);
+        }
+        let tolerance = 6.
+            / self
+                .view
+                .current_transform()
+                .map_or(1., |t| t.scale.max(0.01));
+        let targets = capture_core::snapping::Targets {
+            all: &self.session.document.annotations,
+            exclude: &[],
+            canvas: [self.session.document.width, self.session.document.height],
+            grid: self.quick_controls.snap_grid(),
+        };
+        let (start, _) = capture_core::snapping::point(start, targets, tolerance);
+        let (end, guides) = capture_core::snapping::point(pointer, targets, tolerance);
+        self.snapping_guides = guides;
+        (start, end)
     }
     pub(super) fn update_creation(
         &mut self,
@@ -94,6 +172,7 @@ impl Editor {
         alt: bool,
     ) {
         let canvas = [self.session.document.width, self.session.document.height];
+        let (start, pointer) = self.snap_drawing(kind, start, pointer);
         let mut end = capture_core::angle_snap::endpoint(
             start,
             pointer,
@@ -141,6 +220,16 @@ impl Editor {
         if matches!(annotation.kind, Kind::Text | Kind::Blur | Kind::Pixelate) {
             // A neutral guide is editor UI, never a promised formatted border.
             let stroke = egui::Stroke::new(1.0, egui::Color32::from_rgb(90, 191, 224));
+            if !annotation.points.is_empty() {
+                let mut outline: Vec<_> = annotation
+                    .points
+                    .iter()
+                    .map(|q| transform.screen_point(*q))
+                    .collect();
+                outline.push(outline[0]);
+                p.extend(egui::Shape::dashed_line(&outline, stroke, 4.0, 3.0));
+                return;
+            }
             for edge in [
                 [bounds.left_top(), bounds.right_top()],
                 [bounds.right_top(), bounds.right_bottom()],

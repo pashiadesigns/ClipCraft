@@ -1,4 +1,5 @@
 //! One document-backed Page Setup surface, shared by images, templates and guides.
+use crate::tips::Tip as _;
 use crate::{Command, Editor, egui};
 use capture_core::guide_sections::{Action, Alignment, PageSetup};
 
@@ -131,7 +132,7 @@ impl Editor {
             egui::Color32::WHITE,
         );
         r.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, "Page Setup"));
-        let r = r.on_hover_text("Page Setup · Paper, margins, headers, numbering and print marks");
+        let r = r.tip("Page Setup · Paper, margins, headers, numbering and print marks");
         if r.clicked() {
             self.open_page_setup(ui.ctx());
         }
@@ -170,8 +171,9 @@ impl Editor {
             .frame(
                 egui::Frame::new()
                     .fill(egui::Color32::from_rgb(52, 59, 62))
-                    .stroke(egui::Stroke::new(1., egui::Color32::from_rgb(88, 100, 106)))
-                    .corner_radius(8),
+                    // Dialog audit (BJ): the same blue edge and corners as every dialog.
+                    .stroke(egui::Stroke::new(1.5, crate::shell::ACCENT))
+                    .corner_radius(10),
             )
             .show(ctx, |ui| {
                 let width = (ctx.content_rect().width() - 48.).clamp(360., 760.);
@@ -187,15 +189,9 @@ impl Editor {
                     .inner_margin(egui::Margin::symmetric(15, 11))
                     .show(ui, |ui| {
                         ui.set_width(width - 30.);
-                        ui.horizontal(|ui| {
-                            ui.strong("Page Setup");
-                            ui.with_layout(
-                                egui::Layout::right_to_left(egui::Align::Center),
-                                |ui| {
-                                    ui.weak("ClipCraft");
-                                },
-                            );
-                        });
+                        // Dialog audit (BJ): the standard dialog title; the
+                        // close button sits at the top right.
+                        ui.label(crate::panel_ui::title("Page Setup", 20.));
                     });
                 let tabs = egui::Frame::new()
                     .fill(dark)

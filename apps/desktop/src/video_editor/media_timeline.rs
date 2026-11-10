@@ -1,4 +1,5 @@
 use super::*;
+use crate::tips::Tip as _;
 use capture_core::video::editor::MediaKind;
 use capture_core::video::links::Layer;
 use egui::{Align2, Color32, FontId, Pos2, Rect, Sense, Stroke};
@@ -113,7 +114,7 @@ impl Editor {
         }
         response
             .on_hover_cursor(egui::CursorIcon::ResizeHorizontal)
-            .on_hover_text(format!(
+            .tip(format!(
                 "Track volume: {:.0}%\nDrag left/right · 100% normal · double-click resets",
                 value * 100.
             ));
@@ -128,10 +129,14 @@ impl Editor {
         top: f32,
     ) {
         let x = |time: u64| left + time as f32 * scale;
-        let y = |row: usize| top + row as f32 * 39.;
+        let key_rows = self.video.keyframes.rows;
+        let y = |row: usize| super::keyframes::row_y(top, row, key_rows);
         let mut changed = None;
         for track in &v.media_tracks {
             let row = v.layer_index(Layer::Media(*track));
+            if super::keyframes::row_hidden(row) {
+                continue;
+            }
             for (index, c) in v
                 .segments
                 .iter()
@@ -261,6 +266,16 @@ impl Editor {
                             .line_segment(pair, Stroke::new(1.5, Color32::from_rgb(140, 220, 240)));
                     }
                 }
+                if self.keyframe_marks(
+                    ui,
+                    v,
+                    capture_core::video::editing::Item::Media(c.id),
+                    rect,
+                    scale,
+                    None,
+                ) {
+                    continue;
+                }
                 if r.clicked() || r.secondary_clicked() {
                     self.timeline_focus(
                         capture_core::video::editing::Item::Media(c.id),
@@ -356,9 +371,7 @@ impl Editor {
                                 crate::controls::menu_action(ui, "Generate still frame…")
                             })
                             .inner
-                            .on_hover_text(
-                                "Split here and insert a frame with an adjustable hold duration",
-                            )
+                            .tip("Split here and insert a frame with an adjustable hold duration")
                             .clicked()
                     {
                         self.open_still_frame(c.id);
@@ -479,7 +492,13 @@ impl Editor {
                             i.modifiers,
                         )
                     });
-                    if edge(origin) == 0 && !duplicate {
+                    let item = capture_core::video::editing::Item::Media(c.id);
+                    if duplicate
+                        && self.video.selection.len() > 1
+                        && self.video.selection.contains(&item)
+                    {
+                        self.begin_timeline_duplicate(item, origin);
+                    } else if edge(origin) == 0 && !duplicate {
                         self.begin_timeline_move(
                             capture_core::video::editing::Item::Media(c.id),
                             origin,
@@ -567,7 +586,7 @@ impl Editor {
                 if self.video.drop_probe.is_some() {
                     ui.ctx().request_repaint_after(Duration::from_millis(40));
                 }
-                let row = ((pos.y - top) / 39.).floor().max(0.) as usize;
+                let row = super::keyframes::row_at(top, pos.y, self.video.keyframes.rows);
                 let target = match v.layers().get(row) {
                     Some(Layer::Media(id)) => *id,
                     _ => *v.media_tracks.last().unwrap(),
@@ -604,7 +623,10 @@ impl Editor {
                 };
                 for (row, at, length, label) in previews {
                     let ghost = Rect::from_min_size(
-                        egui::pos2(left + at as f32 * scale, top + row as f32 * 39.),
+                        egui::pos2(
+                            left + at as f32 * scale,
+                            super::keyframes::row_y(top, row, self.video.keyframes.rows),
+                        ),
                         egui::vec2((length as f32 * scale).max(12.), 33.),
                     );
                     ui.painter().rect(
@@ -631,7 +653,7 @@ impl Editor {
                 .map(|f| f.path().to_path_buf())
                 .collect::<Vec<_>>();
             if !paths.is_empty() {
-                let row = ((pos.y - top) / 39.).floor().max(0.) as usize;
+                let row = super::keyframes::row_at(top, pos.y, self.video.keyframes.rows);
                 let track = match v.layers().get(row) {
                     Some(Layer::Media(id)) => *id,
                     _ => *v.media_tracks.last().unwrap(),
@@ -699,7 +721,7 @@ impl Editor {
                 }
                 _ => {
                     c.at = snap(c.at.saturating_add_signed(dt));
-                    let row = ((pos.y - top) / 39.).floor().max(0.) as usize;
+                    let row = super::keyframes::row_at(top, pos.y, self.video.keyframes.rows);
                     if let Some(Layer::Media(id)) = project.layers().get(row) {
                         c.track = *id;
                     }

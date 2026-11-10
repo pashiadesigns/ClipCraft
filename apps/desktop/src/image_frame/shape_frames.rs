@@ -93,10 +93,7 @@ impl Editor {
                         egui::StrokeKind::Inside,
                     );
                 }
-                if response
-                    .on_hover_text(format!("{label} image frame"))
-                    .clicked()
-                {
+                if response.tip(format!("{label} image frame")).clicked() {
                     let mut annotation = a.clone();
                     annotation.kind = kind;
                     annotation.points.clear();
@@ -152,6 +149,57 @@ impl Editor {
         }
     }
 
+    /// A file dropped on an image project's canvas, away from any image
+    /// frame, becomes its own image object at the drop point (BI8).
+    fn canvas_file_drop(
+        &mut self,
+        ui: &mut egui::Ui,
+        transform: crate::canvas_view::Transform,
+        p: egui::Pos2,
+        files: &[std::sync::Arc<dyn egui::DroppedFile + Send + Sync>],
+        key: egui::Id,
+    ) {
+        if self.is_video() || !transform.image.contains(p) {
+            return;
+        }
+        let hint = egui::Rect::from_center_size(p + egui::vec2(0., -28.), egui::vec2(150., 28.));
+        ui.painter()
+            .rect_filled(hint, 4, egui::Color32::from_rgb(0, 115, 160));
+        ui.painter().text(
+            hint.center(),
+            egui::Align2::CENTER_CENTER,
+            "Drop to add image",
+            egui::FontId::proportional(13.),
+            egui::Color32::WHITE,
+        );
+        if files.is_empty() {
+            return;
+        }
+        ui.ctx().data_mut(|d| {
+            d.remove::<egui::Pos2>(key);
+        });
+        const IMAGES: [&str; 10] = [
+            "png", "jpg", "jpeg", "webp", "bmp", "gif", "tif", "tiff", "svg", "eps",
+        ];
+        let center = transform.image_point(p);
+        let mut placed = 0;
+        for file in files {
+            let path = file.path();
+            if path
+                .extension()
+                .and_then(|e| e.to_str())
+                .is_some_and(|e| IMAGES.iter().any(|x| e.eq_ignore_ascii_case(x)))
+            {
+                let shift = placed as f32 * 24.;
+                self.insert_image_file_at(path, Some([center[0] + shift, center[1] + shift]));
+                placed += 1;
+            }
+        }
+        if placed == 0 {
+            self.status = "Only image files can be dropped on the canvas.".into();
+        }
+    }
+
     pub(crate) fn frame_file_drop(
         &mut self,
         ui: &mut egui::Ui,
@@ -202,7 +250,10 @@ impl Editor {
                     && a.hit_test(transform.image_point(p), 0.)
             })
             .cloned();
-        let Some(a) = target else { return };
+        let Some(a) = target else {
+            self.canvas_file_drop(ui, transform, p, &files, key);
+            return;
+        };
         let points = a
             .frame_boundary()
             .into_iter()
@@ -234,6 +285,19 @@ impl Editor {
                     return Err("Drop one image into a frame at a time.".into());
                 }
                 let path = files[0].path();
+                if path
+                    .extension()
+                    .and_then(|e| e.to_str())
+                    .is_some_and(|e| e.eq_ignore_ascii_case("svg"))
+                {
+                    // An SVG stays a sharp drawing inside the frame (EDIT-084).
+                    let text = std::fs::read_to_string(path).map_err(|e| e.to_string())?;
+                    let bitmap =
+                        capture_core::bitmap::Bitmap::from_svg(&text).map_err(|e| e.to_string())?;
+                    self.replace_frame_bitmap(a.id, std::sync::Arc::new(bitmap))?;
+                    self.select_only(Some(a.id));
+                    return Ok(());
+                }
                 let document =
                     capture_core::Document::open_image(path).map_err(|e| e.to_string())?;
                 let pixels = document.render().map_err(|e| e.to_string())?;

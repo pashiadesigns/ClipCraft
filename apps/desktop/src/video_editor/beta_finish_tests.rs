@@ -205,6 +205,26 @@ fn clipboard_only_capture_retains_editable_project_without_switching_editor() {
 }
 
 #[test]
+fn opened_image_capture_starts_on_the_insert_tab() {
+    let ctx = egui::Context::default();
+    let mut e = editor(&ctx);
+    let root = tempfile::tempdir().unwrap();
+    e.history = crate::history::HistoryPanel::isolated(root.path());
+    e.shell.ribbon_tab = crate::ribbon::RibbonTab::Advanced;
+    let d = Document::canvas(80, 60, [220, 230, 240, 255]).unwrap();
+    e.accept_capture(
+        d,
+        capture_core::capture_options::Settings {
+            preview: true,
+            clipboard: false,
+            ..Default::default()
+        },
+        |_| Ok(()),
+    );
+    assert_eq!(e.shell.ribbon_tab, crate::ribbon::RibbonTab::Insert);
+}
+
+#[test]
 #[ignore = "Measured synthetic full-HD overlap preparation; not native playback FPS"]
 fn framed_overlap_preparation_profile() {
     let source = Arc::new(image::RgbaImage::from_fn(1920, 1080, |x, y| {

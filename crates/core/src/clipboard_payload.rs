@@ -89,7 +89,7 @@ impl ImagePayload {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ObjectPayload {
     pub document_version: u32,
     pub source_canvas: [u32; 2],

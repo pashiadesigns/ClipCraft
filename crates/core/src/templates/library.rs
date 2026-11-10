@@ -21,6 +21,19 @@ impl Library {
                 "A template must be at least 48 pixels high.".into(),
             ));
         }
+        if d.video.is_some() {
+            let stamp = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_nanos();
+            let folder = self.0.root().join("video-templates");
+            std::fs::create_dir_all(&folder)?;
+            let file = folder.join(format!("Template-{stamp}.vclip"));
+            d.save(&file)?;
+            d = Document::load(&file)?;
+            let entry = self.0.create(&d, name, Origin::Project)?;
+            return self.0.edit_metadata(&entry, name, &[]);
+        }
         if empty_images {
             for a in &mut d.annotations {
                 if a.image

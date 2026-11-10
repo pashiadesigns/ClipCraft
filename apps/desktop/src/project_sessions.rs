@@ -15,6 +15,17 @@ struct Parked {
     video: crate::video_editor::State,
 }
 impl Sessions {
+    pub(crate) fn retained_media(&self, deleting: &[String]) -> Vec<PathBuf> {
+        self.parked
+            .iter()
+            .filter(|p| !p.history.as_ref().is_some_and(|id| deleting.contains(id)))
+            .flat_map(|p| p.session.retained_media())
+            .collect()
+    }
+    pub(crate) fn forget_deleted(&mut self, deleting: &[String]) {
+        self.parked
+            .retain(|p| !p.history.as_ref().is_some_and(|id| deleting.contains(id)));
+    }
     pub(crate) fn forget_active(&mut self, history: Option<&str>) {
         self.parked
             .retain(|p| !history.is_some_and(|h| p.history.as_deref() == Some(h)));

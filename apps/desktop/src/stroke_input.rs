@@ -13,14 +13,22 @@ impl Editor {
         let mut state = ui
             .ctx()
             .data_mut(|d| d.get_temp::<Wheel>(id).unwrap_or_default());
+        // Live placement of an icon or step sizes the same way (BJ10).
+        let placing_icon = self.icon_library.active && self.icon_library.is_armed();
+        let placing_step = !self.icon_library.active && self.tool == Some(Kind::Step);
         let active = enabled
             && hovered
-            && !self.icon_library.active
-            && matches!(
-                self.tool,
-                Some(Kind::Pen | Kind::Highlighter | Kind::Eraser | Kind::Line | Kind::Arrow)
-            )
-            && !(self.tool == Some(Kind::Highlighter) && self.drawing_rectangle_highlighter());
+            && (placing_icon
+                || placing_step
+                || (!self.icon_library.active
+                    && matches!(
+                        self.tool,
+                        Some(
+                            Kind::Pen | Kind::Highlighter | Kind::Eraser | Kind::Line | Kind::Arrow
+                        )
+                    )
+                    && !(self.tool == Some(Kind::Highlighter)
+                        && self.drawing_rectangle_highlighter())));
         let mut steps = 0;
         ui.input(|input| {
             if !input.is_scrolling() {
@@ -56,7 +64,22 @@ impl Editor {
         if state.consumed {
             ui.input_mut(|i| i.smooth_scroll_delta = egui::Vec2::ZERO);
         }
-        if steps != 0 {
+        if steps != 0 && placing_icon {
+            let canvas = [self.session.document.width, self.session.document.height];
+            if let Some(size) = self.icon_library.resize_armed(steps, canvas) {
+                self.status = format!("Icon size: {size:.0} px");
+                ui.ctx().request_repaint();
+            }
+        } else if steps != 0 && placing_step {
+            let next = ((self.step_size as f32 * 1.08f32.powi(steps)).round() as i64
+                + i64::from(steps.signum()))
+            .clamp(1, 16384) as u32;
+            if next != self.step_size {
+                self.step_size = next;
+                self.status = format!("Step size: {next} px");
+                ui.ctx().request_repaint();
+            }
+        } else if steps != 0 {
             let next = (self.width as i64 + i64::from(steps)).clamp(1, 32) as u32;
             if next != self.width {
                 self.width = next;

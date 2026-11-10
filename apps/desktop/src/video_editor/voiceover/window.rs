@@ -1,4 +1,5 @@
 use super::*;
+use crate::tips::Tip as _;
 use egui::{Color32, Stroke};
 const BLUE: Color32 = Color32::from_rgb(73, 197, 233);
 const RED: Color32 = Color32::from_rgb(237, 107, 120);
@@ -58,8 +59,8 @@ impl Editor {
                 ui.add_enabled_ui(!busy&&!review,|ui|{ui.horizontal(|ui|{
                     ui.small("CAMERA");let before=(self.video.voiceover.camera_device.clone(),self.video.voiceover.camera_height);
                     egui::ComboBox::from_id_salt("narration-camera").width((width*0.48).max(180.)).selected_text(self.video.voiceover.cameras.iter().find(|c|c.0==self.video.voiceover.camera_device).map(|c|c.1.as_str()).unwrap_or("No camera found")).show_ui(ui,|ui|{for (id,name) in &self.video.voiceover.cameras{ui.selectable_value(&mut self.video.voiceover.camera_device,id.clone(),name);}});
-                    egui::ComboBox::from_id_salt("narration-resolution").width(110.).selected_text(format!("{}p preferred",self.video.voiceover.camera_height)).show_ui(ui,|ui|{for h in [720,1080]{ui.selectable_value(&mut self.video.voiceover.camera_height,h,format!("{h}p"));}}).response.on_hover_text("Uses the nearest supported camera format. Recorded at 30 fps.");
-                    if super::super::ui::button(ui,"Refresh","",26.,false).on_hover_text("Refresh camera list").clicked(){self.video.voiceover.error.clear();self.video.voiceover.cameras_job=Some(voiceover_capture::cameras());}
+                    egui::ComboBox::from_id_salt("narration-resolution").width(110.).selected_text(format!("{}p preferred",self.video.voiceover.camera_height)).show_ui(ui,|ui|{for h in [720,1080]{ui.selectable_value(&mut self.video.voiceover.camera_height,h,format!("{h}p"));}}).response.tip("Uses the nearest supported camera format. Recorded at 30 fps.");
+                    if super::super::ui::button(ui,"Refresh","",26.,false).tip("Refresh camera list").clicked(){self.video.voiceover.error.clear();self.video.voiceover.cameras_job=Some(voiceover_capture::cameras());}
                     if before!=(self.video.voiceover.camera_device.clone(),self.video.voiceover.camera_height){self.video.voiceover.capture=None;self.video.voiceover.ready=false;self.video.voiceover.error.clear();self.video.voiceover.rearm_at=Some(Instant::now()+Duration::from_millis(150));}
                 });});
             }
@@ -87,7 +88,7 @@ impl Editor {
             ui.horizontal(|ui|{
                 if review {
                     crate::controls::toggle(ui,&mut self.video.voiceover.review_with_project,"Follow project playhead");
-                    if super::super::ui::button(ui,"Previous","",32.,false).on_hover_text("Start of take").clicked(){seek=Some(0);}
+                    if super::super::ui::button(ui,"Previous","",32.,false).tip("Start of take").clicked(){seek=Some(0);}
                     if super::super::ui::button(ui,if self.video.voiceover.review_clock.is_some(){"Pause"}else{"Play"},if self.video.voiceover.review_clock.is_some(){"Pause"}else{"Play take"},105.,false).clicked(){action=5;}
                     ui.weak(format!("{} total · Space to play / pause",timestamp(duration)));
                 }else{
@@ -101,7 +102,7 @@ impl Editor {
                 }
             });
             if !review {
-                ui.horizontal(|ui| { ui.label("Input channels"); ui.selectable_value(&mut self.video.voiceover.mono,false,"Stereo"); ui.selectable_value(&mut self.video.voiceover.mono,true,"Mono").on_hover_text("Combine input channels for both recording and headphone monitoring"); });
+                ui.horizontal(|ui| { ui.label("Input channels"); ui.selectable_value(&mut self.video.voiceover.mono,false,"Stereo"); ui.selectable_value(&mut self.video.voiceover.mono,true,"Mono").tip("Combine input channels for both recording and headphone monitoring"); });
                 if let Some(c)=&self.video.voiceover.capture {c.mono.store(self.video.voiceover.mono,Ordering::Relaxed);}
                 crate::controls::toggle(ui,&mut self.video.voiceover.monitor,"Monitor through headphones");
                 self.audio_output_controls(ui,true);

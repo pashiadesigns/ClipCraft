@@ -14,7 +14,7 @@ impl Editor {
                 let selected=enabled && objects.iter().all(|a|a.text.as_ref().is_some_and(|s|s.typography().script==script));
                 if text_button(ui,egui::RichText::new(icon),label,enabled,selected) { self.apply_quick_text(TextAction::Script(if selected {Script::Normal} else {script})); }
             }
-            let response=ui.add_sized([33.,24.],egui::Button::new("Aa")).on_hover_text("Change case");
+            let response=ui.add_sized([33.,24.],egui::Button::new("Aa")).tip("Change case");
             response.widget_info(||egui::WidgetInfo::labeled(egui::Role::Button,enabled,"Change case"));
             #[cfg(test)] ui.ctx().data_mut(|d|d.insert_temp(egui::Id::unique("case-menu"),response.rect));
             egui::Popup::menu(&response).show(|ui| {
@@ -24,7 +24,7 @@ impl Editor {
                     if r.clicked() {self.apply_quick_text(TextAction::Case(case));ui.close();}
                 }
             });
-            let response=ui.add_sized([36.,24.],egui::Button::new("AV")).on_hover_text("Character spacing");
+            let response=ui.add_sized([36.,24.],egui::Button::new("AV")).tip("Character spacing");
             response.widget_info(||egui::WidgetInfo::labeled(egui::Role::Button,enabled,"Character spacing"));
             #[cfg(test)] ui.ctx().data_mut(|d|d.insert_temp(egui::Id::unique("spacing-menu"),response.rect));
             egui::Popup::menu(&response).close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside).show(|ui| {
@@ -38,7 +38,7 @@ impl Editor {
             if compact {
             if compact { ui.label(egui::RichText::new("ab").background_color(egui::Color32::from_rgb(255,225,25)).color(egui::Color32::BLACK)); } else { ui.label("Highlight"); }
             let mut color=objects.first().and_then(|a|a.text.as_ref()).and_then(|s|s.typography().highlight).unwrap_or([255,230,50,0]);
-            let r=ui.scope(|ui| {ui.spacing_mut().interact_size=egui::vec2(24.,24.);crate::color_widgets::rgba_live(ui,&mut color)}).inner.on_hover_text("Text highlight color · transparent removes highlighting");
+            let r=ui.scope(|ui| {ui.spacing_mut().interact_size=egui::vec2(24.,24.);crate::color_widgets::rgba_live(ui,&mut color)}).inner.tip("Text highlight color · transparent removes highlighting");
             #[cfg(test)] ui.ctx().data_mut(|d|d.insert_temp(egui::Id::unique("text-highlight-color"),r.rect));
             if r.changed() {self.preview_quick_text(TextAction::Highlight((color[3]>0).then_some(color)));}
             }

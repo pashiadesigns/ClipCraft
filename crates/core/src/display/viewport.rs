@@ -49,6 +49,28 @@ impl Viewport {
 
 impl DisplayList {
     pub fn render_viewport(&self, viewport: Viewport) -> Result<RgbaImage> {
+        match &self.tilt {
+            Some(tilt) => {
+                viewport.validate()?;
+                crate::tilt::viewport(self, tilt, viewport)
+            }
+            None => self.render_flat(viewport),
+        }
+    }
+    pub(crate) fn render_flat(&self, viewport: Viewport) -> Result<RgbaImage> {
+        let mut image = self.render_layers(viewport)?;
+        if let Some(finish) = &self.finish {
+            let frame = [
+                (-viewport.origin[0] * viewport.scale) as f32,
+                (-viewport.origin[1] * viewport.scale) as f32,
+                (f64::from(self.base.width()) * viewport.scale) as f32,
+                (f64::from(self.base.height()) * viewport.scale) as f32,
+            ];
+            finish.apply(&mut image, frame, viewport.scale as f32);
+        }
+        Ok(image)
+    }
+    fn render_layers(&self, viewport: Viewport) -> Result<RgbaImage> {
         viewport.validate()?;
         let mut result = if let Some(color) = self.base_color {
             let color = if color[3] == 0 && viewport.scale < 1.0 {
@@ -224,7 +246,11 @@ pub(crate) fn render_vector(image: &mut RgbaImage, a: &Annotation, viewport: Vie
     paint_annotation(&mut context, &local, viewport.scale, &mut finish);
 }
 
-fn blend_patch(target: &mut RgbaImage, patch: &crate::shadow::Patch, viewport: Viewport) {
+pub(super) fn blend_patch(
+    target: &mut RgbaImage,
+    patch: &crate::shadow::Patch,
+    viewport: Viewport,
+) {
     let origin = patch.origin.map(f64::from);
     let size = [patch.pixels.width(), patch.pixels.height()];
     let low = [0, 1].map(|i| {
@@ -250,7 +276,12 @@ fn blend_patch(target: &mut RgbaImage, patch: &crate::shadow::Patch, viewport: V
     }
 }
 
-fn replace(target: &mut RgbaImage, source: &RgbaImage, origin: [u32; 2], viewport: Viewport) {
+pub(super) fn replace(
+    target: &mut RgbaImage,
+    source: &RgbaImage,
+    origin: [u32; 2],
+    viewport: Viewport,
+) {
     let left = ((f64::from(origin[0]) - viewport.origin[0]) * viewport.scale)
         .floor()
         .max(0.0) as u32;
@@ -370,6 +401,26 @@ pub(crate) fn body_path(a: &Annotation) -> BezPath {
     } else {
         corners.to_vec()
     };
+    if a.callout.as_ref().is_some_and(|c| {
+        c.shape != crate::callout::CalloutShape::Box
+            || c.tail == crate::callout::CalloutTail::Bubbles
+    }) {
+        let mut path = if a.callout.as_ref().unwrap().shape == crate::callout::CalloutShape::Box {
+            rounded_body(a, &points)
+        } else {
+            polygon(&points, true)
+        };
+        for (center, radius) in a.callout_bubbles() {
+            let circle = Ellipse::new(point(center), (f64::from(radius), f64::from(radius)), 0.);
+            path.extend(circle.to_path(0.05));
+        }
+        return path;
+    }
+    rounded_body(a, &points)
+}
+fn rounded_body(a: &Annotation, points: &[[f32; 2]]) -> BezPath {
+    let (min, max) = a.body_bounds();
+    let corners = [min, [max[0], min[1]], max, [min[0], max[1]]];
     let mut path = BezPath::new();
     for (i, &p) in points.iter().enumerate() {
         let corner = point(p);
@@ -468,8 +519,17 @@ pub(super) fn paint_annotation<P: super::vector::Painter>(
                 if width > 0.0 && outline.color[3] > 0 {
                     let path =
                         Ellipse::from_rect(rect(min, max).inset(-width * 0.5)).to_path(tolerance);
-                    context.set_stroke(Stroke::new(width));
-                    context.stroke_path(&path);
+                    // Step outlines take the same outline styles as shapes.
+                    let pattern = a
+                        .line_style
+                        .map_or(crate::line_style::Pattern::Solid, |s| s.pattern);
+                    context.set_stroke(
+                        Stroke::new(width)
+                            .with_caps(Cap::Round)
+                            .with_join(Join::Round)
+                            .with_dashes(0., pattern.dashes(width)),
+                    );
+                    context.stroke_path(&pattern.path(&path, width));
                     finish(context, outline.color);
                 }
             } else if a.kind != Kind::Step {
@@ -531,6 +591,23 @@ pub(super) fn paint_annotation<P: super::vector::Painter>(
                 path.move_to(point(wings[0]));
                 path.line_to(point(a.end));
                 path.line_to(point(wings[1]));
+            }
+            // A shape drawn on by a Path animation is sampled as a pen stroke;
+            // it keeps the outline pattern while it animates.
+            if a.kind == Kind::Pen
+                && let Some(pattern) = a
+                    .line_style
+                    .map(|s| s.pattern)
+                    .filter(|p| *p != crate::line_style::Pattern::Solid)
+            {
+                let width = f64::from(a.width);
+                context.set_stroke(
+                    Stroke::new(width)
+                        .with_caps(Cap::Round)
+                        .with_join(Join::Round)
+                        .with_dashes(0., pattern.dashes(width)),
+                );
+                path = pattern.path(&path, width);
             }
             context.stroke_path(&path);
             finish(context, a.color);

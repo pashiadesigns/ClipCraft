@@ -14,6 +14,7 @@ fn annotation(kind: Kind) -> Annotation {
         focus: None,
 
         highlighter_rect: false,
+        hard_edge: false,
         group: None,
         rotation_degrees: 0.0,
         mirror_x: false,
@@ -493,6 +494,8 @@ fn native_export_matches_viewport_with_antialiased_steps_and_joined_callout_tail
         });
         if kind == Kind::Callout {
             a.callout = Some(crate::callout::CalloutStyle {
+                shape: Default::default(),
+                tail: Default::default(),
                 fill: [80, 140, 200, 128],
                 outline: [40, 90, 160, 255],
                 pointer: tip,

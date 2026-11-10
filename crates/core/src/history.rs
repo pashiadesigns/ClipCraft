@@ -4,6 +4,9 @@
 //! A process lock serializes index updates.
 pub mod import;
 mod manage;
+pub mod media_cleanup;
+mod organize;
+pub use organize::Organize;
 pub mod recovery;
 use crate::{Document, Error, Result, atomic_write};
 use image::{ImageFormat, RgbaImage};
@@ -98,6 +101,8 @@ pub struct Entry {
     pub revision: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub updated_ms: Option<u64>,
+    #[serde(default, skip_serializing_if = "Organize::is_empty")]
+    pub organize: Organize,
 }
 impl Entry {
     pub fn storage_id(&self) -> &str {
@@ -156,19 +161,25 @@ impl Entry {
 struct Index {
     version: u32,
     entries: Vec<Entry>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    folders: Vec<String>,
 }
 impl Default for Index {
     fn default() -> Self {
         Self {
             version: 1,
+            folders: vec![],
             entries: vec![],
         }
     }
 }
 pub struct History {
+    /// Off in Preferences > Library: a save replaces the last version.
+    pub keep_versions: bool,
     root: PathBuf,
     index: Index,
     cleanup_warning: Option<String>,
+    next_picture: Option<RgbaImage>,
 }
 enum WriteMode<'a> {
     Snapshot,
@@ -257,6 +268,8 @@ impl History {
             index: index_at(&root)?,
             root,
             cleanup_warning: None,
+            next_picture: None,
+            keep_versions: true,
         };
         history.classify_legacy_guides()?;
         Ok(history)
@@ -401,6 +414,11 @@ impl History {
     /// Replace one Library item's revision without replacing its identity or
     /// original capture time. The expected revision prevents lost updates from
     /// another process. No other Library item is evicted to make room.
+    /// The picture of the project for the next write. Video needs a decoder to
+    /// show its frames with their edits, which the engine doesn't have.
+    pub fn use_picture(&mut self, picture: Option<RgbaImage>) {
+        self.next_picture = picture;
+    }
     pub fn update(&mut self, expected: &Entry, document: &Document) -> Result<Entry> {
         self.persist(
             document,
@@ -619,7 +637,18 @@ impl History {
         } else {
             None
         };
-        let thumbnail = image::DynamicImage::ImageRgba8(document.render()?)
+        let picture = match self.next_picture.take() {
+            Some(picture) => picture,
+            None if document.video.is_some() => {
+                // Without a decoder only the poster is known. Objects are placed
+                // over time, so they don't belong on it.
+                let mut poster = document.clone();
+                poster.annotations.clear();
+                poster.render()?
+            }
+            None => document.render()?,
+        };
+        let thumbnail = image::DynamicImage::ImageRgba8(picture)
             .thumbnail(
                 THUMBNAIL_SIZE[0].min(document.width),
                 THUMBNAIL_SIZE[1].min(document.height),
@@ -696,6 +725,16 @@ impl History {
             revision: (!matches!(mode, WriteMode::Snapshot)).then(|| storage_id.clone()),
             updated_ms: (!matches!(mode, WriteMode::Snapshot))
                 .then_some(elapsed.as_millis() as u64),
+            organize: replaced
+                .as_ref()
+                .map(|e| e.organize.clone())
+                .unwrap_or_else(|| {
+                    if let WriteMode::Duplicate(e) = mode {
+                        e.organize.clone()
+                    } else {
+                        Organize::default()
+                    }
+                }),
         };
         if matches!(mode, WriteMode::Create) {
             entry.label = format!(
@@ -710,7 +749,9 @@ impl History {
         let paths = self.paths(&storage_id)?;
         let mut removed = Vec::new();
         if let Some(old) = replaced {
-            self.archive_revision(&old)?;
+            if self.keep_versions {
+                self.archive_revision(&old)?;
+            }
             next.version = 3;
             next.entries.retain(|e| e.id != old.id);
             removed.push(old);
@@ -1055,6 +1096,7 @@ mod tests {
         let entry = Entry {
             kind: Default::default(),
             tags: vec![],
+            organize: Default::default(),
             id: "00000000000000000000000000000000".into(),
             label: "Résumé Draft [1]".into(),
             origin: Origin::Saved,
@@ -1088,6 +1130,7 @@ mod tests {
         let mut entry = Entry {
             kind: Default::default(),
             tags: vec![],
+            organize: Default::default(),
             id: String::new(),
             label: String::new(),
             origin: Origin::Canvas,
@@ -1115,6 +1158,24 @@ mod tests {
     }
     fn fixture() -> Document {
         serde_json::from_str(include_str!("../tests/fixtures/translation.capture.json")).unwrap()
+    }
+    #[test]
+    fn the_library_picture_comes_from_the_finished_project() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut h = History::open(dir.path()).unwrap();
+        let doc = Document::canvas(64, 40, [255; 4]).unwrap();
+        let first = h.create(&doc, "One", Origin::Canvas).unwrap();
+        let red = RgbaImage::from_pixel(64, 40, image::Rgba([200, 30, 30, 255]));
+        h.use_picture(Some(red));
+        let second = h.update(&first, &doc).unwrap();
+        assert_eq!(h.thumbnail(&second.id).unwrap().get_pixel(9, 9)[0], 200);
+        assert_ne!(first.storage_id(), second.storage_id());
+        let third = h.update(&second, &doc).unwrap();
+        assert_eq!(
+            h.thumbnail(&third.id).unwrap().get_pixel(9, 9)[0],
+            255,
+            "a picture is used once"
+        );
     }
     #[test]
     fn snapshots_reopen_with_editable_objects_thumbnails_and_independent_original() {

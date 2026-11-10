@@ -202,22 +202,19 @@ impl Video {
                 {
                     return Err("Decoder returned an incomplete video frame.".into());
                 }
-                let mut rgba = image::RgbaImage::new(self.size[0], self.size[1]);
-                for y in 0..self.size[1] as usize {
-                    let row = if stride < 0 {
-                        self.size[1] as usize - 1 - y
-                    } else {
-                        y
-                    };
-                    for x in 0..self.size[0] as usize {
-                        let i = row * stride_abs + x * 4;
-                        rgba.put_pixel(
-                            x as u32,
-                            y as u32,
-                            image::Rgba([bytes[i + 2], bytes[i + 1], bytes[i], 255]),
-                        );
+                let width = self.size[0] as usize * 4;
+                let height = self.size[1] as usize;
+                let mut pixels = vec![0u8; width * height];
+                for (y, target) in pixels.chunks_exact_mut(width).enumerate() {
+                    let row = if stride < 0 { height - 1 - y } else { y };
+                    let start = row * stride_abs;
+                    target.copy_from_slice(&bytes[start..start + width]);
+                    for p in target.as_chunks_mut::<4>().0 {
+                        *p = [p[2], p[1], p[0], 255];
                     }
                 }
+                let rgba = image::RgbaImage::from_raw(self.size[0], self.size[1], pixels)
+                    .ok_or("Decoder returned an incomplete video frame.")?;
                 let at = time / 10_000;
                 self.last = Some((at, std::sync::Arc::new(rgba)));
                 if at + 1000 / self.fps as u64 > ms {
@@ -569,6 +566,16 @@ impl Visuals {
                         .unwrap()
                         .frame_shared(c.source_time(time))?
                 };
+                // Filters and color are drawn here, off the window thread; the
+                // canvas then draws the frame's shape as usual.
+                let pixels = match c.frame.as_ref().filter(|f| !f.color.is_neutral()) {
+                    Some(f) => {
+                        let mut colored = (*pixels).clone();
+                        f.color.apply(&mut colored);
+                        std::sync::Arc::new(colored)
+                    }
+                    None => pixels,
+                };
                 Ok((
                     c.id,
                     std::sync::Arc::new(
@@ -586,6 +593,8 @@ impl Visuals {
         time: u64,
     ) -> Result<Vec<(u64, std::sync::Arc<capture_core::bitmap::Bitmap>)>> {
         use capture_core::video::editor::MediaKind;
+        let sampled = p.sampled_media(time);
+        let p = sampled.as_ref();
         let mut layers = vec![];
         let active: Vec<_> = p
             .segments
@@ -653,7 +662,8 @@ impl Visuals {
                     let rendered = if self.preview {
                         self.frames.render(style, frame.clone(), c.rect, size, c.id)
                     } else {
-                        style.render(frame.clone(), c.rect, size, c.id)
+                        self.frames
+                            .render_steady(style, frame.clone(), c.rect, size, c.id)
                     }
                     .map_err(|e| e.to_string())?;
                     direct = Some(std::sync::Arc::new(
@@ -692,7 +702,8 @@ impl Visuals {
                     let rendered = if self.preview {
                         self.frames.render(style, frame.clone(), c.rect, size, c.id)
                     } else {
-                        style.render(frame.clone(), c.rect, size, c.id)
+                        self.frames
+                            .render_steady(style, frame.clone(), c.rect, size, c.id)
                     }
                     .map_err(|e| e.to_string())?;
                     let opacity = p.opacity(c, time) as f32;

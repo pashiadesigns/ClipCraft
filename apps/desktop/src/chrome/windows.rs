@@ -77,6 +77,9 @@ unsafe extern "system" fn procedure(
     id: usize,
     _data: usize,
 ) -> LRESULT {
+    if message == WM_SETCURSOR && crate::native_cursor::apply(lparam) {
+        return 1;
+    }
     // Still pass the real activation message through winit, preserving focus and
     // keyboard state. Microsoft's -1 flag suppresses only DefWindowProc's frame paint.
     // https://learn.microsoft.com/en-us/windows/win32/winmsg/wm-ncactivate

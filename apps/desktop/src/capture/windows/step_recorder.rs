@@ -234,7 +234,12 @@ unsafe extern "system" fn procedure(
                     return 0;
                 }
                 // Layered composition owns all pixels; children retain semantics.
-                WM_DRAWITEM => return 1,
+                WM_DRAWITEM => {
+                    if !super::control_surface::layered(hwnd) {
+                        visual::present(hwnd, state, state.expansion_value);
+                    }
+                    return 1;
+                }
                 WM_MOUSEACTIVATE => return MA_NOACTIVATE as LRESULT,
                 WM_COMMAND if wparam & 0xffff == 5 => {
                     if state.count > 0 && state.pending.is_none() {
@@ -320,7 +325,9 @@ pub(super) fn record(owner: HWND, cursor: bool, root: Option<PathBuf>) -> Captur
     }
     let (initial_area, work) = monitor_at([point.x, point.y])?;
     let position = controller_position(work);
-    let mut intro = Some(super::steps_intro::show(owner, initial_area)?);
+    // The introductory dimming cue is optional. On unsupported DWM paths its
+    // hidden window is destroyed before capture; never bypass its exclusion.
+    let mut intro = super::steps_intro::show(owner, initial_area).ok();
     unsafe {
         static CLASS: OnceLock<Result<u16, String>> = OnceLock::new();
         CLASS
@@ -391,13 +398,7 @@ pub(super) fn record(owner: HWND, cursor: bool, root: Option<PathBuf>) -> Captur
             return Err(win_error("Cannot open Steps controls"));
         }
         let window = Window(hwnd);
-        // Hide only our recorder from supported Windows capture APIs. If the OS
-        // cannot exclude it, stop before recording rather than contaminate frames.
-        if SetWindowDisplayAffinity(hwnd, WDA_EXCLUDEFROMCAPTURE) == 0 {
-            return Err(win_error(
-                "Windows cannot exclude Steps controls from capture",
-            ));
-        }
+        super::control_surface::exclude(hwnd, "Step by Step controls")?;
         for (id, label) in [
             (1, w!("Pause recording")),
             (2, w!("Finish guide")),

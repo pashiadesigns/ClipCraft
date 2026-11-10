@@ -3,7 +3,95 @@
 use crate::{Annotation, Kind};
 use image::{Rgba, RgbaImage};
 
+/// The outline of a Blur or Pixelate region.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Region {
+    #[default]
+    Rectangle,
+    Ellipse,
+    Freehand,
+}
+impl Region {
+    /// What an object's corners describe.
+    pub fn of(points: &[[f32; 2]]) -> Self {
+        if points.is_empty() {
+            return Self::Rectangle;
+        }
+        let first = points[0];
+        let lo = [0, 1].map(|a| points.iter().map(|p| p[a]).fold(first[a], f32::min));
+        let hi = [0, 1].map(|a| points.iter().map(|p| p[a]).fold(first[a], f32::max));
+        let ellipse = ellipse_region(lo, hi);
+        if ellipse.len() == points.len()
+            && ellipse
+                .iter()
+                .zip(points)
+                .all(|(e, p)| (e[0] - p[0]).abs() < 0.5 && (e[1] - p[1]).abs() < 0.5)
+        {
+            Self::Ellipse
+        } else {
+            Self::Freehand
+        }
+    }
+}
+/// An ellipse as a region of corners, for Blur and Pixelate.
+pub fn ellipse_region(start: [f32; 2], end: [f32; 2]) -> Vec<[f32; 2]> {
+    let center = [(start[0] + end[0]) * 0.5, (start[1] + end[1]) * 0.5];
+    let half = [
+        (start[0] - end[0]).abs() * 0.5,
+        (start[1] - end[1]).abs() * 0.5,
+    ];
+    (0..64)
+        .map(|i| {
+            let t = std::f32::consts::TAU * i as f32 / 64.;
+            [center[0] + t.cos() * half[0], center[1] + t.sin() * half[1]]
+        })
+        .collect()
+}
+
+/// The effect fills the object's box; a shaped region then puts back every
+/// pixel outside it.
 pub(crate) fn render(image: &mut RgbaImage, annotation: &Annotation) {
+    if annotation.points.is_empty() {
+        render_box(image, annotation);
+        return;
+    }
+    let (min, max) = annotation.body_bounds();
+    let [x, y] = min.map(|v| v.floor().max(0.0) as u32);
+    let right = (max[0].ceil() as u32).min(image.width());
+    let bottom = (max[1].ceil() as u32).min(image.height());
+    if x >= right || y >= bottom {
+        return;
+    }
+    let before = image::imageops::crop_imm(image, x, y, right - x, bottom - y).to_image();
+    render_box(image, annotation);
+    let points = &annotation.points;
+    let mut crossings = vec![];
+    for py in y..bottom {
+        let row = py as f32 + 0.5;
+        crossings.clear();
+        for (a, b) in points.iter().zip(points.iter().cycle().skip(1)) {
+            if (a[1] > row) != (b[1] > row) {
+                crossings.push(a[0] + (b[0] - a[0]) * (row - a[1]) / (b[1] - a[1]));
+            }
+        }
+        crossings.sort_by(f32::total_cmp);
+        let mut next = 0;
+        let mut inside = false;
+        for px in x..right {
+            let column = px as f32 + 0.5;
+            while next < crossings.len() && crossings[next] <= column {
+                inside = !inside;
+                next += 1;
+            }
+            if !inside {
+                image.put_pixel(px, py, *before.get_pixel(px - x, py - y));
+            }
+        }
+    }
+}
+
+fn render_box(image: &mut RgbaImage, annotation: &Annotation) {
     let (min, max) = annotation.body_bounds();
     let [x, y] = min.map(|v| v.floor().max(0.0) as u32);
     let right = (max[0].ceil() as u32).min(image.width());
@@ -101,6 +189,7 @@ mod tests {
             focus: None,
 
             highlighter_rect: false,
+            hard_edge: false,
             group: None,
             rotation_degrees: 0.0,
             mirror_x: false,
@@ -115,6 +204,40 @@ mod tests {
             points: vec![],
             text: None,
             callout: None,
+        }
+    }
+
+    #[test]
+    fn a_shaped_region_changes_only_the_pixels_inside_it() {
+        let source =
+            RgbaImage::from_fn(60, 60, |x, y| Rgba([(x * 4) as u8, (y * 4) as u8, 90, 255]));
+        for kind in [Kind::Blur, Kind::Pixelate] {
+            let mut a = effect(kind);
+            a.start = [10., 10.];
+            a.end = [50., 50.];
+            a.width = 6;
+            a.points = ellipse_region(a.start, a.end);
+            let mut image = source.clone();
+            render(&mut image, &a);
+            // Corners of the box are outside the ellipse.
+            for p in [[11, 11], [48, 11], [11, 48], [48, 48]] {
+                assert_eq!(
+                    image.get_pixel(p[0], p[1]),
+                    source.get_pixel(p[0], p[1]),
+                    "{kind:?}"
+                );
+            }
+            let changed = (20..40)
+                .flat_map(|y| (20..40).map(move |x| (x, y)))
+                .filter(|&(x, y)| image.get_pixel(x, y) != source.get_pixel(x, y))
+                .count();
+            assert!(changed > 200, "{kind:?}: {changed}");
+            let mut doc = Document::from_image(source.clone()).unwrap();
+            doc.annotations.push(a.clone());
+            let session = Session::new(doc).unwrap();
+            assert_eq!(session.document.render().unwrap(), image, "{kind:?}");
+            assert!(a.hit_test([30., 30.], 0.));
+            assert!(!a.hit_test([11., 11.], 0.));
         }
     }
 

@@ -295,7 +295,7 @@ unsafe fn show_menu(hwnd: HWND, position: WPARAM, state: &State) {
     ];
     for (id, label) in [
         (1, "Open ClipCraft Editor"),
-        (2, "Open Clip tab"),
+        (2, "Capture Clip settings…"),
         (3, "Capture Clip"),
         (5, "Capture Video"),
         (11, "Open ClipCraft after capture"),

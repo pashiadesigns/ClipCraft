@@ -349,3 +349,60 @@ fn opaque_shaped_sampling_matches_general_path_at_fractional_origins() {
         );
     }
 }
+
+#[test]
+fn perspective_tilts_image_objects_and_lays_them_flat_again() {
+    use crate::bitmap::{FLAT, Perspective};
+    let pixels = image::RgbaImage::from_pixel(80, 60, image::Rgba([30, 120, 200, 255]));
+    let bitmap =
+        Arc::new(Bitmap::new(Arc::new(RasterImage::from_image(&pixels).unwrap())).unwrap());
+    let flat = bitmap.clone().annotation(1);
+    let quad = Perspective::TiltLeft.quad(0.8, 0.6);
+    let tilted_bitmap = bitmap.with_perspective(Some(quad)).unwrap();
+    assert_eq!(tilted_bitmap.perspective(), Some(quad));
+    let mut tilted = flat.clone();
+    tilted.image = Some(Arc::new(tilted_bitmap));
+    let mut a = image::RgbaImage::new(80, 60);
+    let mut b = image::RgbaImage::new(80, 60);
+    crate::render_annotation(&mut a, &flat);
+    crate::render_annotation(&mut b, &tilted);
+    assert_eq!(a.get_pixel(1, 1)[3], 255);
+    assert_eq!(b.get_pixel(1, 1)[3], 0, "the receding corner leaves space");
+    assert_eq!(b.get_pixel(70, 30)[3], 255, "the near edge stays");
+    // Flat corners mean no perspective; crossed corners are refused.
+    assert_eq!(
+        bitmap.with_perspective(Some(FLAT)).unwrap().perspective(),
+        None
+    );
+    assert!(
+        bitmap
+            .with_perspective(Some([[0., 0.], [1., 1.], [1., 0.], [0., 1.]]))
+            .is_err()
+    );
+    // It saves and reopens with the image.
+    let json = serde_json::to_string(&tilted).unwrap();
+    let back: crate::Annotation = serde_json::from_str(&json).unwrap();
+    assert_eq!(back.image.unwrap().perspective(), Some(quad));
+}
+
+#[test]
+fn svg_image_objects_stay_sharp_when_enlarged_and_reopen() {
+    let svg = r##"<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect x="0" y="0" width="32" height="64" fill="#ff0000"/></svg>"##;
+    let bitmap = Arc::new(Bitmap::from_svg(svg).unwrap());
+    let mut a = bitmap.clone().annotation(1);
+    a.end = [640., 640.]; // ten times larger
+    let mut out = image::RgbaImage::new(640, 640);
+    crate::render_annotation(&mut out, &a);
+    // The edge between red and transparent is one pixel wide, not a blur.
+    assert_eq!(out.get_pixel(318, 300).0, [255, 0, 0, 255]);
+    assert_eq!(out.get_pixel(321, 300)[3], 0);
+    let json = serde_json::to_string(&a).unwrap();
+    let back: crate::Annotation = serde_json::from_str(&json).unwrap();
+    assert!(back.image.as_ref().unwrap().is_svg());
+    let tinted = bitmap.with_tint(Some([0, 0, 255, 255])).unwrap();
+    let mut b = a.clone();
+    b.image = Some(Arc::new(tinted));
+    let mut out = image::RgbaImage::new(640, 640);
+    crate::render_annotation(&mut out, &b);
+    assert_eq!(out.get_pixel(100, 300).0, [0, 0, 255, 255]);
+}

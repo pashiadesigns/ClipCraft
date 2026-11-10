@@ -7,7 +7,7 @@ use std::{
     sync::mpsc::{self, Receiver},
 };
 static SCANNING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-pub(crate) const VIDEO_LIMITATION: &str = "Redactions do not track moving content. Set their position and timing manually, then review the entire video before sharing. Editable projects keep the original media.";
+pub(crate) const VIDEO_LIMITATION: &str = "Automatic tracking needs review. Check the entire video, including uncertain intervals and newly appearing content, before sharing. Editable projects keep the original media.";
 struct ScanGuard;
 impl Drop for ScanGuard {
     fn drop(&mut self) {
@@ -32,6 +32,9 @@ pub(super) struct State {
     checked: Vec<bool>,
     texture: Option<egui::TextureHandle>,
     error: String,
+    cover: crate::sensitive_ui::Cover,
+    /// What the review picture currently shows.
+    shown: Option<(Vec<bool>, crate::sensitive_ui::Cover)>,
 }
 fn fingerprint(document: &capture_core::Document) -> Result<u64, String> {
     let bytes = serde_json::to_vec(document).map_err(|e| e.to_string())?;
@@ -41,6 +44,10 @@ fn fingerprint(document: &capture_core::Document) -> Result<u64, String> {
 }
 impl Editor {
     pub(super) fn open_privacy_review(&mut self) {
+        if self.is_video() {
+            self.open_video_privacy_review();
+            return;
+        }
         if !self.commit_text() {
             return;
         }
@@ -115,15 +122,7 @@ impl Editor {
             self.privacy_review.pending = None;
             match result {
                 Ok(scan) => {
-                    let pixels = &scan.pixels;
-                    self.privacy_review.texture = Some(ctx.load_texture(
-                        "sensitive-review",
-                        egui::ColorImage::from_rgba_unmultiplied(
-                            [pixels.width() as usize, pixels.height() as usize],
-                            pixels.as_raw(),
-                        ),
-                        egui::TextureOptions::LINEAR,
-                    ));
+                    self.privacy_review.shown = None;
                     self.privacy_review.checked = vec![true; scan.findings.len()];
                     self.privacy_review.result = Some(scan);
                 }
@@ -136,69 +135,136 @@ impl Editor {
         let mut scan = false;
         let mut apply = false;
         let mut close = false;
-        let modal=crate::controls::Modal::new(egui::Id::unique("sensitive-review")).show(ctx,|ui| {
-            ui.set_width(820_f32.min((ctx.content_rect().width()-48.).max(340.)));
-            ui.heading("Find Sensitive Info");
-            if video {
-                ui.label("Still-image detection only · video tracking is not available");
-                ui.label(VIDEO_LIMITATION);
-                close=ui.add(crate::controls::dialog_button("Close",true)).clicked();
-                return;
-            }
-            ui.weak("Runs on this PC. Review every finding and the remaining image before sharing.");
-            ui.add_enabled_ui(!busy,|ui| {
-                ui.horizontal(|ui| {
-                    crate::controls::toggle(ui,&mut state.options.emails,"Email addresses");
-                    crate::controls::toggle(ui,&mut state.options.phones,"Phone numbers");
+        if let Some(result) = &state.result
+            && state
+                .shown
+                .as_ref()
+                .is_none_or(|(c, k)| *c != state.checked || *k != state.cover)
+        {
+            let boxes: Vec<[f32; 4]> = result
+                .findings
+                .iter()
+                .zip(&state.checked)
+                .filter(|(_, c)| **c)
+                .flat_map(|(f, _)| f.bounds.iter().copied())
+                .collect();
+            let shown = crate::sensitive_ui::preview(&result.pixels, &boxes, state.cover);
+            state.texture = Some(ctx.load_texture(
+                "sensitive-review",
+                egui::ColorImage::from_rgba_unmultiplied(
+                    [shown.width() as usize, shown.height() as usize],
+                    shown.as_raw(),
+                ),
+                egui::TextureOptions::LINEAR,
+            ));
+            state.shown = Some((state.checked.clone(), state.cover));
+        }
+        let modal =
+            crate::controls::Modal::new(egui::Id::unique("sensitive-review")).show(ctx, |ui| {
+                ui.set_width(820_f32.min((ctx.content_rect().width() - 48.).max(340.)));
+                crate::controls::dialog_title(ui, "Find Sensitive Info");
+                if video {
+                    ui.label(VIDEO_LIMITATION);
+                    close = ui
+                        .add(crate::controls::dialog_button("Close", true))
+                        .clicked();
+                    return;
+                }
+                ui.add_enabled_ui(!busy, |ui| {
+                    let field =
+                        crate::sensitive_ui::look_for(ui, &mut state.options, &mut state.phrases);
+                    crate::controls::focus_once(&field, &mut state.focus);
                 });
-                ui.horizontal_wrapped(|ui| {
-                    crate::controls::toggle(ui, &mut state.options.payment_cards, "Payment cards");
-                    crate::controls::toggle(ui, &mut state.options.us_ssns, "US SSNs");
-                    crate::controls::toggle(ui, &mut state.options.ip_addresses, "IP addresses");
-                });
-                ui.label("Custom phrases · one per line");
-                let response=ui.add(crate::unicode_input::TextEdit::multiline(&mut state.phrases).desired_rows(2).desired_width(f32::INFINITY).char_limit(10000));
-                crate::controls::focus_once(&response,&mut state.focus);
-            });
-            ui.separator();
-            if busy {ui.horizontal(|ui|{ui.spinner();ui.label("Scanning visible text…");});}
-            if let Some(result)=&state.result {
-                let height=(ctx.content_rect().height()-300.).clamp(120.,360.);
-                ui.columns(2,|columns| {
-                    let ui=&mut columns[0];
-                    let available=egui::vec2(ui.available_width(),height);
-                    let texture=state.texture.as_ref().unwrap(); let image_size=texture.size_vec2();
-                    let scale=(available.x/image_size.x).min(available.y/image_size.y);
-                    let (rect,_)=ui.allocate_exact_size(image_size*scale,egui::Sense::hover());
-                    ui.painter().image(texture.id(),rect,egui::Rect::from_min_max(egui::Pos2::ZERO,egui::pos2(1.,1.)),egui::Color32::WHITE);
-                    for (finding,checked) in result.findings.iter().zip(&state.checked) { if *checked {
-                        for b in &finding.bounds {
-                            let r=egui::Rect::from_min_size(rect.min+egui::vec2(b[0],b[1])*scale,egui::vec2(b[2],b[3])*scale);
-                            ui.painter().rect_filled(r,0.,egui::Color32::from_rgba_unmultiplied(15,170,220,70));
-                            ui.painter().rect_stroke(r,0.,egui::Stroke::new(1.5,egui::Color32::from_rgb(20,175,225)),egui::StrokeKind::Inside);
+                ui.add_space(4.);
+                let row = egui::vec2(ui.available_width(), 28.);
+                ui.allocate_ui_with_layout(
+                    row,
+                    egui::Layout::right_to_left(egui::Align::Center),
+                    |ui| {
+                        let label = if state.result.is_some() {
+                            "Scan again"
+                        } else {
+                            "Scan"
+                        };
+                        scan = ui
+                            .add_enabled(
+                                !busy,
+                                crate::controls::dialog_button(label, state.result.is_none()),
+                            )
+                            .clicked();
+                        if busy {
+                            ui.spinner();
+                            ui.label("Scanning visible text…");
                         }
-                    }}
-                    let ui=&mut columns[1];
-                    ui.horizontal(|ui|{ui.label(format!("{} {}",result.findings.len(),if result.findings.len()==1 {"finding"} else {"findings"})); if ui.small_button("Select all").clicked(){state.checked.fill(true);}
-                if ui.small_button("Clear").clicked(){state.checked.fill(false);}});
-                    egui::ScrollArea::vertical().max_height(height-30.).auto_shrink([false,false]).show(ui,|ui|{
-                        for (i,f) in result.findings.iter().enumerate() {
-                            let sample=f.text.chars().take(60).collect::<String>();
-                            ui.checkbox(&mut state.checked[i],format!("{} · {}",f.category.label(),sample));
+                    },
+                );
+                if let Some(result) = &state.result {
+                    crate::panel_ui::divider(ui);
+                    let height = (ctx.content_rect().height() - 590.).clamp(110., 280.);
+                    ui.columns(2, |columns| {
+                        let ui = &mut columns[0];
+                        if let Some(texture) = &state.texture {
+                            let size = texture.size_vec2();
+                            let scale = (ui.available_width() / size.x).min(height / size.y);
+                            ui.image((texture.id(), size * scale));
                         }
+                        let ui = &mut columns[1];
+                        ui.horizontal(|ui| {
+                            let n = result.findings.len();
+                            ui.label(format!(
+                                "{n} {}",
+                                if n == 1 { "finding" } else { "findings" }
+                            ));
+                            if ui.small_button("Select all").clicked() {
+                                state.checked.fill(true);
+                            }
+                            if ui.small_button("Clear").clicked() {
+                                state.checked.fill(false);
+                            }
+                        });
+                        egui::ScrollArea::vertical()
+                            .id_salt("sensitive-findings")
+                            .max_height(height - 30.)
+                            .auto_shrink([false, false])
+                            .show(ui, |ui| {
+                                for (i, f) in result.findings.iter().enumerate() {
+                                    let sample = f.text.chars().take(60).collect::<String>();
+                                    ui.horizontal(|ui| {
+                                        crate::controls::toggle(ui, &mut state.checked[i], "");
+                                        ui.add(
+                                            egui::Label::new(format!(
+                                                "{} · {sample}",
+                                                f.category.label()
+                                            ))
+                                            .truncate(),
+                                        );
+                                    });
+                                }
+                            });
                     });
+                    if result.scaled {
+                        ui.weak("This large image was reduced for OCR. Check small text manually.");
+                    }
+                    crate::sensitive_ui::cover(ui, &mut state.cover);
+                }
+                if !state.error.is_empty() {
+                    ui.colored_label(egui::Color32::LIGHT_RED, &state.error);
+                }
+                let count = state.result.as_ref().map_or(0, |r| {
+                    r.findings
+                        .iter()
+                        .zip(&state.checked)
+                        .filter(|(_, c)| **c)
+                        .count()
                 });
-                if result.scaled {ui.weak("This large image was reduced for OCR. Check small text manually.");}
-                ui.weak("Apply adds solid black redactions. Editable .iclip files keep originals; share an exported image or PDF.");
-            }
-            ui.separator();
-            if !state.error.is_empty(){ui.colored_label(egui::Color32::LIGHT_RED,&state.error);}
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center),|ui|{
-                close=ui.add(crate::controls::dialog_button("Cancel",false)).clicked();
-                apply=ui.add_enabled(!busy && state.checked.iter().any(|v|*v),crate::controls::dialog_button("Apply redactions",true)).clicked();
-                scan=ui.add_enabled(!busy,crate::controls::dialog_button("Scan image",state.result.is_none())).clicked();
+                (apply, close) = crate::controls::dialog_actions(
+                    ui,
+                    &state.cover.action(count),
+                    "Close",
+                    !busy && count > 0,
+                    false,
+                );
             });
-        });
         if scan {
             self.scan_sensitive(ctx);
         }
@@ -206,6 +272,7 @@ impl Editor {
             close = self.apply_sensitive_findings();
         }
         if close || crate::text_edit::cancel_on_escape(&modal) {
+            // Options carry over; the cover goes back to Redact.
             let options = self.privacy_review.options.clone();
             let phrases = std::mem::take(&mut self.privacy_review.phrases);
             self.privacy_review = State {
@@ -240,7 +307,13 @@ impl Editor {
             if findings.is_empty() {
                 return false;
             }
-            self.execute(privacy::redact(&self.session.document, findings));
+            let cover = self.privacy_review.cover;
+            self.execute(privacy::cover(
+                &self.session.document,
+                findings,
+                cover.kind,
+                cover.width(),
+            ));
             let applied = self.session.document.annotations.len() > before;
             if !applied {
                 self.privacy_review.error = self.status.clone();
@@ -250,6 +323,33 @@ impl Editor {
     }
 }
 
+/// The dialog with sample findings, for the dialog audit.
+#[cfg(test)]
+pub(crate) fn seed_results(e: &mut Editor) {
+    let pixels = e.session.document.render().unwrap();
+    let words = vec![
+        privacy::Word {
+            text: "alex@example.com".into(),
+            line: 0,
+            bounds: [430., 156., 180., 24.],
+        },
+        privacy::Word {
+            text: "555-010-0143".into(),
+            line: 1,
+            bounds: [430., 196., 150., 24.],
+        },
+    ];
+    let size = [e.session.document.width, e.session.document.height];
+    let findings = privacy::detect(&words, &Options::default(), size).unwrap();
+    e.privacy_review.checked = vec![true; findings.len()];
+    e.privacy_review.cover.kind = crate::Kind::Blur;
+    e.privacy_review.result = Some(Scan {
+        findings,
+        pixels,
+        fingerprint: 0,
+        scaled: false,
+    });
+}
 #[cfg(test)]
 mod tests {
     use super::*;

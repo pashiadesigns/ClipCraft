@@ -191,9 +191,7 @@ impl Preview {
             }
             state.hwnd = hwnd;
             let mut result = Self { state };
-            if SetWindowDisplayAffinity(hwnd, WDA_EXCLUDEFROMCAPTURE) == 0 {
-                return Err(win_error("Cannot exclude Preview from screenshots"));
-            }
+            super::control_surface::exclude(hwnd, "scrolling Preview")?;
             result.refresh()?;
             ShowWindow(hwnd, SW_SHOWNOACTIVATE);
             Ok(result)

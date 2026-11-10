@@ -14,7 +14,7 @@ fn fresh_profile_has_no_projects_or_personal_preferences() {
         assert!(prefs.capture_settings().preview);
         assert_eq!(
             prefs.startup_window(),
-            capture_core::quick_preferences::StartupWindow::Clip
+            capture_core::quick_preferences::StartupWindow::Editor
         );
         let base =
             std::path::PathBuf::from(std::env::var_os("LOCALAPPDATA").unwrap()).join("ClipCraft");
@@ -37,7 +37,7 @@ fn fresh_profile_has_no_projects_or_personal_preferences() {
             0
         );
         println!(
-            "Fresh profile: empty Library and presets, Clip startup, opening enabled, maximum capacity."
+            "Fresh profile: empty Library and presets, Editor startup, opening enabled, maximum capacity."
         );
         return;
     }

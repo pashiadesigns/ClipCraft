@@ -35,8 +35,9 @@ impl Project {
             .retain(|id, _| !items.contains(&Item::Media(*id)));
         self.objects.retain(|id, _| !ids.contains(id));
         self.zooms.retain(|z| !items.contains(&Item::Zoom(z.id)));
-        self.layer_order
-            .retain(|l| !matches!(l, Layer::Zoom(id) if items.contains(&Item::Zoom(*id))));
+        self.layer_order.retain(
+            |l| !matches!(l, Layer::Zoom(t) if !self.zooms.iter().any(|z| z.track() == *t)),
+        );
         self.cursor = self.cursor.min(self.duration().saturating_sub(1));
         ids
     }
@@ -83,7 +84,7 @@ impl Project {
                 .zooms
                 .iter()
                 .find(|z| z.id == id)
-                .map(|z| (z.start, z.end, Layer::Zoom(id))),
+                .map(|z| (z.start, z.end, Layer::Zoom(z.track()))),
         }
     }
     pub fn items(&self) -> Vec<Item> {
@@ -179,7 +180,9 @@ impl Project {
                     t.end = t.end.saturating_add_signed(delta);
                     t.track = track;
                 }
-                (Item::Zoom(id), Layer::Zoom(other)) if id == other => {
+                (Item::Zoom(id), Layer::Zoom(other))
+                    if self.zooms.iter().any(|z| z.id == id && z.track() == other) =>
+                {
                     let z = p.zooms.iter_mut().find(|z| z.id == id).unwrap();
                     z.start = z.start.saturating_add_signed(delta);
                     z.end = z.end.saturating_add_signed(delta);
@@ -345,6 +348,7 @@ impl Project {
                 next_id += 1;
                 right.at = at + duration;
                 right.start = source_at;
+                right.keyframes.trim_start((at - c.at) as i64);
                 right.fade_in = 0;
                 right.clamp_fades();
                 let right_duration = right.duration();
@@ -382,12 +386,30 @@ impl Project {
             duration,
         );
         still.label = "Still frame".into();
-        still.rect = original.rect;
-        still.frame = original.frame.clone();
+        let keyed = original.keyed(at);
+        still.rect = keyed.rect;
+        still.frame = keyed.frame.clone();
         still.hidden = original.hidden;
         p.segments.push(still);
         if all_tracks {
             for t in p.objects.values_mut() {
+                if t.start < at && t.end > at {
+                    t.keyframes.remap_time(
+                        t.start,
+                        |x| if x >= at { x + duration } else { x },
+                        &[at.saturating_sub(1), at],
+                    );
+                }
+                if t.start < at
+                    && t.end > at
+                    && let Some(path) = &mut t.motion_path
+                {
+                    std::sync::Arc::make_mut(path).remap_time(
+                        t.start,
+                        |x| if x >= at { x + duration } else { x },
+                        &[at.saturating_sub(1), at],
+                    );
+                }
                 if t.start >= at {
                     t.start += duration;
                 }

@@ -7,8 +7,29 @@ use imageproc::{
 };
 use serde::{Deserialize, Serialize};
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CalloutShape {
+    #[default]
+    Box,
+    Oval,
+    Cloud,
+}
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CalloutTail {
+    #[default]
+    Wedge,
+    Thin,
+    Bubbles,
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct CalloutStyle {
+    #[serde(default)]
+    pub shape: CalloutShape,
+    #[serde(default)]
+    pub tail: CalloutTail,
     pub fill: [u8; 4],
     pub outline: [u8; 4],
     pub pointer: [f32; 2],
@@ -27,6 +48,8 @@ impl CalloutStyle {
             (min[1] - length).max(0.0)
         };
         Self {
+            shape: CalloutShape::Box,
+            tail: CalloutTail::Wedge,
             fill: [255, 240, 180, 255],
             outline: [80, 65, 35, 255],
             pointer: [min[0] + (max[0] - min[0]) * 0.3, y],
@@ -77,8 +100,13 @@ impl Annotation {
         let Some(style) = &self.callout else {
             return self.rounded_polygon(corners.to_vec());
         };
+        if style.shape != CalloutShape::Box {
+            return round_outline(style, min, max);
+        }
         let tip = style.pointer;
-        if tip[0] >= min[0] && tip[0] <= max[0] && tip[1] >= min[1] && tip[1] <= max[1] {
+        if style.tail == CalloutTail::Bubbles
+            || (tip[0] >= min[0] && tip[0] <= max[0] && tip[1] >= min[1] && tip[1] <= max[1])
+        {
             return self.rounded_polygon(corners.to_vec());
         }
         let center = [(min[0] + max[0]) * 0.5, (min[1] + max[1]) * 0.5];
@@ -92,7 +120,12 @@ impl Annotation {
             0
         };
         let axis = if edge % 2 == 0 { 0 } else { 1 };
-        let half = ((max[axis] - min[axis]) * 0.18).min(12.0);
+        let widest = if style.tail == CalloutTail::Thin {
+            4.0
+        } else {
+            12.0
+        };
+        let half = ((max[axis] - min[axis]) * 0.18).min(widest);
         let middle = tip[axis].clamp(min[axis] + half, max[axis] - half);
         let mut first = corners[edge];
         let mut second = first;
@@ -108,10 +141,91 @@ impl Annotation {
         }
         self.rounded_polygon(polygon)
     }
+    /// The trail of a thought bubble, as circle centers and radii.
+    pub(crate) fn callout_bubbles(&self) -> Vec<([f32; 2], f32)> {
+        let Some(style) = self
+            .callout
+            .as_ref()
+            .filter(|s| s.tail == CalloutTail::Bubbles)
+        else {
+            return vec![];
+        };
+        let (min, max) = self.body_bounds();
+        let center = [(min[0] + max[0]) * 0.5, (min[1] + max[1]) * 0.5];
+        let half = [
+            ((max[0] - min[0]) * 0.5).max(0.01),
+            ((max[1] - min[1]) * 0.5).max(0.01),
+        ];
+        let tip = style.pointer;
+        let reach = [
+            (tip[0] - center[0]) / half[0],
+            (tip[1] - center[1]) / half[1],
+        ];
+        let out = if style.shape == CalloutShape::Box {
+            reach[0].abs().max(reach[1].abs())
+        } else {
+            reach[0].hypot(reach[1])
+        };
+        if out <= 1. {
+            return vec![];
+        }
+        let edge = [0, 1].map(|a| center[a] + (tip[a] - center[a]) / out);
+        let room = (tip[0] - edge[0]).hypot(tip[1] - edge[1]);
+        let scale = (room / 40.).min(1.);
+        [(0.3, 9.), (0.62, 6.), (0.9, 3.5)]
+            .map(|(t, r)| ([0, 1].map(|a| edge[a] + (tip[a] - edge[a]) * t), r * scale))
+            .to_vec()
+    }
+}
+
+/// An oval or cloud body, opened where the pointer leaves it.
+fn round_outline(style: &CalloutStyle, min: [f32; 2], max: [f32; 2]) -> Vec<[f32; 2]> {
+    use std::f32::consts::{FRAC_PI_2, TAU};
+    const SAMPLES: usize = 132;
+    let center = [(min[0] + max[0]) * 0.5, (min[1] + max[1]) * 0.5];
+    let half = [
+        ((max[0] - min[0]) * 0.5).max(0.01),
+        ((max[1] - min[1]) * 0.5).max(0.01),
+    ];
+    let at = |t: f32| {
+        let radius = match style.shape {
+            CalloutShape::Cloud => 0.87 + 0.13 * (t * 5.5).sin().abs(),
+            _ => 1.,
+        };
+        [
+            center[0] + t.cos() * half[0] * radius,
+            center[1] + t.sin() * half[1] * radius,
+        ]
+    };
+    let tip = style.pointer;
+    let reach = [
+        (tip[0] - center[0]) / half[0],
+        (tip[1] - center[1]) / half[1],
+    ];
+    if style.tail == CalloutTail::Bubbles || reach[0].hypot(reach[1]) <= 1. {
+        return (0..SAMPLES)
+            .map(|i| at(-FRAC_PI_2 + TAU * i as f32 / SAMPLES as f32))
+            .collect();
+    }
+    let toward = reach[1].atan2(reach[0]);
+    let spread = if style.tail == CalloutTail::Thin {
+        0.09
+    } else {
+        0.22
+    };
+    let mut ring: Vec<_> = (0..SAMPLES)
+        .map(|i| at(toward + spread + (TAU - 2. * spread) * i as f32 / (SAMPLES - 1) as f32))
+        .collect();
+    ring.push(tip);
+    ring
 }
 
 pub(crate) fn hit_test(annotation: &Annotation, point: [f32; 2], tolerance: f32) -> bool {
     hit_polygon(&annotation.callout_polygon(), point, tolerance)
+        || annotation
+            .callout_bubbles()
+            .iter()
+            .any(|(c, r)| (point[0] - c[0]).hypot(point[1] - c[1]) <= r + tolerance)
 }
 
 pub(crate) fn hit_polygon(polygon: &[[f32; 2]], point: [f32; 2], tolerance: f32) -> bool {

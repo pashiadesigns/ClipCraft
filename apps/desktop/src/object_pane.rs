@@ -1,3 +1,4 @@
+use crate::tips::Tip as _;
 use crate::{Annotation, Command, Editor, Kind, egui};
 use egui::{Color32, Rect, Stroke};
 mod guide_tree;
@@ -138,6 +139,9 @@ fn color_name(c: [u8; 4]) -> &'static str {
     }
 }
 fn label(a: &Annotation) -> String {
+    if a.focus.and_then(|f| f.magnify).is_some() {
+        return "Magnify".into();
+    }
     if a.focus.is_some() {
         return format!(
             "Focus · {}",
@@ -257,7 +261,7 @@ fn control(ui: &mut egui::Ui, rect: Rect, id: egui::Id, eye: bool, active: bool)
             .collect();
         p.add(egui::Shape::line(points, s));
     }
-    response.on_hover_text(name)
+    response.tip_title(name)
 }
 
 impl Editor {
@@ -287,7 +291,7 @@ impl Editor {
                         )
                     })
                     .inner
-                    .on_hover_text(name);
+                    .tip_title(name);
                 #[cfg(test)]
                 ui.ctx()
                     .data_mut(|d| d.insert_temp(egui::Id::unique(("object-all", name)), r.rect));
@@ -304,7 +308,7 @@ impl Editor {
                     crate::video_editor::ui::button(ui, "Selection", "", 32., false)
                 })
                 .inner
-                .on_hover_text("Select all visible, unlocked objects of the same type");
+                .tip("Select all visible, unlocked objects of the same type");
             #[cfg(test)]
             ui.ctx()
                 .data_mut(|d| d.insert_temp(egui::Id::unique("object-select-type"), r.rect));
@@ -568,7 +572,7 @@ impl Editor {
                 });
                 response
                     .clone()
-                    .on_hover_text(format!("{name}\nDrag to change layer order"));
+                    .tip(format!("{name}\nDrag to change layer order"));
                 let eye = control(ui, eye_rect, response.id.with("eye"), true, !state.hidden);
                 let lock = control(ui, lock_rect, response.id.with("lock"), false, state.locked);
                 if eye.clicked() {

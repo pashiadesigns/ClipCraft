@@ -85,6 +85,15 @@ fn paint(dc: HDC, mut rect: RECT) {
     }
 }
 pub(super) fn show(owner: HWND, area: Area) -> Result<Overlay, String> {
+    show_excluding(owner, area, |hwnd| unsafe {
+        SetWindowDisplayAffinity(hwnd, WDA_EXCLUDEFROMCAPTURE) != 0
+    })
+}
+fn show_excluding(
+    owner: HWND,
+    area: Area,
+    exclude: impl FnOnce(HWND) -> bool,
+) -> Result<Overlay, String> {
     unsafe {
         static CLASS: OnceLock<Result<u16, String>> = OnceLock::new();
         CLASS
@@ -126,7 +135,7 @@ pub(super) fn show(owner: HWND, area: Area) -> Result<Overlay, String> {
             hwnd,
             started: Instant::now(),
         };
-        if SetWindowDisplayAffinity(hwnd, WDA_EXCLUDEFROMCAPTURE) == 0 {
+        if !exclude(hwnd) {
             return Err(win_error("Cannot exclude recording cue from capture"));
         }
         SetLayeredWindowAttributes(hwnd, 0, 0, LWA_ALPHA);
@@ -137,6 +146,29 @@ pub(super) fn show(owner: HWND, area: Area) -> Result<Overlay, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn rejected_optional_cue_is_destroyed_before_recording_can_continue() {
+        let mut created = null_mut();
+        let cue = show_excluding(
+            null_mut(),
+            Area {
+                origin: [0, 0],
+                size: [160, 80],
+            },
+            |hwnd| {
+                created = hwnd;
+                assert_eq!(unsafe { IsWindowVisible(hwnd) }, 0);
+                unsafe {
+                    SetLastError(ERROR_NOT_ENOUGH_MEMORY);
+                }
+                false
+            },
+        )
+        .ok();
+        assert!(cue.is_none());
+        assert!(!created.is_null());
+        assert_eq!(unsafe { IsWindow(created) }, 0);
+    }
     #[test]
     fn brief_cue_fades_in_then_out_and_ends_at_two_seconds() {
         assert_eq!(opacity(0), 0);

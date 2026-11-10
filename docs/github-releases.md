@@ -1,6 +1,6 @@
 # Release verification
 
-The 1.0.0-beta.1 release provides an unsigned Windows x64 **MSI installer**, a
+The 1.0.0-beta.2 release provides an unsigned Windows x64 **MSI installer**, a
 **portable ZIP**, and a source archive for the exact release commit. It replaces
 the previous development downloads; old project formats are not supported.
 
@@ -12,8 +12,8 @@ target, lockfile hash and local build origin. This release is built locally and
 does not claim a GitHub-hosted build attestation or an Authenticode signature.
 
 ```powershell
-Get-FileHash ./clipcraft-1.0.0-beta.1-windows-x64.msi -Algorithm SHA256
-Get-FileHash ./clipcraft-1.0.0-beta.1-windows-x64.zip -Algorithm SHA256
+Get-FileHash ./clipcraft-1.0.0-beta.2-windows-x64.msi -Algorithm SHA256
+Get-FileHash ./clipcraft-1.0.0-beta.2-windows-x64.zip -Algorithm SHA256
 ```
 
 The SPDX inventory covers the resolved Windows build/test dependency graph and

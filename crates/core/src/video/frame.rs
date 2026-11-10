@@ -18,6 +18,9 @@ pub struct Frame {
     pub opacity: u8,
     pub shadow: Option<crate::shadow::Shadow>,
     pub line_style: Option<crate::line_style::Style>,
+    /// Filters and color for this clip.
+    #[serde(default)]
+    pub color: crate::picture_finish::ColorAdjust,
 }
 impl Default for Frame {
     fn default() -> Self {
@@ -35,12 +38,28 @@ impl Default for Frame {
             opacity: 255,
             shadow: None,
             line_style: None,
+            color: Default::default(),
         }
     }
 }
 impl Frame {
+    /// Takes only what changed between `before` and `after` on another frame.
+    pub fn copy_change(&mut self, before: &Frame, after: &Frame) {
+        macro_rules! copy {
+            ($($field:ident),+) => {$(
+                if after.$field != before.$field {
+                    self.$field = after.$field.clone();
+                }
+            )+};
+        }
+        copy!(
+            shape, sides, radius, view, fill, rotation, mirror, flip_y, outline, width, opacity,
+            shadow, line_style, color
+        );
+    }
     pub fn unmodified_pixels(&self) -> bool {
         self.shape == Kind::Rectangle
+            && self.color.is_neutral()
             && self.radius == 0.
             && self.view == ImageView::default()
             && self.rotation == 0.
@@ -51,6 +70,130 @@ impl Frame {
             && self.shadow.is_none()
     }
     pub fn render(
+        &self,
+        source: Arc<image::RgbaImage>,
+        rect: [f32; 4],
+        size: [u32; 2],
+        id: u64,
+    ) -> Result<image::RgbaImage> {
+        if let Some((plain, colored)) = self.color_first(&source) {
+            return plain.render(colored, rect, size, id);
+        }
+        match self.plain_fit(&source, rect, size) {
+            Some(rendered) => Ok(rendered),
+            None => self.render_general(source, rect, size, id),
+        }
+    }
+    /// With a color change: this frame without it, and the recolored source.
+    pub(super) fn color_first(
+        &self,
+        source: &image::RgbaImage,
+    ) -> Option<(Frame, Arc<image::RgbaImage>)> {
+        if self.color.is_neutral() {
+            return None;
+        }
+        let mut colored = source.clone();
+        self.color.apply(&mut colored);
+        let plain = Frame {
+            color: Default::default(),
+            ..self.clone()
+        };
+        Some((plain, Arc::new(colored)))
+    }
+    /// A frame held still through an export: a plain picture lands on whole
+    /// pixels, a shift of under half a pixel that a moving frame would show.
+    pub(super) fn plain_snapped(
+        &self,
+        source: &image::RgbaImage,
+        rect: [f32; 4],
+        size: [u32; 2],
+    ) -> Option<image::RgbaImage> {
+        let left = (rect[0] * size[0] as f32).round();
+        let top = (rect[1] * size[1] as f32).round();
+        let right = ((rect[0] + rect[2]) * size[0] as f32).round();
+        let bottom = ((rect[1] + rect[3]) * size[1] as f32).round();
+        self.plain_box(source, [left, top, right - left, bottom - top], size)
+    }
+    /// The picture for Fit: the view shrunk to fit the frame, centered on a
+    /// transparent image of the frame's size. Returns that image and where the
+    /// picture sits in it, as x, y, width, height.
+    pub(super) fn padded_fit(
+        &self,
+        source: &image::RgbaImage,
+        rect: [f32; 4],
+        size: [u32; 2],
+    ) -> (image::RgbaImage, [u32; 4]) {
+        let w = (rect[2] * size[0] as f32).round().max(1.) as u32;
+        let h = (rect[3] * size[1] as f32).round().max(1.) as u32;
+        let [sx, sy, sw, sh] = self.view.rect;
+        let crop = image::imageops::crop_imm(
+            source,
+            (sx * source.width() as f32) as u32,
+            (sy * source.height() as f32) as u32,
+            (sw * source.width() as f32).floor().max(1.) as u32,
+            (sh * source.height() as f32).floor().max(1.) as u32,
+        )
+        .to_image();
+        let (fit_w, fit_h) = contained(crop.dimensions(), (w, h));
+        let fit = fit_pixels(&crop, fit_w, fit_h);
+        let mut padded = image::RgbaImage::new(w, h);
+        let offset = [(w - fit_w) / 2, (h - fit_h) / 2];
+        image::imageops::overlay(&mut padded, &fit, offset[0] as i64, offset[1] as i64);
+        (padded, [offset[0], offset[1], fit_w, fit_h])
+    }
+    /// A plain rectangle on whole pixels is only a resize and a copy, the same
+    /// pixels the shape renderer gives. Export reaches this for every frame of a
+    /// clip that does not match the canvas size.
+    fn plain_fit(
+        &self,
+        source: &image::RgbaImage,
+        rect: [f32; 4],
+        size: [u32; 2],
+    ) -> Option<image::RgbaImage> {
+        self.plain_box(
+            source,
+            [
+                rect[0] * size[0] as f32,
+                rect[1] * size[1] as f32,
+                rect[2] * size[0] as f32,
+                rect[3] * size[1] as f32,
+            ],
+            size,
+        )
+    }
+    fn plain_box(
+        &self,
+        source: &image::RgbaImage,
+        [x, y, w, h]: [f32; 4],
+        size: [u32; 2],
+    ) -> Option<image::RgbaImage> {
+        if self.fill || self.line_style.is_some() || !self.unmodified_pixels() {
+            return None;
+        }
+        if [x, y, w, h].iter().any(|n| n.fract() != 0. || *n < 0.)
+            || w < 1.
+            || h < 1.
+            || x + w > size[0] as f32
+            || y + h > size[1] as f32
+        {
+            return None;
+        }
+        let (fit_w, fit_h) = contained(source.dimensions(), (w as u32, h as u32));
+        let fit = fit_pixels(source, fit_w, fit_h);
+        if fit.as_raw().as_chunks::<4>().0.iter().any(|p| p[3] != 255) {
+            return None;
+        }
+        let mut output = image::RgbaImage::new(size[0], size[1]);
+        let stride = size[0] as usize * 4;
+        let start = (y as usize + (h as usize - fit_h as usize) / 2) * stride
+            + (x as usize + (w as usize - fit_w as usize) / 2) * 4;
+        let width = fit_w as usize * 4;
+        for (index, row) in fit.as_raw().chunks_exact(width).enumerate() {
+            output.as_mut()[start + index * stride..][..width].copy_from_slice(row);
+        }
+        Some(output)
+    }
+    fn render_general(
         &self,
         source: Arc<image::RgbaImage>,
         rect: [f32; 4],
@@ -113,28 +256,7 @@ impl Frame {
                 view.rect[3] = height;
             }
         } else {
-            let [sx, sy, sw, sh] = view.rect;
-            let crop = image::imageops::crop_imm(
-                pixels.as_ref(),
-                (sx * pixels.width() as f32) as u32,
-                (sy * pixels.height() as f32) as u32,
-                (sw * pixels.width() as f32).floor().max(1.) as u32,
-                (sh * pixels.height() as f32).floor().max(1.) as u32,
-            )
-            .to_image();
-            let fit = image::imageops::thumbnail(
-                &crop,
-                w.round().max(1.) as u32,
-                h.round().max(1.) as u32,
-            );
-            let mut padded =
-                image::RgbaImage::new(w.round().max(1.) as u32, h.round().max(1.) as u32);
-            let offset = [
-                (padded.width() - fit.width()) / 2,
-                (padded.height() - fit.height()) / 2,
-            ];
-            image::imageops::overlay(&mut padded, &fit, offset[0] as i64, offset[1] as i64);
-            pixels = Arc::new(padded);
+            pixels = Arc::new(self.padded_fit(&pixels, rect, size).0);
             view = ImageView::default();
         }
         if self.flip_y {
@@ -169,6 +291,148 @@ impl Frame {
         }
         Ok(a)
     }
+}
+
+/// `image::imageops::thumbnail`, spread across the CPU's cores. Video export runs
+/// it for every frame, so it gives the same values as that function.
+/// The largest size inside `target` with the shape of `source`. Within a pixel
+/// of `target` it is `target`, so a rounding difference never leaves a line.
+fn contained(source: (u32, u32), target: (u32, u32)) -> (u32, u32) {
+    let scale =
+        (target.0 as f64 / source.0.max(1) as f64).min(target.1 as f64 / source.1.max(1) as f64);
+    let width = ((source.0 as f64 * scale).round() as u32).clamp(1, target.0);
+    let height = ((source.1 as f64 * scale).round() as u32).clamp(1, target.1);
+    if target.0.abs_diff(width) <= 1 && target.1.abs_diff(height) <= 1 {
+        target
+    } else {
+        (width, height)
+    }
+}
+fn fit_pixels(source: &image::RgbaImage, new_width: u32, new_height: u32) -> image::RgbaImage {
+    let (width, height) = source.dimensions();
+    let stride = new_width as usize * 4;
+    let mut out = vec![0; stride * new_height as usize];
+    if width > 0 && height > 0 && stride > 0 && new_height > 0 {
+        let ratio = [
+            width as f32 / new_width as f32,
+            height as f32 / new_height as f32,
+        ];
+        let columns: Vec<_> = (0..new_width)
+            .map(|x| Span::new(x, ratio[0], width))
+            .collect();
+        let threads = std::thread::available_parallelism()
+            .map_or(1, usize::from)
+            .min(8);
+        let band = (new_height as usize).div_ceil(threads);
+        let columns = &columns;
+        std::thread::scope(|scope| {
+            for (index, rows) in out.chunks_mut(stride * band).enumerate() {
+                scope.spawn(move || {
+                    for (offset, row) in rows.chunks_exact_mut(stride).enumerate() {
+                        let y = (index * band + offset) as u32;
+                        fit_row(source, Span::new(y, ratio[1], height), columns, row);
+                    }
+                });
+            }
+        });
+    }
+    image::RgbaImage::from_raw(new_width, new_height, out).expect("sized for the output")
+}
+
+/// The source pixels that one output row or column covers.
+#[derive(Clone, Copy)]
+struct Span {
+    near: f32,
+    far: f32,
+    start: u32,
+    end: u32,
+}
+impl Span {
+    fn new(index: u32, ratio: f32, length: u32) -> Self {
+        let near = index as f32 * ratio;
+        let far = near + ratio;
+        let start = (near.ceil() as u32).min(length - 1);
+        let end = (far.ceil() as u32).clamp(start, length);
+        Self {
+            near,
+            far,
+            start,
+            end,
+        }
+    }
+    fn is_empty(self) -> bool {
+        self.start == self.end
+    }
+    fn fraction(self) -> f32 {
+        (self.near.fract() + self.far.fract()) / 2.
+    }
+}
+
+fn fit_row(source: &image::RgbaImage, row: Span, columns: &[Span], out: &mut [u8]) {
+    let width = source.width() as usize;
+    let raw = source.as_raw();
+    let at = |x: u32, y: u32| -> [u32; 4] {
+        let i = (y as usize * width + x as usize) * 4;
+        [
+            raw[i] as u32,
+            raw[i + 1] as u32,
+            raw[i + 2] as u32,
+            raw[i + 3] as u32,
+        ]
+    };
+    let add = |sum: &mut [u32; 4], p: [u32; 4]| {
+        for c in 0..4 {
+            sum[c] += p[c];
+        }
+    };
+    let (bottom, top) = (row.start, row.end);
+    for (column, target) in columns.iter().zip(out.as_chunks_mut::<4>().0) {
+        let (left, right) = (column.start, column.end);
+        *target = match (row.is_empty(), column.is_empty()) {
+            (false, false) => {
+                let mut sum = [0; 4];
+                for y in bottom..top {
+                    for x in left..right {
+                        add(&mut sum, at(x, y));
+                    }
+                }
+                let n = (right - left) * (top - bottom);
+                sum.map(|v| ((v + n / 2) / n).min(255) as u8)
+            }
+            (false, true) => {
+                let (mut near, mut far) = ([0; 4], [0; 4]);
+                for y in bottom..top {
+                    add(&mut near, at(right - 1, y));
+                    add(&mut far, at(right, y));
+                }
+                mix_pair(near, far, column.fraction(), top - bottom)
+            }
+            (true, false) => {
+                let (mut near, mut far) = ([0; 4], [0; 4]);
+                for x in left..right {
+                    add(&mut near, at(x, top - 1));
+                    add(&mut far, at(x, top));
+                }
+                mix_pair(near, far, row.fraction(), right - left)
+            }
+            (true, true) => {
+                let (v, h) = (row.fraction(), column.fraction());
+                let (bl, tl) = (at(right - 1, top - 1), at(right - 1, top));
+                let (br, tr) = (at(right, top - 1), at(right, top));
+                std::array::from_fn(|c| {
+                    ((1. - v) * h * br[c] as f32
+                        + v * h * tr[c] as f32
+                        + (1. - v) * (1. - h) * bl[c] as f32
+                        + v * (1. - h) * tl[c] as f32) as u8
+                })
+            }
+        };
+    }
+}
+
+fn mix_pair(near: [u32; 4], far: [u32; 4], fraction: f32, count: u32) -> [u8; 4] {
+    let (far_part, near_part) = (fraction / count as f32, (1. - fraction) / count as f32);
+    std::array::from_fn(|c| (near_part * near[c] as f32 + far_part * far[c] as f32) as u8)
 }
 
 /// Coextensive opaque pictures can dissolve directly as GPU textures. Other
@@ -270,6 +534,8 @@ pub fn ordered_objects(
     hide_annotations: bool,
 ) -> Vec<Annotation> {
     let Some(p) = &doc.video else { return vec![] };
+    let sampled = p.sampled_media(time);
+    let p = sampled.as_ref();
     let objects = super::editor::objects_at(doc, time);
     let mut out = vec![];
     for layer in p.layers().iter().rev() {
@@ -283,8 +549,14 @@ pub fn ordered_objects(
                     .filter(|a| p.objects.get(&a.id).is_some_and(|t| t.track == track))
                     .cloned(),
             ),
-            super::links::Layer::Zoom(id) => {
-                if let Some(z) = p.zooms.iter().find(|z| z.id == id) {
+            super::links::Layer::Zoom(track) => {
+                // A shared zoom track applies whichever of its zooms is active.
+                if let Some(z) = p
+                    .zooms
+                    .iter()
+                    .find(|z| z.track() == track && z.active(time))
+                    .or_else(|| p.zooms.iter().find(|z| z.track() == track))
+                {
                     z.transform(&mut out, [doc.width, doc.height], time);
                 }
             }
@@ -402,8 +674,13 @@ pub fn composite(
 ) -> Result<image::RgbaImage> {
     let background = doc.video.as_ref().map_or([0; 4], |p| p.background);
     let mut output = image::RgbaImage::from_pixel(doc.width, doc.height, image::Rgba(background));
-    for a in ordered_objects(doc, layers, time, false) {
-        crate::render_annotation(&mut output, &a);
+    let objects = ordered_objects(doc, layers, time, false);
+    // Focus effects on screen together share one backdrop (BJ).
+    let backdrop = crate::focus::Backdrop::new(&objects);
+    for a in &objects {
+        if !backdrop.render(&mut output, a) {
+            crate::render_annotation(&mut output, a);
+        }
     }
     Ok(output)
 }
@@ -429,7 +706,12 @@ impl CompositeCache {
         }
         let background = doc.video.as_ref().map_or([0; 4], |p| p.background);
         let mut out = image::RgbaImage::from_pixel(size[0], size[1], image::Rgba(background));
-        for a in ordered_objects(doc, layers, time, false) {
+        let objects = ordered_objects(doc, layers, time, false);
+        let backdrop = crate::focus::Backdrop::new(&objects);
+        for a in objects {
+            if backdrop.render(&mut out, &a) {
+                continue;
+            }
             let cacheable = a.focus.is_none()
                 && !matches!(a.kind, Kind::Blur | Kind::Pixelate | Kind::Eraser)
                 && !a.image.as_ref().is_some_and(|b| b.is_cursor())
@@ -500,6 +782,8 @@ pub fn source_objects(
     hide_annotations: bool,
 ) -> Vec<Annotation> {
     let Some(p) = &doc.video else { return vec![] };
+    let sampled = p.sampled_media(time);
+    let p = sampled.as_ref();
     let objects = super::editor::objects_at(doc, time);
     let mut out = vec![];
     for layer in p.layers().iter().rev() {
@@ -513,8 +797,14 @@ pub fn source_objects(
                     .filter(|a| p.objects.get(&a.id).is_some_and(|t| t.track == track))
                     .cloned(),
             ),
-            super::links::Layer::Zoom(id) => {
-                if let Some(z) = p.zooms.iter().find(|z| z.id == id) {
+            super::links::Layer::Zoom(track) => {
+                // A shared zoom track applies whichever of its zooms is active.
+                if let Some(z) = p
+                    .zooms
+                    .iter()
+                    .find(|z| z.track() == track && z.active(time))
+                    .or_else(|| p.zooms.iter().find(|z| z.track() == track))
+                {
                     z.transform(&mut out, [doc.width, doc.height], time);
                 }
             }
@@ -695,6 +985,114 @@ fn dissolve_regions(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_faster_resize_gives_the_same_pixels_as_the_image_crate() {
+        for (from, to) in [
+            ((64, 40), (64, 40)),
+            ((96, 51), (96, 54)),
+            ((96, 54), (96, 51)),
+            ((50, 37), (113, 91)),
+            ((113, 91), (50, 37)),
+            ((80, 60), (33, 120)),
+            ((33, 120), (80, 60)),
+            ((7, 5), (64, 64)),
+        ] {
+            let source = noisy(from.0, from.1, 255);
+            assert_eq!(
+                super::fit_pixels(&source, to.0, to.1).as_raw(),
+                image::imageops::thumbnail(&source, to.0, to.1).as_raw(),
+                "{from:?} to {to:?}"
+            );
+            let clear = noisy(from.0, from.1, 0);
+            assert_eq!(
+                super::fit_pixels(&clear, to.0, to.1).as_raw(),
+                image::imageops::thumbnail(&clear, to.0, to.1).as_raw()
+            );
+        }
+    }
+
+    #[test]
+    fn a_plain_frame_renders_the_same_pixels_on_the_quick_path() {
+        let plain = Frame {
+            radius: 0.,
+            fill: false,
+            ..Default::default()
+        };
+        for (source, rect, size) in [
+            ((192, 102), [0., 0., 1., 1.], [192, 108]),
+            ((192, 108), [0., 0., 0.5, 0.5], [192, 108]),
+            ((100, 75), [0.25, 0.5, 0.5, 0.5], [200, 100]),
+            ((100, 75), [0.5, 0., 0.5, 1.], [64, 64]),
+        ] {
+            let image = std::sync::Arc::new(noisy(source.0, source.1, 255));
+            let quick = plain.plain_fit(&image, rect, size).expect("quick path");
+            let general = plain.render_general(image, rect, size, 9).unwrap();
+            assert_eq!(quick.as_raw(), general.as_raw(), "{source:?} {rect:?}");
+        }
+        let image = noisy(32, 32, 255);
+        for other in [
+            Frame {
+                fill: true,
+                ..plain.clone()
+            },
+            Frame {
+                radius: 4.,
+                ..plain.clone()
+            },
+            Frame {
+                width: 2,
+                ..plain.clone()
+            },
+            Frame {
+                opacity: 128,
+                ..plain.clone()
+            },
+        ] {
+            assert!(
+                other
+                    .plain_fit(&image, [0., 0., 1., 1.], [64, 64])
+                    .is_none()
+            );
+        }
+        assert!(
+            plain
+                .plain_fit(&image, [0.1, 0., 0.5, 0.5], [64, 64])
+                .is_none(),
+            "a fractional position uses the shape renderer"
+        );
+        assert!(
+            plain
+                .plain_fit(&noisy(32, 32, 200), [0., 0., 1., 1.], [64, 64])
+                .is_none(),
+            "transparent pictures use the shape renderer"
+        );
+    }
+
+    #[test]
+    fn fit_keeps_the_shape_of_a_clip_that_differs_from_its_frame() {
+        let plain = Frame {
+            radius: 0.,
+            fill: false,
+            ..Default::default()
+        };
+        let image = noisy(192, 102, 255);
+        let out = plain
+            .plain_fit(&image, [0., 0., 1., 1.], [192, 108])
+            .expect("quick path");
+        assert_eq!(out.get_pixel(5, 1)[3], 0, "a band above the picture");
+        assert_eq!(out.get_pixel(5, 106)[3], 0, "a band below the picture");
+        assert_eq!(out.get_pixel(5, 3)[3], 255);
+        assert_eq!(super::contained((192, 107), (192, 108)), (192, 108));
+    }
+    fn noisy(width: u32, height: u32, alpha: u8) -> image::RgbaImage {
+        let mut state = 7u32;
+        image::RgbaImage::from_fn(width, height, |_, _| {
+            state = state.wrapping_mul(1664525).wrapping_add(1013904223);
+            let [a, b, c, d] = state.to_le_bytes();
+            image::Rgba([b, c, d, if alpha == 0 { a } else { alpha }])
+        })
+    }
     #[test]
     fn matching_shaped_dissolve_matches_additive_frame_pixels_and_keeps_unequal_frames_on_fallback()
     {

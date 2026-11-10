@@ -14,7 +14,7 @@ use std::{
     path::{Path, PathBuf},
 };
 const LIMIT: usize = 256;
-const MAX_BYTES: u64 = 2_000_000;
+const MAX_BYTES: u64 = 32_000_000;
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Motion {
     pub entrance: Animation,
@@ -84,16 +84,36 @@ impl Motion {
         t.clamp_animations();
         Ok(())
     }
+    /// The motion a newly placed video object starts with, if its kind has one.
+    pub fn for_new_object(a: &Annotation) -> Option<Self> {
+        let icon = a.image.as_ref().is_some_and(|b| b.is_icon());
+        let name = if a.focus.is_some() {
+            "Expand & shrink"
+        } else if a.kind == crate::Kind::Step || icon {
+            "Float from left"
+        } else if matches!(a.kind, crate::Kind::Line | crate::Kind::Arrow)
+            || (a.is_shape() && !a.is_image_frame())
+        {
+            "Draw & retract"
+        } else {
+            return None;
+        };
+        let (_, motion) = Self::builtins().into_iter().find(|(n, _)| *n == name)?;
+        (motion.entrance.supports(a) && motion.exit.supports(a)).then_some(motion)
+    }
     pub fn builtins() -> Vec<(&'static str, Self)> {
         [
-            ("Soft fade", Animation::Fade, 350, 350),
-            ("Float from left", Animation::Float, 450, 350),
-            ("Draw & retract", Animation::Path, 800, 500),
-            ("Type & erase", Animation::Typewriter, 900, 500),
-            ("Expand & shrink", Animation::Scale, 400, 300),
+            ("Soft fade", Animation::Fade, 350, 350, 0),
+            ("Float from left", Animation::Float, 450, 350, 0),
+            ("Float from right", Animation::Float, 450, 350, 1),
+            ("Float from top", Animation::Float, 450, 350, 2),
+            ("Float from bottom", Animation::Float, 450, 350, 3),
+            ("Draw & retract", Animation::Path, 800, 500, 0),
+            ("Type & erase", Animation::Typewriter, 900, 500, 0),
+            ("Expand & shrink", Animation::Scale, 400, 300, 0),
         ]
         .into_iter()
-        .map(|(name, a, enter, exit)| {
+        .map(|(name, a, enter, exit, direction)| {
             (
                 name,
                 Self {
@@ -105,7 +125,7 @@ impl Motion {
                     exit_ms: exit,
                     paired: true,
                     smooth: true,
-                    direction: 0,
+                    direction,
                     path_reverse: false,
                     retract_from_start: false,
                     entrance_durations: Default::default(),
@@ -119,6 +139,7 @@ impl Motion {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", content = "settings", rename_all = "snake_case")]
 pub enum Payload {
+    Group(crate::group_presets::Composition),
     AudioChain(Chain),
     AudioEffect(Effect),
     Motion(Motion),
@@ -127,6 +148,7 @@ pub enum Payload {
 impl Payload {
     pub fn category(&self) -> &'static str {
         match self {
+            Self::Group(_) => "Blocks",
             Self::AudioChain(_) => "Audio chains",
             Self::AudioEffect(_) => "Audio effects",
             Self::Motion(_) => "Motion",
@@ -141,6 +163,7 @@ impl Payload {
     }
     pub fn validate(&self) -> Result<()> {
         match self {
+            Self::Group(c) => c.validate(),
             Self::AudioChain(c) => c.validate(),
             Self::AudioEffect(e) if e.validate() => Ok(()),
             Self::Motion(m)
@@ -230,10 +253,19 @@ fn encode(entries: &[Entry]) -> Result<Vec<u8>> {
         version: 1,
         entries: entries.to_vec(),
     })?;
-    if bytes.len() as u64 > MAX_BYTES {
-        return Err(Error::Invalid(
-            "Preset library exceeds 2 MB. Remove unused presets before saving.".into(),
-        ));
+    let limit = if entries
+        .iter()
+        .any(|e| matches!(e.payload, Payload::Group(_)))
+    {
+        MAX_BYTES
+    } else {
+        2_000_000
+    };
+    if bytes.len() as u64 > limit {
+        return Err(Error::Invalid(format!(
+            "Preset library exceeds {} MB. Remove unused presets before saving.",
+            limit / 1_000_000
+        )));
     }
     Ok(bytes)
 }
@@ -242,7 +274,9 @@ fn read(path: &Path) -> Result<Vec<Entry>> {
     let mut b = vec![];
     f.take(MAX_BYTES + 1).read_to_end(&mut b)?;
     if b.len() as u64 > MAX_BYTES {
-        return Err(Error::Invalid("Preset pack exceeds the 2 MB limit.".into()));
+        return Err(Error::Invalid(
+            "Preset pack exceeds the 32 MB limit.".into(),
+        ));
     }
     let p: Pack = serde_json::from_slice(&b)?;
     if p.version != 1 {

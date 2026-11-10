@@ -309,7 +309,7 @@ impl History {
         drop(lock);
         Ok(())
     }
-    fn management_lock(&self) -> Result<fs::File> {
+    pub(super) fn management_lock(&self) -> Result<fs::File> {
         let file = fs::OpenOptions::new()
             .create(true)
             .truncate(false)

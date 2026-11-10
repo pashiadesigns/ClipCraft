@@ -14,6 +14,7 @@ fn fixture() -> Document {
             focus: None,
 
             highlighter_rect: false,
+            hard_edge: false,
             group: None,
             rotation_degrees: 0.0,
             mirror_x: false,
@@ -38,6 +39,7 @@ fn fixture() -> Document {
             focus: None,
 
             highlighter_rect: false,
+            hard_edge: false,
             group: None,
             rotation_degrees: 0.0,
             mirror_x: false,
@@ -56,6 +58,8 @@ fn fixture() -> Document {
             fill: None,
             points: Vec::new(),
             callout: Some(CalloutStyle {
+                shape: Default::default(),
+                tail: Default::default(),
                 fill: [220, 240, 250, 180],
                 outline: [10, 40, 80, 255],
                 pointer: [110.0, 80.0],

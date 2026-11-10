@@ -252,6 +252,7 @@ fn text_mask(preview: Preview, scale: u32) -> capture_core::Result<image::RgbaIm
         focus: None,
 
         highlighter_rect: false,
+        hard_edge: false,
         group: None,
     };
     capture_core::display::render_annotation_preview(

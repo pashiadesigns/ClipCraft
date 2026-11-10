@@ -131,6 +131,8 @@ impl Editor {
         ]);
         let rect = egui::Rect::from_min_size(min, extent * transform.scale);
         let c = cached.unwrap();
+        // Exactly one mark while placing: the marker as it will be placed. The
+        // system cursor stays hidden so nothing else alternates with it.
         ui.painter()
             .with_clip_rect(transform.viewport.intersect(transform.image))
             .image(
@@ -279,7 +281,21 @@ impl Editor {
             (self.next_step_number(), self.step_letters),
             [self.session.document.width, self.session.document.height],
         )
-        .map(|a| self.styled_new_annotation(a))
+        .map(|a| {
+            let mut a = self.styled_new_annotation(a);
+            // A remembered style carries its label at the size it was made for.
+            // The label keeps that proportion as the marker is resized.
+            let side = (a.end[0] - a.start[0]).abs();
+            if let Some(now) = a.text.as_ref().map(|t| t.size_points) {
+                let ratio = if self.step_style_size > 0 {
+                    side / self.step_style_size as f32
+                } else {
+                    capture_core::steps::label_size(side) / now
+                };
+                capture_core::steps::scale_label(&mut a, ratio);
+            }
+            a
+        })
     }
 
     fn commit_step(

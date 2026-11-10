@@ -13,6 +13,12 @@ pub struct CanvasBehavior {
     pub held: BTreeSet<u64>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub page_owners: BTreeMap<u64, usize>,
+    /// Whole-image perspective, applied on top of the finished image (FX-003).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub perspective: Option<crate::tilt::Tilt>,
+    /// Filters, border and edge for the whole picture.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub finish: Option<crate::picture_finish::Finish>,
 }
 impl Default for CanvasBehavior {
     fn default() -> Self {
@@ -21,6 +27,8 @@ impl Default for CanvasBehavior {
             allow_overflow: false,
             held: BTreeSet::new(),
             page_owners: BTreeMap::new(),
+            perspective: None,
+            finish: None,
         }
     }
 }

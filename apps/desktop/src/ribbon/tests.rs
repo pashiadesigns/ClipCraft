@@ -4,7 +4,7 @@ use egui::{Event, Modifiers, PointerButton};
 
 struct Layout {
     header: Vec<(&'static str, Response)>,
-    tabs: [egui::Rect; 5],
+    tabs: [egui::Rect; 4],
 }
 
 #[test]
@@ -59,15 +59,19 @@ fn step_press_hold_release_keeps_one_property_set_and_stable_canvas() {
     assert!(e.step_placement.is_some());
     for _ in 0..4 {
         let (t, out) = render(&mut e, vec![]);
-        let count = out
-            .shapes
-            .iter()
-            .filter(|s| matches!(&s.shape,egui::Shape::Text(t) if t.galley.text()=="Marker size"))
-            .count();
-        assert_eq!(
-            count, 1,
-            "a pending marker must not duplicate the default and selected controls"
-        );
+        // The Marker group follows Appearance (properties audit), so it may sit
+        // below the fold; whatever is shown must appear only once.
+        for label in ["Marker size", "Thickness", "Fill opacity"] {
+            let count = out
+                .shapes
+                .iter()
+                .filter(|s| matches!(&s.shape,egui::Shape::Text(t) if t.galley.text()==label))
+                .count();
+            assert!(
+                count <= 1,
+                "a pending marker must not duplicate the default and selected controls ({label})"
+            );
+        }
         assert_eq!(
             t.image, original.image,
             "holding a new marker must not shift the canvas"
@@ -78,43 +82,6 @@ fn step_press_hold_release_keeps_one_property_set_and_stable_canvas() {
     assert_eq!(e.session.document.annotations.len(), 2);
     let (t, _) = render(&mut e, vec![]);
     assert_eq!(t.image, original.image);
-}
-
-#[test]
-fn installed_font_search_accepts_click_and_typing_without_dismissing_popup() {
-    let ctx = egui::Context::default();
-    crate::shell::configure(&ctx);
-    let mut e = crate::canvas::tests::editor(&ctx);
-    let mut a = e.new_annotation(crate::Kind::Text, [20., 20.], [260., 90.]);
-    a.text.get_or_insert_with(Default::default).content = "Font search".into();
-    let id = a.id;
-    e.execute(crate::Command::Add { annotation: a });
-    e.select_only(Some(id));
-    e.shell.ribbon_tab = RibbonTab::Formatting;
-    frame(&ctx, &mut e, vec![], 1280.);
-    frame(&ctx, &mut e, vec![], 1280.);
-    let rect = ctx
-        .data(|d| d.get_temp::<egui::Rect>(egui::Id::unique("font-search-button")))
-        .unwrap();
-    click(&ctx, &mut e, rect, 1280.);
-    frame(&ctx, &mut e, vec![], 1280.);
-    let input = ctx
-        .data(|d| d.get_temp::<egui::Rect>(egui::Id::unique("font-search-input")))
-        .unwrap();
-    click(&ctx, &mut e, input, 1280.);
-    frame(&ctx, &mut e, vec![Event::Text("Ubuntu".into())], 1280.);
-    assert_eq!(
-        ctx.data(|d| d.get_temp::<String>(egui::Id::unique("font-search")))
-            .as_deref(),
-        Some("Ubuntu")
-    );
-    ctx.data_mut(|d| d.remove::<egui::Rect>(egui::Id::unique("font-search-input")));
-    frame(&ctx, &mut e, vec![], 1280.);
-    assert!(
-        ctx.data(|d| d.get_temp::<egui::Rect>(egui::Id::unique("font-search-input")))
-            .is_some()
-    );
-    assert_eq!(e.selected, Some(id));
 }
 
 #[test]
@@ -619,7 +586,7 @@ fn frame(
 ) -> (Layout, PaintedOutput) {
     let mut l = Layout {
         header: vec![],
-        tabs: [egui::Rect::NOTHING; 5],
+        tabs: [egui::Rect::NOTHING; 4],
     };
     let output = ctx.run_ui(
         egui::RawInput {
@@ -671,7 +638,7 @@ fn header_stays_fixed_between_tabs_and_library_with_working_undo_redo() {
     let original = serde_json::to_vec(&e.session.document).unwrap();
 
     let fixed = header(&l, "Save As").rect;
-    click(&ctx, &mut e, l.tabs[4], 1280.0);
+    click(&ctx, &mut e, l.tabs[3], 1280.0);
     assert_eq!(e.shell.ribbon_tab, RibbonTab::Export);
     let (l, _) = frame(&ctx, &mut e, vec![], 1280.0);
     assert_eq!(header(&l, "Save As").rect, fixed);
@@ -690,7 +657,7 @@ fn header_stays_fixed_between_tabs_and_library_with_working_undo_redo() {
     let (l, _) = frame(&ctx, &mut e, vec![], 1280.0);
     assert_eq!(header(&l, "Save As").rect, fixed);
     assert!(!header(&l, "Undo").enabled());
-    click(&ctx, &mut e, l.tabs[4], 1280.0);
+    click(&ctx, &mut e, l.tabs[3], 1280.0);
     assert!(!e.shell.library);
     assert_eq!(e.shell.ribbon_tab, RibbonTab::Export);
     assert_eq!(serde_json::to_vec(&e.session.document).unwrap(), original);
@@ -723,17 +690,17 @@ fn compact_header_fits_and_ribbon_rendering_does_not_edit_documents() {
             let labels: &[&str] = match tab {
                 RibbonTab::Insert => &["Clipboard", "Favorites", "General Tools"],
                 RibbonTab::Formatting => &[
-                    "Font",
-                    "Justification",
                     "Alignment",
                     "Distribution",
                     "Arrange",
+                    "Grouping",
+                    "Rotate & flip",
+                    "Size",
+                    "Guides",
+                    "Tools",
                 ],
                 RibbonTab::Export => &["Image", "Editable project", "Printing"],
-                RibbonTab::Clip => &["Capture mode", "Output", "Options"],
-                RibbonTab::Advanced => {
-                    &["Text recognition", "Layers", "Image", "Canvas", "Restore"]
-                }
+                RibbonTab::Advanced => &[],
             };
             let footers: Vec<_> = output
                 .0
@@ -802,7 +769,6 @@ fn headless_full_workspace_ribbon_fixtures() {
         (RibbonTab::Formatting, false, "Typography", 1280.0),
         (RibbonTab::Formatting, false, "Formatting", 1280.0),
         (RibbonTab::Export, false, "Export", 1280.0),
-        (RibbonTab::Clip, false, "Clip", 1280.0),
         (RibbonTab::Advanced, false, "Advanced", 1280.0),
         (RibbonTab::Insert, true, "Library", 1280.0),
         (RibbonTab::Insert, false, "HomeWide", 1920.0),
@@ -980,7 +946,6 @@ fn ribbon_frame_edges_and_advanced_action_tiles_match() {
             RibbonTab::Formatting,
             RibbonTab::Export,
             RibbonTab::Advanced,
-            RibbonTab::Clip,
         ] {
             e.shell.ribbon_tab = tab;
             for _ in 0..3 {
@@ -1031,6 +996,7 @@ fn header_capture_starts_current_profile_without_switching_tabs() {
     let settings = Settings {
         selection: Selection::Fullscreen,
         clipboard: true,
+        find_sensitive: false,
         preview: false,
         cursor: true,
         delay_seconds: 3,
@@ -1039,6 +1005,8 @@ fn header_capture_starts_current_profile_without_switching_tabs() {
         scrolling: false,
     };
     e.quick_controls.remember_capture(settings.clone());
+    // With its settings window turned off, the header button captures straight away.
+    e.quick_controls.set_ask_before_clip(false);
     frame(&ctx, &mut e, vec![], 1280.);
     let (layout, _) = frame(&ctx, &mut e, vec![], 1280.);
     click(&ctx, &mut e, header(&layout, "Capture").rect, 1280.);

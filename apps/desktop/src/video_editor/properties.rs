@@ -1,67 +1,246 @@
 use super::*;
+use crate::tips::Tip as _;
 use capture_core::video::editor::Animation;
-fn animation_stack(
+use egui::{Color32, Sense};
+/// Column widths for entrance/exit rows: [chain arrow][name][duration][×].
+const ARROW_W: f32 = 18.;
+const DURATION_W: f32 = 76.;
+const REMOVE_W: f32 = 26.;
+/// One fixed-height row in the animation columns.
+fn animation_row(ui: &mut egui::Ui, cells: impl FnOnce(&mut egui::Ui, f32)) {
+    let width = ui.available_width();
+    ui.allocate_ui_with_layout(
+        egui::vec2(width, 30.),
+        egui::Layout::left_to_right(egui::Align::Center),
+        |ui| {
+            ui.set_min_size(egui::vec2(width, 30.));
+            ui.set_max_width(width);
+            let gap = ui.spacing().item_spacing.x;
+            let name_w = (width - ARROW_W - DURATION_W - REMOVE_W - gap * 3.).max(60.);
+            cells(ui, name_w);
+        },
+    );
+}
+fn seconds_cell(ui: &mut egui::Ui, value: &mut u64, maximum: u64) -> bool {
+    let mut s = *value as f64 / 1000.;
+    let changed = ui
+        .add_sized(
+            [DURATION_W, 26.],
+            egui::DragValue::new(&mut s)
+                .range(0. ..=maximum as f64 / 1000.)
+                .speed(0.01)
+                .max_decimals(2)
+                .suffix(" s"),
+        )
+        .changed();
+    if changed {
+        *value = (s * 1000.).round() as u64;
+    }
+    changed
+}
+/// Entrance or exit (approved mockup 3): the primary animation, chained effects
+/// aligned in the same columns, and a last row with the chain arrow and
+/// "Add animation". Every row is a fixed height, so the pane grows by one row.
+fn animation_rows(
     ui: &mut egui::Ui,
-    a: &crate::Annotation,
+    targets: &[crate::Annotation],
     timing: &mut capture_core::video::editor::Timing,
     exit: bool,
 ) {
-    let primary = if exit { timing.exit } else { timing.entrance };
-    let fallback = if exit {
-        timing.exit_ms
-    } else {
-        timing.entrance_ms
-    };
-    let durations = if exit {
-        &mut timing.exit_durations
-    } else {
-        &mut timing.entrance_durations
-    };
     let maximum = timing.end - timing.start;
-    let stack = if exit {
-        &mut timing.exit_stack
-    } else {
-        &mut timing.entrance_stack
-    };
-    ui.push_id(("animation-stack", exit), |ui| {
-        let mut remove = None;
-        for (i, effect) in stack.iter().enumerate() {
-            ui.horizontal(|ui| {
-                ui.label(effect.label(exit));
-                seconds_field(
-                    ui,
-                    "",
-                    durations.entry(*effect).or_insert(fallback),
-                    maximum,
-                );
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if super::ui::button(ui, "Close", "", 26., false)
-                        .on_hover_text("Remove this animation")
-                        .clicked()
+    ui.push_id(("animation-rows", exit), |ui| {
+        ui.horizontal(|ui| {
+            ui.add_space(ARROW_W + ui.spacing().item_spacing.x);
+            ui.label(egui::RichText::new("Animation").size(11.).weak());
+        });
+        let (primary, primary_ms) = if exit {
+            (&mut timing.exit, &mut timing.exit_ms)
+        } else {
+            (&mut timing.entrance, &mut timing.entrance_ms)
+        };
+        animation_row(ui, |ui, name_w| {
+            ui.add_space(ARROW_W);
+            egui::ComboBox::from_id_salt(("video-animation", exit))
+                .width(name_w)
+                .selected_text(primary.label(exit))
+                .show_ui(ui, |ui| {
+                    for choice in Animation::ALL
+                        .into_iter()
+                        .filter(|x| targets.iter().all(|a| x.supports(a)))
                     {
-                        remove = Some(i);
+                        ui.selectable_value(primary, choice, choice.label(exit));
                     }
                 });
+            seconds_cell(ui, primary_ms, maximum);
+        });
+        let primary = *primary;
+        let fallback = *primary_ms;
+        let (stack, durations) = if exit {
+            (&mut timing.exit_stack, &mut timing.exit_durations)
+        } else {
+            (&mut timing.entrance_stack, &mut timing.entrance_durations)
+        };
+        let mut remove = None;
+        for (i, effect) in stack.iter().enumerate() {
+            animation_row(ui, |ui, name_w| {
+                let (r, _) = ui.allocate_exact_size(egui::vec2(ARROW_W, 22.), Sense::hover());
+                super::ui::icon(ui.painter(), r.shrink(1.), "Chain", Color32::from_gray(150));
+                ui.add_sized(
+                    [name_w, 24.],
+                    egui::Label::new(effect.label(exit)).truncate(),
+                );
+                seconds_cell(ui, durations.entry(*effect).or_insert(fallback), maximum);
+                if super::ui::button(ui, "Close", "", REMOVE_W, false)
+                    .tip(format!("Remove {}", effect.label(exit)))
+                    .clicked()
+                {
+                    remove = Some(i);
+                }
             });
         }
         if let Some(i) = remove {
             durations.remove(&stack.remove(i));
         }
-        ui.menu_button("+", |ui| {
-            ui.label("Add compatible animation");
-            for effect in Animation::ALL {
-                if effect.supports(a)
-                    && capture_core::video::editor::Timing::stack_compatible(primary, stack, effect)
-                    && ui.button(effect.label(exit)).clicked()
-                {
-                    stack.push(effect);
-                    ui.close();
-                }
-            }
-        })
-        .response
-        .on_hover_text("Combine body, outline and text animations");
+        let choices: Vec<_> = Animation::ALL
+            .into_iter()
+            .filter(|e| {
+                primary != Animation::None
+                    && targets.iter().all(|a| e.supports(a))
+                    && capture_core::video::editor::Timing::stack_compatible(primary, stack, *e)
+            })
+            .collect();
+        if !choices.is_empty() {
+            animation_row(ui, |ui, _| {
+                let (r, _) = ui.allocate_exact_size(egui::vec2(ARROW_W, 22.), Sense::hover());
+                super::ui::icon(ui.painter(), r.shrink(1.), "Chain", Color32::from_gray(110));
+                let add = super::ui::button(ui, "Plus", "Add animation", 132., false)
+                    .tip("Chain another animation: combine body, outline and text effects");
+                egui::Popup::menu(&add).show(|ui| {
+                    for effect in &choices {
+                        if ui.button(effect.label(exit)).clicked() {
+                            stack.push(*effect);
+                            ui.close();
+                        }
+                    }
+                });
+            });
+        }
     });
+}
+/// Which way a float comes from, beside the animation it belongs to.
+fn float_direction(
+    ui: &mut egui::Ui,
+    timing: &mut capture_core::video::editor::Timing,
+    exit: bool,
+) {
+    const SIDES: [&str; 4] = ["From left", "From right", "From top", "From bottom"];
+    ui.label(egui::RichText::new("Float direction").weak());
+    egui::ComboBox::from_id_salt(("video-direction", exit))
+        .width(ui.available_width())
+        .selected_text(SIDES[timing.direction.min(3) as usize])
+        .show_ui(ui, |ui| {
+            for (i, label) in SIDES.iter().enumerate() {
+                ui.selectable_value(&mut timing.direction, i as u8, *label);
+            }
+        });
+}
+#[derive(Clone, Copy)]
+enum LineUp {
+    Start,
+    End,
+}
+/// Timing for several objects: Start and End move the group, keeping its spacing.
+fn group_timing(
+    ui: &mut egui::Ui,
+    targets: &[crate::Annotation],
+    v: &Project,
+    timing: &mut capture_core::video::editor::Timing,
+    duration: u64,
+) -> Option<LineUp> {
+    use crate::tips::Tip as _;
+    let times: Vec<(u64, u64)> = targets
+        .iter()
+        .filter_map(|a| v.objects.get(&a.id))
+        .map(|t| (t.start, t.end))
+        .collect();
+    let earliest = times.iter().map(|t| t.0).min().unwrap_or(0);
+    let latest_start = times.iter().map(|t| t.0).max().unwrap_or(0);
+    let latest = times.iter().map(|t| t.1).max().unwrap_or(1);
+    let soonest_end = times.iter().map(|t| t.1).min().unwrap_or(1);
+    let range =
+        |a: u64, b: u64| format!("Mixed · {:.2}–{:.2} s", a as f64 / 1000., b as f64 / 1000.);
+    super::property_design::heading(ui, "Timing", "On the timeline");
+    let (mut start, mut end) = (earliest, latest);
+    ui.columns(2, |col| {
+        seconds_field(&mut col[0], "Start", &mut start, duration - 1);
+        seconds_field(&mut col[1], "End", &mut end, duration);
+    });
+    timing.start = timing
+        .start
+        .saturating_add_signed(start as i64 - earliest as i64);
+    timing.end = timing.end.saturating_add_signed(end as i64 - latest as i64);
+    timing.start = timing.start.min(duration - 1);
+    timing.end = timing.end.max(timing.start + 1).min(duration);
+    if earliest != latest_start {
+        ui.small(range(earliest, latest_start));
+    }
+    if soonest_end != latest {
+        ui.small(range(soonest_end, latest));
+    }
+    let lengths: Vec<u64> = times.iter().map(|t| t.1 - t.0).collect();
+    ui.small(if lengths.windows(2).all(|l| l[0] == l[1]) {
+        format!("{:.2} seconds on screen", lengths[0] as f64 / 1000.)
+    } else {
+        "Duration: Mixed".to_string()
+    });
+    ui.small("Typing a Start moves the earliest object there. The others keep their spacing.");
+    super::property_design::end(ui);
+    super::property_design::heading(ui, "Timing", "Line up");
+    let mut line = None;
+    ui.columns(2, |col| {
+        let w = col[0].available_width();
+        if super::ui::button(&mut col[0], "Start here", "Start all here", w, false)
+            .tip("Start every selected object at the playhead.")
+            .clicked()
+        {
+            line = Some(LineUp::Start);
+        }
+        let w = col[1].available_width();
+        if super::ui::button(&mut col[1], "End here", "End all here", w, false)
+            .tip("End every selected object at the playhead.")
+            .clicked()
+        {
+            line = Some(LineUp::End);
+        }
+    });
+    line
+}
+fn line_up_objects(v: &mut Project, targets: &[crate::Annotation], line: LineUp) {
+    for a in targets {
+        let Some(old) = v.objects.get(&a.id).cloned() else {
+            continue;
+        };
+        let mut after = old.clone();
+        match line {
+            LineUp::Start => after.start = v.cursor,
+            LineUp::End => after.end = v.cursor + 1,
+        }
+        let mut next = old.clone();
+        next.copy_change(&old, &after, a);
+        v.place(a.id, next);
+    }
+}
+fn animation_summary(primary: Animation, stack: &[Animation], exit: bool) -> String {
+    let names: Vec<_> = std::iter::once(primary)
+        .chain(stack.iter().copied())
+        .filter(|a| *a != Animation::None)
+        .map(|a| a.label(exit))
+        .collect();
+    if names.is_empty() {
+        "None".into()
+    } else {
+        names.join(" + ")
+    }
 }
 fn animation_parts_preview(
     parts: &[crate::Annotation],
@@ -195,11 +374,15 @@ impl Editor {
                 .is_some_and(|c| !c.audio.is_empty()),
             _ => false,
         };
+        let has_text = self.video_text_tab();
         let tabs: Vec<_> = PropertyTab::ALL
             .into_iter()
             .filter(|t| *t != PropertyTab::Audio || has_audio)
+            .filter(|t| *t != PropertyTab::Text || has_text)
             .collect();
-        if !has_audio && self.video.tab == PropertyTab::Audio {
+        if (!has_audio && self.video.tab == PropertyTab::Audio)
+            || (!has_text && self.video.tab == PropertyTab::Text)
+        {
             self.video.tab = PropertyTab::Style;
         }
         egui::Frame::new()
@@ -250,6 +433,7 @@ impl Editor {
                             });
                             if response.clicked() {
                                 self.video.tab = tab;
+                                self.video.text_return = None;
                                 if tab != PropertyTab::Audio {
                                     self.video.object_tab = tab;
                                 }
@@ -258,6 +442,33 @@ impl Editor {
                     });
                 });
             });
+    }
+    /// Objects that hold text, other than Text objects, get a Text tab.
+    pub(crate) fn video_text_tab(&self) -> bool {
+        self.video.selected == Selection::Objects
+            && self.selected_annotation().is_some_and(|a| {
+                a.text.is_some() && a.kind != crate::Kind::Text && a.focus.is_none()
+            })
+            && !self.mixed_selection()
+    }
+    /// Typing into an object opens its Text tab; when typing ends the pane
+    /// returns to the tab it was on (bh-proposal).
+    /// The Text tab opens once when typing starts, so the other tabs stay
+    /// usable while typing (BH1); choosing a tab cancels the return.
+    fn follow_inline_typing(&mut self) {
+        let typing = self.text_draft.is_some() && self.video_text_tab();
+        if typing && !self.video.typing {
+            self.video.typing = true;
+            if self.video.tab != PropertyTab::Text {
+                self.video.text_return = Some(self.video.tab);
+                self.video.tab = PropertyTab::Text;
+            }
+        } else if !typing && self.video.typing {
+            self.video.typing = false;
+            if let Some(tab) = self.video.text_return.take() {
+                self.video.tab = tab;
+            }
+        }
     }
     pub(crate) fn video_properties_pane(&mut self, ui: &mut egui::Ui) {
         ui.spacing_mut().item_spacing = egui::vec2(8., 8.);
@@ -283,6 +494,7 @@ impl Editor {
             }
             self.video.property_selection = Some(selection);
         }
+        self.follow_inline_typing();
 
         let a = self.selected_annotation();
         let c = match self.video.selected {
@@ -321,7 +533,9 @@ impl Editor {
             )
         } else if let Some(a) = &a {
             (
-                if a.focus.is_some() {
+                if a.focus.and_then(|f| f.magnify).is_some() {
+                    "Magnify"
+                } else if a.focus.is_some() {
                     "Focus"
                 } else if a.text.is_some() {
                     "Text"
@@ -342,7 +556,9 @@ impl Editor {
                             .as_ref()
                             .map(|t| t.content.clone())
                             .unwrap_or_else(|| {
-                                if a.focus.is_some() {
+                                if a.focus.and_then(|f| f.magnify).is_some() {
+                                    "Magnify".into()
+                                } else if a.focus.is_some() {
                                     "Focus".into()
                                 } else {
                                     format!("{:?}", a.kind)
@@ -359,6 +575,29 @@ impl Editor {
                 "Project settings".into(),
                 false,
             )
+        };
+        // Several objects are titled as a group, however they were selected.
+        let count = self.selected_objects().len();
+        let group = |matches: fn(&capture_core::video::editing::Item) -> bool| {
+            self.video.selection.iter().filter(|i| matches(i)).count()
+        };
+        let clips = group(|i| matches!(i, capture_core::video::editing::Item::Media(_)));
+        let zooms = group(|i| matches!(i, capture_core::video::editing::Item::Zoom(_)));
+        let (title, subtitle) = if zooms > 1 && self.video.zoom_selected.is_some() {
+            (format!("{zooms} zooms selected"), subtitle)
+        } else if clips > 1 && c.is_some() {
+            (format!("{clips} clips selected"), subtitle)
+        } else if count > 1 && c.is_none() && self.video.zoom_selected.is_none() {
+            (
+                format!("{count} objects selected"),
+                if self.mixed_selection() {
+                    "Mixed".to_string()
+                } else {
+                    subtitle
+                },
+            )
+        } else {
+            (title, subtitle)
         };
         egui::Frame::new()
             .inner_margin(egui::Margin::symmetric(16, 10))
@@ -399,13 +638,18 @@ impl Editor {
                         28.,
                         self.video.properties_priority,
                     )
-                    .on_hover_text("Toggle Properties / Timeline layout priority")
+                    .tip("Toggle Properties / Timeline layout priority")
                     .clicked()
                     {
                         self.video.properties_priority = !self.video.properties_priority;
                     }
                 });
             });
+        if self.mixed_selection() {
+            egui::Frame::new()
+                .inner_margin(egui::Margin::symmetric(16, 0))
+                .show(ui, |ui| self.mixed_chips(ui));
+        }
         self.video_property_tabs(ui);
         let area = ui.available_rect_before_wrap();
         let preview = if self.video.tab == PropertyTab::Motion {
@@ -475,6 +719,7 @@ impl Editor {
     }
 
     pub(crate) fn video_properties(&mut self, ui: &mut egui::Ui) {
+        self.run_review_request();
         if let Some(id) = self.video.zoom_selected {
             self.zoom_properties(ui, id);
             return;
@@ -597,14 +842,14 @@ impl Editor {
                                     w,
                                     false,
                                 )
-                                .on_hover_text("Start at playhead")
+                                .tip("Start at playhead")
                                 .clicked()
                                 {
                                     c.at = v.cursor;
                                 }
                                 let w = col[1].available_width();
                                 if super::ui::button(&mut col[1], "End here", "End here", w, false)
-                                    .on_hover_text("End at playhead")
+                                    .tip("End at playhead")
                                     .clicked()
                                     && v.cursor > c.at
                                 {
@@ -669,6 +914,21 @@ impl Editor {
                             }
                         }
                         PropertyTab::Motion => {
+                            if c.kind() != capture_core::video::editor::MediaKind::Audio {
+                                let values =
+                                    capture_core::video::keyframes::Property::MEDIA.map(|p| {
+                                        (p, capture_core::video::keyframes::media_value(c, p))
+                                    });
+                                let until = c.until();
+                                self.keyframe_controls(
+                                    ui,
+                                    &mut c.keyframes,
+                                    (c.at, until),
+                                    &mut v.cursor,
+                                    &values,
+                                    false,
+                                );
+                            }
                             super::ui::section(ui, "Clip fades");
                             let duration = c.duration();
                             ui.columns(2, |col| {
@@ -685,14 +945,37 @@ impl Editor {
                     if let Some(a) = self.selected_annotation()
                         && let Some(mut timing) = v.objects.get(&a.id).cloned()
                     {
+                        let several = self.selected_objects().len() > 1;
+                        let targets = if several {
+                            self.selected_objects()
+                        } else {
+                            vec![a.clone()]
+                        };
+                        let motions: Vec<_> = targets
+                            .iter()
+                            .filter_map(|t| v.objects.get(&t.id))
+                            .map(capture_core::reusable_presets::Motion::from)
+                            .collect();
+                        let mixed_motion = motions.windows(2).any(|m| m[0] != m[1]);
+                        let mut line_up = None;
                         let locked = self.session.document.object_state(a.id).locked;
                         if locked {
                             ui.small(
                                 "This object is locked. Unlock it from its timeline menu to edit.",
                             );
                         }
-                        ui.add_enabled_ui(!locked,|ui| { match self.video.tab {
+                        ui.add_enabled_ui(!locked,|ui| {
+                            if matches!(self.video.tab,PropertyTab::Style|PropertyTab::Motion){
+                                let was_reviewed=timing.motion_path.as_ref().is_some_and(|p|p.reviewed);
+                                let mut nav=self.review_nav(a.id,v.cursor);
+                                super::path_properties::controls(ui,&mut timing,&mut v.cursor,&mut nav);
+                                let newly=!was_reviewed&&timing.motion_path.as_ref().is_some_and(|p|p.reviewed);
+                                self.finish_review_nav(ui.ctx(),a.id,nav,newly);
+                            }
+                            match self.video.tab {
                             PropertyTab::Style=>self.video_annotation_style(ui),
+                            PropertyTab::Text=>self.image_text_groups(ui),
+                            PropertyTab::Timing if several=>{line_up=group_timing(ui,&targets,&v,&mut timing,duration);}
                             PropertyTab::Timing=>{
                                 super::property_design::heading(ui,"Timing","On the timeline");
                                 ui.columns(2,|col|{seconds_field(&mut col[0],"Start",&mut timing.start,duration-1);seconds_field(&mut col[1],"End",&mut timing.end,duration);});
@@ -706,50 +989,84 @@ impl Editor {
                                 ui.add_space(12.);ui.small("Drag the edges of this object’s timeline block to change its range. Other objects on the same track keep their timing.");
                             }
                             PropertyTab::Motion=>{
-                                if matches!(a.kind,crate::Kind::Redact|crate::Kind::Blur|crate::Kind::Pixelate){ui.label("Privacy effects stay fully applied throughout their visible time. Revealing animations are disabled.");return;}
-                                super::property_design::heading(ui,"Presets","Motion presets");
-                                let current_motion=capture_core::reusable_presets::Motion::from(&timing);
-                                let motion_name=capture_core::reusable_presets::Motion::builtins().into_iter().find(|(_,p)|*p==current_motion).map_or("Custom motion",|(name,_)|name);
-                                egui::ComboBox::from_id_salt("bundled-motion-presets").width(ui.available_width()).selected_text(motion_name).show_ui(ui,|ui|{
-                                    for (name,preset) in capture_core::reusable_presets::Motion::builtins(){if preset.entrance.supports(&a)&&preset.exit.supports(&a)&&ui.button(name).clicked(){if let Err(e)=preset.apply(&a,&mut timing){self.status=e.to_string();}self.video.animation_clock=Some(Instant::now());ui.close();}}
-                                });
-                                if let Some(capture_core::reusable_presets::Payload::Motion(preset))=self.presets.reusable.controls(ui,capture_core::reusable_presets::Payload::Motion((&timing).into())) && let Err(e)=preset.apply(&a,&mut timing){self.status=e.to_string();}
-                                super::property_design::end(ui);
-                                for exit in [false,true] {
-                                    super::property_design::heading(ui,if exit {"End here"}else{"Start here"},if exit {"Exit"}else{"Entrance"});
-                                    ui.columns(2,|col| {
-                                        col[0].label("Animation");let anim=if exit {&mut timing.exit}else{&mut timing.entrance};let before=*anim;
-                                        egui::ComboBox::from_id_salt(("video-animation",exit)).width(col[0].available_width()).selected_text(anim.label(exit)).show_ui(&mut col[0],|ui| {for choice in Animation::ALL.into_iter().filter(|x|x.supports(&a)){ui.selectable_value(anim,choice,choice.label(exit));}});
-                                        if *anim!=before {self.video.animation_clock=Some(Instant::now());}
-                                        if *anim!=before && timing.paired {if exit{timing.entrance=timing.exit}else{timing.exit=timing.entrance}}
-                                        seconds_field(&mut col[1],"Duration",if exit{&mut timing.exit_ms}else{&mut timing.entrance_ms},timing.end-timing.start);
+                                // Motion controls sit directly under the animation preview;
+                                // keyframes follow in their own collapsible section.
+                                let base=self.session.document.annotations.iter().find(|v|v.id==a.id).unwrap();
+                                let values=capture_core::video::keyframes::Property::ANNOTATION.map(|p|(p,capture_core::video::keyframes::annotation_value(base,p)));
+                                let privacy=matches!(a.kind,crate::Kind::Redact|crate::Kind::Blur|crate::Kind::Pixelate);
+                                if privacy{ui.label("Privacy effects stay fully applied throughout their visible time. Revealing animations are disabled.");self.keyframe_controls(ui,&mut timing.keyframes,(timing.start,timing.end),&mut v.cursor,&values,true);return;}
+                                // Approved mockup 3: one Motion section holds the preset, Entrance,
+                                // Exit and Motion curve, so one click hides all of them.
+                                let summary=format!("{} · {} · {}",animation_summary(timing.entrance,&timing.entrance_stack,false),animation_summary(timing.exit,&timing.exit_stack,true),if timing.smooth{"Smooth"}else{"Linear"});
+                                super::property_design::group(ui,"Motion","Motion",&summary,|ui| {
+                                    ui.horizontal(|ui|{
+                                        ui.add_sized([48.,22.],egui::Label::new(egui::RichText::new("Preset").weak()));
+                                        let current_motion=capture_core::reusable_presets::Motion::from(&timing);
+                                        let motion_name=if mixed_motion {"Mixed"} else {capture_core::reusable_presets::Motion::builtins().into_iter().find(|(_,p)|*p==current_motion).map_or("Custom motion",|(name,_)|name)};
+                                        egui::ComboBox::from_id_salt("bundled-motion-presets").width(ui.available_width()).selected_text(motion_name).show_ui(ui,|ui|{
+                                            for (name,preset) in capture_core::reusable_presets::Motion::builtins(){if targets.iter().all(|t|preset.entrance.supports(t)&&preset.exit.supports(t))&&ui.button(name).clicked(){if let Err(e)=preset.apply(&a,&mut timing){self.status=e.to_string();}self.video.animation_clock=Some(Instant::now());ui.close();}}
+                                        });
                                     });
-                                    let stack_before=timing.clone();
-                                    animation_stack(ui,&a,&mut timing,exit);
-                                    timing.normalize_stacks(&a);
-                                    if timing!=stack_before {self.video.animation_clock=Some(Instant::now());if timing.paired {if exit{timing.entrance=timing.exit;timing.entrance_stack=timing.exit_stack.clone();timing.entrance_durations=timing.exit_durations.clone();}else{timing.exit=timing.entrance;timing.exit_stack=timing.entrance_stack.clone();timing.exit_durations=timing.entrance_durations.clone();}}}
-                                    if !exit {let before=timing.paired;crate::controls::toggle(ui,&mut timing.paired,"Pair with reverse exit");if timing.paired && !before {timing.exit=timing.entrance;timing.exit_ms=timing.entrance_ms;timing.exit_stack=timing.entrance_stack.clone();timing.exit_durations=timing.entrance_durations.clone();}}
-                                    super::property_design::end(ui);
-                                }
-                                if timing.exit==Animation::Path || timing.exit_stack.contains(&Animation::Path) {
-                                    super::property_design::heading(ui,"Motion","Retraction direction");
-                                    ui.horizontal_wrapped(|ui| {ui.selectable_value(&mut timing.retract_from_start,true,"First → Last node");ui.selectable_value(&mut timing.retract_from_start,false,"Last → First node");});
-                                    super::property_design::end(ui);
-                                }
-                                if (timing.entrance==Animation::Path || timing.exit==Animation::Path || timing.entrance_stack.contains(&Animation::Path) || timing.exit_stack.contains(&Animation::Path)) && (a.is_shape() || a.kind==crate::Kind::Callout || a.highlighter_rect) {
-                                    super::property_design::heading(ui,"Motion","Path direction");ui.horizontal_wrapped(|ui| {ui.selectable_value(&mut timing.path_reverse,false,"Clockwise");ui.selectable_value(&mut timing.path_reverse,true,"Counterclockwise");});super::property_design::end(ui);
-                                }
-                                super::property_design::group(ui,"Motion","Motion curve",if timing.smooth{"Smooth"}else{"Linear"},|ui| {
-                                    ui.horizontal(|ui| {ui.selectable_value(&mut timing.smooth,false,"Linear");ui.selectable_value(&mut timing.smooth,true,"Smooth");});
-                                    if timing.entrance==Animation::Float || timing.exit==Animation::Float || timing.entrance_stack.contains(&Animation::Float) || timing.exit_stack.contains(&Animation::Float) {
-                                        ui.label("Float direction");egui::ComboBox::from_id_salt("video-direction").width(ui.available_width()).selected_text(["From left","From right","From top","From bottom"][timing.direction as usize]).show_ui(ui,|ui|{for (i,label) in ["From left","From right","From top","From bottom"].iter().enumerate(){ui.selectable_value(&mut timing.direction,i as u8,*label);}});
+                                    if let Some(capture_core::reusable_presets::Payload::Motion(preset))=self.presets.reusable.controls(ui,capture_core::reusable_presets::Payload::Motion((&timing).into())) && let Err(e)=preset.apply(&a,&mut timing){self.status=e.to_string();}
+                                    for exit in [false,true] {
+                                        let side=if exit{animation_summary(timing.exit,&timing.exit_stack,true)}else{animation_summary(timing.entrance,&timing.entrance_stack,false)};
+                                        super::property_design::subgroup(ui,if exit{"Exit"}else{"Entrance"},&side,|ui| {
+                                            let before=timing.clone();
+                                            animation_rows(ui,&targets,&mut timing,exit);
+                                            if if exit {timing.exit==Animation::Float||timing.exit_stack.contains(&Animation::Float)} else {timing.entrance==Animation::Float||timing.entrance_stack.contains(&Animation::Float)} {float_direction(ui,&mut timing,exit);}
+                                            timing.normalize_stacks(&a);
+                                            if timing!=before {
+                                                self.video.animation_clock=Some(Instant::now());
+                                                // Paired: the other side mirrors this one.
+                                                if timing.paired {if exit{timing.entrance=timing.exit;timing.entrance_ms=timing.exit_ms;timing.entrance_stack=timing.exit_stack.clone();timing.entrance_durations=timing.exit_durations.clone();}else{timing.exit=timing.entrance;timing.exit_ms=timing.entrance_ms;timing.exit_stack=timing.entrance_stack.clone();timing.exit_durations=timing.entrance_durations.clone();}}
+                                            }
+                                            if !exit {let before=timing.paired;crate::controls::toggle(ui,&mut timing.paired,"Pair with reverse exit");if timing.paired && !before {timing.exit=timing.entrance;timing.exit_ms=timing.entrance_ms;timing.exit_stack=timing.entrance_stack.clone();timing.exit_durations=timing.entrance_durations.clone();}}
+                                            if exit && (timing.exit==Animation::Path || timing.exit_stack.contains(&Animation::Path)) {
+                                                ui.label(egui::RichText::new("Retraction direction").weak());
+                                                ui.horizontal_wrapped(|ui| {ui.selectable_value(&mut timing.retract_from_start,true,"First → Last node");ui.selectable_value(&mut timing.retract_from_start,false,"Last → First node");});
+                                            }
+                                        });
+                                        ui.add_space(6.);
                                     }
+                                    super::property_design::subgroup(ui,"Motion curve",if timing.smooth{"Smooth"}else{"Linear"},|ui| {
+                                        ui.horizontal(|ui| {ui.selectable_value(&mut timing.smooth,false,"Linear");ui.selectable_value(&mut timing.smooth,true,"Smooth");});
+                                        if (timing.entrance==Animation::Path || timing.exit==Animation::Path || timing.entrance_stack.contains(&Animation::Path) || timing.exit_stack.contains(&Animation::Path)) && (a.is_shape() || a.kind==crate::Kind::Callout || a.highlighter_rect) {
+                                            ui.label(egui::RichText::new("Path direction").weak());
+                                            ui.horizontal_wrapped(|ui| {ui.selectable_value(&mut timing.path_reverse,false,"Clockwise");ui.selectable_value(&mut timing.path_reverse,true,"Counterclockwise");});
+                                        }
+                                    });
                                 });
+                                self.keyframe_controls(ui,&mut timing.keyframes,(timing.start,timing.end),&mut v.cursor,&values,false);
                             }
                             PropertyTab::Audio=>()
                         }});
+                        if self.video.tab == PropertyTab::Timing
+                            && let Some(old) = original.objects.get(&a.id)
+                            && timing.start != old.start
+                            && let Some(path) = timing.motion_path.as_mut()
+                        {
+                            Arc::make_mut(path).offset_ms = old
+                                .motion_path
+                                .as_ref()
+                                .map_or(0, |p| p.offset_ms)
+                                .saturating_add_signed(timing.start as i64 - old.start as i64);
+                        }
+                        if self.video.tab == PropertyTab::Timing
+                            && let Some(old) = original.objects.get(&a.id)
+                        {
+                            timing.keyframes.offset_ms = old.keyframes.offset_ms;
+                            timing
+                                .keyframes
+                                .trim_start(timing.start as i64 - old.start as i64);
+                        }
                         timing.clamp_animations();
+                        if let Some(before) = original.objects.get(&a.id) {
+                            self.spread_timing(&mut v, a.id, before, &timing);
+                        }
                         v.place(a.id, timing);
+                        if let Some(line) = line_up {
+                            line_up_objects(&mut v, &targets, line);
+                        }
                     } else if self.video.tab == PropertyTab::Style {
                         if self.tool.is_some() || self.icon_library.active {
                             self.image_properties(ui);
@@ -771,7 +1088,7 @@ impl Editor {
                                     | col[1]
                                         .add(
                                             egui::DragValue::new(&mut height)
-                                                .range(64..=1080)
+                                                .range(64..=1920)
                                                 .speed(2.)
                                                 .suffix(" px"),
                                         )
@@ -810,6 +1127,9 @@ impl Editor {
                 }
             },
         }
+        if v.cursor != original.cursor {
+            self.video_seek(v.cursor);
+        }
         if !v.same_edit(&original) {
             if let Some(id) = self.selected
                 && let Some((a, b)) = v.objects.get(&id).zip(original.objects.get(&id))
@@ -832,6 +1152,14 @@ impl Editor {
                         }
                     }
                 }
+            }
+            if let Selection::Recording(i) = self.video.selected {
+                self.spread_clip_edit(&mut v, &original, i);
+            }
+            if let Some(preset) = self.video.clip_preset.take() {
+                let ratio =
+                    self.session.document.width as f32 / self.session.document.height as f32;
+                self.spread_clip_preset(&mut v, preset, ratio);
             }
             self.commit_video(v);
         }
@@ -882,7 +1210,7 @@ impl Editor {
                         self.current_tool().id == tool.id,
                         egui::Color32::from_rgb(106, 199, 223),
                     )
-                    .on_hover_text(self.tool_tooltip(tool.id))
+                    .tip(self.tool_tooltip(tool.id))
                     .clicked()
                     {
                         self.choose_tool(index);
@@ -894,23 +1222,42 @@ impl Editor {
         crate::ribbon::group(
             ui,
             "Focus",
-            152. + ui.spacing().item_spacing.x,
+            228. + ui.spacing().item_spacing.x,
             _height,
             |ui| {
                 let index = crate::shell::TOOLS
                     .iter()
                     .position(|t| t.id == capture_core::toolbar::ToolId::Focus)
                     .unwrap();
+                // Magnify uses the focus machinery; only one of the two is ever highlighted.
+                let magnify =
+                    self.current_tool().id == capture_core::toolbar::ToolId::MagnifiedCallout;
                 if crate::shell::ribbon_tile(
                     ui,
                     "Focus",
                     "Focus",
-                    self.shell.focus.active,
+                    self.shell.focus.active && !magnify,
                     crate::shell::ACCENT,
                 )
-                .on_hover_text(self.tool_tooltip(capture_core::toolbar::ToolId::Focus))
+                .tip(self.tool_tooltip(capture_core::toolbar::ToolId::Focus))
                 .clicked()
                 {
+                    self.choose_tool(index);
+                }
+                if crate::shell::ribbon_tile(
+                    ui,
+                    "Magnify",
+                    "Magnify",
+                    self.current_tool().id == capture_core::toolbar::ToolId::MagnifiedCallout,
+                    crate::shell::ACCENT,
+                )
+                .tip("Magnified callout")
+                .clicked()
+                {
+                    let index = crate::shell::TOOLS
+                        .iter()
+                        .position(|t| t.id == capture_core::toolbar::ToolId::MagnifiedCallout)
+                        .unwrap();
                     self.choose_tool(index);
                 }
                 if crate::shell::ribbon_tile(
@@ -920,6 +1267,8 @@ impl Editor {
                     self.video.zoom_draw,
                     crate::shell::ACCENT,
                 )
+                .tip_title("Zoom")
+                .tip("Draw the area the video zooms in to at the playhead.")
                 .clicked()
                 {
                     self.start_zoom_insert();
@@ -939,6 +1288,12 @@ impl Editor {
                     selected,
                     egui::Color32::from_rgb(106, 199, 223),
                 )
+                .tip_title(name)
+                .tip(if name == "Narration" {
+                    "Record your voice over the video."
+                } else {
+                    "Add and tune effects on clips and tracks."
+                })
                 .clicked()
                 {
                     if name == "Narration" {
@@ -949,12 +1304,15 @@ impl Editor {
                 }
             }
         });
+        self.group_preset_ribbon(ui, _height);
     }
     pub(crate) fn video_export_ribbon(&mut self, ui: &mut egui::Ui, height: f32) {
         ui.set_min_height(height + 14.);
         for (i, glyph, label) in [
             (0, "Capture Video", "Export MP4"),
+            (3, "GIF Studio", "GIF Studio"),
             (1, "Export image", "Export frame"),
+            (4, "Copy", "Copy frame"),
             (2, "Save As", "Save As Project"),
         ] {
             if crate::ribbon::command_tile(ui, glyph, label, label, true, false, 126., height)
@@ -962,86 +1320,17 @@ impl Editor {
             {
                 match i {
                     0 => self.export_video(),
+                    3 => self.open_gif_studio(),
                     1 => {
                         self.video.pause();
                         self.begin_export(false)
                     }
+                    4 => self.copy_all(),
                     _ => {
                         self.save_video(true);
                     }
                 }
             }
-        }
-    }
-    pub(crate) fn video_advanced_ribbon(&mut self, ui: &mut egui::Ui, height: f32) {
-        ui.set_min_height(height + 14.);
-        if crate::ribbon::command_tile(
-            ui,
-            "Video setup",
-            "Video setup",
-            "Dimensions, crop and frame fit",
-            true,
-            self.video.settings,
-            108.,
-            height,
-        )
-        .clicked()
-        {
-            self.open_video_setup();
-        }
-        crate::ribbon::divider(ui, height);
-        crate::ribbon::group(ui, "Frame rate", 210., height, |ui| {
-            let mut v = self.session.document.video.clone().unwrap();
-            for fps in [15, 30, 60] {
-                if crate::ribbon::command_tile(
-                    ui,
-                    "Recording",
-                    &format!("{fps} fps"),
-                    "Output frames per second",
-                    true,
-                    v.fps == fps,
-                    64.,
-                    height - 4.,
-                )
-                .clicked()
-                {
-                    v.fps = fps;
-                }
-            }
-            if v.fps != self.session.document.video.as_ref().unwrap().fps {
-                self.commit_video(v);
-            }
-        });
-        crate::ribbon::divider(ui, height);
-        if crate::ribbon::command_tile(
-            ui,
-            "Revert",
-            "Reset source crop",
-            "Keep annotations and timing",
-            true,
-            false,
-            126.,
-            height,
-        )
-        .clicked()
-        {
-            let mut v = self.session.document.video.clone().unwrap();
-            v.crop = [0, 0, v.source_size[0], v.source_size[1]];
-            self.commit_video(v);
-        }
-        if crate::ribbon::command_tile(
-            ui,
-            "Copy",
-            "Copy frame",
-            "Copy current composited frame",
-            true,
-            false,
-            110.,
-            height,
-        )
-        .clicked()
-        {
-            self.copy_all();
         }
     }
 }

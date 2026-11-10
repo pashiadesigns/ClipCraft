@@ -81,7 +81,7 @@ impl Editor {
                         egui::Sense::drag(),
                     )
                     .on_hover_cursor(egui::CursorIcon::Grab)
-                    .on_hover_text("Drag section to reorder or move to another page");
+                    .tip("Drag section to reorder or move to another page");
                 let color = if r.hovered() || r.dragged() {
                     crate::shell::ACCENT
                 } else {

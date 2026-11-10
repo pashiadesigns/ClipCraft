@@ -21,6 +21,7 @@ use windows_sys::Win32::{
     UI::{HiDpi::*, Input::KeyboardAndMouse::*, WindowsAndMessaging::*},
 };
 use windows_sys::core::{BOOL, w};
+mod control_surface;
 mod countdown;
 mod cursor;
 mod monitor_picker;
@@ -34,6 +35,7 @@ mod steps_intro;
 mod transport;
 pub(crate) mod video_audio;
 pub(crate) mod video_encoder;
+mod video_input;
 mod video_recording;
 
 fn win_error(operation: &str) -> String {
@@ -211,6 +213,7 @@ impl Snapshot {
         })
     }
     fn document(&self, region: Region) -> Result<Document, String> {
+        crate::capture_source::remember(crate::capture_source::under_cursor());
         let frame = self.frame(region)?;
         let mut document = Document::from_capture_image(frame.image).map_err(|e| e.to_string())?;
         if let Some(mut cursor) = frame.cursor {

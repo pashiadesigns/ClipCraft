@@ -62,7 +62,26 @@ unsafe extern "system" fn procedure(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM) 
             let s = &mut *s;
             match msg {
                 WM_MOUSEACTIVATE => return MA_NOACTIVATE as LRESULT,
-                WM_ERASEBKGND | WM_DRAWITEM => return 1,
+                WM_ERASEBKGND => return 1,
+                WM_PAINT => {
+                    let mut ps = PAINTSTRUCT::default();
+                    BeginPaint(hwnd, &mut ps);
+                    if !super::control_surface::layered(hwnd)
+                        && let Some(image) = &s.base
+                    {
+                        visual::present_image(hwnd, image);
+                    }
+                    EndPaint(hwnd, &ps);
+                    return 0;
+                }
+                WM_DRAWITEM => {
+                    if !super::control_surface::layered(hwnd)
+                        && let Some(image) = &s.base
+                    {
+                        visual::present_image(hwnd, image);
+                    }
+                    return 1;
+                }
                 WM_CLOSE => {
                     s.events.push_back(Action::Cancel);
                     return 0;
@@ -157,9 +176,7 @@ impl Transport {
             }
             state.hwnd = hwnd;
             let mut result = Self { state };
-            if SetWindowDisplayAffinity(hwnd, WDA_EXCLUDEFROMCAPTURE) == 0 {
-                return Err(win_error("Cannot exclude recorder from capture"));
-            }
+            super::control_surface::exclude(hwnd, "recording controls")?;
             for (index, label, x, y, width, height) in [
                 (0, w!("Record / stop scrolling"), 156, 14, 56, 56),
                 (1, w!("Finish capture"), 293, 23, 52, 62),

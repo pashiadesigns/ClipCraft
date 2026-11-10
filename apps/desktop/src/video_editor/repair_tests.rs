@@ -349,3 +349,178 @@ fn zoom_video_export_uses_the_live_layer_transform_and_preserves_originals() {
         doc.video.as_ref().unwrap().zooms
     );
 }
+
+#[test]
+fn many_flagged_redactions_keep_export_video_on_screen() {
+    use capture_core::video::motion_path::{Node, Path, Purpose};
+    let ctx = egui::Context::default();
+    let mut e = editor(&ctx);
+    let node = |at, confidence| Node {
+        at,
+        rect: [100., 100., 80., 20.],
+        visible: true,
+        sprite: 0,
+        confidence,
+    };
+    let project = e.session.document.video.as_mut().unwrap();
+    let track = project.tracks[0];
+    for id in 0..34u64 {
+        let mut timing = capture_core::video::editor::Timing::new(track, 0, 2000);
+        timing.label = "Email \u{b7} sample".into();
+        let mut nodes = vec![node(0, 1.), node(100, 0.), node(200, 1.)];
+        if id < 27 {
+            nodes.extend([node(300, 0.), node(400, 1.)]);
+        }
+        timing.motion_path = Some(Arc::new(Path {
+            purpose: Purpose::Redaction,
+            reference: [100., 100., 80., 20.],
+            nodes,
+            sprites: vec![],
+            smooth: false,
+            enabled: true,
+            offset_ms: 0,
+            reviewed: false,
+            reduction: Default::default(),
+            inputs: vec![],
+            recorded: None,
+        }));
+        project.objects.insert(9000 + id, timing);
+    }
+    let pending = capture_core::privacy::tracking::pending_reviews(&e.session.document);
+    assert_eq!(pending.len(), 34);
+    assert_eq!(pending.iter().map(|p| p.uncertain.len()).sum::<usize>(), 61);
+    e.export_video();
+    let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1440., 960.));
+    for confirming in [false, true] {
+        ctx.data_mut(|d| d.insert_temp(egui::Id::unique("video-export-mark-all"), confirming));
+        for _ in 0..3 {
+            render(&ctx, &mut e, vec![]);
+        }
+        let dialog: egui::Rect = ctx
+            .data(|d| d.get_temp(egui::Id::unique("video-export-rect")))
+            .unwrap();
+        assert!(screen.contains_rect(dialog), "{confirming}: {dialog:?}");
+        assert!(dialog.height() < 760., "{confirming}: {dialog:?}");
+    }
+}
+
+#[test]
+fn a_saved_copy_matches_the_recording_and_never_replaces_it() {
+    let root = tempfile::tempdir().unwrap();
+    let source = root.path().join("capture.mp4");
+    let bytes: Vec<u8> = (0..3_000_000u32).map(|i| (i % 251) as u8).collect();
+    std::fs::write(&source, &bytes).unwrap();
+    let out = root.path().join("copy.mp4");
+    let stop = std::sync::atomic::AtomicBool::new(false);
+    workers::copy_recording(&source, &out, &stop, |_| ()).unwrap();
+    assert_eq!(std::fs::read(&out).unwrap(), bytes);
+    assert!(workers::copy_recording(&source, &source, &stop, |_| ()).is_err());
+    assert_eq!(std::fs::read(&source).unwrap(), bytes);
+    let cancelled = root.path().join("cancelled.mp4");
+    stop.store(true, std::sync::atomic::Ordering::Relaxed);
+    assert!(workers::copy_recording(&source, &cancelled, &stop, |_| ()).is_err());
+    assert!(!cancelled.exists());
+}
+
+#[test]
+fn review_steps_through_flagged_moments_and_offers_export_at_the_end() {
+    use capture_core::privacy::tracking::{next_stop_after, review_stops};
+    use capture_core::video::motion_path::{Node, Path, Purpose};
+    let ctx = egui::Context::default();
+    let mut e = editor(&ctx);
+    let node = |at, confidence| Node {
+        at,
+        rect: [100., 100., 80., 20.],
+        visible: true,
+        sprite: 0,
+        confidence,
+    };
+    let project = e.session.document.video.as_mut().unwrap();
+    let track = project.tracks[0];
+    for (id, start) in [(9001u64, 2000u64), (9002, 500)] {
+        let mut timing = capture_core::video::editor::Timing::new(track, start, start + 1000);
+        timing.label = "Email \u{b7} sample".into();
+        timing.motion_path = Some(Arc::new(Path {
+            purpose: Purpose::Redaction,
+            reference: [100., 100., 80., 20.],
+            nodes: vec![
+                node(0, 1.),
+                node(100, 0.),
+                node(200, 1.),
+                node(500, 0.),
+                node(600, 1.),
+            ],
+            sprites: vec![],
+            smooth: false,
+            enabled: true,
+            offset_ms: 0,
+            reviewed: false,
+            reduction: Default::default(),
+            inputs: vec![],
+            recorded: None,
+        }));
+        project.objects.insert(id, timing);
+    }
+    let stops = review_stops(&e.session.document);
+    // Time order across redactions, not grouped by redaction.
+    assert_eq!(
+        stops.iter().map(|s| (s.id, s.start)).collect::<Vec<_>>(),
+        vec![(9002, 600), (9002, 1000), (9001, 2100), (9001, 2500)]
+    );
+    assert_eq!(next_stop_after(&stops, 9002, 1000), Some(stops[2]));
+    assert_eq!(next_stop_after(&stops[2..], 9001, 2500), None);
+    e.show_review_stop(stops[1]);
+    assert_eq!(e.session.document.video.as_ref().unwrap().cursor, 1000);
+    assert_eq!(e.selected, Some(9002));
+    let nav = e.review_nav(9002, 1000);
+    assert_eq!(nav.position, Some((2, 4)));
+    assert_eq!((nav.previous, nav.next), (Some(stops[0]), Some(stops[2])));
+    // Ticking the box moves to the other redaction on the next frame.
+    let project = e.session.document.video.as_mut().unwrap();
+    Arc::make_mut(
+        project
+            .objects
+            .get_mut(&9002)
+            .unwrap()
+            .motion_path
+            .as_mut()
+            .unwrap(),
+    )
+    .reviewed = true;
+    let nav = e.review_nav(9002, 1000);
+    assert_eq!(nav.position, None);
+    e.finish_review_nav(
+        &ctx,
+        9002,
+        jump::ReviewNav {
+            stop: Some(stops[1]),
+            ..nav
+        },
+        true,
+    );
+    e.run_review_request();
+    assert_eq!(e.selected, Some(9001));
+    assert_eq!(e.session.document.video.as_ref().unwrap().cursor, 2100);
+    // The last one offers Export video again.
+    let project = e.session.document.video.as_mut().unwrap();
+    Arc::make_mut(
+        project
+            .objects
+            .get_mut(&9001)
+            .unwrap()
+            .motion_path
+            .as_mut()
+            .unwrap(),
+    )
+    .reviewed = true;
+    let nav = e.review_nav(9001, 2100);
+    e.finish_review_nav(&ctx, 9001, nav, true);
+    assert!(e.review_nav(9001, 2100).finished);
+    e.run_review_request();
+    assert!(!e.video.export_dialog);
+    let mut nav = e.review_nav(9001, 2100);
+    nav.reopen = true;
+    e.finish_review_nav(&ctx, 9001, nav, false);
+    e.run_review_request();
+    assert!(e.video.export_dialog);
+}

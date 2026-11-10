@@ -1,4 +1,5 @@
 //! Lucide geometry from the approved Library preview. See assets/library-icons/LICENSE.
+use crate::tips::Tip as _;
 use eframe::egui;
 use std::collections::HashMap;
 pub(super) fn button(
@@ -19,12 +20,24 @@ pub(super) fn button(
         response.widget_info(|| {
             egui::WidgetInfo::selected(egui::Role::Button, enabled, selected, tooltip)
         });
-        response.on_hover_text(tooltip)
+        response.tip(tooltip)
     })
     .inner
 }
 pub(super) fn paint(p: &egui::Painter, center: egui::Pos2, name: &str, color: egui::Color32) {
+    paint_sized(p, center, name, color, 18.);
+}
+pub(super) fn paint_sized(
+    p: &egui::Painter,
+    center: egui::Pos2,
+    name: &str,
+    color: egui::Color32,
+    size: f32,
+) {
     let name = match name {
+        "Folder" => "folder",
+        "Add" => "plus",
+        "Type" => "list-filter",
         "Library" => "images",
         "Image" => "image",
         "Steps" => "list-ordered",
@@ -41,7 +54,7 @@ pub(super) fn paint(p: &egui::Painter, center: egui::Pos2, name: &str, color: eg
             return;
         }
     };
-    let px = (18. * p.ctx().pixels_per_point()).round().clamp(18., 144.) as u16;
+    let px = (size * p.ctx().pixels_per_point()).round().clamp(12., 144.) as u16;
     let cache_id = egui::Id::unique("library-icon-textures");
     let mut cache = p
         .ctx()
@@ -68,7 +81,7 @@ pub(super) fn paint(p: &egui::Painter, center: egui::Pos2, name: &str, color: eg
     if let Some(texture) = cache.get(&key) {
         p.image(
             texture.id(),
-            egui::Rect::from_center_size(center, egui::vec2(18., 18.)),
+            egui::Rect::from_center_size(center, egui::vec2(size, size)),
             egui::Rect::from_min_max(egui::Pos2::ZERO, egui::pos2(1., 1.)),
             color,
         );

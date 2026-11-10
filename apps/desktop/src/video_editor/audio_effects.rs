@@ -1,4 +1,5 @@
 use super::*;
+use crate::tips::Tip as _;
 use capture_core::video::effects::{
     Chain, Kind, Target,
     analysis::{Analyzer, Character, Report},
@@ -289,7 +290,7 @@ impl Editor {
             routing |= ui.selectable_value(&mut mono, false, "Stereo").changed();
             routing |= ui
                 .selectable_value(&mut mono, true, "Mono")
-                .on_hover_text("Merge left and right input into both speakers")
+                .tip("Merge left and right input into both speakers")
                 .changed();
         });
         if routing {
@@ -327,7 +328,7 @@ impl Editor {
                             open = Some(effect.id);
                         }
                         if super::ui::button(ui, "Effect power", "", 26., effect.enabled)
-                            .on_hover_text("Enable / bypass effect")
+                            .tip("Enable / bypass effect")
                             .clicked()
                         {
                             effect.enabled = !effect.enabled;
@@ -363,8 +364,7 @@ impl Editor {
             if let Some((sources, linked)) = &source_info {
                 for (label, filename) in sources {
                     ui.label(egui::RichText::new(label).strong());
-                    ui.add(egui::Label::new(filename).truncate())
-                        .on_hover_text(filename);
+                    ui.add(egui::Label::new(filename).truncate()).tip(filename);
                 }
                 ui.small(if *linked {
                     "Timing linked · change linking in Timing"
@@ -604,5 +604,5 @@ fn effect_row(
         egui::FontId::proportional(11.),
         crate::panel_ui::MUTED,
     );
-    response.on_hover_text(format!("Open {} settings", effect.kind.label()))
+    response.tip(format!("Open {} settings", effect.kind.label()))
 }

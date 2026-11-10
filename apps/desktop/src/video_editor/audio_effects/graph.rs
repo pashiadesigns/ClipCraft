@@ -232,7 +232,7 @@ pub(super) fn draw(
                 }
                 changed = true;
             }
-            response.clone().on_hover_text("Click the EQ curve to add a band. Drag a node for frequency and gain. Use Width · Q below to set bandwidth.");
+            response.clone().tip("Click the EQ curve to add a band. Drag a node for frequency and gain. Use Width · Q below to set bandwidth.");
             for (i, b) in effect.bands.iter().enumerate() {
                 let pos = egui::pos2(
                     x(b.frequency as f64),

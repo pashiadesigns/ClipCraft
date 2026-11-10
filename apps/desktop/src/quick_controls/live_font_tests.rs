@@ -181,7 +181,7 @@ fn frame(
         },
         |ui| {
             e.prepare_property_input(ctx);
-            e.show_quick_font_controls(ui);
+            e.show_font_controls(ui, false);
             e.settle_property_preview(ctx);
         },
     );

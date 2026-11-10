@@ -69,7 +69,7 @@ fn icon_button(
     let response = ui
         .add_enabled_ui(enabled, |ui| ui.put(rect, button))
         .inner
-        .on_hover_text(names[index]);
+        .tip(names[index]);
     response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, enabled, names[index]));
     let c = rect.center();
     let p = ui.painter();

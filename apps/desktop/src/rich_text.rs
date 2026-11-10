@@ -1,3 +1,4 @@
+use crate::tips::Tip as _;
 use crate::{Annotation, Command, Editor, egui};
 use capture_core::text::{
     TextStyle,
@@ -182,18 +183,10 @@ impl Editor {
         });
         ui.horizontal(|ui| {
             ui.label("Indent");
-            if ui
-                .small_button("−")
-                .on_hover_text("Decrease indent")
-                .clicked()
-            {
+            if ui.small_button("−").tip("Decrease indent").clicked() {
                 indent = (indent - 16.).max(0.);
             }
-            if ui
-                .small_button("+")
-                .on_hover_text("Increase indent")
-                .clicked()
-            {
+            if ui.small_button("+").tip("Increase indent").clicked() {
                 indent = (indent + 16.).min(256.);
             }
         });
@@ -215,7 +208,7 @@ impl Editor {
         ui.add_enabled_ui(enabled, |ui| {
             if ui
                 .button("Paragraph Settings")
-                .on_hover_text("Spacing, indents, tabs and lists")
+                .tip("Spacing, indents, tabs and lists")
                 .clicked()
             {
                 self.open_rich_text(Tab::Paragraph);
@@ -357,7 +350,7 @@ fn list_buttons(ui: &mut egui::Ui, value: &mut List) {
                     .min_size(egui::vec2(30., 26.))
                     .selected(*value == list),
             )
-            .on_hover_text(name);
+            .tip_title(name);
         crate::icons::draw_scaled(ui.painter(), r.rect, name, ui.visuals().text_color(), 0.65);
         r.widget_info(|| {
             egui::WidgetInfo::selected(

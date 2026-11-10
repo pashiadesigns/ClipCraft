@@ -1,3 +1,4 @@
+use crate::tips::Tip as _;
 use crate::{Command, Editor, egui};
 use capture_core::{
     layout_selection::LayoutAction as L,
@@ -88,12 +89,6 @@ impl QuickControls {
     pub(super) fn thumbnail_details(&self) -> bool {
         self.prefs.thumbnail_details
     }
-    pub(super) fn library_pinned(&self) -> bool {
-        self.prefs.library_pinned
-    }
-    pub(super) fn set_library_pinned(&mut self, value: bool) {
-        self.remember(Choice::LibraryPinned(value));
-    }
     pub(super) fn set_thumbnail_details(&mut self, value: bool) {
         self.remember(Choice::ThumbnailDetails(value));
     }
@@ -114,6 +109,36 @@ impl QuickControls {
     ) {
         self.remember(Choice::Folder(kind, path));
     }
+    /// Watermark presets and the default preset's name (FX-003).
+    pub(crate) fn blank_defaults(&self) -> capture_core::quick_preferences::BlankDefaults {
+        self.prefs.blank
+    }
+    pub(crate) fn remember_blank(&mut self, value: capture_core::quick_preferences::BlankDefaults) {
+        if self.prefs.blank != value {
+            self.remember(Choice::Blank(value));
+        }
+    }
+    pub(crate) fn watermarks(&self) -> (Vec<capture_core::watermark::Watermark>, Option<String>) {
+        (
+            self.prefs.watermarks.clone(),
+            self.prefs.default_watermark.clone(),
+        )
+    }
+    pub(crate) fn default_watermark(&self) -> Option<capture_core::watermark::Watermark> {
+        let name = self.prefs.default_watermark.as_ref()?;
+        self.prefs
+            .watermarks
+            .iter()
+            .find(|w| &w.name == name)
+            .cloned()
+    }
+    pub(crate) fn remember_watermarks(
+        &mut self,
+        list: Vec<capture_core::watermark::Watermark>,
+        default: Option<String>,
+    ) {
+        self.remember(Choice::Watermarks(list, default));
+    }
     pub(super) fn video_settings(&self) -> capture_core::video::Options {
         self.prefs.video.clone()
     }
@@ -122,6 +147,12 @@ impl QuickControls {
     }
     pub(super) fn capture_settings(&self) -> capture_core::capture_options::Settings {
         self.prefs.capture.request().unwrap_or_default()
+    }
+    pub(super) fn ask_before_clip(&self) -> bool {
+        self.prefs.ask_before_clip
+    }
+    pub(super) fn set_ask_before_clip(&mut self, value: bool) {
+        self.remember(Choice::AskBeforeClip(value));
     }
     pub(super) fn capture_for(
         &self,
@@ -186,6 +217,7 @@ impl QuickControls {
     pub(super) fn auto_switch_tool(&self) -> bool {
         self.prefs.auto_switch_tool
     }
+    #[cfg(test)]
     pub(super) fn set_auto_switch_tool(&mut self, value: bool) {
         self.remember(Choice::AutoSwitchTool(value));
     }
@@ -237,6 +269,82 @@ impl QuickControls {
         self.prefs.canvas_snapping
     }
 
+    pub(super) fn workspace(&self) -> capture_core::quick_preferences::Workspace {
+        self.prefs.workspace
+    }
+    pub(super) fn snapshot(&self) -> Preferences {
+        self.prefs.clone()
+    }
+    /// Snapping is on overall, on for this kind of drag, and not being held off.
+    pub(super) fn snap_when(
+        &self,
+        kind: fn(&capture_core::quick_preferences::Workspace) -> bool,
+        modifiers: egui::Modifiers,
+    ) -> bool {
+        use capture_core::quick_preferences::BypassKey;
+        let w = &self.prefs.workspace;
+        let held = match w.bypass {
+            BypassKey::Ctrl => modifiers.ctrl,
+            BypassKey::Shift => modifiers.shift,
+            BypassKey::Alt => modifiers.alt,
+        };
+        self.prefs.canvas_snapping && kind(w) && !held
+    }
+    /// The grid to land on while it is showing.
+    pub(super) fn snap_grid(&self) -> Option<u32> {
+        let w = &self.prefs.workspace;
+        w.show_grid.then_some(w.grid_size)
+    }
+    pub(super) fn canvas_color(&self) -> egui::Color32 {
+        use capture_core::quick_preferences::CanvasBackground as B;
+        match self.prefs.workspace.background {
+            B::Charcoal => crate::shell::CANVAS,
+            B::Graphite => egui::Color32::from_rgb(42, 47, 49),
+            B::Black => egui::Color32::BLACK,
+            B::Light => egui::Color32::from_rgb(200, 205, 208),
+        }
+    }
+    pub(super) fn remember_view(&mut self, zoom: Option<f32>, panel_width: Option<f32>) {
+        let mut workspace = self.prefs.workspace;
+        workspace.zoom = zoom;
+        workspace.panel_width = panel_width;
+        self.remember(Choice::Workspace(workspace));
+    }
+    /// Saves everything Preferences edits, leaving other settings alone.
+    pub(super) fn apply_preferences(&mut self, d: &Preferences) {
+        let mut video = self.prefs.video.clone();
+        video.fps = d.video.fps;
+        video.quality = d.video.quality;
+        for choice in [
+            Choice::CloseToTray(d.close_to_tray),
+            Choice::AskBeforeClip(d.ask_before_clip),
+            Choice::AutoSwitchTool(d.auto_switch_tool),
+            Choice::CanvasSnapping(d.canvas_snapping),
+            Choice::Video(video),
+            Choice::Workspace(d.workspace),
+        ] {
+            self.remember(choice);
+        }
+    }
+    pub(super) fn restore_toolbar(&mut self, order: Vec<ToolId>, favorites: Vec<ToolId>) {
+        self.remember(Choice::RestoreToolbar { order, favorites });
+    }
+    pub(super) fn restore_folders(
+        &mut self,
+        folders: std::collections::BTreeMap<
+            capture_core::quick_preferences::Folder,
+            std::path::PathBuf,
+        >,
+    ) {
+        self.remember(Choice::RestoreFolders(folders));
+    }
+    #[cfg(test)]
+    pub(super) fn remember_workspace_for_test(
+        &mut self,
+        value: capture_core::quick_preferences::Workspace,
+    ) {
+        self.remember(Choice::Workspace(value));
+    }
     pub(super) fn set_snapping(&mut self, value: bool) {
         self.remember(Choice::CanvasSnapping(value));
     }
@@ -482,7 +590,7 @@ fn grid_icon(
         egui::Rect::from_center_size(r.rect.center(), egui::vec2(14.0, 14.0)),
         color,
     );
-    r.on_hover_text(label)
+    r.tip_title(label)
 }
 
 #[derive(Clone, Copy)]
@@ -640,9 +748,19 @@ fn text_button(
             (response.rect, selected),
         )
     });
-    response.on_hover_text(label).clicked()
+    response.tip_title(label).clicked()
 }
 
+use capture_core::multi_selection as multi;
+/// One object needs text to take text settings; in a selection, it's enough
+/// that some of them can.
+fn text_controls_enabled(objects: &[crate::Annotation]) -> bool {
+    match objects {
+        [] => false,
+        [one] => one.text.is_some(),
+        _ => objects.iter().any(multi::can_hold_text),
+    }
+}
 impl Editor {
     pub(super) fn paste_shared_format(&mut self) {
         let Some(source) = self.quick_controls.copied_format.clone() else {
@@ -858,9 +976,17 @@ impl Editor {
             self.quick_controls.remember(Choice::Justification(choice));
             return;
         }
+        let several = self.selected_objects().len() > 1;
         let annotations = self
             .selected_objects()
             .into_iter()
+            .map(|a| {
+                if several {
+                    multi::with_room_for_text(a)
+                } else {
+                    a
+                }
+            })
             .filter_map(|mut a| {
                 let text = a.text.as_mut()?;
                 update(text, 0..text.content.chars().count());
@@ -950,9 +1076,17 @@ impl Editor {
                 Err(error) => self.status = error.to_string(),
             }
         } else {
+            let several = self.selected_objects().len() > 1;
             let annotations: capture_core::Result<Vec<_>> = self
                 .selected_objects()
                 .into_iter()
+                .map(|a| {
+                    if several {
+                        multi::with_room_for_text(a)
+                    } else {
+                        a
+                    }
+                })
                 .filter(|a| a.text.is_some())
                 .map(|a| action.apply_annotation(a, canvas))
                 .collect();
@@ -971,9 +1105,17 @@ impl Editor {
         let canvas = [self.session.document.width, self.session.document.height];
         // Always calculate an absolute drag value from the unchanged document:
         // increasing then decreasing size must not retain a larger fitted frame.
+        let several = self.selected_objects().len() > 1;
         let annotations = self
             .selected_objects()
             .into_iter()
+            .map(|a| {
+                if several {
+                    multi::with_room_for_text(a)
+                } else {
+                    a
+                }
+            })
             .map(|a| action.apply_annotation(a, canvas))
             .collect::<capture_core::Result<Vec<_>>>();
         match annotations {
@@ -1041,7 +1183,7 @@ impl Editor {
         ui: &mut egui::Ui,
     ) -> Vec<(J, egui::Response)> {
         let objects = self.selected_objects();
-        let enabled = !objects.is_empty() && objects.iter().all(|a| a.text.is_some());
+        let enabled = text_controls_enabled(&objects);
         let mut responses = vec![];
         ui.vertical(|ui| {
             ui.spacing_mut().item_spacing = egui::vec2(2.0, 2.0);
@@ -1074,10 +1216,6 @@ impl Editor {
         responses
     }
 
-    pub(super) fn show_quick_font_controls(&mut self, ui: &mut egui::Ui) {
-        self.show_font_controls(ui, false);
-    }
-
     pub(super) fn show_font_controls(&mut self, ui: &mut egui::Ui, sidebar: bool) {
         use capture_core::text::TextFont;
         let mut objects = self
@@ -1093,8 +1231,8 @@ impl Editor {
                 format.apply(text);
             }
         }
-        let enabled = !objects.is_empty() && objects.iter().all(|a| a.text.is_some());
-        let first = objects.first().and_then(|a| a.text.as_ref());
+        let enabled = text_controls_enabled(&objects);
+        let first = objects.iter().find_map(|a| a.text.as_ref());
         ui.vertical(|ui| {
             ui.spacing_mut().item_spacing = if sidebar { egui::vec2(6.,8.) } else { egui::vec2(3.0,4.0) };
             ui.spacing_mut().interact_size.y = if sidebar {28.}else{24.};
@@ -1133,7 +1271,7 @@ impl Editor {
                             }
                         })
                         .response
-                        .on_hover_text("Installed font family. Other computers need the same font; missing fonts use Ubuntu.");
+                        .tip("Installed font family. Other computers need the same font; missing fonts use Ubuntu.");
                     #[cfg(test)]
                     ui.ctx().data_mut(|d| d.insert_temp(egui::Id::unique("font-search-button"),font_button.rect));
                     let _ = font_button;
@@ -1151,7 +1289,7 @@ impl Editor {
                                     ui.close();
                                 }
                             }
-                        }).response.on_hover_text("Text style");
+                        }).response.tip("Text style");
                     }
                     let mut size = first.map_or(24.0, |t| t.size_points);
                     let mixed = objects
@@ -1172,7 +1310,7 @@ impl Editor {
                     if r.changed() {
                         self.preview_quick_text(TextAction::SetSize(size));
                     }
-                    r.on_hover_text(if mixed {
+                    r.tip(if mixed {
                         "Mixed sizes. Enter a font size to apply to all selected labels."
                     } else {
                         "Font size · drag to resize live; click to type"
@@ -1192,8 +1330,8 @@ impl Editor {
                 })
             });
             ui.horizontal(|ui| {
-                let bold = enabled && objects.iter().all(|a| a.text.as_ref().unwrap().bold);
-                let italic = enabled && objects.iter().all(|a| a.text.as_ref().unwrap().italic);
+                let bold = enabled && objects.iter().filter_map(|a| a.text.as_ref()).all(|t| t.bold);
+                let italic = enabled && objects.iter().filter_map(|a| a.text.as_ref()).all(|t| t.italic);
                 if text_button(ui, egui::RichText::new("B").strong(), "Bold", enabled, bold) {
                     self.apply_quick_text(TextAction::Bold(!bold));
                 }
@@ -1207,11 +1345,9 @@ impl Editor {
                     self.apply_quick_text(TextAction::Italic(!italic));
                 }
                 let underline =
-                    enabled && objects.iter().all(|a| a.text.as_ref().unwrap().underline);
+                    enabled && objects.iter().filter_map(|a| a.text.as_ref()).all(|t| t.underline);
                 let strike = enabled
-                    && objects
-                        .iter()
-                        .all(|a| a.text.as_ref().unwrap().strikethrough);
+                    && objects.iter().filter_map(|a| a.text.as_ref()).all(|t| t.strikethrough);
                 if text_button(
                     ui,
                     egui::RichText::new("U").underline(),
@@ -1250,7 +1386,7 @@ impl Editor {
                                     &mut color,
                                     crate::color_widgets::Preview::Text,
                                 )
-                                .on_hover_text("Text color");
+                                .tip("Text color");
                                 #[cfg(test)]
                                 ui.ctx().data_mut(|d| {
                                     d.insert_temp(
@@ -1265,7 +1401,7 @@ impl Editor {
                         }
                         if ui
                             .button("Font…")
-                            .on_hover_text("Open text properties and advanced text options")
+                            .tip("Open text properties and advanced text options")
                             .clicked()
                         {
                             self.shell.properties = true;
@@ -1699,7 +1835,7 @@ mod tests {
                     focused: true,
                     ..Default::default()
                 },
-                |ui| e.show_quick_font_controls(ui),
+                |ui| e.show_font_controls(ui, false),
             );
             output.textures_delta.clear();
         };

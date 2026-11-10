@@ -137,6 +137,10 @@ pub(in crate::capture::windows) enum Caption {
     Video {
         seconds: u64,
         countdown: u32,
+        /// Step by Step recordings count their steps (clicks), like image Steps.
+        steps: Option<usize>,
+        /// The webcam is recording too.
+        webcam: bool,
     },
 }
 pub(super) fn render(
@@ -312,6 +316,14 @@ pub(in crate::capture::windows) fn render_capture(
         } else if hover == 1 {
             glyph(dc.0, "pause", 174, 32, 0x00ffffff);
         }
+        if let Caption::Video { webcam: true, .. } = caption {
+            // The webcam indicator sits beside the record button (BG mockup note),
+            // on its own disc so it reads on the collapsed controls too.
+            if expanded <= 0. {
+                box_shape(dc.0, [211, 15, 30, 30], 15, PANEL, 0x00665556, 1);
+            }
+            glyph(dc.0, "video", 216, 20, 0x00edb47d);
+        }
         box_shape(dc.0, [135, 78, 98, 29], 8, PANEL, PANEL, 1);
         if caption == Caption::Steps {
             let number = count.to_string();
@@ -353,15 +365,26 @@ pub(in crate::capture::windows) fn render_capture(
                     }
                 }
                 Caption::Video { countdown, .. } if countdown > 0 => "Starting…".into(),
+                Caption::Video {
+                    seconds,
+                    steps: Some(n),
+                    ..
+                } => format!(
+                    "{n} {} · {:02}:{:02}",
+                    if n == 1 { "step" } else { "steps" },
+                    seconds / 60,
+                    seconds % 60
+                ),
                 Caption::Video { seconds, .. } => {
                     format!("{:02}:{:02}", seconds / 60, seconds % 60)
                 }
                 Caption::Steps => unreachable!(),
             };
+            let small = matches!(caption, Caption::Video { steps: Some(_), .. });
             text(
                 dc.0,
                 &label,
-                13,
+                if small { 11 } else { 13 },
                 0x00f8f7f5,
                 RECT {
                     left: 135,
@@ -374,6 +397,7 @@ pub(in crate::capture::windows) fn render_capture(
         }
         GdiFlush();
         SelectObject(dc.0, old);
+        let caption_kind = caption;
         let bytes = std::slice::from_raw_parts(bits.cast::<u8>(), (size[0] * size[1] * 4) as usize);
         let mut rgba = RgbaImage::new(size[0], size[1]);
         for (x, y, p) in rgba.enumerate_pixels_mut() {
@@ -383,7 +407,9 @@ pub(in crate::capture::windows) fn render_capture(
             let shell = rounded(sx, sy, [left, 0., width, 114.], 20.);
             let center = (sx - 184.).powi(2) + (sy - 42.).powi(2) <= 28. * 28.;
             let caption = rounded(sx, sy, [135., 78., 98., 29.], 8.);
-            let alpha = if center || caption {
+            let camera = matches!(caption_kind, Caption::Video { webcam: true, .. })
+                && (sx - 226.).powi(2) + (sy - 30.).powi(2) <= 15. * 15.;
+            let alpha = if center || caption || camera {
                 255
             } else if shell {
                 (255. * expanded).round() as u8
@@ -494,6 +520,10 @@ pub(super) fn present(hwnd: HWND, state: &Dialog, expanded: f32) {
     present_image(hwnd, &image);
 }
 pub(in crate::capture::windows) fn present_image(hwnd: HWND, image: &RgbaImage) {
+    if !super::super::control_surface::layered(hwnd) {
+        super::super::control_surface::present(hwnd, image);
+        return;
+    }
     unsafe {
         let dc = MemoryDc(CreateCompatibleDC(null_mut()));
         let mut bits = null_mut();
@@ -583,6 +613,8 @@ mod tests {
                     Caption::Video {
                         seconds: 65,
                         countdown: 0,
+                        steps: None,
+                        webcam: false,
                     },
                     false,
                 ),
@@ -591,6 +623,8 @@ mod tests {
                     Caption::Video {
                         seconds: 0,
                         countdown: 3,
+                        steps: None,
+                        webcam: false,
                     },
                     false,
                 ),
@@ -599,8 +633,20 @@ mod tests {
                     Caption::Video {
                         seconds: 65,
                         countdown: 0,
+                        steps: None,
+                        webcam: false,
                     },
                     true,
+                ),
+                (
+                    "video-steps-webcam",
+                    Caption::Video {
+                        seconds: 754,
+                        countdown: 0,
+                        steps: Some(12),
+                        webcam: true,
+                    },
+                    false,
                 ),
             ] {
                 for expanded in [0., 1.] {

@@ -103,7 +103,7 @@ pub(super) fn button(ui: &mut egui::Ui, popup: egui::Id, draft: egui::Id) {
             });
         }
     }
-    r.on_hover_text(if active {
+    r.tip(if active {
         "Cancel color sampling · Esc"
     } else {
         "Pick color from canvas, including transparency"
@@ -129,6 +129,19 @@ impl Editor {
         if pick.owner.as_ref().is_some_and(|old| *old != owner) {
             cancel(ctx);
             return true;
+        }
+        if pick.image.is_none() && self.is_video() {
+            // Video: sample the frame on screen, not the empty still (BI6).
+            match self.video_frame_pixels() {
+                Some(image) => {
+                    pick.image = Some(Arc::new(image));
+                    pick.owner = Some(owner.clone());
+                }
+                None => {
+                    ctx.data_mut(|d| d.insert_temp(key(), pick));
+                    return true;
+                }
+            }
         }
         if pick.image.is_none() {
             let mut document = self.preview_document();

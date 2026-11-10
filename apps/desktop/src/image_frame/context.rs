@@ -21,6 +21,7 @@ impl Editor {
         transform: crate::canvas_view::Transform,
     ) {
         let key = egui::Id::unique("image-frame-context-target");
+        let video = self.is_video();
         if response.secondary_clicked() {
             let hit = response.interact_pointer_pos().and_then(|p| {
                 self.session
@@ -30,7 +31,7 @@ impl Editor {
                     .rev()
                     .find(|a| {
                         a.focus.is_none()
-                            && (a.is_shape() || a.is_image_frame())
+                            && (a.is_shape() || a.is_image_frame() || video)
                             && self.session.document.object_editable(a.id)
                             && a.hit_test(transform.image_point(p), 2. / transform.scale)
                     })
@@ -61,15 +62,27 @@ impl Editor {
         };
         let mut action = None;
         response.context_menu(|ui| {
+            // Video objects can be found on the timeline (bg-proposal).
+            if video && crate::controls::menu_action(ui, "Jump to Object").clicked() {
+                action = Some("Jump to Object");
+                ui.close();
+            }
             if !a.is_image_frame() {
-                if crate::controls::menu_action(ui, "Convert to image frame").clicked() {
+                if a.is_shape()
+                    && crate::controls::menu_action(ui, "Convert to image frame").clicked()
+                {
                     action = Some("Convert to image frame");
                     ui.close();
                 }
                 return;
             }
             crate::controls::menu_submenu(ui, "Replace Image", |ui| {
-                for label in ["From File…", "From Clipboard", "From Library…"] {
+                for label in [
+                    "From Capture",
+                    "From File…",
+                    "From Clipboard",
+                    "From Library…",
+                ] {
                     if crate::controls::menu_action(ui, label).clicked() {
                         action = Some(label);
                         ui.close();
@@ -96,7 +109,9 @@ impl Editor {
                 }
             }
         });
-        if action == Some("Grab Text") {
+        if action == Some("Jump to Object") {
+            self.jump_to_object();
+        } else if action == Some("Grab Text") {
             self.grab_canvas_text(ui.ctx());
         } else {
             self.frame_action(ui, id, action);
@@ -110,7 +125,12 @@ impl Editor {
     ) {
         let mut action = None;
         egui::Popup::menu(response).show(|ui| {
-            for label in ["From File…", "From Clipboard", "From Library…"] {
+            for label in [
+                "From Capture",
+                "From File…",
+                "From Clipboard",
+                "From Library…",
+            ] {
                 if crate::controls::menu_action(ui, label).clicked() {
                     action = Some(label);
                     ui.close();
@@ -138,6 +158,7 @@ impl Editor {
             Some("Convert to image frame") | Some("Convert to basic shape") => {
                 self.convert_selected_frame(action == Some("Convert to image frame"));
             }
+            Some("From Capture") => self.capture_into_frame(ui.ctx(), id),
             Some("From File…") => {
                 ui.ctx()
                     .data_mut(|d| d.insert_temp(egui::Id::unique("replace-frame-image"), id));
@@ -318,7 +339,7 @@ impl Editor {
                                             selected = Some(entry.id.clone());
                                         }
                                         ui.add(egui::Label::new(&entry.label).truncate())
-                                            .on_hover_text(&entry.label);
+                                            .tip(&entry.label);
                                     });
                                 }
                             });
@@ -383,6 +404,35 @@ mod tests {
         ) -> Result<(), String> {
             panic!("Replacement must not write clipboard")
         }
+    }
+    #[test]
+    fn a_capture_taken_from_a_frame_lands_in_that_frame() {
+        let ctx = egui::Context::default();
+        let mut e = crate::canvas::tests::editor(&ctx);
+        let a = templates::image_in_frame(
+            templates::placeholder().unwrap(),
+            1,
+            [20., 15., 220., 140.],
+            Scale::Fill,
+        )
+        .unwrap();
+        let mut doc = Document::canvas(400, 300, [255; 4]).unwrap();
+        doc.annotations.push(a.clone());
+        doc.promote_features();
+        e.session = capture_core::Session::new(doc).unwrap();
+        let captured = Document::canvas(60, 40, [10, 20, 30, 255]).unwrap();
+        e.place_capture_in_frame(1, captured);
+        let filled = &e.session.document.annotations[0];
+        assert!(!filled.image.as_ref().unwrap().is_placeholder());
+        assert_eq!((filled.start, filled.end), (a.start, a.end));
+        e.execute(Command::Undo);
+        assert!(
+            e.session.document.annotations[0]
+                .image
+                .as_ref()
+                .unwrap()
+                .is_placeholder()
+        );
     }
     #[test]
     fn frame_clipboard_replace_clear_undo_and_reopen_preserve_geometry() {
@@ -624,7 +674,7 @@ mod tests {
             .data(|d| d.get_temp::<egui::Rect>(egui::Id::unique(("frame-library-card", &entry.id))))
             .unwrap();
         assert_eq!(target.size(), egui::vec2(80., 48.));
-        assert!(crate::color_widgets::tests::text_rect(&out.shapes, "IMAGE").is_some());
+        assert!(crate::color_widgets::tests::text_rect(&out.shapes, "Image").is_some());
         assert!(
             out.textures_delta
                 .set

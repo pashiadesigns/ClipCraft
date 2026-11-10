@@ -1,3 +1,4 @@
+use crate::tips::Tip as _;
 use crate::{Editor, Kind, egui};
 use capture_core::object_styles::ObjectStyle;
 
@@ -60,6 +61,12 @@ impl Editor {
             self.color = style.color[..3].try_into().unwrap();
             self.width = style.width;
             self.presets.alpha = style.color[3];
+        } else if let Some(kind) = kind {
+            // Each tool starts at its own first preset's width (3 for lines and
+            // arrows), not whatever the last tool used.
+            self.width = capture_core::object_styles::presets(kind)
+                .first()
+                .map_or(3, |s| s.width);
         }
     }
     pub(super) fn apply_object_template(&mut self, style: &ObjectStyle, custom: bool) {
@@ -236,13 +243,15 @@ impl Editor {
         let mut apply = None;
         let mut remove = None;
         let mut update = None;
+        let mut save = None;
         egui::ScrollArea::vertical()
             .id_salt("object_templates")
             .max_height(214.0)
             .show(ui, |ui| {
                 let saved_columns = crate::style_tile::columns(ui.available_width(), false);
                 let columns = crate::style_tile::columns(ui.available_width(), true);
-                if !saved.is_empty() {
+                // Approved option B: "Save current" always ends the saved presets.
+                {
                     ui.small("Your styles");
                     egui::Grid::new("saved_templates")
                         .spacing([5.0, 5.0])
@@ -284,6 +293,12 @@ impl Editor {
                                     ui.end_row();
                                 }
                             }
+                            save = Some(
+                                ui.add_enabled_ui(objects.len() == 1, |ui| {
+                                    crate::style_tile::save_tile(ui)
+                                })
+                                .inner,
+                            );
                         });
                     ui.separator();
                 }
@@ -307,7 +322,7 @@ impl Editor {
                                         group.label,
                                         is_active(remembered),
                                     );
-                                    response.clone().on_hover_text(format!(
+                                    response.clone().tip(format!(
                                         "{}: {}. Click to repeat this style.",
                                         group.label, remembered.name
                                     ));
@@ -355,6 +370,9 @@ impl Editor {
                     });
                 }
             });
+        if let Some(save) = save {
+            self.preset_save_popup(ui, &save, Some(kind));
+        }
         if let Some((style, custom, category)) = apply {
             self.apply_object_template(&style, custom);
             if let Some(category) = category {
@@ -445,6 +463,62 @@ mod tests {
         let drawn = e.styled_new_annotation(next);
         assert_eq!(drawn.color[..3], [1, 2, 3]);
         assert_eq!(drawn.width, 8);
+    }
+    #[test]
+    fn save_current_tile_ends_saved_presets_and_opens_the_save_popup() {
+        let ctx = egui::Context::default();
+        crate::shell::configure(&ctx);
+        let mut e = crate::canvas::tests::editor(&ctx);
+        e.session.document.annotations.push(
+            capture_core::steps::marker(
+                1,
+                [100.0, 100.0],
+                44,
+                [120, 20, 40, 255],
+                (1, false),
+                [640, 400],
+            )
+            .unwrap(),
+        );
+        e.select_only(Some(1));
+        let dir = tempfile::tempdir().unwrap();
+        e.presets.templates = Some(capture_core::object_styles::Store::open(dir.path()).unwrap());
+        let frame = |e: &mut Editor, events: Vec<egui::Event>| {
+            let out = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        egui::vec2(340., 600.),
+                    )),
+                    focused: true,
+                    events,
+                    ..Default::default()
+                },
+                |ui| e.object_templates(ui, Kind::Step),
+            );
+            crate::property_layout::tests::PaintedOutput(out)
+        };
+        frame(&mut e, vec![]);
+        frame(&mut e, vec![]);
+        let tile = ctx
+            .data(|d| d.get_temp::<egui::Rect>(egui::Id::unique("preset-save-tile")))
+            .expect("Save current tile drawn with no saved presets yet");
+        for pressed in [true, false] {
+            frame(
+                &mut e,
+                vec![
+                    egui::Event::PointerMoved(tile.center()),
+                    egui::Event::PointerButton {
+                        pos: tile.center(),
+                        button: egui::PointerButton::Primary,
+                        pressed,
+                        modifiers: egui::Modifiers::NONE,
+                    },
+                ],
+            );
+        }
+        let out = frame(&mut e, vec![]);
+        assert!(crate::color_widgets::tests::text_rect(&out.shapes, "Save Style").is_some());
     }
     #[test]
     fn template_clicks_batch_apply_preserve_labels_and_save_reopen_without_document_edits() {

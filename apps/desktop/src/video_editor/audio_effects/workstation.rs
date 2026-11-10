@@ -77,7 +77,7 @@ for (name,preset) in super::presets::choices(effect.kind,effect.id) {if ui.butto
 if ui.button("Bypass this effect").clicked(){effect.enabled=false;commit=true;ui.close();}});});});
        if let Some(capture_core::reusable_presets::Payload::AudioEffect(mut saved))=self.presets.reusable.controls(ui,capture_core::reusable_presets::Payload::AudioEffect(effect.clone())) {saved.id=effect.id;*effect=saved;commit=true;}
        let target=self.video.fx.target(&p);let _ = graph::draw(ui,effect,&mut self.video.fx.band,self.video.meters.get(&target).and_then(|m|m.get(selected)).copied());
-       if effect.kind==Kind::Equalizer{self.eq_controls(ui,effect,&mut commit);}else{ui.small(match effect.kind{Kind::Compressor=>"Control peaks while retaining natural speech dynamics.",Kind::Clarity=>"Balance warmth, intelligibility and air.",Kind::DeEsser=>"Reduce sharp consonants when they exceed the threshold.",Kind::Leveler=>"Smooth speech levels; RMS target is not final export loudness.",Kind::Limiter=>"Sample-peak protection at the end of the chain.",_=>"Remove low-frequency rumble before shaping the voice."});let params=effect.kind.parameters();ui.columns(params.len(),|cols|{for(i,p)in params.iter().enumerate(){parameter(&mut cols[i],p.label,&mut effect.values[i],p.min,p.max,p.step,p.unit);cols[i].response().on_hover_text(super::presets::help(effect.kind,i));}});}
+       if effect.kind==Kind::Equalizer{self.eq_controls(ui,effect,&mut commit);}else{ui.small(match effect.kind{Kind::Compressor=>"Control peaks while retaining natural speech dynamics.",Kind::Clarity=>"Balance warmth, intelligibility and air.",Kind::DeEsser=>"Reduce sharp consonants when they exceed the threshold.",Kind::Leveler=>"Smooth speech levels; RMS target is not final export loudness.",Kind::Limiter=>"Sample-peak protection at the end of the chain.",_=>"Remove low-frequency rumble before shaping the voice."});let params=effect.kind.parameters();ui.columns(params.len(),|cols|{for(i,p)in params.iter().enumerate(){parameter(&mut cols[i],p.label,&mut effect.values[i],p.min,p.max,p.step,p.unit);cols[i].response().tip(super::presets::help(effect.kind,i));}});}
       });ui.separator();ui.allocate_ui_with_layout(egui::vec2(118.,315.),egui::Layout::top_down(egui::Align::Min),|ui|{graph::meters(ui,self.video.meters.get(&self.video.fx.target(&p)).and_then(|m|m.get(selected)).copied());});
      });
     }else{ui.heading("Build your vocal chain");ui.label("Add an effect with +, choose a chain preset, or analyze your voice.");}}
@@ -89,7 +89,7 @@ if ui.button("Bypass this effect").clicked(){effect.enabled=false;commit=true;ui
    ui.add_space((ui.min_rect().bottom()-ui.cursor().min.y-46.).max(0.));ui.separator();ui.horizontal_wrapped(|ui|{
     if super::super::ui::button(ui,if self.video.playing{"Pause"}else{"Play"},"",30.,false).clicked(){play=true;}
     ui.label("Original"); ui.spacing_mut().slider_width=180.;
-    if ui.add(egui::Slider::new(&mut self.video.fx.audition_mix,0. ..=1.).show_value(false)).on_hover_text("Blend the original sound with the processed sound. 50% is an equal mix.").changed(){self.video.fx.original=false;self.video.fx.auditioning=analysis_open&&self.video.fx.proposal.is_some();self.preview_chain(&chain);}
+    if ui.add(egui::Slider::new(&mut self.video.fx.audition_mix,0. ..=1.).show_value(false)).tip("Blend the original sound with the processed sound. 50% is an equal mix.").changed(){self.video.fx.original=false;self.video.fx.auditioning=analysis_open&&self.video.fx.proposal.is_some();self.preview_chain(&chain);}
     ui.label(format!("Processed · {:.0}%",self.video.fx.audition_mix*100.));
     if analysis_open {self.audio_analysis_actions(ui,&mut chain,&mut commit);}else{
     ui.small(if self.video.fx.track_scope {"Track effects · after clip effects"}else{"Clip effects · before track effects"});
@@ -211,7 +211,7 @@ if ui.button("Bypass this effect").clicked(){effect.enabled=false;commit=true;ui
                 }
             });
             if super::super::ui::button(ui, "Delete effect", "", 26., false)
-                .on_hover_text("Remove selected EQ band")
+                .tip("Remove selected EQ band")
                 .clicked()
                 && !effect.bands.is_empty()
             {
@@ -373,7 +373,7 @@ if ui.button("Bypass this effect").clicked(){effect.enabled=false;commit=true;ui
                                             egui::Id::unique(("fx-power", f.id)),
                                             egui::Sense::click(),
                                         )
-                                        .on_hover_text("Enable / bypass effect")
+                                        .tip("Enable / bypass effect")
                                         .clicked()
                                     {
                                         toggle = Some(i);

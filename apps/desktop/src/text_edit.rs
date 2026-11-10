@@ -152,9 +152,11 @@ impl Editor {
             }
         };
         if draft.changed()
-            && let Err(error) = self.session.execute(Command::Update {
-                annotation: annotation.clone(),
-            })
+            && let Err(error) = self
+                .keyframe_command(Command::Update {
+                    annotation: annotation.clone(),
+                })
+                .and_then(|command| self.session.execute(command))
         {
             self.status = error.to_string();
             return false;
@@ -1131,6 +1133,7 @@ mod tests {
                 focus: None,
 
                 highlighter_rect: false,
+                hard_edge: false,
                 group: None,
                 rotation_degrees: 0.0,
                 mirror_x: false,

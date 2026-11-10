@@ -1,8 +1,9 @@
 use crate::{Command, Editor, canvas_view::Transform, egui};
-use capture_core::cut_out::CutAxis;
+use capture_core::cut_out::{CutAxis, EdgeShape, Seam};
 
 pub(super) struct CutOut {
     axis: CutAxis,
+    edge: EdgeShape,
     origin: Option<u32>,
     band: Option<[u32; 2]>,
     review: bool,
@@ -25,6 +26,12 @@ impl CutOut {
     pub(super) fn dragging(&self) -> bool {
         self.origin.is_some()
     }
+    /// A Help picture of a strip being dragged across.
+    #[cfg(test)]
+    pub(super) fn seed_band(&mut self, band: [u32; 2]) {
+        self.origin = Some(band[0]);
+        self.band = Some(band);
+    }
     fn reset(&mut self) {
         self.origin = None;
         self.band = None;
@@ -40,6 +47,7 @@ impl Editor {
         self.tool = None;
         self.cut_out = Some(CutOut {
             axis: CutAxis::Horizontal,
+            edge: EdgeShape::Straight,
             origin: None,
             band: None,
             review: false,
@@ -62,6 +70,7 @@ impl Editor {
         {
             Command::CutOutPages {
                 axis: cut.axis,
+                edge: cut.edge,
                 start,
                 end,
                 page: cut.page,
@@ -70,6 +79,7 @@ impl Editor {
         } else {
             Command::CutOut {
                 axis: cut.axis,
+                edge: cut.edge,
                 start,
                 end,
             }
@@ -118,7 +128,14 @@ impl Editor {
             "Cut out only selected page"
         });
         ui.small("Start dragging on the page you want to cut.");
-        ui.label("Straight edge");
+        let edges = EdgeShape::ALL.map(|e| (e, e.label()));
+        crate::property_layout::choice(
+            ui,
+            "Edge",
+            &mut cut.edge,
+            &edges,
+            "How the two sides meet after the strip is removed.",
+        );
         let (_, size) = page_geometry(&self.session.document, cut.page);
         if let Some([start, end]) = cut.band {
             if let Ok(new) = cut.axis.output_size(size, start, end) {
@@ -262,6 +279,8 @@ impl Editor {
                         new,
                         cut.axis,
                         [start, end],
+                        cut.edge,
+                        self.quick_controls.canvas_color(),
                     );
                 }
             }
@@ -288,6 +307,7 @@ impl Editor {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn paint_joined_preview(
     ui: &mut egui::Ui,
     transform: Transform,
@@ -296,11 +316,13 @@ fn paint_joined_preview(
     new: [u32; 2],
     axis: CutAxis,
     [start, end]: [u32; 2],
+    edge: EdgeShape,
+    background: egui::Color32,
 ) {
     let painter = ui
         .painter()
         .with_clip_rect(transform.viewport.intersect(transform.image));
-    painter.rect_filled(transform.image, 0.0, crate::shell::CANVAS);
+    painter.rect_filled(transform.image, 0.0, background);
     let frame = egui::Rect::from_min_size(
         transform.image.min,
         egui::vec2(new[0] as f32, new[1] as f32) * transform.scale,
@@ -324,6 +346,21 @@ fn paint_joined_preview(
         }
     }
     let i = axis.dimension();
+    if edge != EdgeShape::Straight {
+        paint_shaped_join(
+            &p,
+            &painter,
+            transform,
+            source_uv,
+            texture,
+            size,
+            new,
+            axis,
+            [start, end],
+            edge,
+        );
+        return;
+    }
     for (source_start, source_end, dest_start) in [(0, start, 0), (end, size[i], start)] {
         if source_start == source_end {
             continue;
@@ -355,6 +392,64 @@ fn paint_joined_preview(
         [transform.screen_point(a), transform.screen_point(b)],
         egui::Stroke::new(1.0, egui::Color32::LIGHT_BLUE),
     );
+}
+
+/// Draws the joined image in thin strips across the cut, so the seam shows
+/// the shape the cut will have.
+#[allow(clippy::too_many_arguments)]
+fn paint_shaped_join(
+    p: &egui::Painter,
+    painter: &egui::Painter,
+    transform: Transform,
+    source_uv: egui::Rect,
+    texture: egui::TextureId,
+    size: [u32; 2],
+    new: [u32; 2],
+    axis: CutAxis,
+    [start, end]: [u32; 2],
+    edge: EdgeShape,
+) {
+    const STRIP: u32 = 2;
+    let i = axis.dimension();
+    let seam = Seam::new(axis, start, end, edge, size);
+    let removed = (end - start) as f32;
+    let length = new[1 - i];
+    let mut line = vec![];
+    for n in (0..length).step_by(STRIP as usize) {
+        let along = n as f32 + STRIP as f32 * 0.5;
+        let at = seam.at(along);
+        for (lo, hi, shift) in [(0., at, 0.), (at, new[i] as f32, removed)] {
+            let corner = |value: f32, position: f32| {
+                let mut q = [0.; 2];
+                q[i] = value;
+                q[1 - i] = position;
+                q
+            };
+            let a = corner(lo, n as f32);
+            let b = corner(hi, (n + STRIP).min(length) as f32);
+            let uv = |q: [f32; 2]| {
+                let mut read = q;
+                read[i] += shift;
+                source_uv.min
+                    + egui::vec2(read[0] / size[0] as f32, read[1] / size[1] as f32)
+                        * source_uv.size()
+            };
+            p.image(
+                texture,
+                egui::Rect::from_min_max(transform.screen_point(a), transform.screen_point(b)),
+                egui::Rect::from_min_max(uv(a), uv(b)),
+                egui::Color32::WHITE,
+            );
+        }
+        let mut q = [0.; 2];
+        q[i] = at;
+        q[1 - i] = along;
+        line.push(transform.screen_point(q));
+    }
+    painter.add(egui::Shape::line(
+        line,
+        egui::Stroke::new(1.0, egui::Color32::LIGHT_BLUE),
+    ));
 }
 
 fn page_geometry(document: &crate::Document, page: usize) -> ([f32; 2], [u32; 2]) {

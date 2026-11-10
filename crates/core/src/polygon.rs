@@ -5,6 +5,133 @@
 use crate::{Annotation, Kind};
 use image::RgbaImage;
 
+/// Ready-made shapes, drawn from corners placed in a unit box.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Ready {
+    Triangle,
+    RightTriangle,
+    Diamond,
+    Star,
+    Cross,
+    Chevron,
+    ArrowRight,
+    ArrowLeft,
+    ArrowUp,
+    ArrowDown,
+}
+impl Ready {
+    pub const ALL: [Self; 10] = [
+        Self::Triangle,
+        Self::RightTriangle,
+        Self::Diamond,
+        Self::Star,
+        Self::Cross,
+        Self::Chevron,
+        Self::ArrowRight,
+        Self::ArrowLeft,
+        Self::ArrowUp,
+        Self::ArrowDown,
+    ];
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Triangle => "Triangle",
+            Self::RightTriangle => "Right triangle",
+            Self::Diamond => "Diamond",
+            Self::Star => "Star",
+            Self::Cross => "Cross",
+            Self::Chevron => "Chevron",
+            Self::ArrowRight => "Arrow right",
+            Self::ArrowLeft => "Arrow left",
+            Self::ArrowUp => "Arrow up",
+            Self::ArrowDown => "Arrow down",
+        }
+    }
+    fn unit(self) -> Vec<[f32; 2]> {
+        const ARROW: [[f32; 2]; 7] = [
+            [0., 0.28],
+            [0.6, 0.28],
+            [0.6, 0.],
+            [1., 0.5],
+            [0.6, 1.],
+            [0.6, 0.72],
+            [0., 0.72],
+        ];
+        match self {
+            Self::Triangle => vec![[0.5, 0.], [1., 1.], [0., 1.]],
+            Self::RightTriangle => vec![[0., 0.], [1., 1.], [0., 1.]],
+            Self::Diamond => vec![[0.5, 0.], [1., 0.5], [0.5, 1.], [0., 0.5]],
+            Self::Star => {
+                let vertices: Vec<[f64; 2]> = (0..10)
+                    .map(|i| {
+                        let angle = -std::f64::consts::FRAC_PI_2
+                            + std::f64::consts::TAU * f64::from(i) / 10.;
+                        let radius = if i % 2 == 0 { 1. } else { 0.42 };
+                        [angle.cos() * radius, angle.sin() * radius]
+                    })
+                    .collect();
+                let low = [0, 1].map(|a| vertices.iter().map(|p| p[a]).fold(f64::MAX, f64::min));
+                let high = [0, 1].map(|a| vertices.iter().map(|p| p[a]).fold(f64::MIN, f64::max));
+                vertices
+                    .iter()
+                    .map(|p| [0, 1].map(|a| ((p[a] - low[a]) / (high[a] - low[a])) as f32))
+                    .collect()
+            }
+            Self::Cross => vec![
+                [0.35, 0.],
+                [0.65, 0.],
+                [0.65, 0.35],
+                [1., 0.35],
+                [1., 0.65],
+                [0.65, 0.65],
+                [0.65, 1.],
+                [0.35, 1.],
+                [0.35, 0.65],
+                [0., 0.65],
+                [0., 0.35],
+                [0.35, 0.35],
+            ],
+            Self::Chevron => vec![
+                [0., 0.],
+                [0.7, 0.],
+                [1., 0.5],
+                [0.7, 1.],
+                [0., 1.],
+                [0.3, 0.5],
+            ],
+            Self::ArrowRight => ARROW.to_vec(),
+            Self::ArrowLeft => ARROW.iter().map(|p| [1. - p[0], p[1]]).collect(),
+            Self::ArrowDown => ARROW.iter().map(|p| [p[1], p[0]]).collect(),
+            Self::ArrowUp => ARROW.iter().map(|p| [p[1], 1. - p[0]]).collect(),
+        }
+    }
+    /// This shape's corners, filling the box dragged out from `start` to `end`.
+    pub fn outline(self, start: [f32; 2], end: [f32; 2]) -> Vec<[f32; 2]> {
+        let min = [start[0].min(end[0]), start[1].min(end[1])];
+        let max = [start[0].max(end[0]), start[1].max(end[1])];
+        self.unit()
+            .into_iter()
+            .map(|p| [0, 1].map(|a| min[a] + p[a] * (max[a] - min[a])))
+            .collect()
+    }
+    /// Which ready-made shape these corners are, whatever size it was drawn.
+    pub fn of(points: &[[f32; 2]]) -> Option<Self> {
+        let first = *points.first()?;
+        let low = [0, 1].map(|a| points.iter().map(|p| p[a]).fold(first[a], f32::min));
+        let high = [0, 1].map(|a| points.iter().map(|p| p[a]).fold(first[a], f32::max));
+        if (0..2).any(|a| high[a] <= low[a]) {
+            return None;
+        }
+        Self::ALL.into_iter().find(|shape| {
+            let unit = shape.unit();
+            unit.len() == points.len()
+                && unit.iter().zip(points).all(|(u, p)| {
+                    (0..2).all(|a| ((p[a] - low[a]) / (high[a] - low[a]) - u[a]).abs() < 0.02)
+                })
+        })
+    }
+}
+
 pub fn outline(start: [f32; 2], end: [f32; 2], sides: u32) -> Vec<[f32; 2]> {
     if !(3..=64).contains(&sides) || start.iter().chain(&end).any(|n| !n.is_finite()) {
         return Vec::new();
@@ -57,6 +184,54 @@ mod tests {
     use crate::{Command, Document, Session, selection::Handle};
 
     #[test]
+    fn ready_shapes_fill_their_box_and_are_recognized_at_any_size() {
+        for shape in Ready::ALL {
+            let points = shape.outline([120., 110.], [20., 30.]);
+            assert_eq!(Ready::of(&points), Some(shape), "{shape:?}");
+            for (axis, low, high) in [(0, 20., 120.), (1, 30., 110.)] {
+                let values = || points.iter().map(|p| p[axis]);
+                assert_eq!(values().fold(f32::MAX, f32::min), low, "{shape:?}");
+                assert_eq!(values().fold(f32::MIN, f32::max), high, "{shape:?}");
+            }
+            assert!((3..=64).contains(&points.len()));
+        }
+        assert_eq!(Ready::of(&outline([0.; 2], [10.; 2], 5)), None);
+    }
+
+    #[test]
+    fn a_star_fills_its_middle_and_leaves_its_notches_empty() {
+        let mut a = Annotation {
+            image: None,
+            step_outline: None,
+            line_style: None,
+            shadow: None,
+            focus: None,
+            highlighter_rect: false,
+            hard_edge: false,
+            group: None,
+            rotation_degrees: 0.0,
+            mirror_x: false,
+            id: 1,
+            kind: Kind::Polygon,
+            start: [10., 10.],
+            end: [110., 110.],
+            color: [20, 50, 80, 255],
+            width: 1,
+            corner_radius: 0.0,
+            fill: Some([200, 40, 40, 255]),
+            points: vec![],
+            text: None,
+            callout: None,
+        };
+        a.points = Ready::Star.outline(a.start, a.end);
+        let mut doc = Document::blank(120, 120).unwrap();
+        doc.annotations.push(a);
+        let image = doc.render().unwrap();
+        assert_eq!(image.get_pixel(60, 62).0, [200, 40, 40, 255]);
+        assert_eq!(image.get_pixel(14, 100).0, [255, 255, 255, 255]);
+    }
+
+    #[test]
     fn bounded_vertices_fit_reverse_drag_and_preserve_triangle_area() {
         for sides in 3..=64 {
             let points = outline([20.0, 30.0], [120.0, 110.0], sides);
@@ -101,6 +276,7 @@ mod tests {
             focus: None,
 
             highlighter_rect: false,
+            hard_edge: false,
             group: None,
             rotation_degrees: 0.0,
             mirror_x: false,

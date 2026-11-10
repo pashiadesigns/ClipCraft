@@ -159,10 +159,13 @@ impl Editor {
         );
     }
     fn guide_scene_document(&self) -> Option<(crate::Document, Option<[i32; 2]>)> {
-        if !crate::guide_display::supported(&self.session.document) {
+        // Moving a tilted image uses the same GPU preview as dragging a corner.
+        let plan = self.expanding_move_plan();
+        let warp = self.shell.perspective_drag || plan.is_some();
+        if !crate::guide_display::supported_with(&self.session.document, warp) {
             return None;
         }
-        if let Some(plan) = self.expanding_move_plan() {
+        if let Some(plan) = plan {
             let mut d = self.session.document.clone();
             [d.width, d.height] = plan.dimensions;
             d.annotations = plan.annotations;
@@ -172,10 +175,10 @@ impl Editor {
             let d =
                 capture_core::redaction_labels::decorate(d.clone(), self.shell.redaction_labels)
                     .unwrap_or(d);
-            crate::guide_display::supported(&d).then_some((d, Some(plan.offset)))
+            crate::guide_display::supported_with(&d, warp).then_some((d, Some(plan.offset)))
         } else {
             let d = self.canvas_document();
-            crate::guide_display::supported(&d).then_some((d, None))
+            crate::guide_display::supported_with(&d, warp).then_some((d, None))
         }
     }
 }
