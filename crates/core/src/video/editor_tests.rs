@@ -237,6 +237,57 @@ fn draw_animation_follows_the_original_curved_path() {
     assert!(a.line_style.unwrap().reveal.is_none());
 }
 #[test]
+fn drawing_on_a_shape_keeps_its_outline_pattern_and_shadow_while_animating() {
+    let mut a = marker(1);
+    a.kind = Kind::Rectangle;
+    a.text = None;
+    a.fill = None;
+    a.width = 6;
+    a.start = [30., 30.];
+    a.end = [230., 130.];
+    let mut style = crate::line_style::Style::for_kind(Kind::Rectangle);
+    style.pattern = crate::line_style::Pattern::Dashed;
+    a.line_style = Some(style);
+    a.shadow = Some(crate::shadow::Shadow::default());
+    let mut t = Timing::new(1, 0, 2000);
+    t.entrance = Animation::Path;
+    t.entrance_ms = 1000;
+    t.exit = Animation::Path;
+    t.exit_ms = 1000;
+    t.smooth = false;
+    let render = |a: &crate::Annotation| {
+        let mut image = image::RgbaImage::new(260, 160);
+        crate::display::render_vector(
+            &mut image,
+            a,
+            crate::display::Viewport {
+                size: [260, 160],
+                origin: [0., 0.],
+                scale: 1.,
+            },
+        );
+        image
+    };
+    for time in [500, 1500] {
+        let sampled = animated(&a, &t, time).unwrap();
+        assert_eq!(sampled.kind, Kind::Pen, "at {time}");
+        assert_eq!(
+            sampled.line_style.map(|s| s.pattern),
+            Some(crate::line_style::Pattern::Dashed)
+        );
+        assert_eq!(sampled.shadow, a.shadow);
+        assert!(crate::shadow::patch(&sampled).is_some(), "shadow at {time}");
+        let mut solid = sampled.clone();
+        solid.line_style = None;
+        let ink = |i: &image::RgbaImage| i.pixels().filter(|p| p[3] > 0).count();
+        let (dashed, solid) = (ink(&render(&sampled)), ink(&render(&solid)));
+        assert!(
+            dashed > 0 && dashed * 10 < solid * 9,
+            "dashed {dashed} vs solid {solid}"
+        );
+    }
+}
+#[test]
 fn portable_media_metadata_collision_keeps_both_contents() {
     let root = tempfile::tempdir().unwrap();
     let a = root.path().join("a.mp4");

@@ -1,3 +1,4 @@
+use crate::tips::Tip as _;
 use crate::{Annotation, Editor, Kind, egui, shell::PropertyTab};
 use egui::{Color32, Stroke};
 
@@ -34,8 +35,17 @@ pub(super) fn section(ui: &mut egui::Ui, title: &str) -> egui::Rect {
 
 pub(super) fn section_help(ui: &mut egui::Ui, title: &str, help: &str) -> egui::Rect {
     let rect = section(ui, title);
-    help_at(ui, rect.right_center() - egui::vec2(15.0, 0.0), title, help);
+    help_at(ui, beside_title(ui, rect, title), title, help);
     rect
+}
+/// Where a section's ? sits: just right of its title (BB8), not at the far edge.
+pub(super) fn beside_title(ui: &egui::Ui, rect: egui::Rect, title: &str) -> egui::Pos2 {
+    let width = ui
+        .painter()
+        .layout_no_wrap(title.into(), crate::panel_ui::font(13.), Color32::WHITE)
+        .size()
+        .x;
+    rect.left_center() + egui::vec2(27. + width + 14., 0.)
 }
 
 /// Help occupies the header, never a row in the property controls.
@@ -80,7 +90,7 @@ pub(super) fn tool_help(kind: Option<Kind>) -> &'static str {
             "Draw an opaque black cover. PNG export and Copy All flatten the covering pixels. Editable projects retain the original image; share the flattened output for redaction."
         }
         Some(Kind::Blur | Kind::Pixelate) => {
-            "Drag a rectangle, then move or resize it with its handles. Intensity updates live. These are visual effects: use Redact for an opaque cover. Editable projects retain the original image."
+            "Drag out the region, then move or resize it with its handles. Choose Rectangle, Ellipse or Freehand under Next object. Intensity updates live. These are visual effects: use Redact for an opaque cover. Editable projects retain the original image."
         }
         Some(Kind::Eraser) => {
             "Drag to erase to transparency; release to keep, Undo to restore. Choose a circle preset for brush size. Strokes remain editable. The configured stroke-size modifier + mouse wheel adjusts the brush width."
@@ -129,7 +139,7 @@ pub(super) fn text_section_with_back(ui: &mut egui::Ui) -> egui::Response {
             button,
             egui::Button::new(egui::RichText::new("    Back to Object").size(12.0)),
         )
-        .on_hover_text("Finish editing text and return to this object's properties");
+        .tip("Finish editing text and return to this object's properties");
     let c = egui::pos2(button.left() + 10.0, button.center().y);
     let stroke = Stroke::new(1.5, Color32::WHITE);
     ui.painter()
@@ -199,7 +209,7 @@ pub(super) fn slider(ui: &mut egui::Ui, label: &str, slider: egui::Slider<'_>) -
         ui.spacing_mut().interact_size = egui::vec2(64.0, 22.0);
         ui.spacing_mut().slider_width =
             (ui.available_width() - 64.0 - ui.spacing().item_spacing.x).max(36.0);
-        crate::controls::slider(ui, slider.max_decimals(1)).on_hover_text(label)
+        crate::controls::slider(ui, slider.max_decimals(1)).tip_title(label)
     });
     #[cfg(test)]
     ui.ctx().data_mut(|d| {
@@ -211,6 +221,37 @@ pub(super) fn slider(ui: &mut egui::Ui, label: &str, slider: egui::Slider<'_>) -
     row.inner
 }
 
+/// A named dropdown on one row, the same size as the rows around it. Returns
+/// true when the choice changed.
+pub(super) fn choice<T: PartialEq + Copy>(
+    ui: &mut egui::Ui,
+    label: &str,
+    value: &mut T,
+    options: &[(T, &str)],
+    tip: &str,
+) -> bool {
+    use crate::tips::Tip as _;
+    let before = *value;
+    ui.horizontal(|ui| {
+        field_label(ui, label, 24.);
+        let text = options
+            .iter()
+            .find(|(option, _)| option == value)
+            .map_or("", |(_, name)| name);
+        egui::ComboBox::from_id_salt(("property-choice", label))
+            .width(ui.available_width())
+            .selected_text(text)
+            .show_ui(ui, |ui| {
+                for (option, name) in options {
+                    ui.selectable_value(value, *option, *name);
+                }
+            })
+            .response
+            .tip_title(label)
+            .tip(tip);
+    });
+    *value != before
+}
 pub(super) fn swatch(ui: &mut egui::Ui, label: &str, color: &mut [u8; 4]) {
     let preview = match label {
         "Outline" => crate::color_widgets::Preview::Outline,
@@ -239,7 +280,7 @@ pub(super) fn swatch_preview(
                     }))
                     .truncate(),
                 );
-                crate::color_widgets::property_rgba(ui, color, preview).on_hover_text(label);
+                crate::color_widgets::property_rgba(ui, color, preview).tip_title(label);
             });
         });
     });
@@ -451,10 +492,10 @@ pub(super) fn rotation_controls(
                         .suffix("°"),
                 )
                 .labelled_by(label.id)
-                .on_hover_text("Clockwise rotation in degrees; drag or click to type");
+                .tip("Clockwise rotation in degrees; drag or click to type");
             let reset = ui
                 .add(egui::Button::new("Reset"))
-                .on_hover_text("Reset rotation to 0°");
+                .tip("Reset rotation to 0°");
             if reset.clicked() {
                 degrees = 0.0;
             }

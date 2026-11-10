@@ -1,3 +1,4 @@
+use crate::tips::Tip as _;
 use crate::{Command, Editor, canvas_view::Transform, egui};
 use capture_core::{
     Document,
@@ -178,7 +179,10 @@ impl Editor {
         let path = rfd::FileDialog::new()
             .set_title("Add image section")
             .set_directory(&self.last_directory)
-            .add_filter("Images", &["png", "jpg", "jpeg", "bmp", "webp"])
+            .add_filter(
+                "Images",
+                &["png", "jpg", "jpeg", "bmp", "webp", "svg", "eps"],
+            )
             .pick_file();
         let Some(path) = path else {
             return;
@@ -246,7 +250,7 @@ impl Editor {
         {
             let add = ui
                 .put(rect, egui::Button::new("+"))
-                .on_hover_text("Insert a section at the beginning");
+                .tip("Insert a section at the beginning");
             egui::Popup::menu(&add).show(|ui| {
                 for (label, kind) in [
                     ("Header", SectionKind::Header),
@@ -283,7 +287,7 @@ impl Editor {
                         egui::Sense::drag(),
                     )
                     .on_hover_cursor(egui::CursorIcon::ResizeVertical)
-                    .on_hover_text("Resize section from its bottom edge");
+                    .tip("Resize section from its bottom edge");
                 painter.rect_filled(
                     egui::Rect::from_center_size(c.resize.center(), egui::vec2(30., 3.)),
                     2.,
@@ -310,7 +314,7 @@ impl Editor {
                 if viewport.contains_rect(c.add) && visible.contains(&c.add) {
                     let add = ui
                         .put(c.add, egui::Button::new("+"))
-                        .on_hover_text("Insert a section below");
+                        .tip("Insert a section below");
                     egui::Popup::menu(&add).show(|ui| {
                         for (label, kind) in [
                             ("Header", SectionKind::Header),
@@ -342,9 +346,7 @@ impl Editor {
                 }
             }
             if viewport.contains_rect(c.menu) && visible.contains(&c.menu) {
-                let menu = ui
-                    .put(c.menu, egui::Button::new(""))
-                    .on_hover_text("Section actions");
+                let menu = ui.put(c.menu, egui::Button::new("")).tip("Section actions");
                 menu.widget_info(|| {
                     egui::WidgetInfo::labeled(egui::Role::Button, true, "Section actions")
                 });

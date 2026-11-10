@@ -16,12 +16,21 @@ pub(super) struct Scene {
     vectors: HashMap<u64, Vector>,
     shadows: HashMap<u64, (Annotation, capture_core::shadow::Patch, egui::TextureHandle)>,
     effects: HashMap<u64, Effect>,
+    video_density: Option<f32>,
+    /// A canvas gesture is in progress. Reduced-density previews then reuse the
+    /// retained lens surface instead of re-rendering full-resolution detail
+    /// on every pointer move; detail is rebuilt once the gesture ends.
+    pub(super) interacting: bool,
 }
 struct Effect {
     plan: Plan,
     offset: [i32; 2],
     tiles: Vec<([u32; 4], egui::TextureHandle)>,
     clear: Option<Vec<([u32; 4], egui::TextureHandle)>>,
+    density: f32,
+    detail: Option<([u32; 4], focus::Tiles)>,
+    /// Sharp Magnify sources for the other Focus areas sharing this backdrop.
+    member_detail: HashMap<u64, ([u32; 4], focus::Tiles)>,
 }
 struct Background {
     raster: Option<Arc<capture_core::RasterImage>>,
@@ -36,7 +45,25 @@ struct Vector {
     size: [u32; 2],
     origin: [f64; 2],
 }
+#[cfg(test)]
 pub(super) fn supported(d: &Document) -> bool {
+    supported_with(d, false)
+}
+/// `warp_preview` admits perspective images while a corner is dragged: the
+/// scene then warps them as a GPU mesh. Otherwise perspective (on an image or
+/// the whole picture) goes through the engine's display list, which warps
+/// exactly as export does (BI8, BI9).
+pub(super) fn supported_with(d: &Document, warp_preview: bool) -> bool {
+    if d.canvas_behavior.perspective.is_some() || d.canvas_behavior.finish.is_some() {
+        return false;
+    }
+    let warped = d
+        .annotations
+        .iter()
+        .any(|a| a.image.as_ref().is_some_and(|b| b.perspective().is_some()));
+    if warped {
+        return warp_preview;
+    }
     d.canvas_behavior.allow_overflow
         || d.guide.is_some()
         || d.raster.is_some()
@@ -125,7 +152,10 @@ impl Scene {
             self.effects.clear();
         }
         base.video = None;
-        self.paint_with_base(ui, d, t, &base, [0, 0])
+        self.video_density = Some((t.scale * ui.ctx().pixels_per_point()).clamp(0.05, 1.));
+        let result = self.paint_with_base(ui, d, t, &base, [0, 0]);
+        self.video_density = None;
+        result
     }
     pub(super) fn paint(
         &mut self,
@@ -158,10 +188,51 @@ impl Scene {
             .cloned()
             .collect();
         objects.extend(d.page_furniture());
+        // Focus effects drawn together share one backdrop; on paged guides,
+        // those on the same page.
+        let paged = !d.canvas_behavior.page_owners.is_empty() || d.guide.is_some();
+        let backdrop_for = |a: &Annotation| {
+            if paged {
+                let owner = d.object_page(a);
+                let page: Vec<_> = objects
+                    .iter()
+                    .filter(|o| d.object_page(o) == owner)
+                    .cloned()
+                    .collect();
+                capture_core::focus::Backdrop::new(&page)
+            } else {
+                capture_core::focus::Backdrop::new(&objects)
+            }
+        };
+        // A later member needs no surfaces of its own. The exception is a
+        // Magnify view whose window shows objects drawn after the backdrop,
+        // because the backdrop's picture does not include those objects.
+        let draws_alone = |i: usize, a: &Annotation, g: &capture_core::focus::Backdrop| {
+            g.is_quiet(a)
+                && (a.focus.is_none_or(|f| f.magnify.is_none())
+                    || !objects
+                        .iter()
+                        .position(|o| Some(o.id) == g.lead())
+                        .is_some_and(|lead| {
+                            let (lo, hi) = a.bounds();
+                            objects[lead + 1..i].iter().any(|o| {
+                                let (olo, ohi) = o.bounds();
+                                !g.members().iter().any(|m| m.id == o.id)
+                                    && olo[0] < hi[0]
+                                    && lo[0] < ohi[0]
+                                    && olo[1] < hi[1]
+                                    && lo[1] < ohi[1]
+                            })
+                        }))
+        };
         let plans: Vec<_> = objects
             .iter()
             .enumerate()
             .filter_map(|(i, a)| {
+                let group = a.focus.is_some().then(|| backdrop_for(a));
+                if group.as_ref().is_some_and(|g| draws_alone(i, a, g)) {
+                    return None;
+                }
                 let plan = if !d.canvas_behavior.page_owners.is_empty()
                     || (a.focus.is_some() && d.guide.is_some())
                 {
@@ -174,8 +245,12 @@ impl Scene {
                         .filter(|o| d.object_page(o) == owner)
                         .cloned()
                         .collect();
-                    Plan::new(&own, own.len() - 1, [d.width, d.height])?
-                        .clipped(d.page_rect(owner).map(|n| n as u32))?
+                    let plan = Plan::new(&own, own.len() - 1, [d.width, d.height])?;
+                    match group {
+                        Some(group) => plan.with_backdrop(group),
+                        None => plan,
+                    }
+                    .clipped(d.page_rect(owner).map(|n| n as u32))?
                 } else {
                     Plan::new(&objects, i, [d.width, d.height])?
                 };
@@ -272,18 +347,24 @@ impl Scene {
         }
         for (_, id, _, plan) in &plans {
             let surfaces = plan.focus_surfaces();
+            let density = if surfaces.is_some() {
+                self.video_density.unwrap_or(1.)
+            } else {
+                1.
+            };
             let key = surfaces.as_ref().map_or(plan, |(_, outside)| outside);
             if self
                 .effects
                 .get(id)
-                .is_none_or(|e| e.plan != *key || e.offset != offset)
+                .is_none_or(|e| e.plan != *key || e.offset != offset || e.density != density)
             {
                 let base = &self.background.as_ref().unwrap().pixels;
-                let pixels = key.render(base, offset)?;
-                let clear = surfaces
-                    .as_ref()
-                    .map(|(lower, _)| lower.render(base, offset))
-                    .transpose()?;
+                let (clear, pixels) = if surfaces.is_some() {
+                    let (clear, affected) = plan.render_focus_surfaces(base, offset, density)?;
+                    (Some(clear), affected)
+                } else {
+                    (None, key.render(base, offset)?)
+                };
                 let limit = (ui.input(|i| i.max_texture_side) as u32).clamp(1, 1024);
                 let mut tiles = Vec::new();
                 for y in (0..pixels.height()).step_by(limit as usize) {
@@ -311,8 +392,52 @@ impl Scene {
                         offset,
                         tiles,
                         clear: clear.map(|pixels| focus::textures(ui, &pixels, limit)),
+                        density,
+                        detail: None,
+                        member_detail: HashMap::new(),
                     },
                 );
+            }
+            let effect = self.effects.get_mut(id).unwrap();
+            let region = (density < 1. && !self.interacting)
+                .then(|| plan.magnified_region())
+                .flatten();
+            if effect.detail.as_ref().map(|(r, _)| *r) != region {
+                effect.detail = if let Some(region) = region {
+                    let pixels = plan.render_magnified_region(
+                        &self.background.as_ref().unwrap().pixels,
+                        offset,
+                        region,
+                    )?;
+                    let limit = (ui.input(|i| i.max_texture_side) as u32).clamp(1, 1024);
+                    Some((region, focus::textures(ui, &pixels, limit)))
+                } else {
+                    None
+                };
+            }
+            let wanted: Vec<_> = if density < 1. && !self.interacting {
+                plan.member_lens_regions()
+                    .into_iter()
+                    .filter(|(member, _)| !plans.iter().any(|p| p.1 == *member))
+                    .collect()
+            } else {
+                vec![]
+            };
+            effect
+                .member_detail
+                .retain(|member, (region, _)| wanted.contains(&(*member, *region)));
+            for (member, region) in wanted {
+                if let std::collections::hash_map::Entry::Vacant(slot) =
+                    effect.member_detail.entry(member)
+                {
+                    let pixels = plan.render_magnified_region(
+                        &self.background.as_ref().unwrap().pixels,
+                        offset,
+                        region,
+                    )?;
+                    let limit = (ui.input(|i| i.max_texture_side) as u32).clamp(1, 1024);
+                    slot.insert((region, focus::textures(ui, &pixels, limit)));
+                }
             }
         }
         let mut retained = Vec::new();
@@ -335,14 +460,54 @@ impl Scene {
                     ));
                 }
             }
-            if effect_patch::needs_pixels(a) {
+            let group = a.focus.is_some().then(|| backdrop_for(a));
+            if let Some(g) = group
+                .as_ref()
+                .filter(|g| g.is_quiet(a) && !plans.iter().any(|p| p.1 == a.id))
+            {
+                if let Some(e) = g.lead().and_then(|id| self.effects.get(&id))
+                    && let Some(clear) = &e.clear
+                {
+                    focus::paint_member(
+                        &painter,
+                        t,
+                        a,
+                        e.plan.output,
+                        clear,
+                        &holes,
+                        e.density,
+                        e.member_detail.get(&a.id),
+                    );
+                }
+                outline = a.clone();
+                outline.focus = None;
+                outline.fill = None;
+                outline.text = None;
+                outline.shadow = None;
+            } else if effect_patch::needs_pixels(a) {
                 if let Some(e) = self
                     .effects
                     .get(&a.id)
                     .filter(|_| plans.iter().any(|p| p.1 == a.id))
                 {
                     if let Some(clear) = &e.clear {
-                        focus::paint(&painter, t, a, e.plan.output, clear, &e.tiles, &holes);
+                        focus::paint(
+                            &painter,
+                            t,
+                            a,
+                            e.plan.output,
+                            clear,
+                            &e.tiles,
+                            &holes,
+                            e.density,
+                            e.detail.as_ref(),
+                            &group
+                                .iter()
+                                .flat_map(|g| g.members())
+                                .filter(|m| m.id != a.id)
+                                .cloned()
+                                .collect::<Vec<_>>(),
+                        );
                         // Only the stroke remains a normal retained vector.
                         outline = a.clone();
                         outline.focus = None;
@@ -390,6 +555,14 @@ impl Scene {
             hi = hi.map(|x| x + margin);
             let screen = egui::Rect::from_min_max(t.screen_point(lo), t.screen_point(hi));
             if !screen.intersects(t.viewport) {
+                continue;
+            }
+            // A later pixel effect has already composed fully covered layers.
+            // Do not upload/rasterize them again underneath its replacement.
+            if holes
+                .iter()
+                .any(|h| h.contains_rect(screen.intersect(painter.clip_rect())))
+            {
                 continue;
             }
             let patterned_frame = a.is_image_frame()
@@ -459,7 +632,11 @@ impl Scene {
                     }
                 }
                 let b = a.image.as_ref().unwrap();
-                let pixels = b.pixels()?;
+                let (lo, hi) = a.body_bounds();
+                // A border, edge or filter is part of the texture, so moving the
+                // object only moves the texture (the finish is cached).
+                let pixels = b.display_pixels([hi[0] - lo[0], hi[1] - lo[1]])?;
+                let pixels = &pixels;
                 let key = Arc::as_ptr(pixels) as usize;
                 retained.push(key);
                 let (_, texture) = self.images.entry(key).or_insert_with(|| {
@@ -481,7 +658,35 @@ impl Scene {
                 // The image mask bounds exclude the outer half of the outline.
                 // Clip against expanded ink bounds, never the frame's body rectangle.
                 with_holes(&painter, screen, &holes, |p| {
-                    if a.is_shape() || a.rotation_degrees != 0. || a.mirror_x {
+                    if let Some(quad) = b.perspective() {
+                        // A fine grid keeps the warp straight along each line.
+                        const CELLS: u32 = 24;
+                        let mut mesh = egui::Mesh::with_texture(texture.id());
+                        for row in 0..=CELLS {
+                            for column in 0..=CELLS {
+                                let s = [column as f32 / CELLS as f32, row as f32 / CELLS as f32];
+                                let at = capture_core::bitmap::warp_point(quad, s);
+                                let across = if a.mirror_x { 1. - at[0] } else { at[0] };
+                                let point = a.rotation().point([
+                                    min[0] + across * (max[0] - min[0]),
+                                    min[1] + at[1] * (max[1] - min[1]),
+                                ]);
+                                mesh.vertices.push(egui::epaint::Vertex {
+                                    pos: t.screen_point(point),
+                                    uv: egui::pos2(x + s[0] * w, y + s[1] * h),
+                                    color: egui::Color32::from_white_alpha(a.image_opacity()),
+                                });
+                            }
+                        }
+                        for row in 0..CELLS {
+                            for column in 0..CELLS {
+                                let i = row * (CELLS + 1) + column;
+                                let n = i + CELLS + 1;
+                                mesh.indices.extend([i, i + 1, n, i + 1, n + 1, n]);
+                            }
+                        }
+                        p.add(mesh);
+                    } else if a.is_shape() || a.rotation_degrees != 0. || a.mirror_x {
                         let boundary = a.frame_boundary();
                         let points: Vec<_> = boundary
                             .iter()
@@ -646,6 +851,46 @@ impl Scene {
 mod tests {
     use super::*;
     use crate::property_layout::tests::{PaintedOutput, dump_meshes};
+    /// BI8, BI9: perspective must leave the flat retained scene, so the canvas
+    /// shows the same warp as export.
+    #[test]
+    fn perspective_documents_use_the_engine_display() {
+        let pixels = image::RgbaImage::from_pixel(64, 48, image::Rgba([200, 40, 40, 255]));
+        let bitmap = capture_core::bitmap::Bitmap::new(
+            capture_core::clipboard_payload::ImagePayload::from_rgba(64, 48, pixels.into_raw())
+                .unwrap()
+                .image,
+        )
+        .unwrap();
+        let mut d = Document::canvas(300, 200, [255; 4]).unwrap();
+        let mut a = Arc::new(bitmap.clone()).annotation(1);
+        a.start = [20., 20.];
+        a.end = [180., 140.];
+        d.annotations.push(a);
+        assert!(supported(&d), "a flat image keeps the fast scene");
+        let quad = capture_core::bitmap::Perspective::TiltLeft.quad(0.6, 0.5);
+        d.annotations[0].image = Some(Arc::new(bitmap.with_perspective(Some(quad)).unwrap()));
+        assert!(!supported(&d), "a tilted image uses the display list");
+        let flat = bitmap.with_perspective(None).unwrap();
+        d.annotations[0].image = Some(Arc::new(flat));
+        assert!(supported(&d));
+        d.canvas_behavior.perspective = Some(capture_core::tilt::Tilt {
+            quad,
+            background: None,
+        });
+        assert!(!supported(&d), "a tilted picture uses the display list");
+        // And that path really tilts what is drawn.
+        let list = d.display_list().unwrap();
+        let view = capture_core::display::Viewport {
+            size: [300, 200],
+            origin: [0., 0.],
+            scale: 1.,
+        };
+        let tilted = list.render_viewport(view).unwrap();
+        d.canvas_behavior.perspective = None;
+        let flat = d.display_list().unwrap().render_viewport(view).unwrap();
+        assert_ne!(tilted, flat);
+    }
     #[test]
     fn outlined_rotated_shadow_frames_retain_pixels_and_do_not_clip_ink_at_high_zoom() {
         for kind in [Kind::Image, Kind::Ellipse, Kind::Polygon] {

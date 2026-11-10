@@ -64,7 +64,7 @@ impl Project {
             .copied()
             .map(Layer::Annotation)
             .chain(self.media_tracks.iter().copied().map(Layer::Media))
-            .chain(self.zooms.iter().map(|z| Layer::Zoom(z.id)))
+            .chain(self.zooms.iter().map(|z| Layer::Zoom(z.track())))
             .collect();
         let mut out: Vec<_> = self
             .layer_order
@@ -78,7 +78,7 @@ impl Project {
             }
         }
         out.sort_by_key(
-            |l| !matches!(l,Layer::Zoom(id) if self.zooms.iter().any(|z|z.id==*id&&z.pinned)),
+            |l| !matches!(l,Layer::Zoom(t) if self.zooms.iter().any(|z|z.track()==*t&&z.pinned)),
         );
         out
     }
@@ -168,6 +168,16 @@ impl Project {
                     "The linked recording ends here. Unlink to trim this clip separately.".into(),
                 ));
             }
+            if !c.keyframes.is_empty() {
+                c.keyframes.offset_ms = old.keyframes.offset_ms;
+                c.keyframes
+                    .trim_start(((c.start as f64 - old.start as f64) / old.speed).round() as i64);
+            }
+            if c.speed != old.speed {
+                let ratio = old.speed / c.speed;
+                c.keyframes
+                    .remap_time(0, |ms| (ms as f64 * ratio).round() as u64, &[]);
+            }
             c.clamp_fades();
             let duration = c.duration();
             for a in &mut c.audio {
@@ -207,6 +217,7 @@ impl Project {
             right.id = id;
             right.at = time;
             right.start = source;
+            right.keyframes.trim_start((time - s.at) as i64);
             right.fade_in = 0;
             right.link = s.link.map(|_| new_link);
             s.end = source;
@@ -230,17 +241,17 @@ impl Project {
             order.remove(index);
             order.insert(target.min(order.len()), layer);
         }
-        if let Layer::Zoom(id) = layer
-            && let Some(z) = self.zooms.iter_mut().find(|z| z.id == id)
-        {
-            z.pinned = target == 0;
+        if let Layer::Zoom(track) = layer {
+            for z in self.zooms.iter_mut().filter(|z| z.track() == track) {
+                z.pinned = target == 0;
+            }
         }
         self.layer_order = order;
     }
     pub fn remove_layer(&mut self, layer: Layer) -> Vec<u64> {
         let mut removed = vec![];
         match layer {
-            Layer::Zoom(id) => self.zooms.retain(|z| z.id != id),
+            Layer::Zoom(track) => self.zooms.retain(|z| z.track() != track),
             Layer::Annotation(id) => {
                 removed = self
                     .objects

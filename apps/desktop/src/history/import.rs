@@ -32,7 +32,10 @@ impl Editor {
             if let Some(paths) = rfd::FileDialog::new()
                 .set_title("Import images into Library")
                 .set_directory(self.dialog_directory())
-                .add_filter("Images", &["png", "jpg", "jpeg", "bmp", "gif", "webp"])
+                .add_filter(
+                    "Images",
+                    &["png", "jpg", "jpeg", "bmp", "gif", "webp", "svg", "eps"],
+                )
                 .pick_files()
             {
                 self.begin_library_import(paths, ui.ctx());

@@ -6,11 +6,24 @@ use capture_core::selection::Handle;
 pub(super) struct Feedback {
     pub icon: egui::CursorIcon,
     pub tool: Option<&'static str>,
+    /// Open (false) or closed (true) hand: rotation handles and the middle
+    /// curve node only.
+    pub hand: Option<bool>,
 }
 
 impl Feedback {
     fn interaction(icon: egui::CursorIcon) -> Self {
-        Self { icon, tool: None }
+        Self {
+            icon,
+            tool: None,
+            hand: None,
+        }
+    }
+    fn hand(closed: bool) -> Self {
+        Self {
+            hand: Some(closed),
+            ..Self::interaction(egui::CursorIcon::Default)
+        }
     }
     fn tool(name: &'static str) -> Self {
         Self {
@@ -20,12 +33,15 @@ impl Feedback {
                 egui::CursorIcon::Crosshair
             },
             tool: Some(name),
+            hand: None,
         }
     }
 }
 
 fn handle_feedback(handle: Handle) -> Feedback {
-    if handle.is_radius() {
+    if handle == Handle::Bend {
+        Feedback::hand(false)
+    } else if handle.is_radius() {
         Feedback::tool("Round corners")
     } else {
         Feedback::interaction(handle_cursor(handle))
@@ -113,19 +129,39 @@ impl Editor {
         }
     }
 
-    fn pointer_feedback(&self, pos: egui::Pos2, transform: Transform, space: bool) -> Feedback {
+    /// Whether hovering here shows the selection cursor, not a tool's mark.
+    #[cfg(test)]
+    pub(crate) fn hover_selects(&self, pos: egui::Pos2, transform: Transform) -> bool {
+        let local = self.video_annotation_transform(transform, Some(pos));
+        self.pointer_feedback(pos, local, transform, false)
+            .tool
+            .is_none()
+    }
+    /// `transform` may follow the object under the pointer (video); `canvas` is
+    /// the plain view, which is what hit testing starts from.
+    fn pointer_feedback(
+        &self,
+        pos: egui::Pos2,
+        transform: Transform,
+        canvas: Transform,
+        space: bool,
+    ) -> Feedback {
         use egui::CursorIcon as Cursor;
         if self.quick_controls.format_source.is_some() {
             return Feedback::interaction(Cursor::Copy);
         }
         if self.rotation_drag.is_some() {
-            return Feedback::interaction(Cursor::Grabbing);
+            return Feedback::hand(true);
         }
         if !space && let Some(cursor) = self.group_transform_cursor(pos, transform) {
-            return Feedback::interaction(cursor);
+            return match cursor {
+                Cursor::Grab => Feedback::hand(false),
+                Cursor::Grabbing if self.group_rotating() => Feedback::hand(true),
+                cursor => Feedback::interaction(cursor),
+            };
         }
         if self.rotation_hit(pos, transform) {
-            return Feedback::interaction(Cursor::Grab);
+            return Feedback::hand(false);
         }
         if self.group_drag.as_ref().is_some_and(|d| d.duplicate) {
             return Feedback::interaction(Cursor::Copy);
@@ -134,9 +170,11 @@ impl Editor {
             return Feedback::interaction(Cursor::Grabbing);
         }
         if let Some(drag) = &self.edit_drag {
-            return drag
-                .handle
-                .map_or(Feedback::interaction(Cursor::Grabbing), handle_feedback);
+            // The middle curve handle closes the hand while it bends the line.
+            return match drag.handle {
+                Some(Handle::Bend) => Feedback::hand(true),
+                handle => handle.map_or(Feedback::interaction(Cursor::Grabbing), handle_feedback),
+            };
         }
         if space && self.crop.is_none() && self.drag_start.is_none() {
             return Feedback::interaction(Cursor::Grab);
@@ -159,6 +197,7 @@ impl Editor {
             return Feedback {
                 icon: cut.cursor(),
                 tool: (cut.cursor() != Cursor::Default).then_some("Cut Out"),
+                hand: None,
             };
         }
         let near_handle = self
@@ -191,7 +230,10 @@ impl Editor {
             {
                 return handle_feedback(handle);
             }
-            if self.tool_hit(point, tolerance).is_some() {
+            if self
+                .tool_hit(canvas.image_point(pos), 7.0 / canvas.scale)
+                .is_some()
+            {
                 return Feedback::interaction(Cursor::Grab);
             }
         }
@@ -222,6 +264,7 @@ impl Editor {
         ui: &egui::Ui,
         response: &egui::Response,
         transform: Transform,
+        canvas: Transform,
         interactive: bool,
     ) {
         if !interactive || !ui.input(|i| i.focused) || self.text_draft.is_some() {
@@ -241,12 +284,19 @@ impl Editor {
         let Some(pos) = ui.input(|i| i.pointer.hover_pos()) else {
             return;
         };
-        let mut feedback =
-            self.pointer_feedback(pos, transform, ui.input(|i| i.key_down(egui::Key::Space)));
+        let mut feedback = self.pointer_feedback(
+            pos,
+            transform,
+            canvas,
+            ui.input(|i| i.key_down(egui::Key::Space)),
+        );
         if feedback.tool.is_some() && !transform.image.contains(pos) && !dragging {
             feedback = Feedback::interaction(egui::CursorIcon::Default);
         }
         ui.ctx().set_cursor_icon(feedback.icon);
+        if let Some(closed) = feedback.hand {
+            crate::native_cursor::request_hand(ui.ctx(), closed);
+        }
         if let Some(name) = feedback.tool.filter(|_| transform.viewport.contains(pos)) {
             // The OS cursor moves independently of app frames. Paint the hotspot
             // and badge together and suppress that separate cursor only here.
@@ -255,8 +305,25 @@ impl Editor {
             if name == "Step" && self.paint_step_cursor(ui, transform, pos) {
                 return;
             }
-            let scale = 1.0 / ui.ctx().pixels_per_point();
-            let rect = tool_badge_rect(pos, scale);
+            let ppp = ui.ctx().pixels_per_point();
+            let brush = matches!(name, "Pen" | "Highlighter" | "Eraser")
+                && !(name == "Highlighter" && self.drawing_rectangle_highlighter());
+            let mark = Mark {
+                name,
+                icon: feedback.icon,
+                brush: brush.then_some(self.width as f32 * transform.scale * 0.5),
+                line: matches!(name, "Line" | "Arrow")
+                    .then_some(self.width as f32 * transform.scale),
+                color: [self.color[0], self.color[1], self.color[2]],
+                step: (name == "Step").then(|| {
+                    capture_core::steps::label(self.next_step_number(), self.step_letters)
+                        .unwrap_or_else(|_| "×".into())
+                }),
+            };
+            if name != "Step" && show_native(&mark, ppp) {
+                ui.ctx().set_cursor_icon(feedback.icon);
+                return;
+            }
             let painter = ui
                 .ctx()
                 .layer_painter(egui::LayerId::new(
@@ -264,78 +331,117 @@ impl Editor {
                     egui::Id::unique("canvas_tool_pointer"),
                 ))
                 .with_clip_rect(transform.viewport);
-            if matches!(name, "Pen" | "Highlighter" | "Eraser")
-                && !(name == "Highlighter" && self.drawing_rectangle_highlighter())
-            {
-                let radius = self.width as f32 * transform.scale * 0.5;
-                painter.circle_filled(
-                    pos,
-                    radius,
-                    egui::Color32::from_rgba_unmultiplied(
-                        self.color[0],
-                        self.color[1],
-                        self.color[2],
-                        if name == "Highlighter" { 80 } else { 40 },
-                    ),
-                );
-                painter.circle_stroke(
-                    pos,
-                    radius,
-                    egui::Stroke::new(2. * scale, egui::Color32::WHITE),
-                );
-                painter.circle_stroke(
-                    pos,
-                    radius,
-                    egui::Stroke::new(scale, egui::Color32::from_gray(35)),
-                );
-                return;
-            }
-            if matches!(name, "Line" | "Arrow") {
-                let start = pos + egui::vec2(12., 30.) * scale;
-                painter.line_segment(
-                    [start, start + egui::vec2(25. * scale, 0.)],
-                    egui::Stroke::new(
-                        self.width as f32 * transform.scale,
-                        egui::Color32::from_rgb(self.color[0], self.color[1], self.color[2]),
-                    ),
-                );
-            }
-            paint_hotspot(&painter, pos, feedback.icon, scale);
-            painter.rect_filled(rect, 2.0, egui::Color32::from_white_alpha(235));
-            painter.rect_stroke(
-                rect,
-                2.0,
-                egui::Stroke::new(scale, egui::Color32::from_gray(40)),
-                egui::StrokeKind::Inside,
-            );
-            if name == "Round corners" {
-                // A continuous rounded L marks this as radius adjustment.
-                let at = |x, y| rect.min + egui::vec2(x, y) * scale;
-                let mut points = vec![at(3.0, 13.0), at(3.0, 9.0)];
-                for i in 0..=12 {
-                    let angle =
-                        std::f32::consts::PI + i as f32 / 12.0 * std::f32::consts::FRAC_PI_2;
-                    points.push(at(9.0 + 6.0 * angle.cos(), 9.0 + 6.0 * angle.sin()));
-                }
-                points.push(at(13.0, 3.0));
-                painter.add(egui::Shape::line(
-                    points,
-                    egui::Stroke::new(1.8 * scale, egui::Color32::from_gray(25)),
-                ));
-            } else if name == "Step" {
-                let label = capture_core::steps::label(self.next_step_number(), self.step_letters)
-                    .unwrap_or_else(|_| "×".into());
-                paint_step_badge(&painter, rect, &label, scale);
-            } else {
-                crate::icons::draw_scaled(
-                    &painter,
-                    rect,
-                    name,
-                    egui::Color32::from_gray(25),
-                    0.5 * scale,
-                );
-            }
+            paint_mark(&painter, pos, 1.0 / ppp, &mark);
         }
+    }
+}
+
+/// What the pointer shows for the active tool.
+struct Mark {
+    name: &'static str,
+    icon: egui::CursorIcon,
+    /// Brush radius in canvas-screen points.
+    brush: Option<f32>,
+    /// Sample width for Line and Arrow, in canvas-screen points.
+    line: Option<f32>,
+    color: [u8; 3],
+    step: Option<String>,
+}
+
+/// Puts the mark on a real Windows cursor image, once per distinct look.
+fn show_native(mark: &Mark, ppp: f32) -> bool {
+    let radius = mark.brush.map(|r| (r * ppp * 2.).round() / 2.);
+    let line = mark.line.map(|w| (w * ppp).round());
+    let half = radius.map_or_else(
+        || line.map_or(48., |w| (34. + w * 0.5).max(48.)),
+        |r| r.ceil() + 4.,
+    ) as u32;
+    if half * 2 > crate::native_cursor::MAX_SIDE {
+        return false;
+    }
+    let physical = Mark {
+        name: mark.name,
+        icon: mark.icon,
+        brush: radius,
+        line,
+        color: mark.color,
+        step: mark.step.clone(),
+    };
+    let key = format!(
+        "{}:{:?}:{radius:?}:{line:?}:{:?}:{:?}",
+        mark.name, mark.icon, mark.color, mark.step
+    );
+    crate::native_cursor::show(&key, || {
+        Some(crate::native_cursor::rasterize(half * 2, |painter, pos| {
+            paint_mark(painter, pos, 1., &physical);
+        }))
+    })
+}
+
+fn paint_mark(painter: &egui::Painter, pos: egui::Pos2, scale: f32, mark: &Mark) {
+    let [r, g, b] = mark.color;
+    if let Some(radius) = mark.brush {
+        painter.circle_filled(
+            pos,
+            radius,
+            egui::Color32::from_rgba_unmultiplied(
+                r,
+                g,
+                b,
+                if mark.name == "Highlighter" { 80 } else { 40 },
+            ),
+        );
+        painter.circle_stroke(
+            pos,
+            radius,
+            egui::Stroke::new(2. * scale, egui::Color32::WHITE),
+        );
+        painter.circle_stroke(
+            pos,
+            radius,
+            egui::Stroke::new(scale, egui::Color32::from_gray(35)),
+        );
+        return;
+    }
+    if let Some(width) = mark.line {
+        let start = pos + egui::vec2(12., 30.) * scale;
+        painter.line_segment(
+            [start, start + egui::vec2(25. * scale, 0.)],
+            egui::Stroke::new(width, egui::Color32::from_rgb(r, g, b)),
+        );
+    }
+    let rect = tool_badge_rect(pos, scale);
+    paint_hotspot(painter, pos, mark.icon, scale);
+    painter.rect_filled(rect, 2.0, egui::Color32::from_white_alpha(235));
+    painter.rect_stroke(
+        rect,
+        2.0,
+        egui::Stroke::new(scale, egui::Color32::from_gray(40)),
+        egui::StrokeKind::Inside,
+    );
+    if mark.name == "Round corners" {
+        // A continuous rounded L marks this as radius adjustment.
+        let at = |x, y| rect.min + egui::vec2(x, y) * scale;
+        let mut points = vec![at(3.0, 13.0), at(3.0, 9.0)];
+        for i in 0..=12 {
+            let angle = std::f32::consts::PI + i as f32 / 12.0 * std::f32::consts::FRAC_PI_2;
+            points.push(at(9.0 + 6.0 * angle.cos(), 9.0 + 6.0 * angle.sin()));
+        }
+        points.push(at(13.0, 3.0));
+        painter.add(egui::Shape::line(
+            points,
+            egui::Stroke::new(1.8 * scale, egui::Color32::from_gray(25)),
+        ));
+    } else if let Some(label) = &mark.step {
+        paint_step_badge(painter, rect, label, scale);
+    } else {
+        crate::icons::draw_scaled(
+            painter,
+            rect,
+            mark.name,
+            egui::Color32::from_gray(25),
+            0.5 * scale,
+        );
     }
 }
 
@@ -704,7 +810,7 @@ mod tests {
             let pos = t.screen_point(p);
             assert_eq!(shape.hit_handle(p, 1.0), Some(h));
             assert_eq!(
-                e.pointer_feedback(pos, t, false).tool,
+                e.pointer_feedback(pos, t, t, false).tool,
                 Some("Round corners")
             );
             assert_eq!(
@@ -866,7 +972,14 @@ mod tests {
             editor.tool = Some(tool);
             let (_, cursor) = frame(&ctx, &mut editor, vec![Event::PointerMoved(pos)]);
             assert_eq!(cursor, Cursor::None);
-            assert!(names.insert(editor.pointer_feedback(pos, transform, false).tool.unwrap()));
+            assert!(
+                names.insert(
+                    editor
+                        .pointer_feedback(pos, transform, transform, false)
+                        .tool
+                        .unwrap()
+                )
+            );
         }
         editor.begin_cut_out();
         assert_eq!(
@@ -912,6 +1025,7 @@ mod tests {
             focus: None,
 
             highlighter_rect: false,
+            hard_edge: false,
             group: None,
             rotation_degrees: 0.0,
             mirror_x: false,
@@ -1080,6 +1194,12 @@ mod brush_preview_tests {
                             e.canvas_pointer(
                                 ui,
                                 &r,
+                                Transform {
+                                    image: area,
+                                    viewport: area,
+                                    scale: zoom,
+                                    zoom,
+                                },
                                 Transform {
                                     image: area,
                                     viewport: area,

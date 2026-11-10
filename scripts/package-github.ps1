@@ -14,7 +14,7 @@ $release = Join-Path $root "artifacts/github/releases/$Version"
 if (Test-Path -LiteralPath $release) { throw 'Release staging already exists; inspect it or choose a new version. Never overwrite a published package.' }
 $env:CARGO_BUILD_JOBS = '2'
 $env:RUST_TEST_THREADS = '2'
-$env:CARGO_ENCODED_RUSTFLAGS = @("--remap-path-prefix=$env:USERPROFILE=/build-user", "--remap-path-prefix=$root=/clipcraft") -join [char]31
+$env:CARGO_ENCODED_RUSTFLAGS = @("--remap-path-prefix=$env:USERPROFILE=/build-user", "--remap-path-prefix=$root=/clipcraft", "-Ctarget-feature=+crt-static") -join [char]31
 $pwsh = (Get-Process -Id $PID).Path
 $targetRoot = if ($env:CARGO_TARGET_DIR) { [IO.Path]::GetFullPath($env:CARGO_TARGET_DIR) } else { Join-Path $root 'target' }
 $desktopExe = Join-Path $targetRoot 'release/capture-desktop.exe'
@@ -30,7 +30,7 @@ if ($LASTEXITCODE -ne 0) { throw 'Rust checks failed.' }
 New-Item -ItemType Directory -Path $release -Force | Out-Null
 & cargo build --release --workspace --locked --offline *> (Join-Path $release 'build.log')
 if ($LASTEXITCODE -ne 0) { throw 'Release build failed; inspect build.log.' }
-& node scripts/check-windows-imports.mjs $desktopExe *> (Join-Path $release 'windows-imports.json')
+& node scripts/check-windows-imports.mjs $desktopExe --require-self-contained *> (Join-Path $release 'windows-imports.json')
 if ($LASTEXITCODE -ne 0) { throw 'Windows startup import verification failed.' }
 $package = Join-Path $release 'package'
 $public = Join-Path $release 'public'

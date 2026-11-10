@@ -1,3 +1,4 @@
+use crate::tips::Tip as _;
 use crate::{Annotation, Command, Editor, Kind, egui, property_layout};
 use capture_core::image_frame::ImageView;
 mod context;
@@ -48,6 +49,29 @@ pub(crate) fn properties_content(ui: &mut egui::Ui, a: &mut Annotation, headings
         }
         return;
     }
+    if bitmap.is_svg() {
+        // EDIT-084: an imported SVG stays a drawing; Recolor draws it in one color.
+        property_layout::section_help(
+            ui,
+            "Vector image",
+            "An imported SVG drawing. It is redrawn at every size, so it stays sharp. Recolor draws the whole drawing in one color, which suits icons and logos.",
+        );
+        let mut recolor = bitmap.tint().is_some();
+        let mut color = bitmap.tint().unwrap_or([24, 145, 193, 255]);
+        let toggled = crate::controls::toggle(ui, &mut recolor, "Recolor")
+            .tip("Draw the whole SVG in one color.")
+            .changed();
+        let before = color;
+        if recolor {
+            property_layout::swatch(ui, "Recolor", &mut color);
+        }
+        let picked = recolor && color != before;
+        if (toggled || picked)
+            && let Ok(next) = bitmap.with_tint(recolor.then_some(color))
+        {
+            a.image = Some(std::sync::Arc::new(next));
+        }
+    }
     if headings {
         property_layout::section_help(
             ui,
@@ -62,10 +86,10 @@ pub(crate) fn properties_content(ui: &mut egui::Ui, a: &mut Annotation, headings
     let before = bitmap.view();
     let mut view = before;
     ui.horizontal(|ui| {
-        if ui.button("−").on_hover_text("Zoom image out").clicked() {
+        if ui.button("−").tip("Zoom image out").clicked() {
             view = view.zoomed_about(1. / 1.25, bitmap.focus()).unwrap_or(view);
         }
-        if ui.button("+").on_hover_text("Zoom image in").clicked() {
+        if ui.button("+").tip("Zoom image in").clicked() {
             view = view.zoomed_about(1.25, bitmap.focus()).unwrap_or(view);
         }
     });
@@ -141,6 +165,7 @@ pub(crate) fn properties_content(ui: &mut egui::Ui, a: &mut Annotation, headings
             egui::Slider::new(&mut a.corner_radius, 0.0..=max),
         );
     }
+    crate::perspective_ui::object_properties(ui, a);
 }
 
 pub(super) fn paint_pan_handle(p: &egui::Painter, rect: egui::Rect, hovered: bool) {
@@ -408,7 +433,7 @@ impl Editor {
                     response
                 })
                 .inner
-                .on_hover_text("Choose Image");
+                .tip("Choose Image");
             response.widget_info(|| {
                 egui::WidgetInfo::labeled(egui::Role::Button, !gesturing, "Choose Image")
             });
@@ -420,6 +445,11 @@ impl Editor {
                 .data_mut(|d| d.insert_temp(egui::Id::unique(("choose-frame-image", id)), rect));
         }
         if gesturing {
+            // A Free corner drag is itself a held preview: keep its handles
+            // for the whole drag (BS23), but nothing else while gesturing.
+            if self.shell.perspective_drag {
+                self.show_perspective_handles(ui, transform);
+            }
             return;
         }
         if let Some(rect) = self.image_pan_handle(transform) {
@@ -430,19 +460,20 @@ impl Editor {
                     egui::Sense::hover(),
                 )
                 .on_hover_cursor(egui::CursorIcon::Grab)
-                .on_hover_text("Drag to reposition image inside its crop");
+                .tip("Drag to reposition image inside its crop");
             paint_pan_handle(ui.painter(), rect, response.hovered());
             #[cfg(test)]
             ui.ctx()
                 .data_mut(|d| d.insert_temp(egui::Id::unique("image-pan-handle-rect"), rect));
         }
+        self.show_perspective_handles(ui, transform);
         let Some(buttons) = self.image_frame_buttons(transform) else {
             return;
         };
         for (index, rect) in buttons.into_iter().enumerate() {
             let response = ui
                 .put(rect, egui::Button::new(if index == 0 { "−" } else { "+" }))
-                .on_hover_text(if index == 0 {
+                .tip(if index == 0 {
                     "Zoom image out"
                 } else {
                     "Zoom image in"

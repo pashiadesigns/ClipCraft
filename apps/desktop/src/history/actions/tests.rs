@@ -249,8 +249,8 @@ fn shared_library_and_recent_menu_actions_preserve_canvas_and_use_selected_entry
         e.history.entry(&duplicate.id).is_some(),
         "delete requires its confirmation"
     );
-    let dialog = e.history.dialog.take().unwrap();
-    e.submit_history_dialog(&dialog).unwrap();
+    let dialog = e.history.manage.take().unwrap();
+    e.apply_library_management(&dialog).unwrap();
     assert!(e.history.entry(&duplicate.id).is_none());
     assert!(e.history.entry(&other.id).is_some());
     assert_eq!(serde_json::to_vec(&e.session.document).unwrap(), canvas);
@@ -260,8 +260,8 @@ fn shared_library_and_recent_menu_actions_preserve_canvas_and_use_selected_entry
     e.autosave
         .reset(&doc, Some(tagged.clone()), &tagged.label, tagged.origin);
     e.history_action(&tagged, Action::Delete, &ctx);
-    let dialog = e.history.dialog.take().unwrap();
-    e.submit_history_dialog(&dialog).unwrap();
+    let dialog = e.history.manage.take().unwrap();
+    e.apply_library_management(&dialog).unwrap();
     e.autosave_tick(&ctx, true);
     assert!(!e.library_saved());
     assert_eq!(e.autosave_summary().0, "Removed from Library");
@@ -314,7 +314,7 @@ fn shared_library_and_recent_menu_actions_preserve_canvas_and_use_selected_entry
         let mut first = frame(&mut e, vec![]);
         let warm = frame(&mut e, vec![]);
         first.0.textures_delta.append(warm.textures_delta.clone());
-        let tile = crate::color_widgets::tests::text_rect(&warm.shapes, "IMAGE")
+        let tile = crate::color_widgets::tests::text_rect(&warm.shapes, "Image")
             .unwrap()
             .center()
             - egui::vec2(0., 30.);

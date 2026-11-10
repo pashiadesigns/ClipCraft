@@ -184,7 +184,7 @@ fn production_video_workspace_renders_all_contexts() {
         ("media-audio", None, crate::ribbon::RibbonTab::Formatting),
         ("motion", Some(3), crate::ribbon::RibbonTab::Formatting),
         ("timing", Some(3), crate::ribbon::RibbonTab::Insert),
-        ("video-settings", None, crate::ribbon::RibbonTab::Advanced),
+        ("video-settings", None, crate::ribbon::RibbonTab::Insert),
         ("video-export", None, crate::ribbon::RibbonTab::Export),
         ("audio", None, crate::ribbon::RibbonTab::Formatting),
         (
@@ -558,7 +558,8 @@ fn production_video_workspace_renders_all_contexts() {
             render(e, vec![]);
         };
         if name.starts_with("properties-") {
-            click(&mut e, "footer-priority", egui::PointerButton::Primary);
+            e.video.properties_priority = true;
+            render(&mut e, vec![]);
         }
         if [
             "timeline-collapsed",
@@ -710,6 +711,7 @@ fn video_properties_tabs_fit_and_remember_selection_context() {
         let rects: Vec<_> = PropertyTab::ALL
             .iter()
             .filter(|t| **t != PropertyTab::Audio)
+            .filter(|t| **t != PropertyTab::Text || e.video_text_tab())
             .map(|tab| {
                 ctx.data(|d| d.get_temp::<egui::Rect>(egui::Id::unique(("video-tab", tab.label()))))
                     .unwrap()

@@ -1,4 +1,5 @@
 //! A temporary presentation state; pane choices are retained, not rewritten.
+use crate::tips::Tip as _;
 use crate::{Editor, egui};
 
 impl Editor {
@@ -43,12 +44,9 @@ impl Editor {
         }
     }
 
-    pub(super) fn show_ui_button(&mut self, ui: &mut egui::Ui) {
+    /// The Hide UI / Show UI button, drawn in the bottom-right of the footer.
+    pub(super) fn show_ui_button(&mut self, ui: &mut egui::Ui, area: egui::Rect) {
         let hidden = self.shell.preview_ui;
-        let area = egui::Rect::from_min_size(
-            egui::pos2(ui.max_rect().right() - 86., ui.min_rect().center().y - 15.),
-            egui::vec2(80., 30.),
-        );
         let r = ui
             .scope_builder(egui::UiBuilder::new().max_rect(area), |ui| {
                 ui.add_sized(
@@ -57,7 +55,7 @@ impl Editor {
                 )
             })
             .inner
-            .on_hover_text(if hidden {
+            .tip(if hidden {
                 "Restore the ribbon and panes · shortcut in Settings"
             } else {
                 "Hide the ribbon and panes · shortcut in Settings"
@@ -189,7 +187,8 @@ mod tests {
                         .unwrap()
                 });
                 assert_eq!(rect, visible_button);
-                assert!(rect.right() > 1250. && rect.top() < 50., "{rect:?}");
+                // Bottom-right of the footer.
+                assert!(rect.right() > 1250. && rect.top() > 100., "{rect:?}");
                 if properties
                     && recent
                     && let Some(dir) = std::env::var_os("CLIPCRAFT_HEADLESS_PREVIEW_DIR")

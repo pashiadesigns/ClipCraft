@@ -1,5 +1,6 @@
 //! Original ribbon implementation based on user-provided visual references.
-use crate::{Command, Editor, FileAction, egui};
+use crate::tips::Tip as _;
+use crate::{Command, Editor, egui};
 use egui::{Color32, Response, Stroke};
 
 #[cfg(test)]
@@ -7,7 +8,6 @@ mod blue_surround_preview;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum RibbonTab {
-    Clip,
     Insert,
     Formatting,
     Advanced,
@@ -44,13 +44,22 @@ pub(super) fn icon(
         Color32::from_gray(110)
     };
     draw_icon(ui.painter(), r.rect.center(), name, color);
-    r.on_hover_text(tooltip)
+    r.tip_title(name).tip(tooltip)
 }
 pub(super) fn draw_icon(p: &egui::Painter, c: egui::Pos2, name: &str, color: Color32) {
     let at = |x, y| c + egui::vec2(x, y);
     let stroke = Stroke::new(1.4, color);
     let rect = |x, y, w, h| egui::Rect::from_center_size(at(x, y), egui::vec2(w, h));
     match name {
+        "GIF Studio" | "Group presets" | "Save group" => {
+            crate::icons::draw(p, rect(0., 0., 28., 28.), name, color)
+        }
+        "Perspective" => {
+            // A screen leaning back: a trapezoid with a top bar.
+            let pts = vec![at(-9., 8.), at(9., 8.), at(6., -8.), at(-6., -8.)];
+            p.add(egui::Shape::closed_line(pts, stroke));
+            p.line_segment([at(-7., -4.), at(7., -4.)], stroke);
+        }
         "Expand canvas on" | "Expand canvas off" => {
             p.rect_stroke(rect(0., 0., 12., 10.), 2., stroke, egui::StrokeKind::Inside);
             let direction = if name == "Expand canvas on" { 1. } else { -1. };
@@ -341,7 +350,7 @@ pub(super) fn draw_icon(p: &egui::Painter, c: egui::Pos2, name: &str, color: Col
         "Export" | "Exit" => {
             p.arrow(at(-7.0, 0.0), egui::vec2(14.0, 0.0), stroke);
         }
-        "Options" => {
+        "Options" | "Preferences" => {
             p.circle_stroke(c, 6.0, stroke);
             p.circle_stroke(c, 2.0, stroke);
         }
@@ -416,22 +425,52 @@ pub(super) fn command_tile(
             },
         );
     }
-    ui.painter().text(
-        r.rect.center_bottom() - egui::vec2(0.0, 9.0),
-        egui::Align2::CENTER_BOTTOM,
-        label,
-        egui::FontId::proportional(12.0),
-        if enabled {
-            Color32::from_gray(235)
-        } else {
-            Color32::from_gray(135)
-        },
-    );
+    let ink = if enabled {
+        Color32::from_gray(235)
+    } else {
+        Color32::from_gray(135)
+    };
+    // A label wider than its tile wraps onto centered lines (approved
+    // formatting-merge mockup: "Revert to / Original" in a 72 px tile).
+    let room = width - 8.0;
+    let fits = |text: &str, size: f32| {
+        ui.painter()
+            .layout_no_wrap(text.to_owned(), egui::FontId::proportional(size), ink)
+            .size()
+            .x
+            <= room
+    };
+    let (lines, size) = if fits(label, 12.0) {
+        (vec![label.to_owned()], 12.0)
+    } else {
+        let mut lines: Vec<String> = vec![];
+        for word in label.split(' ') {
+            match lines.last_mut() {
+                Some(line) if fits(&format!("{line} {word}"), 11.0) => {
+                    line.push(' ');
+                    line.push_str(word);
+                }
+                _ => lines.push(word.to_owned()),
+            }
+        }
+        (lines, 11.0)
+    };
+    let mut bottom = r.rect.center_bottom() - egui::vec2(0.0, 9.0);
+    for line in lines.iter().rev() {
+        let rect = ui.painter().text(
+            bottom,
+            egui::Align2::CENTER_BOTTOM,
+            line,
+            egui::FontId::proportional(size),
+            ink,
+        );
+        bottom.y = rect.top() + 1.0;
+    }
     r.widget_info(|| egui::WidgetInfo::selected(egui::Role::Button, enabled, selected, label));
     #[cfg(test)]
     ui.ctx()
         .data_mut(|d| d.insert_temp(egui::Id::unique(("command-tile", label)), r.rect));
-    r.on_hover_text(tip)
+    r.tip_title(label).tip(tip)
 }
 
 fn labeled_icon(
@@ -474,7 +513,7 @@ fn labeled_icon(
         },
     );
     r.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, enabled, name));
-    r.on_hover_text(tip)
+    r.tip_title(name).tip(tip)
 }
 pub(super) fn group(
     ui: &mut egui::Ui,
@@ -516,7 +555,7 @@ pub(super) fn divider(ui: &mut egui::Ui, height: f32) {
 }
 
 impl Editor {
-    pub(super) fn ribbon_tabs(&mut self, ui: &mut egui::Ui) -> [Response; 5] {
+    pub(super) fn ribbon_tabs(&mut self, ui: &mut egui::Ui) -> [Response; 4] {
         crate::tabs::group(ui, |ui| {
             ui.horizontal(|ui| {
                 if crate::tabs::tab(ui, "File", false, 76.0).clicked() {
@@ -534,13 +573,19 @@ impl Editor {
                 }
 
                 [
-                    (RibbonTab::Clip, "Clip", 76.),
                     (RibbonTab::Insert, "Insert", 88.0),
                     (RibbonTab::Formatting, "Formatting", 118.0),
                     (RibbonTab::Advanced, "Advanced", 112.0),
                     (RibbonTab::Export, "Export", 90.0),
                 ]
                 .map(|(tab, label, width)| {
+                    // Advanced folded into Formatting (approved mockup). The empty
+                    // slot keeps each tab at its usual index.
+                    if tab == RibbonTab::Advanced {
+                        let r = ui.allocate_response(egui::Vec2::ZERO, egui::Sense::hover());
+                        ui.add_space(-ui.spacing().item_spacing.x);
+                        return r;
+                    }
                     let r = crate::tabs::tab(
                         ui,
                         label,
@@ -576,7 +621,7 @@ impl Editor {
                         ui,
                         egui::Rect::from_center_size(mark.center(), egui::vec2(20., 20.)),
                     );
-                    response.on_hover_text("ClipCraft");
+                    response.tip("ClipCraft");
                     let r = icon(
                         ui,
                         "Save As",
@@ -592,7 +637,7 @@ impl Editor {
                     let r = icon(
                         ui,
                         "Capture Clip",
-                        "Capture Clip · Use current Clip settings",
+                        "Capture Clip",
                         crate::CAPTURE_ENABLED
                             && self.capture_result.is_none()
                             && !self.capture_requested,
@@ -600,10 +645,7 @@ impl Editor {
                         egui::vec2(28.0, 26.0),
                     );
                     if r.clicked() {
-                        self.request_action(
-                            FileAction::StartCapture(self.quick_controls.capture_settings()),
-                            &ctx,
-                        );
+                        self.capture_clip_clicked(&ctx);
                     }
                     buttons.push(("Capture", r));
                     let r = icon(
@@ -642,7 +684,10 @@ impl Editor {
             });
         buttons
     }
-    pub(super) fn show_ribbon(&mut self, ui: &mut egui::Ui) -> [Response; 5] {
+    pub(super) fn show_ribbon(&mut self, ui: &mut egui::Ui) -> [Response; 4] {
+        if self.shell.ribbon_tab == RibbonTab::Advanced {
+            self.shell.ribbon_tab = RibbonTab::Formatting;
+        }
         egui::Panel::top("workspace_ribbon")
             .show_separator_line(false)
             .frame(egui::Frame::new().fill(crate::shell::SURROUND))
@@ -653,7 +698,7 @@ impl Editor {
                     .inner_margin(egui::Margin::symmetric(8, 2))
                     .show(ui, |ui| ui.horizontal(|ui| self.ribbon_tabs(ui)).inner)
                     .inner;
-                self.show_ui_button(ui);
+                self.capture_pills(ui, tabs[3].rect.right());
                 if self.shell.preview_ui {
                     return tabs;
                 }
@@ -682,7 +727,8 @@ impl Editor {
                                 ui.set_min_width(ui.available_width());
                                 let height = 70.;
                                 let bounds = ui.available_rect_before_wrap();
-                                let setup = self.shell.ribbon_tab == RibbonTab::Advanced && !self.is_video();
+                                let setup = self.shell.ribbon_tab == RibbonTab::Formatting
+                                    && !self.is_video();
                                 let mut setup_rect = egui::Rect::from_min_max(
                                     egui::pos2(bounds.left(), bounds.top()),
                                     egui::pos2(bounds.left() + 108., bounds.top() + height),
@@ -690,7 +736,7 @@ impl Editor {
                                 let scroll_width = bounds.width() - if setup { 112. } else { 0. };
                                 let scrolled = ui.scope_builder(
                                     egui::UiBuilder::new().max_rect(egui::Rect::from_min_size(
-                                        bounds.min + egui::vec2(if setup {112.} else {0.},0.),
+                                        bounds.min + egui::vec2(if setup { 112. } else { 0. }, 0.),
                                         egui::vec2(scroll_width, height + 27.),
                                     )),
                                     |ui| {
@@ -706,17 +752,20 @@ impl Editor {
                                             ui.spacing_mut().item_spacing.x = 3.0;
                                             let height =
                                                 70.0;
+                                            // Tabs build different widgets. Separate id scopes stop a
+                                            // tile taking the state of the last tab's widget for a frame.
+                                            let tab = self.shell.ribbon_tab;
+                                            ui.push_id(("ribbon-tab", tab as u8), |ui| {
                                             match self.shell.ribbon_tab {
-                                                RibbonTab::Clip => self.clip_ribbon(ui, height),
-                                                RibbonTab::Advanced => self.advanced_ribbon(ui, height),
                                                 RibbonTab::Insert => self.insert_ribbon(ui, height),
-                                                RibbonTab::Formatting => {
+                                                RibbonTab::Formatting | RibbonTab::Advanced => {
                                                     ui.add_enabled_ui(!self.shell.library, |ui| {
                                                         self.formatting_ribbon(ui, height)
                                                     });
                                                 }
                                                 RibbonTab::Export => self.export_ribbon(ui, height),
                                             }
+                                            });
                                         });
                                     })
                                     },
@@ -750,11 +799,10 @@ impl Editor {
                     })
                     .inner;
                 let active = tabs[match self.shell.ribbon_tab {
-                    RibbonTab::Clip => 0,
-                    RibbonTab::Insert => 1,
-                    RibbonTab::Formatting => 2,
-                    RibbonTab::Advanced => 3,
-                    RibbonTab::Export => 4,
+                    RibbonTab::Insert => 0,
+                    RibbonTab::Formatting => 1,
+                    RibbonTab::Advanced => 2,
+                    RibbonTab::Export => 3,
                 }]
                 .rect;
                 ui.painter().rect_filled(
@@ -800,6 +848,23 @@ impl Editor {
                     if ui.button("New image from clipboard").clicked() {
                         self.new_from_clipboard(&ctx);
                         ui.close();
+                    }
+                    if ui
+                        .button("Image from file…")
+                        .tip("Insert a PNG, JPEG, WebP, BMP, GIF, SVG or EPS file as an image object. SVG stays sharp at any size.")
+                        .clicked()
+                    {
+                        ui.close();
+                        self.suspend_global_capture();
+                        if let Some(path) = rfd::FileDialog::new()
+                            .add_filter(
+                                "Images",
+                                &["png", "jpg", "jpeg", "webp", "bmp", "gif", "svg", "eps"],
+                            )
+                            .pick_file()
+                        {
+                            self.insert_image_file(&path);
+                        }
                     }
                 });
             });
@@ -847,8 +912,9 @@ impl Editor {
             });
         });
         divider(ui, height);
-        let tools_width = (available - 166.0).max(102.0);
+        let tools_width = (available - 166.0 - Self::GROUP_PRESET_WIDTH).max(102.0);
         self.ribbon_tools(ui, tools_width, height);
+        self.group_preset_ribbon(ui, height);
     }
     fn tool_sections(
         &self,
@@ -918,7 +984,7 @@ impl Editor {
                     let (r, response) =
                         ui.allocate_exact_size(egui::vec2(84.0, 58.0), egui::Sense::hover());
                     crate::icons::draw(ui.painter(), r, "Favorites", Color32::WHITE);
-                    response.on_hover_text("Right-click any tool and choose Add to Favorites.");
+                    response.tip("Right-click any tool and choose Add to Favorites.");
                 } else {
                     let buttons = self.toolbar_range(ui, range.start, range.end);
                     if let Some((_, r)) = buttons.last() {
@@ -938,9 +1004,7 @@ impl Editor {
                         |ui| self.draggable_tools_menu(ui, visible),
                     )
                     .response
-                    .on_hover_text(
-                        "More tools · right-click to favorite, or drag within its section",
-                    ),
+                    .tip("More tools · right-click to favorite, or drag within its section"),
                 );
             });
             response.unwrap()
@@ -1017,7 +1081,7 @@ impl Editor {
             if command_tile(
                 ui,
                 "Template",
-                "Save layout as template",
+                "Save as Template",
                 "Save current layout as a reusable local template",
                 true,
                 false,
@@ -1053,7 +1117,7 @@ impl Editor {
         height: f32,
     ) -> Vec<(&'static str, Response)> {
         let mut responses = vec![];
-        group(ui, "Restore", 132.0, height, |ui| {
+        {
             let r = command_tile(
                 ui,
                 "Revert",
@@ -1061,7 +1125,7 @@ impl Editor {
                 "Restore the original screenshot; Undo restores your edits",
                 !self.shell.library && self.session.document.can_revert(),
                 false,
-                132.0,
+                72.0,
                 height,
             );
             if r.clicked() {
@@ -1070,7 +1134,7 @@ impl Editor {
                     "Original image restored. Undo restores the previous image state.".into();
             }
             responses.push(("Revert", r));
-        });
+        }
         responses
     }
 }

@@ -1,4 +1,5 @@
 use super::*;
+use crate::tips::Tip as _;
 use capture_core::video::links::Layer;
 
 use egui::{Align2, Color32, FontId, Pos2, Rect, Sense, Stroke};
@@ -167,12 +168,53 @@ impl Editor {
         let Some(mut v) = self.session.document.video.clone() else {
             return;
         };
-        let result = if let Selection::Recording(i) = self.video.selected {
-            v.split_clip(i, v.cursor)
-        } else {
-            v.split(v.cursor)
-        };
-        match result {
+        let at = v.cursor;
+        // Selected media clips, zooms and objects split at the playhead; with nothing
+        // selected, the media clip under the playhead splits as before.
+        if let Selection::Recording(i) = self.video.selected {
+            match v.split_clip(i, at) {
+                Ok(()) => self.commit_video(v),
+                Err(e) => self.status = e.to_string(),
+            }
+            return;
+        }
+        if let Some(id) = self.video.zoom_selected {
+            match capture_core::video::split::split_zoom(&mut v, id, at) {
+                Ok(_) => self.commit_video(v),
+                Err(e) => self.status = e.to_string(),
+            }
+            return;
+        }
+        let objects: Vec<u64> = self
+            .selection_ordered_ids()
+            .into_iter()
+            .filter(|id| {
+                v.objects
+                    .get(id)
+                    .is_some_and(|t| t.active(at) && t.start < at)
+            })
+            .collect();
+        if !objects.is_empty() {
+            self.commit_text();
+            self.commit_property_preview();
+            let mut doc = self.session.document.clone();
+            for id in objects {
+                if let Err(e) = capture_core::video::split::split_object(&mut doc, id, at) {
+                    self.status = e.to_string();
+                    return;
+                }
+            }
+            self.execute(Command::VideoComposition {
+                project: doc.video.unwrap(),
+                annotations: doc.annotations,
+            });
+            return;
+        }
+        if self.selected.is_some() {
+            self.status = "Move the playhead inside the selected object before splitting.".into();
+            return;
+        }
+        match v.split(at) {
             Ok(()) => self.commit_video(v),
             Err(e) => self.status = e.to_string(),
         }
@@ -265,7 +307,7 @@ impl Editor {
                             100.,
                             false,
                         )
-                        .on_hover_text(if self.video.collapsed {
+                        .tip(if self.video.collapsed {
                             "Expand Timeline and hide Recent Clips"
                         } else {
                             "Collapse Timeline for a larger video preview"
@@ -284,21 +326,19 @@ impl Editor {
                             28.,
                             self.video.playing,
                         )
-                        .on_hover_text(
-                            "Space: play/pause · twice: clip start · three times: project start",
-                        )
+                        .tip("Space: play/pause · twice: clip start · three times: project start")
                         .clicked()
                         {
                             self.video_play();
                         }
                         if super::ui::button(ui, "Previous", "", 28., false)
-                            .on_hover_text("Previous frame")
+                            .tip("Previous frame")
                             .clicked()
                         {
                             self.video_step(false);
                         }
                         if super::ui::button(ui, "Next", "", 28., false)
-                            .on_hover_text("Next frame")
+                            .tip("Next frame")
                             .clicked()
                         {
                             self.video_step(true);
@@ -339,24 +379,47 @@ impl Editor {
                                 }
                             },
                         );
+                        let can_jump = !self.jump_targets().is_empty();
+                        let jump = ui
+                            .add_enabled_ui(can_jump, |ui| {
+                                super::ui::button(
+                                    ui,
+                                    "Jump to Object",
+                                    "Jump to Object",
+                                    128.,
+                                    false,
+                                )
+                            })
+                            .inner
+                            .tip("Scroll the timeline to the selected object's clip (F)")
+                            .tip_disabled("Select an object on the canvas first");
+                        #[cfg(test)]
+                        ui.ctx().data_mut(|d| {
+                            d.insert_temp(egui::Id::unique("jump-to-object"), jump.rect)
+                        });
+                        if jump.clicked() {
+                            self.jump_to_object();
+                        }
                         if super::ui::button(ui, "Add Track", "Import…", 82., false)
-                            .on_hover_text("Import audio, image or video at the playhead")
+                            .tip("Import audio, image or video at the playhead")
                             .clicked()
                         {
                             let v = self.session.document.video.as_ref().unwrap();
                             self.pick_timeline_media(v.cursor, *v.media_tracks.last().unwrap());
                         }
+                        self.keyframe_toggle(ui);
+                        self.hide_tracks_menu(ui);
                         ui.add_space((ui.available_width() - 164.).max(0.));
                         ui.label("Timeline");
                         if super::ui::button(ui, "Minus", "", 28., false)
-                            .on_hover_text("Zoom timeline out")
+                            .tip("Zoom timeline out")
                             .clicked()
                         {
                             self.video.zoom = (self.video.zoom / 1.25).max(0.5);
                         }
                         ui.label(format!("{:.1}×", self.video.zoom));
                         if super::ui::button(ui, "Plus", "", 28., false)
-                            .on_hover_text("Zoom timeline in")
+                            .tip("Zoom timeline in")
                             .clicked()
                         {
                             self.video.zoom = (self.video.zoom * 1.25).min(8.);
@@ -445,23 +508,72 @@ impl Editor {
                 let anchor = (self.video.timeline_offset.x + local) / old_width;
                 scroll = scroll.horizontal_scroll_offset((anchor * width - local).max(0.));
             }
+            // Keep the playhead in view; scrolling by hand wins for a moment.
+            let moved = self.video.follow_seen != v.cursor;
+            self.video.follow_seen = v.cursor;
+            if ui.input(|i| {
+                i.smooth_scroll_delta != egui::Vec2::ZERO
+                    && i.pointer
+                        .hover_pos()
+                        .is_some_and(|p| ui.max_rect().contains(p))
+            }) {
+                self.video.follow_held = Some(Instant::now());
+            }
+            let held = self.video.timeline_panning
+                || self
+                    .video
+                    .follow_held
+                    .is_some_and(|t| t.elapsed().as_secs_f32() < 2.)
+                || (!self.video.playing && ui.input(|i| i.pointer.primary_down()));
+            if self.video.follow_playhead && moved && !held && self.video.zoom == old_zoom {
+                let view = (available - label_width - 16.).max(1.);
+                let x = v.cursor as f32 * scale;
+                let offset = self.video.timeline_offset.x;
+                if x < offset || x > offset + view - 24. {
+                    scroll = scroll.horizontal_scroll_offset((x - view * 0.1).max(0.));
+                }
+            }
+            let hidden: Vec<bool> = v
+                .layers()
+                .into_iter()
+                .map(|layer| {
+                    self.video.hidden_tracks.contains(&super::track_kind(
+                        &self.session.document,
+                        &v,
+                        layer,
+                    ))
+                })
+                .collect();
+            let hidden_count = hidden.iter().filter(|h| **h).count();
+            super::keyframes::set_hidden_rows(hidden);
+            self.keyframe_rows(&v);
+            let key_rows = self.video.keyframes.rows;
+            self.expire_jump_flash();
+            let view = egui::vec2(
+                (available - label_width - 16.).max(1.),
+                (ui.available_height() - 36. - 16.).max(1.),
+            );
+            let scroll = self.jump_scroll(&v, scroll, scale, view, key_rows);
             let scroll_output = scroll
                 .auto_shrink([false, false])
                 .id_salt("video-tracks")
                 .show(ui, |ui| {
-                    let rows = v.layers().len()
+                    let rows = v.layers().len() - hidden_count
                         + if ui.input(|i| !i.raw.hovered_files.is_empty()) {
                             self.video.drop_clips.len().max(1)
                         } else {
                             0
                         };
                     let (whole, _) = ui.allocate_exact_size(
-                        egui::vec2(label_width + width, 36. + rows as f32 * 39.),
+                        egui::vec2(
+                            label_width + width,
+                            36. + rows as f32 * 39. + key_rows.map_or(0., |(_, n)| n as f32 * 25.),
+                        ),
                         Sense::hover(),
                     );
                     let left = whole.left() + label_width;
                     let x = |ms: u64| left + ms as f32 * scale;
-                    let y = |row: usize| whole.top() + 36. + row as f32 * 39.;
+                    let y = |row: usize| super::keyframes::row_y(whole.top() + 36., row, key_rows);
                     let outer_clip = ui.clip_rect();
                     let pinned_left = outer_clip.left().max(whole.left());
                     let pinned_top = outer_clip.top().max(whole.top());
@@ -488,6 +600,9 @@ impl Editor {
 
                     for track in &v.tracks {
                         let row = v.layer_index(Layer::Annotation(*track));
+                        if super::keyframes::row_hidden(row) {
+                            continue;
+                        }
                         for (id, t) in v.objects.iter().filter(|(_, t)| t.track == *track) {
                             let Some(a) = self
                                 .session
@@ -530,6 +645,19 @@ impl Editor {
                                 },
                                 self.selected == Some(*id),
                             );
+                            self.paint_review_mark(ui, &v, *id, rect, scale);
+                            self.paint_jump_flash(ui, *id, rect);
+                            let keys = self.keyframe_marks(
+                                ui,
+                                &v,
+                                capture_core::video::editing::Item::Annotation(*id),
+                                rect,
+                                scale,
+                                None,
+                            );
+                            if self.path_marks(ui, &v, *id, rect, scale) || keys {
+                                continue;
+                            }
                             if r.clicked() {
                                 clicked = Some(*id);
                             }
@@ -661,7 +789,13 @@ impl Editor {
                                 } else {
                                     0
                                 };
-                                if edge == 0 && !duplicate {
+                                let item = capture_core::video::editing::Item::Annotation(*id);
+                                if duplicate
+                                    && self.video.selection.len() > 1
+                                    && self.video.selection.contains(&item)
+                                {
+                                    self.begin_timeline_duplicate(item, pos);
+                                } else if edge == 0 && !duplicate {
                                     self.begin_timeline_move(
                                         capture_core::video::editing::Item::Annotation(*id),
                                         pos,
@@ -785,6 +919,15 @@ impl Editor {
                         } else if drag.edge < 0 {
                             t.start = snap(old.start.saturating_add_signed(dt))
                                 .min(t.end.saturating_sub(frame));
+                            t.keyframes.trim_start(t.start as i64 - old.start as i64);
+                            if let Some(path) = &mut t.motion_path {
+                                std::sync::Arc::make_mut(path).offset_ms = old
+                                    .motion_path
+                                    .as_ref()
+                                    .unwrap()
+                                    .offset_ms
+                                    .saturating_add_signed(t.start as i64 - old.start as i64);
+                            }
                         } else if drag.edge > 0 {
                             t.end = snap(old.end.saturating_add_signed(dt))
                                 .clamp((t.start + frame).min(duration), duration);
@@ -792,7 +935,7 @@ impl Editor {
                             let len = t.end - t.start;
                             t.start = snap(old.start.saturating_add_signed(dt)).min(duration - len);
                             t.end = t.start + len;
-                            let row = ((pos.y - y(0)) / 39.).floor().max(0.) as usize;
+                            let row = super::keyframes::row_at(y(0), pos.y, key_rows);
                             if let Some(Layer::Annotation(track)) = v.layers().get(row) {
                                 t.track = *track;
                             }
@@ -867,6 +1010,9 @@ impl Editor {
                                 self.commit_video(project);
                             }
                         }
+                    }
+                    if let Some((row, _)) = key_rows {
+                        self.keyframe_lanes(ui, &v, left, y(row) + 39., width, scale);
                     }
                     ui.set_clip_rect(outer_clip);
                     self.track_headers(

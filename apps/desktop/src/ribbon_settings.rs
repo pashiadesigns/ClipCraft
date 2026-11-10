@@ -1,5 +1,6 @@
 //! Original icon-based command groups. Existing document commands remain the
 //! single implementation; unavailable workflows stay visibly disabled.
+use crate::tips::Tip as _;
 use crate::{Command, Editor, egui};
 use egui::{Color32, Response, Stroke};
 
@@ -11,7 +12,6 @@ pub(super) enum Action {
     Back,
     Group,
     Ungroup,
-    FlattenSelected,
     FlattenAll,
     ResizeImage,
     ResizeCanvas,
@@ -20,11 +20,9 @@ pub(super) enum Action {
     HalfTurn,
     FlipHorizontal,
     FlipVertical,
-    Trim,
     Snapping,
     PixelGrid,
-    CanvasColor,
-    Template,
+    AutoExpand,
 }
 impl Action {
     fn label(self) -> &'static str {
@@ -35,7 +33,6 @@ impl Action {
             Self::Back => "Send to back",
             Self::Group => "Group objects",
             Self::Ungroup => "Ungroup objects",
-            Self::FlattenSelected => "Flatten selected — planned",
             Self::FlattenAll => "Flatten page · Ctrl+Shift+T",
             Self::ResizeImage => "Resize image",
             Self::ResizeCanvas => "Resize canvas",
@@ -44,11 +41,9 @@ impl Action {
             Self::HalfTurn => "Rotate 180 degrees",
             Self::FlipHorizontal => "Flip horizontally",
             Self::FlipVertical => "Flip vertically",
-            Self::Trim => "Trim image — planned",
             Self::Snapping => "Canvas snapping",
             Self::PixelGrid => "Pixel grid · Ctrl+Alt+G · visible at 600% and above",
-            Self::CanvasColor => "Canvas color — planned",
-            Self::Template => "Apply image template — planned",
+            Self::AutoExpand => "Auto-expand canvas",
         }
     }
     fn order(self) -> Option<capture_core::StackOrder> {
@@ -79,12 +74,7 @@ impl Action {
             }
             if matches!(
                 self,
-                Self::FlattenAll
-                    | Self::FlattenSelected
-                    | Self::ResizeCanvas
-                    | Self::ResizeImage
-                    | Self::CanvasColor
-                    | Self::Template
+                Self::FlattenAll | Self::ResizeCanvas | Self::ResizeImage | Self::AutoExpand
             ) {
                 return false;
             }
@@ -119,7 +109,6 @@ impl Action {
                         || objects.iter().any(|a| a.group != objects[0].group))
             }
             Self::Ungroup => e.selected_objects().iter().any(|a| a.group.is_some()),
-            Self::FlattenSelected | Self::CanvasColor | Self::Template | Self::Trim => false,
             Self::FlattenAll => !e.session.document.annotations.is_empty(),
             _ => true,
         }
@@ -127,39 +116,12 @@ impl Action {
 }
 
 impl Editor {
+    /// Formatting, with what Advanced held (approved mockup
+    /// `artifacts/br-proposal/formatting-merge.html`): the selection first,
+    /// then the picture, guides and tools. Video keeps the first four groups.
     pub(super) fn formatting_ribbon(&mut self, ui: &mut egui::Ui, height: f32) {
         use crate::ribbon::{divider, group};
-        if self.is_video() {
-            group(ui, "Motion", 132., height, |ui| {
-                ui.vertical(|ui| {
-                    if crate::video_editor::ui::button(ui, "Motion", "Animations", 124., false)
-                        .clicked()
-                    {
-                        self.video.tab = crate::video_editor::PropertyTab::Motion;
-                        self.video.object_tab = crate::video_editor::PropertyTab::Motion;
-                        self.shell.properties = true;
-                        self.shell.property_tab = crate::shell::PropertyTab::Tool;
-                    }
-                    if crate::video_editor::ui::button(ui, "Play", "Preview", 124., false).clicked()
-                    {
-                        let at = self.video_clip_start();
-                        self.video_seek(at);
-                        self.video_play();
-                    }
-                });
-            });
-            divider(ui, height);
-        }
-        group(ui, "Font", 404.0, height, |ui| {
-            self.show_quick_font_controls(ui)
-        });
-        divider(ui, height);
-        group(ui, "Justification", 70.0, height, |ui| {
-            self.show_justification_grid(ui);
-        });
-        divider(ui, height);
-        group(ui, "Text", 100., height, |ui| self.rich_text_buttons(ui));
-        divider(ui, height);
+        let video = self.is_video();
         group(ui, "Alignment", 70.0, height, |ui| {
             self.show_layout_grid(ui, false);
         });
@@ -181,74 +143,49 @@ impl Editor {
             );
         });
         divider(ui, height);
-        group(ui, "Groups", 66.0, height, |ui| {
-            self.settings_grid(ui, &[Action::Group, Action::Ungroup], 2);
+        group(ui, "Grouping", 66.0, height, |ui| {
+            let actions: &[Action] = if video {
+                &[Action::Group, Action::Ungroup]
+            } else {
+                &[Action::Group, Action::Ungroup, Action::FlattenAll]
+            };
+            self.settings_grid(ui, actions, 2);
         });
         divider(ui, height);
-    }
-    pub(super) fn advanced_ribbon(&mut self, ui: &mut egui::Ui, height: f32) {
-        if self.is_video() {
-            self.video_advanced_ribbon(ui, height);
+        if video {
             return;
         }
-        use crate::ribbon::{divider, group};
-        group(ui, "Layers", 66.0, height, |ui| {
-            self.settings_grid(ui, &[Action::FlattenSelected, Action::FlattenAll], 2);
+        group(ui, "Rotate & flip", 100.0, height, |ui| {
+            self.settings_grid(
+                ui,
+                &[
+                    Action::Clockwise,
+                    Action::CounterClockwise,
+                    Action::HalfTurn,
+                    Action::FlipHorizontal,
+                    Action::FlipVertical,
+                ],
+                3,
+            );
         });
         divider(ui, height);
-        group(ui, "Image", 134.0, height, |ui| {
+        group(ui, "Size", 66.0, height, |ui| {
             self.settings_grid(
                 ui,
                 &[
                     Action::ResizeImage,
                     Action::ResizeCanvas,
-                    Action::Clockwise,
-                    Action::CounterClockwise,
-                    Action::FlipHorizontal,
-                    Action::FlipVertical,
-                    Action::HalfTurn,
-                    Action::Trim,
-                ],
-                4,
-            );
-        });
-        divider(ui, height);
-        group(ui, "Canvas", 66.0, height, |ui| {
-            self.settings_grid(
-                ui,
-                &[
-                    Action::Snapping,
-                    Action::PixelGrid,
-                    Action::CanvasColor,
-                    Action::Template,
+                    Action::AutoExpand,
                 ],
                 2,
             );
         });
         divider(ui, height);
-        group(ui, "Canvas behavior", 132., height, |ui| {
-            let enabled = self.session.document.canvas_behavior.dynamic_expansion;
-            if crate::ribbon::command_tile(
-                ui,
-                if enabled {
-                    "Expand canvas on"
-                } else {
-                    "Expand canvas off"
-                },
-                "Auto-expand canvas",
-                "Dynamically expand canvas to fit objects",
-                true,
-                enabled,
-                132.,
-                height,
-            )
-            .clicked()
-            {
-                self.execute(Command::SetCanvasExpansion { enabled: !enabled });
-            }
+        group(ui, "Guides", 36.0, height, |ui| {
+            self.settings_grid(ui, &[Action::Snapping, Action::PixelGrid], 1);
         });
         divider(ui, height);
-        group(ui, "Text recognition", 132., height, |ui| {
+        group(ui, "Tools", 150.0, height, |ui| {
             let r = crate::ribbon::command_tile(
                 ui,
                 "Grab Text",
@@ -256,15 +193,14 @@ impl Editor {
                 "Grab Text from the visible canvas or selected area",
                 !self.ocr.busy(),
                 false,
-                132.,
+                72.,
                 height,
             );
             if r.clicked() {
                 self.grab_canvas_text(ui.ctx());
             }
+            self.restore_ribbon(ui, height);
         });
-        divider(ui, height);
-        self.restore_ribbon(ui, height);
     }
     pub(super) fn settings_grid(
         &mut self,
@@ -281,6 +217,9 @@ impl Editor {
                         let selected = match action {
                             Action::Snapping => self.quick_controls.snapping(),
                             Action::PixelGrid => self.shell.pixel_grid,
+                            Action::AutoExpand => {
+                                self.session.document.canvas_behavior.dynamic_expansion
+                            }
                             _ => false,
                         };
                         let response =
@@ -315,6 +254,11 @@ impl Editor {
             }
             Action::PixelGrid => {
                 self.toggle_pixel_grid();
+                return;
+            }
+            Action::AutoExpand => {
+                let enabled = !self.session.document.canvas_behavior.dynamic_expansion;
+                self.execute(Command::SetCanvasExpansion { enabled });
                 return;
             }
             _ => {}
@@ -392,7 +336,7 @@ impl Editor {
                     responses.push((name, r));
                 }
                 let raster = command_icon(ui, "Raster Preview", true, self.shell.raster_preview)
-                    .on_hover_text("Preview the PNG at its actual pixel resolution. Zoom in to inspect pixels; toggle off to edit.");
+                    .tip("Preview the PNG at its actual pixel resolution. Zoom in to inspect pixels; toggle off to edit.");
                 if raster.clicked() { self.toggle_raster_preview(); }
                 responses.push(("Raster Preview", raster));
                 ui.menu_button(self.view.label(), |ui| {
@@ -408,7 +352,7 @@ impl Editor {
                     }
                 })
                 .response
-                .on_hover_text("Canvas zoom · Configured zoom modifier + wheel to zoom · middle-drag to pan");
+                .tip("Canvas zoom · Configured zoom modifier + wheel to zoom · middle-drag to pan");
             },
         );
         if let Some(action) = action {
@@ -447,7 +391,7 @@ pub(super) fn command_icon(
         Color32::from_gray(108)
     };
     draw(ui.painter(), response.rect.center(), name, color);
-    response.on_hover_text(name)
+    response.tip_title(name)
 }
 pub(crate) fn draw(p: &egui::Painter, c: egui::Pos2, name: &str, color: Color32) {
     let at = |x, y| c + egui::vec2(x, y);

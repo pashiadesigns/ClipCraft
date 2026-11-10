@@ -144,9 +144,9 @@ impl Editor {
         explicit_file: bool,
         window: StartupWindow,
     ) {
-        if !explicit_file && window == StartupWindow::Clip {
-            self.open_clip();
-        }
+        // BB1: ClipCraft always starts in the editor; the Capture Clip window
+        // opens only when you choose Capture Clip.
+        let _ = (explicit_file, window);
         self.show_editor_window(ctx);
     }
     pub(super) fn background_logic(&mut self, ctx: &egui::Context) {

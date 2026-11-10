@@ -117,7 +117,7 @@ impl Editor {
                 self.text_draft
                     .as_ref()
                     .filter(|d| d.preview.id == a.id)
-                    .map_or_else(|| a.clone(), |d| d.preview.clone())
+                    .map_or_else(|| self.keyframe_annotation(a), |d| d.preview.clone())
             })
             .collect()
     }

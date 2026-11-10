@@ -1,4 +1,5 @@
 use super::*;
+use crate::tips::Tip as _;
 
 impl State {
     pub(super) fn show(&mut self, ctx: &egui::Context) {
@@ -59,14 +60,14 @@ impl State {
                 ui.add_space(8.);
                 ui.horizontal(|ui| {
                     let metadata=match &self.result {Some(Ok(r))=>format!("Language: {}. Formatting estimates color, size and the nearest bundled font per line.{}",r.language,if r.scaled {" Large image reduced for recognition; review small text carefully."} else {""}),_=>"Show and copy text without formatting.".into()};
-                    ui.label("Plain text").on_hover_text(&metadata);
+                    ui.label("Plain text").tip(&metadata);
                     let (rect,mut response)=ui.allocate_exact_size(egui::vec2(36.,20.),egui::Sense::click());
                     if response.clicked() {self.plain = !self.plain;self.copy_status=None;response.mark_changed();}
                     response.widget_info(||egui::WidgetInfo::selected(egui::Role::CheckBox,ui.is_enabled(),self.plain,"Plain text"));
                     ui.painter().rect_filled(rect,10,if self.plain {crate::shell::ACCENT}else{egui::Color32::from_gray(105)});
                     ui.painter().circle_filled(egui::pos2(if self.plain {rect.right()-10.}else{rect.left()+10.},rect.center().y),8.,egui::Color32::WHITE);
                     if response.hovered() || response.has_focus() {ui.painter().rect_stroke(rect,10,egui::Stroke::new(1.,egui::Color32::WHITE),egui::StrokeKind::Outside);}
-                    response.on_hover_text(metadata);
+                    response.tip(metadata);
                     #[cfg(test)] ctx.data_mut(|d|d.insert_temp(egui::Id::unique("ocr-plain"),rect));
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center),|ui| {
                         let response=ui.add_sized([94.,crate::controls::DIALOG_ACTION_HEIGHT],egui::Button::new("Close"));close=response.clicked();

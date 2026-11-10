@@ -109,6 +109,117 @@ impl Editor {
             Err(error) => self.status = error,
         }
     }
+    /// Insert > Image from file (EDIT-084): PNG, JPEG, WebP, BMP, GIF, SVG
+    /// or EPS as a new image object. SVG stays a sharp, resizable drawing.
+    pub(super) fn insert_image_file(&mut self, path: &std::path::Path) {
+        self.insert_image_file_at(path, None);
+    }
+    /// Places the image centered at `at` in canvas pixels, or in the view.
+    pub(super) fn insert_image_file_at(&mut self, path: &std::path::Path, at: Option<[f32; 2]>) {
+        let svg = path
+            .extension()
+            .and_then(|e| e.to_str())
+            .is_some_and(|e| e.eq_ignore_ascii_case("svg"));
+        let eps = path
+            .extension()
+            .and_then(|e| e.to_str())
+            .is_some_and(|e| e.eq_ignore_ascii_case("eps"));
+        let mut note = String::new();
+        // A vector icon is drawn in a square box; size it by the SVG's own size.
+        let mut shape: Option<[u32; 2]> = None;
+        let bitmap = (|| -> Result<std::sync::Arc<capture_core::bitmap::Bitmap>, String> {
+            if svg {
+                let text = std::fs::read_to_string(path).map_err(|e| e.to_string())?;
+                // BI11: an SVG becomes an editable vector icon (its colors are
+                // separate swatches) when it fits; otherwise it stays a drawing.
+                match capture_core::vector_import::svg_vector_icon(&text)
+                    .and_then(capture_core::bitmap::Bitmap::from_vector)
+                {
+                    Ok(icon) => {
+                        shape = capture_core::vector_import::svg_size(&text).ok();
+                        return Ok(std::sync::Arc::new(icon));
+                    }
+                    Err(e) => {
+                        note = format!(
+                            " It stays a drawing ({}), so Recolor changes it as a whole.",
+                            e.to_string().trim_end_matches('.')
+                        );
+                    }
+                }
+                return capture_core::bitmap::Bitmap::from_svg(&text)
+                    .map(std::sync::Arc::new)
+                    .map_err(|e| e.to_string());
+            }
+            let pixels = if eps {
+                let bytes = std::fs::read(path).map_err(|e| e.to_string())?;
+                let (pixels, source) =
+                    capture_core::vector_import::eps_image(&bytes).map_err(|e| e.to_string())?;
+                if source == capture_core::vector_import::EpsSource::Preview {
+                    note = " Ghostscript isn't installed, so this is the preview stored in the EPS; it may look soft when enlarged.".into();
+                }
+                pixels
+            } else {
+                capture_core::Document::open_image(path)
+                    .and_then(|d| d.render())
+                    .map_err(|e| e.to_string())?
+            };
+            let payload = capture_core::clipboard_payload::ImagePayload::from_rgba(
+                pixels.width(),
+                pixels.height(),
+                pixels.into_raw(),
+            )
+            .map_err(|e| e.to_string())?;
+            capture_core::bitmap::Bitmap::new(payload.image)
+                .map(std::sync::Arc::new)
+                .map_err(|e| e.to_string())
+        })();
+        let bitmap = match bitmap {
+            Ok(b) => b,
+            Err(e) => {
+                self.status = e;
+                return;
+            }
+        };
+        if !self.commit_text() {
+            return;
+        }
+        let mut a = bitmap.annotation(1);
+        // Fit within most of the canvas, keeping the drawing's shape.
+        let canvas = [
+            self.session.document.width as f32,
+            self.session.document.height as f32,
+        ];
+        let size = match shape {
+            Some([w, h]) => [w.max(h) as f32; 2],
+            None => [a.end[0] - a.start[0], a.end[1] - a.start[1]],
+        };
+        let fit = (canvas[0] * 0.8 / size[0])
+            .min(canvas[1] * 0.8 / size[1])
+            .min(1.);
+        a.end = [size[0] * fit, size[1] * fit];
+        let payload = capture_core::clipboard_payload::ObjectPayload {
+            document_version: capture_core::MAX_PROJECT_VERSION,
+            source_canvas: [self.session.document.width, self.session.document.height],
+            objects: vec![a],
+        };
+        let center = at.unwrap_or_else(|| {
+            self.view
+                .current_transform()
+                .map(|t| t.image_point(t.viewport.center()))
+                .unwrap_or([canvas[0] * 0.5, canvas[1] * 0.5])
+        });
+        let before = self.session.document.annotations.len();
+        self.execute(Command::PasteObjects { payload, center });
+        if self.session.document.annotations.len() > before {
+            let id = self.session.document.annotations.last().map(|a| a.id);
+            self.select_only(id);
+            self.status = format!(
+                "Inserted {}.{}",
+                path.file_name().unwrap_or_default().to_string_lossy(),
+                note
+            );
+        }
+    }
     fn paste_canvas_with(&mut self, transfer: &mut impl Transfer) {
         let result = transfer.read().and_then(|payload| {
             payload.validate().map_err(|e| e.to_string())?;

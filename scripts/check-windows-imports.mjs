@@ -4,7 +4,11 @@ import { readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 
 const file = process.argv[2];
-if (!file) throw new Error('Usage: node scripts/check-windows-imports.mjs <ClipCraft.exe>');
+if (!file) throw new Error('Usage: node scripts/check-windows-imports.mjs <ClipCraft.exe> [--require-self-contained]');
+const requireSelfContained = process.argv.includes('--require-self-contained');
+for (const arg of process.argv.slice(3)) {
+  if (arg !== '--require-self-contained') throw new Error(`Unknown option: ${arg}`);
+}
 const bytes = readFileSync(file);
 const u16 = p => bytes.readUInt16LE(p);
 const u32 = p => bytes.readUInt32LE(p);
@@ -48,6 +52,11 @@ for (let p = offset(importRva); u32(p + 12); p += 20) {
 const forbidden = new Set(['LoadIconMetric', 'LoadIconWithScaleDown']);
 const failures = imports.flatMap(({ dll, symbols }) =>
   symbols.filter(s => forbidden.has(s)).map(s => `${dll}!${s}`));
+const redistributableDependencies = imports
+  .map(i => i.dll)
+  .filter(dll => /^(vcruntime|msvcp|concrt)\d.*\.dll$/i.test(dll));
+if (requireSelfContained) failures.push(...redistributableDependencies.map(dll =>
+  `Missing bundled runtime: ${dll} (release must statically link the Visual C++ runtime)`));
 const result = {
   executable: file,
   sha256: createHash('sha256').update(bytes).digest('hex'),
@@ -56,6 +65,8 @@ const result = {
   symbols: imports.reduce((n, i) => n + i.symbols.length, 0),
   user32_load_image: imports.some(i => i.dll.toLowerCase() === 'user32.dll' && i.symbols.includes('LoadImageW')),
   forbidden_imports: failures,
+  require_self_contained: requireSelfContained,
+  redistributable_dependencies: redistributableDependencies,
   executed: false,
 };
 console.log(JSON.stringify(result, null, 2));

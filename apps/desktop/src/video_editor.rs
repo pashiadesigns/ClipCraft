@@ -15,14 +15,23 @@ mod audio_output;
 #[cfg(test)]
 mod beta_finish_tests;
 #[cfg(windows)]
-mod camera;
+pub(crate) mod camera;
+mod creation;
 #[cfg(test)]
 mod flow_tests;
 mod footer;
 #[cfg(test)]
 mod footer_tests;
 mod frames;
+mod hide_tracks;
+pub(crate) use hide_tracks::{TrackType, track_kind};
+mod gif_audition;
+mod gif_studio;
 mod imports;
+mod jump;
+#[cfg(test)]
+mod keyframe_tests;
+mod keyframes;
 #[cfg(windows)]
 mod media;
 #[cfg(test)]
@@ -32,9 +41,11 @@ mod media_timeline;
 mod narration_tests;
 mod object_menu;
 mod overview;
+pub(crate) mod path_properties;
 mod placement_motion;
 #[cfg(test)]
 mod precision_tests;
+mod privacy;
 mod properties;
 #[cfg(test)]
 mod public_beta_tests;
@@ -47,13 +58,16 @@ mod still_frame;
 #[cfg(test)]
 mod tests;
 mod timeline;
+#[cfg(test)]
+mod tip_tests;
 mod tracks;
 pub(crate) mod ui;
 mod voiceover;
-mod voiceover_capture;
+pub(crate) mod voiceover_capture;
 mod workers;
 mod zoom;
 mod zoom_focus;
+pub(super) use workers::library_picture;
 pub(super) use workers::load;
 pub(super) fn still(doc: &Document) -> Result<Document, String> {
     #[cfg(windows)]
@@ -72,6 +86,16 @@ pub(super) fn still(doc: &Document) -> Result<Document, String> {
         Err("Video decoding requires Windows.".into())
     }
 }
+/// [`still`] on a thread of its own: the decoder needs a multithreaded COM
+/// apartment, which the window thread can never join.
+fn still_off_thread(doc: &Document) -> Result<Document, String> {
+    std::thread::scope(|scope| {
+        scope
+            .spawn(|| still(doc))
+            .join()
+            .unwrap_or_else(|_| Err("The video frame could not be read.".into()))
+    })
+}
 pub(super) fn supported(path: &Path) -> bool {
     path.extension()
         .is_some_and(|x| x.eq_ignore_ascii_case("mp4") || x.eq_ignore_ascii_case("vclip"))
@@ -87,15 +111,24 @@ pub(super) enum Selection {
 pub(crate) enum PropertyTab {
     #[default]
     Style,
+    /// Font, paragraph and fitting for objects that hold text (bh-proposal).
+    Text,
     Timing,
     Motion,
     Audio,
 }
 impl PropertyTab {
-    const ALL: [Self; 4] = [Self::Style, Self::Timing, Self::Motion, Self::Audio];
+    const ALL: [Self; 5] = [
+        Self::Style,
+        Self::Text,
+        Self::Timing,
+        Self::Motion,
+        Self::Audio,
+    ];
     fn label(self) -> &'static str {
         match self {
             Self::Style => "Style",
+            Self::Text => "Text",
             Self::Timing => "Timing",
             Self::Motion => "Motion",
             Self::Audio => "Audio",
@@ -103,7 +136,38 @@ impl PropertyTab {
     }
 }
 type MediaOverview = (Vec<(u64, egui::TextureHandle)>, Vec<f32>);
+/// A preview no larger than 1000 pixels, with the shape of the frame.
+fn fitted_preview(pixels: &image::RgbaImage) -> image::RgbaImage {
+    let (width, height) = pixels.dimensions();
+    let scale = (1000. / width.max(height) as f32).min(1.);
+    image::imageops::thumbnail(
+        pixels,
+        (width as f32 * scale).round().max(1.) as u32,
+        (height as f32 * scale).round().max(1.) as u32,
+    )
+}
+/// Export video's preview of the watermark on the frame at the playhead.
+pub(crate) struct ExportPreview {
+    key: (u64, u64),
+    base: image::RgbaImage,
+    shown: Option<(capture_core::watermark::Watermark, egui::TextureHandle)>,
+}
+#[cfg(test)]
+impl ExportPreview {
+    fn showing(&self, mark: &capture_core::watermark::Watermark) -> bool {
+        self.shown.as_ref().is_some_and(|(m, _)| m == mark)
+    }
+}
+
 pub(super) struct State {
+    pub(crate) gif: gif_studio::State,
+    pub(crate) keyframes: keyframes::State,
+    pub(crate) jump: jump::State,
+    /// A frame preset chosen this frame, for every selected clip.
+    pub(crate) clip_preset: Option<usize>,
+    pub(crate) creation: Option<creation::Draft>,
+    pub(crate) template_catalog: creation::Catalog,
+    pub(crate) privacy: privacy::State,
     placement_motion: [Option<capture_core::reusable_presets::Motion>; 2],
     pub(crate) still_frame: Option<still_frame::Dialog>,
     selection: std::collections::BTreeSet<capture_core::video::editing::Item>,
@@ -125,6 +189,10 @@ pub(super) struct State {
     voiceover: voiceover::State,
     pub tab: PropertyTab,
     pub object_tab: PropertyTab,
+    /// The tab to return to when inline typing ends (typing opens Text).
+    text_return: Option<PropertyTab>,
+    /// Inline typing was already followed to the Text tab (BH1: open it once).
+    typing: bool,
     pub audio_index: usize,
     pub rename: Option<(u64, String, bool)>,
     property_selection: Option<(Selection, Option<u64>)>,
@@ -138,6 +206,8 @@ pub(super) struct State {
     pub playing: bool,
     pub clock: Option<(Instant, u64)>,
     pub selected: Selection,
+    /// Track kinds hidden from the timeline view (view only; never edits the project).
+    pub hidden_tracks: std::collections::BTreeSet<TrackType>,
     pub collapsed: bool,
     pub properties_priority: bool,
     pub snap: bool,
@@ -169,7 +239,18 @@ pub(super) struct State {
     pub export: Option<workers::Export>,
     pub export_progress: f32,
     pub export_dialog: bool,
+    pub export_preview: Option<ExportPreview>,
+    /// The timeline keeps the moving playhead in view.
+    pub follow_playhead: bool,
+    follow_seen: u64,
+    follow_held: Option<Instant>,
+    /// Where an Alt+drag on the timeline would put its copies.
+    pub copy_preview: Option<Project>,
     pub export_after: [bool; 2],
+    /// Save the recording as captured instead of rendering the edits.
+    pub export_original: bool,
+    /// None follows the quality the project was recorded at.
+    pub export_quality: Option<capture_core::video::Quality>,
     pub drag: Option<timeline::Drag>,
     pub active_track: Option<capture_core::video::links::Layer>,
     pub track_rename: Option<(capture_core::video::links::Layer, String, bool)>,
@@ -188,6 +269,13 @@ pub(super) struct State {
 impl Default for State {
     fn default() -> Self {
         Self {
+            gif: Default::default(),
+            keyframes: Default::default(),
+            jump: Default::default(),
+            clip_preset: None,
+            creation: None,
+            template_catalog: Default::default(),
+            privacy: Default::default(),
             placement_motion: Default::default(),
             still_frame: None,
             selection: Default::default(),
@@ -209,6 +297,8 @@ impl Default for State {
             voiceover: Default::default(),
             tab: PropertyTab::Style,
             object_tab: PropertyTab::Style,
+            text_return: None,
+            typing: false,
             audio_index: 0,
             rename: None,
             property_selection: None,
@@ -222,6 +312,7 @@ impl Default for State {
             playing: false,
             clock: None,
             selected: Selection::Objects,
+            hidden_tracks: Default::default(),
             collapsed: false,
             properties_priority: false,
             snap: true,
@@ -251,7 +342,14 @@ impl Default for State {
             export: None,
             export_progress: 0.,
             export_dialog: false,
+            export_preview: None,
+            follow_playhead: true,
+            follow_seen: 0,
+            follow_held: None,
+            copy_preview: None,
             export_after: [false, false],
+            export_original: false,
+            export_quality: None,
             drag: None,
             active_track: None,
             track_rename: None,
@@ -323,6 +421,10 @@ impl Editor {
         self.session.document.video.as_ref().map_or(0, |v| v.cursor)
     }
     pub(super) fn video_seek(&mut self, time: u64) {
+        if !self.commit_text() {
+            return;
+        }
+        self.commit_property_preview();
         self.video.pause();
         if let Some(v) = self.session.document.video.as_mut() {
             let time = time.min(14_400_000 - 4000);
@@ -365,6 +467,7 @@ impl Editor {
         }
     }
     pub(super) fn video_tick(&mut self, ctx: &egui::Context) {
+        self.sync_timeline_with_canvas();
         self.poll_voiceover(ctx);
         self.poll_audio_analysis(ctx);
         if let Some(tx) = &self.video.audio_spectrum {
@@ -596,7 +699,9 @@ impl Editor {
             capture_core::history::Origin::Project,
         );
     }
-    pub(super) fn commit_video(&mut self, project: Project) {
+    pub(super) fn commit_video(&mut self, mut project: Project) {
+        // Following zooms track the cursor as it now is (path reduction, trims).
+        project.refollow_zooms([self.session.document.width, self.session.document.height]);
         let zoom = self
             .video
             .zoom_selected
@@ -684,12 +789,14 @@ impl Editor {
                             || *size != [self.session.document.width, self.session.document.height]
                     })
         }) {
-            return still(&self.session.document);
+            return still_off_thread(&self.session.document);
         }
-        if self.video.frame.as_ref().is_some_and(|(_, p)| {
-            p.dimensions() != (self.session.document.width, self.session.document.height)
-        }) {
-            return still(&self.session.document);
+        if self.video.frame_layers.is_empty()
+            && self.video.frame.as_ref().is_some_and(|(_, p)| {
+                p.dimensions() != (self.session.document.width, self.session.document.height)
+            })
+        {
+            return still_off_thread(&self.session.document);
         }
         let frame = self
             .video
@@ -711,6 +818,27 @@ impl Editor {
         }
         .map_err(|e| e.to_string())?;
         Document::from_image(pixels).map_err(|e| e.to_string())
+    }
+    /// The video frame on screen with its objects, at document size, for color
+    /// sampling and palettes (BI6). `None` until a frame has loaded.
+    pub(crate) fn video_frame_pixels(&self) -> Option<image::RgbaImage> {
+        let frame = self.video.frame.as_ref()?;
+        let size = (self.session.document.width, self.session.document.height);
+        let pixels = if self.video.frame_layers.is_empty() {
+            capture_core::video::editor::composite(
+                &self.session.document,
+                &frame.1,
+                self.video_time(),
+            )
+        } else {
+            capture_core::video::frame::composite(
+                &self.session.document,
+                &self.video.frame_layers,
+                self.video_time(),
+            )
+        }
+        .ok()?;
+        (pixels.dimensions() == size).then_some(pixels)
     }
     pub(super) fn paint_video(&mut self, ui: &egui::Ui, t: crate::canvas_view::Transform) -> bool {
         let density = (t.scale * ui.ctx().pixels_per_point()).clamp(0.1, 1.);
@@ -767,9 +895,18 @@ impl Editor {
         };
         doc.video = None;
         doc.object_states.clear();
-        doc = capture_core::redaction_labels::decorate(doc, self.shell.redaction_labels)
-            .unwrap_or_else(|_| self.preview_document());
+        // Labels are optional presentation. A labelling failure must never swap
+        // the frame layers for the raw project document, which hides the footage.
+        if self.shell.redaction_labels
+            && let Ok(labelled) = capture_core::redaction_labels::decorate(doc.clone(), true)
+        {
+            doc = labelled;
+        }
         // Transform only the source frame here; retained vector overlays are sampled independently.
+        self.display.scene.interacting = self.edit_drag.is_some()
+            || self.group_drag.is_some()
+            || self.rotation_drag.is_some()
+            || self.video.timing_preview.is_some();
         let result = self.display.scene.paint_video(
             ui,
             &doc,
@@ -788,6 +925,7 @@ impl Editor {
             egui::StrokeKind::Inside,
         );
         self.paint_video_frame_handles(ui, t);
+        self.paint_keyframe_path(ui, t);
         true
     }
     pub(super) fn save_video(&mut self, save_as: bool) -> bool {
@@ -805,7 +943,12 @@ impl Editor {
                     .set_directory(
                         self.dialog_folder(capture_core::quick_preferences::Folder::Project),
                     )
-                    .set_file_name("Video clip.vclip")
+                    .set_file_name(
+                        self.shell
+                            .untitled_name
+                            .as_ref()
+                            .map_or_else(|| "Video clip.vclip".into(), |n| format!("{n}.vclip")),
+                    )
                     .add_filter("ClipCraft video clip", &["vclip"])
                     .save_file()
                     .map(|mut p| {
@@ -832,11 +975,73 @@ impl Editor {
         }
         false
     }
+    /// The frame at the playhead with the watermark, built only when the frame,
+    /// the edits or the watermark change. It uses the frame already decoded for
+    /// the canvas, so nothing is decoded on the UI thread.
+    fn export_watermark_preview(&mut self, ui: &mut egui::Ui) {
+        let Some(mark) = self.export_preferences.options.watermark.clone() else {
+            return;
+        };
+        crate::watermark_ui::heading(
+            ui,
+            "Preview",
+            "The frame at the playhead with this watermark.",
+        );
+        let cursor = self.session.document.video.as_ref().map_or(0, |v| v.cursor);
+        let key = (cursor, self.video.generation);
+        if self
+            .video
+            .export_preview
+            .as_ref()
+            .is_none_or(|p| p.key != key)
+        {
+            let Some(pixels) = self.video_frame_pixels() else {
+                ui.weak("The preview appears once the frame at the playhead has loaded.");
+                return;
+            };
+            self.video.export_preview = Some(ExportPreview {
+                key,
+                base: fitted_preview(&pixels),
+                shown: None,
+            });
+        }
+        let preview = self.video.export_preview.as_mut().unwrap();
+        if preview.shown.as_ref().is_none_or(|(m, _)| *m != mark) {
+            let mut pixels = preview.base.clone();
+            // The watermark scales with the output, so the preview matches.
+            let _ = capture_core::watermark::apply(&mut pixels, Some(&mark));
+            let texture = ui.ctx().load_texture(
+                "video-export-preview",
+                egui::ColorImage::from_rgba_unmultiplied(
+                    [pixels.width() as usize, pixels.height() as usize],
+                    pixels.as_raw(),
+                ),
+                egui::TextureOptions::LINEAR,
+            );
+            preview.shown = Some((mark, texture));
+        }
+        let (rect, _) =
+            ui.allocate_exact_size(egui::vec2(ui.available_width(), 170.), egui::Sense::hover());
+        let size = egui::vec2(preview.base.width() as f32, preview.base.height() as f32);
+        let image = egui::Rect::from_center_size(
+            rect.center(),
+            size * (rect.width() / size.x).min(rect.height() / size.y),
+        );
+        if let Some((_, texture)) = &preview.shown {
+            ui.painter().image(
+                texture.id(),
+                image,
+                egui::Rect::from_min_max(egui::Pos2::ZERO, egui::pos2(1., 1.)),
+                egui::Color32::WHITE,
+            );
+        }
+    }
     pub(super) fn export_video(&mut self) {
         self.video.pause();
         self.video.export_dialog = true;
     }
     pub(super) fn show_video_export(&mut self, ctx: &egui::Context) {
+        use crate::tips::Tip as _;
         if self.video.export.is_some() {
             let mut open = true;
             egui::Window::new("Export video")
@@ -863,59 +1068,439 @@ impl Editor {
             return;
         }
         let mut confirm = false;
+        let mut mark_all = false;
+        let mut review_first: Option<capture_core::privacy::tracking::Stop> = None;
+        let confirm_id = egui::Id::unique("video-export-mark-all");
         let modal = crate::controls::Modal::new(egui::Id::unique("video-export")).show(ctx, |ui| {
-            ui.set_width(360.);
-            ui.heading("Export video");
-            if self.session.document.annotations.iter().any(|a| {
+            // Approved bj-proposal layout: summary card, Privacy review,
+            // Watermark, After export, then Cancel / Export.
+            ui.set_width(crate::watermark_ui::DIALOG_WIDTH);
+            // A scrollbar that appears must not widen the dialog.
+            ui.spacing_mut().scroll.floating_allocated_width = 0.;
+            crate::controls::dialog_title(ui, "Export video");
+            if let Some(v) = &self.session.document.video {
+                egui::Frame::new()
+                    .fill(egui::Color32::from_rgb(25, 32, 34))
+                    .corner_radius(8)
+                    .inner_margin(egui::Margin::symmetric(10, 8))
+                    .show(ui, |ui| {
+                        ui.set_width(ui.available_width());
+                        ui.horizontal(|ui| {
+                            let (r, _) =
+                                ui.allocate_exact_size(egui::vec2(52., 30.), egui::Sense::hover());
+                            ui.painter()
+                                .rect_filled(r, 4., egui::Color32::from_rgb(43, 75, 87));
+                            let c = r.center();
+                            ui.painter().add(egui::Shape::convex_polygon(
+                                vec![
+                                    c + egui::vec2(-4., -6.),
+                                    c + egui::vec2(6., 0.),
+                                    c + egui::vec2(-4., 6.),
+                                ],
+                                egui::Color32::from_rgb(207, 230, 238),
+                                egui::Stroke::NONE,
+                            ));
+                            ui.vertical(|ui| {
+                                ui.label(
+                                    egui::RichText::new(format!("{}.mp4", self.project_name()))
+                                        .strong(),
+                                );
+                                let ms = v.duration();
+                                ui.label(
+                                    egui::RichText::new(format!(
+                                        "MP4 · {} × {} · {} fps · {}:{:04.1}",
+                                        self.session.document.width,
+                                        self.session.document.height,
+                                        v.fps,
+                                        ms / 60_000,
+                                        (ms % 60_000) as f64 / 1000.
+                                    ))
+                                    .monospace()
+                                    .size(11.5)
+                                    .color(egui::Color32::from_rgb(142, 154, 157)),
+                                );
+                            });
+                        });
+                    });
+            }
+            let body = (ui.ctx().content_rect().height() - 190.).max(240.);
+            let original = egui::ScrollArea::vertical()
+                .id_salt("export-video-body")
+                .max_height(body)
+                .auto_shrink([false, true])
+                .show(ui, |ui| {
+            // Room for the scrollbar, whether or not it is showing.
+            ui.set_max_width(ui.available_width() - 13.);
+            let recording = self.recording_file();
+            if recording.is_none() {
+                self.video.export_original = false;
+            }
+            if recording.is_some()
+                && let Some(edited) = crate::backstage::segmented(
+                    ui,
+                    ["Original capture", "Edited Capture"],
+                    !self.video.export_original,
+                )
+            {
+                self.video.export_original = !edited;
+            }
+            let original = self.video.export_original;
+            if original {
+                ui.label(
+                    "Saves a copy of the recording as it was captured, straight away and at its full quality. Edits are not included.",
+                );
+            } else if let Some(v) = &self.session.document.video {
+                use capture_core::video::{Quality, size_text};
+                crate::watermark_ui::heading(
+                    ui,
+                    "Quality",
+                    "Match recording keeps the quality you recorded at. A lower choice makes a smaller file.",
+                );
+                let choice = self
+                    .video
+                    .export_quality
+                    .map_or(0, |q| 1 + Quality::ALL.iter().position(|a| *a == q).unwrap_or(0));
+                if let Some(index) = crate::backstage::segmented_choice(
+                    ui,
+                    &["Match recording", "Standard", "High", "Maximum"],
+                    choice,
+                ) {
+                    self.video.export_quality = index.checked_sub(1).map(|i| Quality::ALL[i]);
+                }
+                let size = size_text(
+                    self.video
+                        .export_quality
+                        .or(v.recorded_quality)
+                        .unwrap_or_default()
+                        .megabytes(v.fps, v.duration()),
+                );
+                ui.weak(match (self.video.export_quality, v.recorded_quality) {
+                    (None, Some(quality)) => {
+                        format!("Recorded at {}. About {size} for this video.", quality.label())
+                    }
+                    _ => format!("About {size} for this video."),
+                });
+                if self.can_copy_for_export() {
+                    ui.weak("No edits to render, so this saves straight away.");
+                }
+            }
+            let pending = capture_core::privacy::tracking::pending_reviews(&self.session.document);
+            let stops = capture_core::privacy::tracking::review_stops(&self.session.document);
+            let obscured = self.session.document.annotations.iter().any(|a| {
                 matches!(
                     a.kind,
                     crate::Kind::Redact | crate::Kind::Blur | crate::Kind::Pixelate
                 )
-            }) {
-                ui.label(crate::privacy_review::VIDEO_LIMITATION);
+            });
+            if original {
+                let warning = egui::Color32::from_rgb(242, 201, 76);
+                if obscured || !pending.is_empty() {
+                    ui.colored_label(warning, "This copy shows everything in the recording. Your redactions are not applied.");
+                }
+                if self
+                    .session
+                    .document
+                    .video
+                    .as_ref()
+                    .is_some_and(|v| v.has_recorded_cursor())
+                {
+                    ui.colored_label(warning, "The mouse pointer was recorded separately, so it isn't in this copy.");
+                }
+            } else if obscured || !pending.is_empty() {
+                crate::watermark_ui::heading(
+                    ui,
+                    "Privacy review",
+                    crate::privacy_review::VIDEO_LIMITATION,
+                );
+                let warn = !pending.is_empty();
+                let (fill, stroke, dot) = if warn {
+                    (
+                        egui::Color32::from_rgb(42, 38, 24),
+                        egui::Color32::from_rgb(92, 79, 34),
+                        egui::Color32::from_rgb(242, 201, 76),
+                    )
+                } else {
+                    (
+                        egui::Color32::from_rgb(24, 42, 32),
+                        egui::Color32::from_rgb(45, 90, 62),
+                        egui::Color32::from_rgb(99, 197, 143),
+                    )
+                };
+                let time = |ms: u64| format!("{}:{:04.1}", ms / 60_000, (ms % 60_000) as f64 / 1000.);
+                let mut confirming = ui.ctx().data(|d| d.get_temp::<bool>(confirm_id)).unwrap_or(false) && warn;
+                egui::Frame::new()
+                    .fill(fill)
+                    .stroke(egui::Stroke::new(1., stroke))
+                    .corner_radius(8)
+                    .inner_margin(egui::Margin::symmetric(10, 8))
+                    .show(ui, |ui| {
+                        ui.set_width(ui.available_width());
+                        ui.horizontal(|ui| {
+                            let (r, _) = ui.allocate_exact_size(egui::vec2(8., 8.), egui::Sense::hover());
+                            ui.painter().circle_filled(r.center(), 4., dot);
+                            ui.label(egui::RichText::new(if warn {
+                                format!(
+                                    "{} tracked redaction{} need{} review",
+                                    pending.len(),
+                                    if pending.len() == 1 { "" } else { "s" },
+                                    if pending.len() == 1 { "s" } else { "" }
+                                )
+                            } else {
+                                "Redactions reviewed".into()
+                            })
+                            .strong());
+                        });
+                        if !warn {
+                            ui.weak("Editing a redaction clears its approval.");
+                            return;
+                        }
+                        if !confirming {
+                            egui::ScrollArea::vertical()
+                                .id_salt("export-pending")
+                                .max_height(REVIEW_LIST_HEIGHT)
+                                .auto_shrink([false, true])
+                                .show(ui, |ui| {
+                                    for p in &pending {
+                                        ui.horizontal_top(|ui| {
+                                            let room = (ui.available_width() - 56.).max(40.);
+                                            ui.allocate_ui(egui::vec2(room, 20.), |ui| {
+                                                ui.horizontal_wrapped(|ui| {
+                                                    ui.label(
+                                                        egui::RichText::new(format!(
+                                                            "{} · {}–{}",
+                                                            p.kind,
+                                                            time(p.start),
+                                                            time(p.end)
+                                                        ))
+                                                        .monospace()
+                                                        .size(11.),
+                                                    );
+                                                    for (a, b) in &p.uncertain {
+                                                        ui.label(
+                                                            egui::RichText::new(format!(
+                                                                "Needs review {}–{}",
+                                                                time(*a),
+                                                                time(*b)
+                                                            ))
+                                                            .size(10.5)
+                                                            .color(egui::Color32::from_rgb(242, 201, 76)),
+                                                        );
+                                                    }
+                                                });
+                                            });
+                                            if ui
+                                                .button("Show")
+                                                .tip("Close this and go to this redaction's first flagged moment.")
+                                                .clicked()
+                                            {
+                                                review_first =
+                                                    stops.iter().find(|s| s.id == p.id).copied();
+                                            }
+                                        });
+                                    }
+                                });
+                        }
+                        let uncertain: Vec<String> = pending
+                            .iter()
+                            .flat_map(|p| {
+                                p.uncertain
+                                    .iter()
+                                    .map(move |(a, b)| format!("{} {}–{}", p.kind, time(*a), time(*b)))
+                            })
+                            .collect();
+                        if !confirming {
+                            ui.horizontal(|ui| {
+                                if ui
+                                    .button(
+                                        egui::RichText::new("Mark all as reviewed…")
+                                            .color(egui::Color32::from_rgb(242, 201, 76)),
+                                    )
+                                    .tip("Approve every tracked redaction for export after checking them.")
+                                    .clicked()
+                                {
+                                    confirming = true;
+                                }
+                                if ui
+                                    .button("Review in the editor")
+                                    .tip("Close this and go to the earliest flagged moment. Previous and Next in Properties step through the rest.")
+                                    .clicked()
+                                {
+                                    review_first = stops.first().copied();
+                                }
+                            });
+                        } else {
+                            ui.separator();
+                            let mut text = format!(
+                                "Mark all {} as reviewed? Automatic tracking can miss text.",
+                                pending.len()
+                            );
+                            if !uncertain.is_empty() {
+                                text.push_str(&format!(
+                                    " {} flagged range{} will be approved too.",
+                                    uncertain.len(),
+                                    if uncertain.len() == 1 { "" } else { "s" },
+                                ));
+                            }
+                            text.push_str(" You can undo this.");
+                            ui.label(egui::RichText::new(text).size(12.));
+                            if !uncertain.is_empty() {
+                                egui::ScrollArea::vertical()
+                                    .id_salt("export-flagged")
+                                    .max_height(REVIEW_LIST_HEIGHT)
+                                    .auto_shrink([false, true])
+                                    .show(ui, |ui| {
+                                        for range in &uncertain {
+                                            ui.label(egui::RichText::new(range).monospace().size(11.));
+                                        }
+                                    });
+                            }
+                            ui.horizontal(|ui| {
+                                if ui
+                                    .add(crate::controls::dialog_button("Mark all as reviewed", true))
+                                    .clicked()
+                                {
+                                    mark_all = true;
+                                    confirming = false;
+                                }
+                                if ui.add(crate::controls::dialog_button("Cancel", false)).clicked() {
+                                    confirming = false;
+                                }
+                            });
+                        }
+                    });
+                ui.ctx().data_mut(|d| d.insert_temp(confirm_id, confirming));
             }
-            if let Some(v) = &self.session.document.video {
-                ui.label(format!(
-                    "MP4 · {} × {} · {} fps · {:.2} seconds",
-                    self.session.document.width,
-                    self.session.document.height,
-                    v.fps,
-                    v.duration() as f64 / 1000.
-                ));
+            self.export_watermark_preview(ui);
+            if !self.export_preferences.watermark_ready {
+                self.export_preferences.watermark_ready = true;
+                self.export_preferences.options.watermark = self.quick_controls.default_watermark();
             }
+            if !original {
+                let presets = self.quick_controls.watermarks();
+                if let crate::watermark_ui::Outcome::Presets(list, default) =
+                    crate::watermark_ui::section(
+                        ui,
+                        &mut self.export_preferences.options.watermark,
+                        &presets.0,
+                        &presets.1,
+                    )
+                {
+                    self.quick_controls.remember_watermarks(list, default);
+                }
+            }
+            crate::watermark_ui::heading(ui, "After export", "What ClipCraft does when the video is saved.");
             crate::controls::toggle(ui, &mut self.video.export_after[0], "Open export folder");
-            crate::controls::toggle(
+            crate::controls::toggle(ui, &mut self.video.export_after[1], "Open video after export");
+            original
+                })
+                .inner;
+            ui.add_space(4.);
+            ui.separator();
+            let review = capture_core::privacy::tracking::require_review(&self.session.document);
+            if review.is_err() && !original {
+                ui.weak("Review the redactions to export");
+            }
+            let action = crate::controls::dialog_actions(
                 ui,
-                &mut self.video.export_after[1],
-                "Open video after export",
+                if original { "Save copy" } else { "Export" },
+                "Cancel",
+                original || review.is_ok(),
+                false,
             );
-            let action = crate::controls::dialog_actions(ui, "Export", "Cancel", true, false);
             confirm = action.0;
             if action.1 {
                 self.video.export_dialog = false;
             }
         });
+        #[cfg(test)]
+        ctx.data_mut(|d| d.insert_temp(egui::Id::unique("video-export-rect"), modal.response.rect));
+        if mark_all && let Some(mut project) = self.session.document.video.clone() {
+            let n = capture_core::privacy::tracking::mark_all_reviewed(&mut project);
+            if n > 0 {
+                self.execute(crate::Command::Video { project });
+                self.status = format!(
+                    "Marked {n} tracked redaction{} as reviewed. Ctrl+Z undoes it.",
+                    if n == 1 { "" } else { "s" }
+                );
+            }
+        }
+        if let Some(stop) = review_first {
+            self.video.export_dialog = false;
+            ctx.data_mut(|d| d.remove::<bool>(confirm_id));
+            self.show_review_stop(stop);
+        }
         if crate::text_edit::cancel_on_escape(&modal) {
             self.video.export_dialog = false;
         }
         if confirm {
             self.video.export_dialog = false;
             self.suspend_global_capture();
+            let copy = (self.video.export_original || self.can_copy_for_export())
+                .then(|| self.recording_file())
+                .flatten();
+            let extension = copy
+                .as_ref()
+                .and_then(|p| p.extension())
+                .map_or("mp4".to_owned(), |e| {
+                    e.to_string_lossy().to_ascii_lowercase()
+                });
             if let Some(mut path) = rfd::FileDialog::new()
                 .set_directory(self.dialog_folder(capture_core::quick_preferences::Folder::Export))
-                .set_file_name("Video.mp4")
-                .add_filter("MP4 video", &["mp4"])
+                .set_file_name(format!("Video.{extension}"))
+                .add_filter("Video", &[extension.as_str()])
                 .save_file()
             {
-                path.set_extension("mp4");
+                path.set_extension(&extension);
                 self.remember_dialog_folder(capture_core::quick_preferences::Folder::Export, &path);
                 self.video.export_progress = 0.;
-                self.video.export = Some(workers::export(self.session.document.clone(), path));
+                self.video.export = Some(match copy {
+                    Some(source) => workers::save_copy(source, path),
+                    None => workers::export(
+                        self.session.document.clone(),
+                        path,
+                        self.export_preferences.options.watermark.clone(),
+                        self.export_bitrate(),
+                    ),
+                });
             }
         }
     }
+    /// The recording file behind this project, when it is there to copy.
+    pub(super) fn recording_file(&self) -> Option<std::path::PathBuf> {
+        let path = self.session.document.video.as_ref()?.recording_path()?;
+        let path = std::path::PathBuf::from(path);
+        path.is_file().then_some(path)
+    }
+    /// Edited Capture with nothing to render saves the recording itself.
+    fn can_copy_for_export(&self) -> bool {
+        let d = &self.session.document;
+        self.video.export_quality.is_none()
+            && self.export_preferences.options.watermark.is_none()
+            && d.video
+                .as_ref()
+                .is_some_and(|v| v.is_unedited([d.width, d.height], d.annotations.len()))
+            && self
+                .recording_file()
+                .is_some_and(|p| p.extension().is_some_and(|e| e.eq_ignore_ascii_case("mp4")))
+    }
+    fn export_bitrate(&self) -> u32 {
+        let project = self.session.document.video.as_ref();
+        self.video
+            .export_quality
+            .or(project.and_then(|v| v.recorded_quality))
+            .unwrap_or_default()
+            .bitrate(project.map_or(30, |v| v.fps))
+    }
 }
 
+/// The flagged lists in Export video scroll at this height, so its buttons
+/// stay on screen however many redactions a project has.
+const REVIEW_LIST_HEIGHT: f32 = 104.;
+
+#[cfg(test)]
+mod dialog_gallery_tests;
+#[cfg(test)]
+mod help_gallery_tests;
 #[cfg(test)]
 mod review_tests;
 #[cfg(test)]

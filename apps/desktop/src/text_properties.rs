@@ -1,3 +1,4 @@
+use crate::tips::Tip as _;
 use crate::{Annotation, Editor, egui};
 use capture_core::text::TextFit;
 
@@ -57,7 +58,7 @@ impl Editor {
 
     pub(super) fn caret_formatting_toggle(&mut self, ui: &mut egui::Ui) {
         if crate::controls::toggle(ui, &mut self.rich_text.caret_formatting, "Format typing at caret")
-            .on_hover_text("Off: format the whole block unless characters are highlighted. On: a caret with no selection formats newly typed text.")
+            .tip("Off: format the whole block unless characters are highlighted. On: a caret with no selection formats newly typed text.")
             .changed()
         {
             if let Some(draft) = &mut self.text_draft {
@@ -67,12 +68,69 @@ impl Editor {
         }
     }
 
-    pub(super) fn update_text_sidebar(&mut self, mut edited: Annotation, rotation_requested: bool) {
+    /// While typing with text selected (or caret formatting), color edits go to
+    /// that selection, not the whole object. The swatches then have to show
+    /// the selection's format, or they appear to snap back (BI2). Returns the
+    /// annotation as the swatches should show it, or `None` to show it as is.
+    pub(super) fn selection_view(&self, a: &Annotation) -> Option<Annotation> {
+        use capture_core::text::rich;
+        let draft = self.text_draft.as_ref()?;
+        if draft.preview.id != a.id
+            || !draft.selection_active
+            || (draft.selection.is_empty() && !self.rich_text.caret_formatting)
+        {
+            return None;
+        }
+        let text = a.text.as_ref()?;
+        let format = if draft.selection.is_empty() {
+            draft
+                .typing
+                .clone()
+                .unwrap_or_else(|| rich::format_at(text, draft.selection.start.saturating_sub(1)))
+        } else {
+            rich::format_at(text, draft.selection.start)
+        };
+        let mut shown = a.clone();
+        format.apply(shown.text.as_mut()?);
+        Some(shown)
+    }
+    /// The Appearance group for `a`. While a text selection is being formatted
+    /// it shows (and edits) that selection's format; the edited annotation is
+    /// returned for [`Self::update_text_sidebar`] and `a` is left alone.
+    pub(crate) fn appearance_for_selection(
+        &self,
+        ui: &mut egui::Ui,
+        a: &mut Annotation,
+    ) -> Option<(Annotation, Annotation)> {
+        let Some(mut shown) = self.selection_view(a) else {
+            crate::appearance::show(ui, a);
+            return None;
+        };
+        let before = shown.clone();
+        crate::appearance::show(ui, &mut shown);
+        (shown != before).then_some((before, shown))
+    }
+    pub(super) fn update_text_sidebar(&mut self, edited: Annotation, rotation_requested: bool) {
+        self.update_text_sidebar_seen(edited, rotation_requested, None);
+    }
+    /// Like [`Self::update_text_sidebar`]; `seen` is the annotation as the
+    /// controls showed it (a selection's format, see [`Self::selection_view`]),
+    /// so only the fields the user actually changed reach the selection.
+    pub(super) fn update_text_sidebar_seen(
+        &mut self,
+        mut edited: Annotation,
+        rotation_requested: bool,
+        seen: Option<Annotation>,
+    ) {
         if let Some(before) = self.selected_annotation()
             && let (Some(old), Some(new)) = (&before.text, &mut edited.text)
         {
             use capture_core::text::rich::{self, Format};
-            let old_format = Format::from_style(old);
+            let old_format = seen
+                .as_ref()
+                .and_then(|s| s.text.as_ref())
+                .map_or_else(|| Format::from_style(old), Format::from_style);
+            let object_format = Format::from_style(old);
             let mut new_format = Format::from_style(new);
             if before.color != edited.color && edited.kind == crate::Kind::Text {
                 new_format.color = Some(edited.color);
@@ -82,7 +140,7 @@ impl Editor {
                     && draft.selection_active
                     && (!draft.selection.is_empty() || self.rich_text.caret_formatting)
                 {
-                    old_format.apply(new);
+                    object_format.apply(new);
                     edited.color = before.color;
                     if draft.selection.is_empty() {
                         let mut format = draft.typing.clone().unwrap_or_else(|| {
@@ -188,7 +246,7 @@ pub(super) fn outline_swatch(
     let before = outline.color;
     ui.scope(|ui| crate::property_layout::swatch(ui, label, &mut outline.color))
         .response
-        .on_hover_text("Text stroke color");
+        .tip("Text stroke color");
     if outline.color != before {
         style.outline = Some(outline);
     }
@@ -218,7 +276,6 @@ pub(super) fn advanced(ui: &mut egui::Ui, annotation: &mut Annotation) {
     let Some(style) = &mut annotation.text else {
         return;
     };
-    let mut text_color = style.color.unwrap_or(annotation.color);
     crate::property_layout::divider(ui);
     ui.scope(|ui| {
         ui.label("Text fitting");
@@ -244,23 +301,6 @@ pub(super) fn advanced(ui: &mut egui::Ui, annotation: &mut Annotation) {
                 egui::Slider::new(&mut style.padding, 0.0..=128.0),
             );
         }
-        // Convert only after an edit; simply displaying these controls must not
-        // quantize an existing RGBA alpha value or dirty the document.
-        let mut opacity = f32::from(text_color[3]) * 100.0 / 255.0;
-        let opacity_changed = crate::property_layout::slider(
-            ui,
-            "Text opacity",
-            egui::Slider::new(&mut opacity, 0.0..=100.0)
-                .suffix("%")
-                .fixed_decimals(0),
-        )
-        .changed();
-        if opacity_changed {
-            text_color[3] = (opacity * 255.0 / 100.0).round() as u8;
-        }
+        // Text opacity is set with the alpha of the Text color (properties audit).
     });
-
-    if text_color != style.color.unwrap_or(annotation.color) {
-        style.color = Some(text_color);
-    }
 }

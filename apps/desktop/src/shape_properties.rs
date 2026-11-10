@@ -1,4 +1,5 @@
 use crate::{Annotation, Kind, egui};
+use capture_core::polygon::Ready;
 
 pub(super) fn show(ui: &mut egui::Ui, annotation: &mut Annotation) {
     if !matches!(
@@ -32,6 +33,7 @@ pub(super) fn show(ui: &mut egui::Ui, annotation: &mut Annotation) {
         egui::Slider::new(&mut annotation.width, 1..=32),
     );
     crate::line_properties::outline(ui, annotation);
+    crate::text_properties::outline_controls(ui, annotation);
     crate::property_layout::slider(
         ui,
         if annotation.is_image_frame() {
@@ -49,11 +51,14 @@ pub(super) fn show(ui: &mut egui::Ui, annotation: &mut Annotation) {
         );
     }
     if annotation.kind == Kind::Polygon {
+        // Other shapes presets switch the shape; a regular polygon keeps Sides.
+        let shape = Ready::of(&annotation.points);
+        let (min, max) = annotation.body_bounds();
         let mut sides = annotation.points.len() as u32;
-        if crate::property_layout::slider(ui, "Sides", egui::Slider::new(&mut sides, 3..=64))
-            .changed()
+        if shape.is_none()
+            && crate::property_layout::slider(ui, "Sides", egui::Slider::new(&mut sides, 3..=64))
+                .changed()
         {
-            let (min, max) = annotation.body_bounds();
             annotation.points = capture_core::polygon::outline(min, max, sides);
             annotation.start = min;
             annotation.end = max;

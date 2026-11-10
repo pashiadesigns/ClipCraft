@@ -1,5 +1,6 @@
 //! Shared spacing and disclosures for the approved Properties layout.
 use super::*;
+use crate::tips::Tip as _;
 use egui::{Color32, FontId, Rect, Sense, Stroke};
 pub(crate) fn begin(ui: &egui::Ui, key: impl std::hash::Hash + std::fmt::Debug) {
     let id = egui::Id::unique((
@@ -57,6 +58,86 @@ pub(crate) fn group(
     body: impl FnOnce(&mut egui::Ui),
 ) {
     group_forced(ui, glyph, title, summary, false, body);
+}
+/// A smaller collapsible section nested inside a [`group`] (Entrance, Exit and
+/// Motion curve inside Motion). Collapsed by default; manual choices last the session.
+pub(crate) fn subgroup(
+    ui: &mut egui::Ui,
+    title: &str,
+    summary: &str,
+    body: impl FnOnce(&mut egui::Ui),
+) {
+    // Session-wide per title, so a manual choice carries across objects.
+    let id = egui::Id::unique(("property-subgroup", title));
+    // BA9: Entrance, Exit and Motion curve start collapsed; their summaries show the values.
+    let mut open = ui.ctx().data(|d| d.get_temp::<bool>(id)).unwrap_or(false);
+    egui::Frame::new()
+        .stroke(Stroke::new(1., Color32::from_rgb(52, 61, 64)))
+        .corner_radius(8)
+        .show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            let (r, response) =
+                ui.allocate_exact_size(egui::vec2(ui.available_width(), 34.), Sense::click());
+            if response.clicked() {
+                open = !open;
+                ui.ctx().data_mut(|d| d.insert_temp(id, open));
+            }
+            let p = ui.painter();
+            if response.hovered() {
+                p.rect_filled(r, 7., Color32::from_white_alpha(5));
+            }
+            super::ui::icon(
+                p,
+                Rect::from_center_size(
+                    egui::pos2(r.left() + 14., r.center().y),
+                    egui::vec2(12., 12.),
+                ),
+                if open { "Down" } else { "Expand section" },
+                Color32::LIGHT_GRAY,
+            );
+            p.text(
+                egui::pos2(r.left() + 26., r.center().y),
+                egui::Align2::LEFT_CENTER,
+                title,
+                crate::panel_ui::font(12.5),
+                Color32::WHITE,
+            );
+            let galley = p.layout_no_wrap(
+                summary.into(),
+                FontId::proportional(11.),
+                Color32::from_rgb(181, 194, 199),
+            );
+            if galley.size().x + 110. < r.width() {
+                p.galley(
+                    egui::pos2(
+                        r.right() - 10. - galley.size().x,
+                        r.center().y - galley.size().y / 2.,
+                    ),
+                    galley,
+                    Color32::LIGHT_GRAY,
+                );
+            }
+            #[cfg(test)]
+            ui.ctx().data_mut(|d| {
+                d.insert_temp(
+                    egui::Id::unique(("property-subgroup-state", title)),
+                    (r, open),
+                )
+            });
+            if open {
+                egui::Frame::new()
+                    .inner_margin(egui::Margin {
+                        left: 10,
+                        right: 10,
+                        top: 0,
+                        bottom: 8,
+                    })
+                    .show(ui, |ui| {
+                        ui.set_width(ui.available_width());
+                        ui.push_id(id, |ui| body(ui));
+                    });
+            }
+        });
 }
 pub(super) fn group_forced(
     ui: &mut egui::Ui,
@@ -221,10 +302,14 @@ pub(super) fn preset(
             egui::StrokeKind::Inside,
         );
     }
-    response.on_hover_text(name).clicked()
+    response.tip_title(name).clicked()
 }
 impl Editor {
     pub(super) fn video_annotation_style(&mut self, ui: &mut egui::Ui) {
+        if self.mixed_selection() {
+            self.mixed_style_groups(ui);
+            return;
+        }
         if self
             .selected_annotation()
             .is_some_and(|a| a.focus.is_some())
@@ -258,37 +343,18 @@ impl Editor {
                     self.object_templates(ui, a.kind);
                 }
             });
-            if matches!(
-                a.kind,
-                crate::Kind::Redact | crate::Kind::Blur | crate::Kind::Pixelate
-            ) {
-                heading(ui, "Sensitive search", "Privacy & Security");
-            } else {
-                heading(ui, "Style", "Appearance");
-            }
             let before = a.clone();
+            let mut selection_edit = None;
+            let canvas = [self.session.document.width, self.session.document.height];
             match a.kind {
-                crate::Kind::Rectangle | crate::Kind::Ellipse | crate::Kind::Polygon => {
-                    crate::shape_properties::show(ui, &mut a)
-                }
                 crate::Kind::Redact | crate::Kind::Blur | crate::Kind::Pixelate => {
+                    heading(ui, "Sensitive search", "Privacy & Security");
                     crate::obscure_properties::show(ui, &mut a);
                     ui.weak(crate::privacy_review::VIDEO_LIMITATION);
-                }
-                crate::Kind::Callout => {
-                    if let Some(c) = a.callout.as_mut() {
-                        ui.horizontal(|ui| {
-                            crate::property_layout::swatch(ui, "Fill", &mut c.fill);
-                            crate::property_layout::swatch(ui, "Outline", &mut c.outline);
-                        });
-                    }
-                    crate::property_layout::slider(
-                        ui,
-                        "Outline size",
-                        egui::Slider::new(&mut a.width, 1..=32),
-                    );
+                    end(ui);
                 }
                 crate::Kind::Image => {
+                    heading(ui, "Style", "Appearance");
                     if a.image
                         .as_ref()
                         .is_some_and(|image| image.vector().is_some())
@@ -300,94 +366,27 @@ impl Editor {
                         "Opacity",
                         egui::Slider::new(&mut a.color[3], 0..=255),
                     );
-                }
-                crate::Kind::Step => {
-                    ui.horizontal(|ui| crate::property_layout::swatch(ui, "Fill", &mut a.color));
-                    let (lo, hi) = a.body_bounds();
-                    let mut size = hi[0] - lo[0];
-                    if crate::property_layout::slider(
-                        ui,
-                        "Marker size",
-                        egui::Slider::new(&mut size, 1. ..=16384.).logarithmic(true),
-                    )
-                    .changed()
-                        && let Ok(resized) = capture_core::steps::resized_marker(
-                            &a,
-                            size,
-                            [self.session.document.width, self.session.document.height],
-                        )
-                    {
-                        a = resized;
-                    }
-                    if let Some(text) = a.text.as_mut() {
-                        ui.label("Step label");
-                        ui.add(
-                            crate::unicode_input::TextEdit::singleline(&mut text.content)
-                                .char_limit(8),
-                        );
-                    }
+                    crate::shadow_properties::show(ui, &mut a);
+                    end(ui);
                 }
                 _ => {
-                    ui.horizontal(|ui| crate::property_layout::swatch(ui, "Color", &mut a.color));
-                    if !a.highlighter_rect {
-                        crate::property_layout::slider(
-                            ui,
-                            "Width",
-                            egui::Slider::new(&mut a.width, 1..=32),
-                        );
-                    }
-                    crate::property_layout::slider(
-                        ui,
-                        "Opacity",
-                        egui::Slider::new(&mut a.color[3], 0..=255),
-                    );
+                    // Properties audit: the same Appearance group as images.
+                    heading(ui, "Style", "Appearance");
+                    selection_edit = self.appearance_for_selection(ui, &mut a);
+                    end(ui);
                 }
             }
-            if matches!(a.kind, crate::Kind::Rectangle | crate::Kind::Callout) {
-                let max = a.max_corner_radius();
-                crate::property_layout::slider(
-                    ui,
-                    "Corner radius",
-                    egui::Slider::new(&mut a.corner_radius, 0. ..=max),
-                );
+            if a.kind == crate::Kind::Step {
+                heading(ui, "Steps", "Marker");
+                crate::image_properties::marker_fields(ui, &mut a, canvas);
+                end(ui);
             }
-            end(ui);
             if a.is_image_frame() {
                 group(ui, "Crop", "Crop image", "", |ui| {
                     crate::image_frame::properties(ui, &mut a)
                 });
             }
-            if !matches!(
-                a.kind,
-                crate::Kind::Redact | crate::Kind::Blur | crate::Kind::Pixelate
-            ) {
-                group(ui, "Outline", "Outline & shadow", "", |ui| {
-                    if a.kind == crate::Kind::Step {
-                        let mut enabled = a.step_outline.is_some();
-                        crate::controls::toggle(ui, &mut enabled, "Show outline");
-                        if enabled {
-                            let outline = a.step_outline.get_or_insert_with(Default::default);
-                            crate::color_widgets::rgba_live(ui, &mut outline.color);
-                            crate::property_layout::slider(
-                                ui,
-                                "Width",
-                                egui::Slider::new(&mut outline.width, 0. ..=32.),
-                            );
-                        } else {
-                            a.step_outline = None;
-                        }
-                    }
-                    crate::line_properties::show(ui, &mut a);
-                    crate::shadow_properties::show(ui, &mut a);
-                });
-            }
-            if a.text.is_some() {
-                group(ui, "Text", "Text", "", |ui| {
-                    crate::text_properties::show(ui, &mut a);
-                    crate::text_properties::outline_controls(ui, &mut a);
-                    crate::text_properties::advanced(ui, &mut a);
-                });
-            }
+            // Text and Text fitting live on the Text tab (bh-proposal).
             let mut rotation = false;
             let placement = placement_summary(&a);
             group(ui, "Position", "Position & size", &placement, |ui| {
@@ -399,13 +398,27 @@ impl Editor {
                 rotation = crate::property_layout::rotation_controls(ui, &mut a)
                     .is_some_and(|r| r[0].changed() || r[1].clicked());
             });
+            if let Some((seen, edited)) = selection_edit {
+                self.update_text_sidebar_seen(edited, false, Some(seen));
+            }
             if a != before || rotation {
                 self.update_text_sidebar(a, rotation);
             }
             return;
         }
-        heading(ui, "Text", "Text");
+        // Text objects follow the same order: Presets, Appearance, Text,
+        // Text fitting, Position & size (properties audit).
+        group(ui, "Presets", "Presets", "", |ui| {
+            self.object_templates(ui, crate::Kind::Text);
+        });
+        let Some(mut a) = self.selected_annotation() else {
+            return;
+        };
         let before = a.clone();
+        heading(ui, "Style", "Appearance");
+        let selection_edit = self.appearance_for_selection(ui, &mut a);
+        end(ui);
+        heading(ui, "Text", "Text");
         if let Some(text) = a.text.as_mut() {
             let content = text.content.clone();
             if ui
@@ -418,123 +431,22 @@ impl Editor {
             {
                 capture_core::text::rich::rebase(text, &content, None);
             }
-            ui.columns(2, |col| {
-                col[0].label("Font");
-                col[1].label("Size");
-                egui::ComboBox::from_id_salt("video-text-font")
-                    .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
-                    .width(col[0].available_width())
-                    .selected_text(text.font.label())
-                    .show_ui(&mut col[0], |ui| {
-                        let id = egui::Id::unique("video-font-search");
-                        let mut q = ui
-                            .ctx()
-                            .data_mut(|d| d.get_temp::<String>(id).unwrap_or_default());
-                        ui.add(
-                            crate::unicode_input::TextEdit::singleline(&mut q)
-                                .hint_text("Search installed fonts"),
-                        );
-                        ui.ctx().data_mut(|d| d.insert_temp(id, q.clone()));
-                        use capture_core::text::TextFont;
-                        for f in [TextFont::UbuntuLight, TextFont::HackRegular]
-                            .into_iter()
-                            .chain(capture_core::text::system_fonts::choices())
-                            .filter(|f| f.label().to_lowercase().contains(&q.to_lowercase()))
-                        {
-                            if ui.selectable_value(&mut text.font, f, f.label()).clicked() {
-                                ui.close();
-                            }
-                        }
-                    });
-                let width = col[1].available_width();
-                col[1].add_sized(
-                    [width, 28.],
-                    egui::DragValue::new(&mut text.size_points)
-                        .range(6. ..=144.)
-                        .speed(0.25)
-                        .suffix(" pt"),
-                );
-            });
-            ui.horizontal(|ui| {
-                let width = (ui.available_width() - 40.) / 6.;
-                for (label, value) in [
-                    ("B", &mut text.bold),
-                    ("I", &mut text.italic),
-                    ("U", &mut text.underline),
-                ] {
-                    if ui
-                        .add_sized(
-                            [width, 28.],
-                            egui::Button::new(match label {
-                                "B" => crate::panel_ui::title(label, 13.),
-                                "I" => egui::RichText::new(label).font(egui::FontId::new(
-                                    13.,
-                                    crate::text_layout::family(&capture_core::text::TextStyle {
-                                        italic: true,
-                                        ..Default::default()
-                                    }),
-                                )),
-                                _ => egui::RichText::new(label).underline(),
-                            })
-                            .selected(*value),
-                        )
-                        .clicked()
-                    {
-                        *value = !*value;
-                    }
-                }
-                use capture_core::text::HorizontalAlignment as H;
-                for (glyph, value) in [
-                    ("Align left", H::Left),
-                    ("Align center", H::Center),
-                    ("Align right", H::Right),
-                ] {
-                    if super::ui::button(ui, glyph, "", width, text.horizontal == value)
-                        .on_hover_text(glyph)
-                        .clicked()
-                    {
-                        text.horizontal = value;
-                    }
-                }
-            });
+            font_fields(ui, text);
         }
-        end(ui);
-        heading(ui, "Palette", "Text color & stroke");
-        crate::property_layout::color_row(ui, 2, |ui| {
-            crate::text_properties::color_swatch(ui, &mut a.text, a.color)
-        });
-        crate::text_properties::outline_controls(ui, &mut a);
-        if let Some(outline) = a.text.as_mut().unwrap().outline.as_mut() {
-            ui.horizontal(|ui| {
-                ui.label("Text stroke color");
-                crate::color_widgets::rgba_live(ui, &mut outline.color);
-            });
-        }
-        if a != before {
+        if let Some((seen, edited)) = selection_edit {
+            self.update_text_sidebar_seen(edited, false, Some(seen));
+        } else if a != before {
             self.update_text_sidebar(a.clone(), false);
         }
+        self.common_paragraph_controls(ui);
+        self.show_justification_grid(ui);
+        self.rich_text_buttons(ui);
         end(ui);
-        let paragraph = a
-            .text
-            .as_ref()
-            .map(|t| format!("{} aligned", t.horizontal.label()))
-            .unwrap_or_default();
-        group(ui, "Align left", "Paragraph", &paragraph, |ui| {
-            self.common_paragraph_controls(ui);
-            self.show_justification_grid(ui);
-            self.rich_text_buttons(ui);
-        });
-        let effects = if a.shadow.is_some() {
-            "Shadow on"
-        } else {
-            "Shadow off"
-        };
-        group(ui, "Motion", "Text effects", effects, |ui| {
+        group(ui, "Text", "Text fitting", "", |ui| {
             let Some(mut a) = self.selected_annotation() else {
                 return;
             };
             let before = a.clone();
-            crate::shadow_properties::show(ui, &mut a);
             crate::text_properties::advanced(ui, &mut a);
             if a != before {
                 self.update_text_sidebar(a, false);
@@ -558,6 +470,89 @@ impl Editor {
             }
         });
     }
+}
+
+/// Font, size, bold/italic/underline and alignment, for text in any object.
+fn font_fields(ui: &mut egui::Ui, text: &mut capture_core::text::TextStyle) {
+    ui.columns(2, |col| {
+        col[0].label("Font");
+        col[1].label("Size");
+        egui::ComboBox::from_id_salt("video-text-font")
+            .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
+            .width(col[0].available_width())
+            .selected_text(text.font.label())
+            .show_ui(&mut col[0], |ui| {
+                let id = egui::Id::unique("video-font-search");
+                let mut q = ui
+                    .ctx()
+                    .data_mut(|d| d.get_temp::<String>(id).unwrap_or_default());
+                ui.add(
+                    crate::unicode_input::TextEdit::singleline(&mut q)
+                        .hint_text("Search installed fonts"),
+                );
+                ui.ctx().data_mut(|d| d.insert_temp(id, q.clone()));
+                use capture_core::text::TextFont;
+                for f in [TextFont::UbuntuLight, TextFont::HackRegular]
+                    .into_iter()
+                    .chain(capture_core::text::system_fonts::choices())
+                    .filter(|f| f.label().to_lowercase().contains(&q.to_lowercase()))
+                {
+                    if ui.selectable_value(&mut text.font, f, f.label()).clicked() {
+                        ui.close();
+                    }
+                }
+            });
+        let width = col[1].available_width();
+        col[1].add_sized(
+            [width, 28.],
+            egui::DragValue::new(&mut text.size_points)
+                .range(6. ..=144.)
+                .speed(0.25)
+                .suffix(" pt"),
+        );
+    });
+    ui.horizontal(|ui| {
+        let width = (ui.available_width() - 40.) / 6.;
+        for (label, value) in [
+            ("B", &mut text.bold),
+            ("I", &mut text.italic),
+            ("U", &mut text.underline),
+        ] {
+            if ui
+                .add_sized(
+                    [width, 28.],
+                    egui::Button::new(match label {
+                        "B" => crate::panel_ui::title(label, 13.),
+                        "I" => egui::RichText::new(label).font(egui::FontId::new(
+                            13.,
+                            crate::text_layout::family(&capture_core::text::TextStyle {
+                                italic: true,
+                                ..Default::default()
+                            }),
+                        )),
+                        _ => egui::RichText::new(label).underline(),
+                    })
+                    .selected(*value),
+                )
+                .clicked()
+            {
+                *value = !*value;
+            }
+        }
+        use capture_core::text::HorizontalAlignment as H;
+        for (glyph, value) in [
+            ("Align left", H::Left),
+            ("Align center", H::Center),
+            ("Align right", H::Right),
+        ] {
+            if super::ui::button(ui, glyph, "", width, text.horizontal == value)
+                .tip_title(glyph)
+                .clicked()
+            {
+                text.horizontal = value;
+            }
+        }
+    });
 }
 
 pub(crate) fn geometry_fields(ui: &mut egui::Ui, a: &mut crate::Annotation, canvas: [u32; 2]) {

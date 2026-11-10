@@ -5,6 +5,7 @@ use crate::{Annotation, Document, Error, Kind, MAX_PIXELS, Result};
 use image::RgbaImage;
 
 pub mod effect_patch;
+mod focus_preview;
 pub mod vector;
 mod viewport;
 pub use viewport::Viewport;
@@ -34,11 +35,18 @@ pub struct DisplayList {
     /// rather than sampled four times per display pixel at fractional zoom.
     base_color: Option<image::Rgba<u8>>,
     pub layers: Vec<Layer>,
+    /// Whole-image perspective drawn over the finished view (FX-003).
+    pub(crate) tilt: Option<crate::tilt::Tilt>,
+    /// Filters, border and edge for the whole picture.
+    pub(crate) finish: Option<crate::picture_finish::Finish>,
 }
 
 impl Document {
     pub fn display_list(&self) -> Result<DisplayList> {
-        self.display_list_limited(MAX_PIXELS)
+        let mut list = self.display_list_limited(MAX_PIXELS)?;
+        list.tilt = self.canvas_behavior.perspective;
+        list.finish = self.canvas_behavior.finish;
+        Ok(list)
     }
 
     fn display_list_limited(&self, patch_pixel_limit: u64) -> Result<DisplayList> {
@@ -112,12 +120,14 @@ pub(crate) fn layers_from_base(
     // rasterization is needed. The UI can tessellate vectors at its DPI.
     let last_effect = annotations.iter().rposition(needs_pixels);
     let mut composite = last_effect.map(|_| base.clone());
+    let backdrop = crate::focus::Backdrop::new(annotations);
     let mut layers = Vec::with_capacity(annotations.len());
     let mut patch_pixels = 0u64;
     for (index, annotation) in annotations.iter().enumerate() {
         let shadow = crate::shadow::patch(annotation);
         if let Some(image) = &mut composite {
-            if crate::shadow::above_pixel_effect(annotation.kind) {
+            if backdrop.render(image, annotation) {
+            } else if crate::shadow::above_pixel_effect(annotation.kind) {
                 crate::render_annotation_ink(image, annotation);
                 if let Some(patch) = &shadow {
                     patch.paint(image);
@@ -175,6 +185,8 @@ pub(crate) fn layers_from_base(
         base,
         base_color,
         layers,
+        tilt: None,
+        finish: None,
     })
 }
 

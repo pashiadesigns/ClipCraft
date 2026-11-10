@@ -1,3 +1,4 @@
+use crate::tips::Tip as _;
 use crate::{Command, Editor, canvas_view::Transform, egui};
 pub(super) struct Crop {
     // Exclusive right/bottom edges in image pixels.
@@ -5,7 +6,18 @@ pub(super) struct Crop {
     drag: Option<Drag>,
     pub(super) page: usize,
     content: capture_core::crop::CropMode,
+    /// A locked width-to-height shape; None drags freely.
+    ratio: Option<[u32; 2]>,
 }
+/// Ratios offered in Crop; None is free.
+const RATIOS: [(Option<[u32; 2]>, &str); 6] = [
+    (None, "Free"),
+    (Some([1, 1]), "1:1 Square"),
+    (Some([4, 3]), "4:3"),
+    (Some([3, 2]), "3:2"),
+    (Some([16, 9]), "16:9"),
+    (Some([9, 16]), "9:16"),
+];
 struct Drag {
     original: [u32; 4],
     origin: [i32; 2],
@@ -24,6 +36,7 @@ impl Crop {
             bounds: [0; 4],
             page: 0,
             content: Default::default(),
+            ratio: None,
             drag: None,
         }
     }
@@ -32,6 +45,7 @@ impl Crop {
             bounds: [0, 0, size[0], size[1]],
             page: 0,
             content: Default::default(),
+            ratio: None,
             drag: None,
         }
     }
@@ -255,6 +269,99 @@ impl Crop {
             ],
         }
         .map(|v| v as u32);
+        if !matches!(d.mode, Mode::Move) {
+            let keep = match d.mode {
+                Mode::New => {
+                    let b = self.bounds;
+                    [
+                        i32::from(d.origin[0] as u32 != b[0]) * 2 - 1,
+                        i32::from(d.origin[1] as u32 != b[1]) * 2 - 1,
+                    ]
+                }
+                Mode::Resize(i) => [
+                    if [2, 3, 4].contains(&i) {
+                        -1
+                    } else if [0, 6, 7].contains(&i) {
+                        1
+                    } else {
+                        0
+                    },
+                    if [4, 5, 6].contains(&i) {
+                        -1
+                    } else if [0, 1, 2].contains(&i) {
+                        1
+                    } else {
+                        0
+                    },
+                ],
+                Mode::Move => [0, 0],
+            };
+            self.hold_ratio(keep, size);
+        }
+    }
+    /// Reshapes the crop to the locked ratio. `keep` says which side stays put
+    /// on each axis: -1 left or top, 1 right or bottom, 0 the middle.
+    fn hold_ratio(&mut self, keep: [i32; 2], size: [u32; 2]) {
+        let Some([rw, rh]) = self.ratio else { return };
+        let ratio = rw as f32 / rh as f32;
+        let [l, t, r, b] = self.bounds.map(|v| v as f32);
+        let (w, h) = (r - l, b - t);
+        let (mut new_w, mut new_h) = if keep[0] == 0 {
+            (h * ratio, h)
+        } else if keep[1] == 0 || w / ratio >= h {
+            (w, w / ratio)
+        } else {
+            (h * ratio, h)
+        };
+        let room = |lo: f32, hi: f32, limit: f32, side: i32| match side {
+            -1 => limit - lo,
+            1 => hi,
+            _ => 2. * ((lo + hi) * 0.5).min(limit - (lo + hi) * 0.5),
+        };
+        let fit = (room(l, r, size[0] as f32, keep[0]) / new_w)
+            .min(room(t, b, size[1] as f32, keep[1]) / new_h)
+            .min(1.);
+        new_w = (new_w * fit).max(1.);
+        new_h = (new_h * fit).max(1.);
+        let place = |lo: f32, hi: f32, length: f32, side: i32| match side {
+            -1 => lo,
+            1 => hi - length,
+            _ => (lo + hi - length) * 0.5,
+        };
+        let x = place(l, r, new_w, keep[0]).max(0.);
+        let y = place(t, b, new_h, keep[1]).max(0.);
+        self.bounds = [
+            x.round() as u32,
+            y.round() as u32,
+            ((x + new_w).round() as u32).min(size[0]),
+            ((y + new_h).round() as u32).min(size[1]),
+        ];
+    }
+    /// Locks a ratio and reshapes the crop around its center.
+    fn set_ratio(&mut self, ratio: Option<[u32; 2]>, size: [u32; 2]) {
+        self.ratio = ratio;
+        let Some([rw, rh]) = ratio else { return };
+        let [l, t, r, b] = self.bounds.map(|v| v as f32);
+        let aspect = rw as f32 / rh as f32;
+        let (w, h) = if (r - l) / (b - t) > aspect {
+            ((b - t) * aspect, b - t)
+        } else {
+            (r - l, (r - l) / aspect)
+        };
+        let x = (l + r - w) * 0.5;
+        let y = (t + b - h) * 0.5;
+        self.bounds = [
+            x.round() as u32,
+            y.round() as u32,
+            ((x + w).round() as u32).min(size[0]),
+            ((y + h).round() as u32).min(size[1]),
+        ];
+    }
+    /// Types an exact size, keeping the top-left corner in place.
+    fn set_size(&mut self, width: u32, height: u32, size: [u32; 2]) {
+        let [l, t, ..] = self.bounds;
+        self.bounds[2] = (l + width.max(1)).min(size[0]);
+        self.bounds[3] = (t + height.max(1)).min(size[1]);
     }
 }
 impl Editor {
@@ -360,7 +467,7 @@ impl Editor {
         ui.scope_builder(
             egui::UiBuilder::new().max_rect(egui::Rect::from_min_size(
                 pos,
-                egui::vec2(toolbar_width, 144.0),
+                egui::vec2(toolbar_width, 200.0),
             )),
             |ui| {
                 egui::Frame::new()
@@ -368,7 +475,22 @@ impl Editor {
                     .inner_margin(6.0)
                     .show(ui, |ui| {
                         ui.add_enabled_ui(interactive, |ui| {
-                            ui.label(format!("Page {} · {} × {} px",crop.page+1,bounds[2]-bounds[0],bounds[3]-bounds[1]));
+                            ui.label(format!("Page {}",crop.page+1));
+                            let mut ratio=crop.ratio;
+                            if crate::property_layout::choice(ui,"Ratio",&mut ratio,&RATIOS,"Lock the crop to a shape, or keep it Free."){crop.set_ratio(ratio,size);}
+                            let mut w=bounds[2]-bounds[0];let mut h=bounds[3]-bounds[1];
+                            let edited=ui.horizontal(|ui|{
+                                let mut changed=false;
+                                ui.label("Width");
+                                changed|=ui.add(egui::DragValue::new(&mut w).range(1..=size[0]).suffix(" px")).tip_title("Width").tip("The width of the crop in pixels.").changed();
+                                ui.label("Height");
+                                let h_field=ui.add_enabled(crop.ratio.is_none(),egui::DragValue::new(&mut h).range(1..=size[1]).suffix(" px")).tip_title("Height").tip("The height of the crop in pixels.").tip_disabled("The ratio sets the height. Choose Free to type one.");
+                                changed|h_field.changed()
+                            }).inner;
+                            if edited{
+                                if let Some([rw,rh])=crop.ratio{h=((w as f32*rh as f32/rw as f32).round() as u32).max(1);}
+                                crop.set_size(w,h,size);
+                            }
                             ui.radio_value(&mut crop.content,capture_core::crop::CropMode::Preserve,"Preserve content outside the crop");
                             ui.radio_value(&mut crop.content,capture_core::crop::CropMode::Delete,"Delete raster content outside the crop");
                             ui.small("Shapes and text stay editable. Outside portions are excluded from export.");
@@ -542,6 +664,7 @@ mod tests {
                 bounds: initial,
                 page: 0,
                 content: Default::default(),
+                ratio: None,
                 drag: Some(Drag {
                     original: initial,
                     origin: [0, 0],
@@ -559,10 +682,34 @@ mod tests {
             crop.update_drag([1000, 1000], [200, 160]);
             assert!(crop.bounds[2] <= 200 && crop.bounds[3] <= 160);
         }
+        let mut locked = Crop {
+            bounds: [20, 20, 120, 120],
+            page: 0,
+            content: Default::default(),
+            ratio: None,
+            drag: None,
+        };
+        // Choosing a ratio reshapes around the center; dragging keeps it.
+        locked.set_ratio(Some([16, 9]), [200, 160]);
+        assert_eq!(locked.bounds, [20, 42, 120, 98]);
+        locked.drag = Some(Drag {
+            original: locked.bounds,
+            origin: [120, 98],
+            mode: Mode::Resize(4),
+        });
+        locked.update_drag([180, 120], [200, 160]);
+        let [l, t, r, b] = locked.bounds;
+        assert_eq!([l, t], [20, 42]);
+        assert!((((r - l) as f32 / (b - t) as f32) - 16. / 9.).abs() < 0.03);
+        locked.update_drag([5000, 5000], [200, 160]);
+        assert!(locked.bounds[2] <= 200 && locked.bounds[3] <= 160);
+        let [l, t, r, b] = locked.bounds;
+        assert!((((r - l) as f32 / (b - t) as f32) - 16. / 9.).abs() < 0.03);
         let mut crop = Crop {
             bounds: initial,
             page: 0,
             content: Default::default(),
+            ratio: None,
             drag: Some(Drag {
                 original: initial,
                 origin: [80, 65],

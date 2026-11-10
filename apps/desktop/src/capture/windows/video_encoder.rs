@@ -38,9 +38,18 @@ fn ratio(a: u32, b: u32) -> u64 {
 }
 impl Encoder {
     pub fn new(path: &Path, size: [u32; 2], fps: u32, audio: bool) -> Result<Self> {
+        Self::with_bitrate(path, size, fps, audio, 8_000_000)
+    }
+    pub fn with_bitrate(
+        path: &Path,
+        size: [u32; 2],
+        fps: u32,
+        audio: bool,
+        bitrate: u32,
+    ) -> Result<Self> {
         if size.iter().any(|n| *n < 64 || !n.is_multiple_of(2))
-            || size[0] > 1920
-            || size[1] > 1080
+            || size[0].max(size[1]) > 1920
+            || size[0].min(size[1]) > 1080
             || ![15, 30, 60].contains(&fps)
         {
             return Err(windows::core::Error::from_hresult(
@@ -57,7 +66,7 @@ impl Encoder {
             let output = MFCreateMediaType()?;
             output.SetGUID(&MF_MT_MAJOR_TYPE, &MFMediaType_Video)?;
             output.SetGUID(&MF_MT_SUBTYPE, &MFVideoFormat_H264)?;
-            output.SetUINT32(&MF_MT_AVG_BITRATE, 8_000_000)?;
+            output.SetUINT32(&MF_MT_AVG_BITRATE, bitrate)?;
             output.SetUINT32(&MF_MT_INTERLACE_MODE, MFVideoInterlace_Progressive.0 as u32)?;
             output.SetUINT64(&MF_MT_FRAME_SIZE, ratio(size[0], size[1]))?;
             output.SetUINT64(&MF_MT_FRAME_RATE, ratio(fps, 1))?;

@@ -1,6 +1,7 @@
 //! Field layout mirrors the approved Page Setup design; all controls share a right edge.
 use super::page_setup::Draft;
 use crate::egui;
+use crate::tips::Tip as _;
 use capture_core::guide_sections::{Alignment, NumberStyle};
 
 fn row<R>(ui: &mut egui::Ui, label: &str, f: impl FnOnce(&mut egui::Ui) -> R) -> R {
@@ -107,7 +108,7 @@ pub(super) fn fields(ui: &mut egui::Ui, d: &mut Draft) {
                             }
                         }
                         ui.selectable_label(name == "Custom", "Custom")
-                            .on_hover_text("Edit the dimensions below for a custom size.");
+                            .tip("Edit the dimensions below for a custom size.");
                     });
             });
             row(ui, "Orientation", |ui| {
@@ -259,7 +260,7 @@ pub(super) fn fields(ui: &mut egui::Ui, d: &mut Draft) {
                         [58., 28.],
                         egui::DragValue::new(&mut s.number_start).range(1..=100000),
                     )
-                    .on_hover_text("Start at");
+                    .tip("Start at");
                     egui::ComboBox::from_id_salt("number-style")
                         .width(105.)
                         .selected_text(match s.number_style {

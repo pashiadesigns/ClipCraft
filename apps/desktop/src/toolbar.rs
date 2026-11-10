@@ -1,4 +1,5 @@
 //! Original reorderable toolbar. Tool IDs stay independent of visible positions.
+use crate::tips::Tip as _;
 use crate::{Editor, egui, shell::TOOLS};
 use capture_core::{
     quick_preferences::Choice,
@@ -71,7 +72,7 @@ impl Editor {
                     )
                 })
                 .inner
-                .on_hover_text(self.tool_tooltip(active_id));
+                .tip(self.tool_tooltip(active_id));
             response.dnd_set_drag_payload(ToolDrag(id));
             if let Some(payload) = response.dnd_hover_payload::<ToolDrag>().filter(|p| {
                 self.quick_controls.tool_group(p.0) == self.quick_controls.tool_group(id)
@@ -284,7 +285,7 @@ impl Editor {
                             .inner
                         })
                         .inner
-                        .on_hover_text(self.tool_tooltip(active_id));
+                        .tip(self.tool_tooltip(active_id));
                     response.dnd_set_drag_payload(ToolDrag(id));
                     let group_order: Vec<_> = order
                         .iter()

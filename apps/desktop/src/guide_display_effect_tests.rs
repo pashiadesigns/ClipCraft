@@ -230,6 +230,7 @@ fn page_cut_flatten_undo_restores_retained_text_shapes_and_frames() {
     for command in [
         Command::CutOutPages {
             axis: CutAxis::Horizontal,
+            edge: Default::default(),
             start: 180,
             end: 200,
             page: 0,
@@ -358,4 +359,319 @@ fn pixel_effect_interaction_profile() {
         serde_json::to_vec_pretty(&rows).unwrap(),
     )
     .unwrap();
+}
+
+#[test]
+fn magnified_callout_reuses_lower_textures_during_drag_zoom_and_resize() {
+    let mut d = fixture([1920, 1080], Kind::Rectangle);
+    d.annotations[1].start = [180., 250.];
+    d.annotations[1].end = [430., 400.];
+    d.annotations[1].focus = Some(capture_core::focus::Focus {
+        darken: 0.4,
+        blur: 3.,
+        magnify: Some(Default::default()),
+        ..Default::default()
+    });
+    let ctx = egui::Context::default();
+    let mut scene = Scene::default();
+    let mut first = paint(&ctx, &mut scene, &d, 0.7);
+    let key = scene.effects[&2].clear.as_ref().unwrap()[0].1.id();
+    let affected_key = scene.effects[&2].tiles[0].1.id();
+    for i in 0..20 {
+        let a = &mut d.annotations[1];
+        a.start[0] += 1.;
+        a.end[0] += 2.;
+        a.rotation_degrees = i as f32;
+        a.corner_radius = i as f32;
+        let m = a.focus.as_mut().unwrap().magnify.as_mut().unwrap();
+        m.offset[1] = i as f32 * 0.03;
+        m.scale = 1.5 + i as f32 * 0.03;
+        let out = paint(&ctx, &mut scene, &d, 0.7 + i as f32 * 0.002);
+        assert!(
+            !out.0
+                .textures_delta
+                .set
+                .iter()
+                .any(|(id, _)| *id == key || *id == affected_key),
+            "movement uploaded cached raster pixels"
+        );
+        first.0.textures_delta.append(out.0.textures_delta.clone());
+        assert_eq!(scene.effects[&2].clear.as_ref().unwrap()[0].1.id(), key);
+        assert_eq!(scene.effects[&2].tiles[0].1.id(), affected_key);
+    }
+    if let Ok(root) = std::env::var("CLIPCRAFT_GIF_EVIDENCE") {
+        let last = paint(&ctx, &mut scene, &d, 0.7);
+        dump_meshes(&ctx, &root, "magnified-canvas", first, last);
+        d.render()
+            .unwrap()
+            .save(std::path::Path::new(&root).join("magnified-export.png"))
+            .unwrap();
+    }
+}
+
+#[test]
+fn video_magnify_drag_skips_full_resolution_detail_until_release() {
+    let size = [1920, 1080];
+    let mut d = fixture(size, Kind::Rectangle);
+    let a = &mut d.annotations[1];
+    a.start = [220., 200.];
+    a.end = [520., 400.];
+    a.focus = Some(capture_core::focus::Focus {
+        darken: 0.4,
+        magnify: Some(Default::default()),
+        ..Default::default()
+    });
+    let ctx = egui::Context::default();
+    let mut scene = Scene::default();
+    let project = capture_core::video::editor::Project::new("synthetic.mp4".into(), size, 4000, 30);
+    let zoom = 900. / size[0] as f32;
+    let draw = |scene: &mut Scene, d: &Document| {
+        let mut out = ctx.run_ui(
+            egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    egui::vec2(960., 600.),
+                )),
+                ..Default::default()
+            },
+            |ui| {
+                let image = egui::Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    egui::vec2(size[0] as f32, size[1] as f32) * zoom,
+                );
+                scene
+                    .paint_video(
+                        ui,
+                        d,
+                        Transform {
+                            viewport: ui.clip_rect(),
+                            image,
+                            scale: zoom,
+                            zoom,
+                        },
+                        None,
+                        1,
+                        &project,
+                    )
+                    .unwrap();
+            },
+        );
+        let uploads = out.textures_delta.set.len();
+        out.textures_delta.clear();
+        uploads
+    };
+    draw(&mut scene, &d);
+    assert!(
+        scene.effects[&2].detail.is_some(),
+        "idle preview keeps sharp detail"
+    );
+    scene.interacting = true;
+    for _ in 0..12 {
+        let a = &mut d.annotations[1];
+        a.start[0] += 7.;
+        a.end[0] += 7.;
+        let uploads = draw(&mut scene, &d);
+        assert!(
+            scene.effects[&2].detail.is_none(),
+            "no detail re-render while dragging"
+        );
+        assert_eq!(uploads, 0, "dragging uploaded {uploads} new textures");
+    }
+    scene.interacting = false;
+    draw(&mut scene, &d);
+    let region = scene.effects[&2].detail.as_ref().map(|(r, _)| *r);
+    assert!(region.is_some(), "detail rebuilt once the drag ends");
+    let uploads = draw(&mut scene, &d);
+    assert_eq!(uploads, 0, "rebuilt detail is retained");
+}
+#[test]
+#[ignore = "Optimized large-raster and changing-video CPU preparation profile; no desktop access"]
+fn magnified_interaction_performance() {
+    use std::time::Instant;
+    let mut rows = vec![];
+    for (size, dynamic, blur) in [
+        ([3840, 2160], false, 0.),
+        ([3840, 2160], false, 8.),
+        ([1920, 1080], true, 0.),
+        ([1920, 1080], true, 8.),
+    ] {
+        let mut d = fixture(size, Kind::Rectangle);
+        let a = &mut d.annotations[1];
+        a.start = [220., 200.];
+        a.end = [520., 400.];
+        a.focus = Some(capture_core::focus::Focus {
+            blur,
+            darken: 0.4,
+            magnify: Some(Default::default()),
+            ..Default::default()
+        });
+        let ctx = egui::Context::default();
+        let mut scene = Scene::default();
+        let project =
+            capture_core::video::editor::Project::new("synthetic.mp4".into(), size, 4000, 30);
+        let draw = |scene: &mut Scene, d: &Document, zoom| {
+            if !dynamic {
+                return paint(&ctx, scene, d, zoom);
+            }
+            PaintedOutput(ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        egui::vec2(960., 600.),
+                    )),
+                    ..Default::default()
+                },
+                |ui| {
+                    scene
+                        .paint_video(
+                            ui,
+                            d,
+                            Transform {
+                                viewport: ui.clip_rect(),
+                                image: egui::Rect::from_min_size(
+                                    egui::Pos2::ZERO,
+                                    egui::vec2(size[0] as f32, size[1] as f32) * zoom,
+                                ),
+                                scale: zoom,
+                                zoom,
+                            },
+                            None,
+                            1,
+                            &project,
+                        )
+                        .unwrap();
+                },
+            ))
+        };
+        let zoom = 900. / size[0] as f32;
+        let started = Instant::now();
+        drop(draw(&mut scene, &d, zoom));
+        let cold = started.elapsed().as_secs_f64() * 1000.;
+        let keys = [
+            scene.effects[&2].tiles[0].1.id(),
+            scene.effects[&2].clear.as_ref().unwrap()[0].1.id(),
+        ];
+        let mut times = vec![];
+        for i in 0..90 {
+            if dynamic {
+                // A changing decoded video source, including normal image-frame geometry.
+                let pixels = Arc::new(image::RgbaImage::from_fn(size[0], size[1], |x, y| {
+                    image::Rgba([((x + i) % 256) as u8, ((y + i) % 256) as u8, 180, 255])
+                }));
+                d.annotations[0].image = Some(Arc::new(
+                    capture_core::bitmap::Bitmap::transient(pixels).unwrap(),
+                ));
+            }
+            let a = &mut d.annotations[1];
+            a.start[0] += 0.3;
+            a.end[0] += 0.6;
+            a.rotation_degrees = (i % 15) as f32;
+            let m = a.focus.as_mut().unwrap().magnify.as_mut().unwrap();
+            m.offset[1] = i as f32 * 0.002;
+            m.scale = 1.5 + i as f32 * 0.004;
+            let start = Instant::now();
+            let frame = draw(
+                &mut scene,
+                &d,
+                zoom + if dynamic { 0. } else { i as f32 * 0.0001 },
+            );
+            times.push(start.elapsed().as_secs_f64() * 1000.);
+            if !dynamic {
+                assert_eq!(scene.effects[&2].tiles[0].1.id(), keys[0]);
+                assert_eq!(scene.effects[&2].clear.as_ref().unwrap()[0].1.id(), keys[1]);
+                assert!(
+                    !frame
+                        .0
+                        .textures_delta
+                        .set
+                        .iter()
+                        .any(|(id, _)| keys.contains(id))
+                );
+            }
+        }
+        times.sort_by(f64::total_cmp);
+        rows.push(serde_json::json!({"size":size,"dynamic_video":dynamic,"blur":blur,"cold_ms":cold,"median_ms":times[45],"p95_ms":times[85],"max_ms":times[89],"frames":90,"raster_uploads_during_still_drag":if dynamic {None} else {Some(0)}}));
+    }
+    let report = serde_json::json!({"measurement":"CPU preparation; excludes decoder, GPU upload/presentation and native display latency", "profiles":rows});
+    println!("{report}");
+    if let Ok(root) = std::env::var("CLIPCRAFT_GIF_EVIDENCE") {
+        std::fs::write(
+            std::path::Path::new(&root).join("magnified-performance.json"),
+            serde_json::to_vec_pretty(&report).unwrap(),
+        )
+        .unwrap();
+    }
+}
+
+/// BJ4: several Focus areas share one backdrop, built once. Moving any of them
+/// only moves its window; the blurred surfaces are not rebuilt.
+#[test]
+fn dragging_one_of_several_focus_areas_keeps_the_shared_surfaces() {
+    use capture_core::focus::Focus;
+    let ctx = egui::Context::default();
+    let mut scene = Scene::default();
+    let mut d = fixture([1920, 1080], Kind::Rectangle);
+    let focus = Focus {
+        blur: 8.,
+        darken: 0.4,
+        ..Default::default()
+    };
+    d.annotations[1].focus = Some(focus);
+    for (slot, id, x, magnify) in [(2, 30, 900., true), (3, 40, 1400., false)] {
+        let mut more = d.annotations[1].clone();
+        more.id = id;
+        more.start = [x, 200.];
+        more.end = [x + 300., 420.];
+        more.focus = Some(Focus {
+            magnify: magnify.then(Default::default),
+            ..focus
+        });
+        d.annotations.insert(slot, more);
+    }
+    paint(&ctx, &mut scene, &d, 0.7);
+    assert_eq!(scene.effects.len(), 1, "one set of surfaces for the group");
+    let tiles = scene.effects[&2].tiles[0].1.id();
+    let clear = scene.effects[&2].clear.as_ref().unwrap()[0].1.id();
+    for _ in 0..30 {
+        for i in 1..=3 {
+            d.annotations[i].start[0] += 1.5;
+            d.annotations[i].end[0] += 1.5;
+        }
+        paint(&ctx, &mut scene, &d, 0.7);
+        assert_eq!(scene.effects[&2].tiles[0].1.id(), tiles, "drag rebuilt it");
+        assert_eq!(scene.effects[&2].clear.as_ref().unwrap()[0].1.id(), clear);
+    }
+    d.annotations[3].focus.as_mut().unwrap().blur = 20.;
+    paint(&ctx, &mut scene, &d, 0.7);
+    assert_ne!(
+        scene.effects[&2].tiles[0].1.id(),
+        tiles,
+        "a stronger member changes the shared backdrop"
+    );
+}
+
+/// BJ5: the corner-drag preview warps a mesh, and only while dragging.
+#[test]
+fn perspective_previews_as_a_mesh_only_while_a_corner_is_dragged() {
+    let mut d = fixture([640, 400], Kind::Image);
+    let quad = [[0.1, 0.05], [0.95, 0.], [0.9, 1.], [0., 0.9]];
+    let target = d
+        .annotations
+        .iter_mut()
+        .find(|a| a.image.is_some())
+        .expect("fixture image");
+    let image = target.image.clone().unwrap();
+    target.image = Some(std::sync::Arc::new(
+        image.with_perspective(Some(quad)).unwrap(),
+    ));
+    assert!(!supported_with(&d, false), "engine warp when idle");
+    assert!(supported_with(&d, true), "mesh preview while dragging");
+    d.canvas_behavior.perspective = Some(capture_core::tilt::Tilt {
+        quad,
+        background: None,
+    });
+    assert!(
+        !supported_with(&d, true),
+        "the whole-image tilt stays exact"
+    );
 }

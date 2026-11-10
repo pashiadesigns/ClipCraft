@@ -1,0 +1,789 @@
+# Welcome to ClipCraft
+id: welcome
+section: Getting started
+keywords: start, overview, introduction, tour, basics
+hero: welcome-hero
+---
+ClipCraft captures your screen as images or videos, lets you mark them up, and turns them into guides, GIFs and videos. Everything you add stays editable until you export.
+
+step: Capture something with Capture Clip or Capture Video at the right end of the tab row. | title: Capture something | icon: Capture | pic: welcome-1
+step: Pick a tool on the Insert tab and draw on the image. | title: Mark it up | icon: Shape | pic: welcome-2
+step: Change how the selected object looks in Properties on the right. | title: Adjust its look | icon: Properties | pic: welcome-3
+step: Export from the Export tab, or copy with Ctrl+C. | title: Export or copy | icon: Save As | pic: welcome-4
+
+tip: Press F1 while a tooltip is showing to open the article about that control.
+
+# Capture a picture
+id: capture-clip
+section: Getting started
+where: Tab row › Capture Clip
+controls: Capture Clip, Capture
+keywords: screenshot, snip, region, window, fullscreen, scrolling, delay, capture
+hero: capture-clip-hero
+---
+Capture Clip takes a picture of part of your screen. Choose a region, a window or the whole screen, then the capture opens in the editor ready to mark up.
+
+step: Click Capture Clip at the right end of the tab row. | title: Open Capture Clip | icon: Capture | pic: capture-clip-1
+step: Choose Region, Window, Fullscreen or Scrolling in the settings window, then click Capture. | title: Choose a capture type | pic: capture-clip-2
+step: Drag over the area you want, or click a window. | title: Select what to capture | pic: capture-clip-3
+
+Scrolling capture follows a long page as it scrolls and joins it into one tall image. It works with Region.
+
+Capture Clip also offers Steps, which captures one picture per click for a step guide.
+
+tip: Hotkeys and the tray capture straight away without the settings window.
+
+# Record a video
+id: capture-video
+section: Getting started
+where: Tab row › Capture Video
+controls: Capture Video, Record
+keywords: record, recording, screen recording, video, mp4, microphone, system audio, pause
+hero: capture-video-hero
+---
+Capture Video records part of your screen with the microphone and computer sound. The floating controls let you pause, cancel or finish.
+
+step: Click Capture Video at the right end of the tab row. | title: Open Capture Video | icon: Capture | pic: capture-video-1
+step: Choose the area and sound in the General tab, then click Record. | title: Set area and sound | pic: capture-video-2
+step: Use the floating controls to pause or finish. Esc asks before discarding. | title: Pause or finish
+
+During Step by Step recording, the controls count your steps next to the timer. A camera icon beside the record button shows when the webcam is recording too.
+
+tip: The recording opens in the video editor with editable zooms, captions and the cursor.
+
+# Step by Step video
+id: step-by-step-video
+section: Video
+where: Capture Video › Step by Step
+controls: Step by Step
+keywords: instruction, tutorial, clicks, zoom on click, captions, steps, counter
+hero: step-by-step-video-hero
+---
+Step by Step turns each click into a step: Turn on Step by Step in Capture Video. | pic: step-by-step-video-1
+step: Record as normal. Each click inside the recorded area adds a step, and the count shows on the floating controls. | title: Record your clicks
+step: Finish. The zooms, highlights and captions are separate objects on the timeline, so you can change or delete any of them. | title: Finish and adjust | pic: step-by-step-video-3
+
+
+tip: Click zooms that are close together pan from one click to the next instead of zooming out and back in.
+
+# Webcam picture-in-picture
+id: webcam
+section: Video
+where: Capture Video › General › Webcam
+controls: Webcam, Keep the webcam in place during zooms
+keywords: camera, face, picture in picture, pip, overlay
+hero: webcam-hero
+---
+Turn on Webcam to record your camera next to the screen. The webcam goes on its own Webcam track in the corner, shape and size you chose, and starts with the screen recording.
+
+step: In Capture Video › General, turn on Webcam and choose the camera, shape, size and corner. | title: Turn on the webcam | pic: webcam-1
+step: Record. The camera icon on the floating controls shows it is on. | title: Record
+step: In the editor, move or resize the webcam clip like any other clip. | title: Place the webcam clip | pic: webcam-3
+
+With Step by Step, "Keep the webcam in place during zooms" stops click zooms from enlarging your face.
+
+# The editor at a glance
+id: editor
+section: Getting started
+controls: File, Insert, Formatting, Zoom in, Zoom out, Fit to Screen, Actual size · 100%, 100%, Hide annotations, Raster Preview, Hide the ribbon and panes
+keywords: interface, layout, ribbon, toolbar, properties, canvas, tabs
+hero: editor-hero
+---
+The ribbon at the top holds the tabs: File, Library, Insert, Formatting and Export. Video settings are in Video Setup at the bottom. Tools are on the Insert tab. The selected object's settings are in Properties on the right, and Recent captures sit along the bottom.
+
+Most changes preview as you drag and become one Undo step when you let go.
+
+tip: Ctrl+wheel zooms at the pointer. Space-drag or middle-drag pans.
+
+# Select and move objects
+id: move
+section: Tools
+where: Insert › Move
+controls: Move, Select
+keywords: select, drag, resize, rotate, duplicate, alt drag, nudge
+hero: move-hero
+---
+Click an object to select it. Drag to move it, drag a handle to resize, or drag the round handle above it to rotate. Shift keeps the proportions while resizing.
+
+step: On the Insert tab, click Move. | title: Choose Move | pic: move-1
+step: Click an object to select it. | title: Select an object | pic: move-2
+step: Drag to move it, drag a handle to resize, or drag the round handle above it to rotate. | title: Move, resize or rotate | pic: move-3
+
+Alt-drag makes a copy.
+
+tip: Objects never flatten into the image by themselves. Use Formatting › Grouping › Flatten page when you want that.
+
+# Lines and arrows
+id: lines
+section: Tools
+where: Insert › Lines
+controls: Lines, Arrow, Line, Start size, End size, Straight arrow, Curved arrow
+keywords: arrow, line, curve, bend, endpoint, dash, pointer
+hero: lines-hero
+---
+Lines draws straight or curved lines and arrows. Drag from start to end, then drag the middle node to bend the line.
+
+step: On the Insert tab, click Lines. | title: Choose Lines | pic: lines-1
+step: Drag from the start of the line to its end, then drag the middle node to bend it. | title: Draw the line | pic: lines-2
+step: Choose the ends, thickness, color and dash pattern in Properties. | title: Style the line | pic: lines-3
+
+Choose the ends, thickness, color and dash pattern in Properties. Hold Shift while drawing to keep the angle level.
+
+# Text
+id: text
+section: Tools
+where: Insert › Text
+controls: Text, Bold, Italic, Underline, Strikethrough, Superscript, Subscript, Align left, Align center, Align right, Bullet list, Numbered list, No list, Increase indent, Decrease indent, Change case, Character spacing, Clear text formatting, Increase font size, Decrease font size, Text style, Text stroke color, Text stroke size, Spacing indents tabs and lists, Padding, Text justification, Highlight, Font size, Monospace
+keywords: type, write, font, label, words, bold, list
+hero: text-hero
+---
+Text adds a text box. Drag a box and start typing; click away to finish. Double-click a text box to edit it again.
+
+step: On the Insert tab, click Text. | title: Choose Text | pic: text-1
+step: Drag a box and start typing. Click away to finish. | title: Type your text | pic: text-2
+step: Set the font, size and alignment on the Text tab in Properties. | title: Format the text | pic: text-3
+
+Font, size, bold, alignment, lists and spacing are on the Text tab in Properties. Text stroke draws an outline around each letter so text stays readable on busy screenshots.
+
+# Shapes
+id: shapes
+section: Tools
+where: Insert › Shape
+controls: Shape, Rectangle, Ellipse, Polygon, Circle / ellipse, Rounded rectangle, Other shapes
+keywords: box, rectangle, circle, ellipse, outline, fill, rounded corners
+hero: shapes-hero
+---
+Shape draws rectangles, ellipses and polygons. Shapes can hold text: double-click one and type.
+
+step: On the Insert tab, click Shape. | title: Choose Shape | pic: shapes-1
+step: Drag on the image to draw the shape. | title: Draw the shape | pic: shapes-2
+step: Set the fill, outline, thickness and corners in Style. | title: Style the shape | pic: shapes-3
+
+Set the fill, outline, thickness, corner radius and shadow in Style. The Text tab holds the text settings.
+
+# Callouts
+id: callouts
+section: Tools
+where: Insert › Shape › Callout
+controls: Callout, Rounded callout, Oval callout, Cloud callout, Pointer
+keywords: speech bubble, bubble, pointer, note, label
+hero: callouts-hero
+---
+A callout is a shape with a pointer. Drag the pointer's tip to aim it at what you are talking about, and type inside the bubble. The Callout presets give a box, an oval or a cloud, and Pointer in Style switches between a wedge, a thin point and thought bubbles.
+
+
+step: On the Insert tab, click Shape and choose the callout preset. | title: Choose a callout | pic: callouts-1
+step: Drag out the bubble and type inside it. | title: Draw and type | pic: callouts-2
+step: Drag the pointer's tip to aim it at what you are talking about. | title: Aim the pointer | pic: callouts-3
+
+# Numbered steps
+id: steps
+section: Tools
+where: Insert › Steps
+controls: Steps, Step, Marker, Marker size
+keywords: number, numbered, counter, sequence, letters, markers
+hero: steps-hero
+---
+Steps places numbered markers. Each click places the next number; the cursor shows which number comes next.
+
+step: On the Insert tab, click Steps. | title: Choose Steps | pic: steps-1
+step: Click each spot in order. Each click places the next number. | title: Place the numbers | pic: steps-2
+step: Switch to letters or change the next number in Properties › Marker. | title: Change the numbering | pic: steps-3
+
+Switch to letters, choose the next number, or reset the count in Properties › Marker. Steps can hold text and take the same outline styles as shapes.
+
+# Penlighter
+id: penlighter
+section: Tools
+where: Insert › Penlighter
+controls: Penlighter, Highlighter, Pen, Highlighter box
+keywords: highlight, highlighter, marker, freehand, pen, draw
+hero: penlighter-hero
+---
+Penlighter draws freehand like a highlighter pen, or a filled highlighter rectangle. Pick the pen or rectangle from its presets.
+
+
+step: On the Insert tab, click Penlighter. | title: Choose Penlighter | pic: penlighter-1
+step: Drag over the text you want to highlight. | title: Highlight the text | pic: penlighter-2
+step: Pick the pen or the rectangle from its presets in Properties. | title: Pick pen or rectangle | pic: penlighter-3
+
+# Blur and pixelate
+id: obfuscate
+section: Tools
+where: Insert › Obfuscate
+controls: Obfuscate, Blur, Pixelate, Intensity, New intensity, Region
+keywords: hide, censor, mask, privacy, email, face, blur, pixelate
+hero: obfuscate-hero
+---
+Obfuscate hides part of an image without deleting it. Blur softens the area; Pixelate turns it into large blocks. Both stay editable until you export, so you can move or resize them any time.
+
+step: On the Insert tab, click Obfuscate and drag a box over the area. | title: Draw the area | icon: Obfuscate | pic: obfuscate-1
+step: Choose Blur or Pixelate from its presets. | title: Choose Blur or Pixelate | pic: obfuscate-2
+step: Raise Intensity in Properties until the text can't be read at the size you'll share. | title: Raise the Intensity | pic: obfuscate-3
+
+pair: blur, redact | Blur (left) keeps the shape of the text. Redact (right) replaces it.
+
+Blur is for tidiness, not secrecy: some blurred text can be recovered. For passwords, emails or account numbers, use Redact.
+
+# Redact sensitive information
+id: redact
+section: Privacy
+where: Insert › Obfuscate › Redact
+controls: Redact
+keywords: blackout, censor, privacy, secret, password, email, phone, remove
+hero: redact-hero
+---
+Redact covers an area with a solid block. When you export, the pixels underneath are replaced, so nothing can be recovered from the exported file. Your project keeps the original so you can change your mind.
+
+step: On the Insert tab, click Obfuscate and choose the Redact preset. | title: Choose Redact | pic: redact-1
+step: Drag a box over what you want to hide. | title: Cover the area | pic: redact-2
+step: Export the image. The pixels underneath are replaced in the exported file. | title: Export the image | pic: redact-3
+
+tip: Focus and Magnify only draw attention; they never hide anything.
+
+# Find emails and phone numbers
+id: sensitive
+section: Privacy
+where: Properties › Privacy & Security › Find Sensitive Info…
+controls: Find Sensitive Info…, Sensitive search, Find sensitive information after recording
+keywords: detect, ocr, email, phone, personal data, privacy, scan, tracking
+hero: sensitive-hero
+---
+ClipCraft can look for emails, phone numbers and phrases you list, in an image or a video, and cover them with editable redactions in one step.
+
+step: Choose Obfuscate on the Insert tab or select a redaction, click Find Sensitive Info… in Properties, and choose what to look for. | title: Open Find Sensitive Info | pic: sensitive-1
+step: Click Scan, then tick the findings to cover. | title: Scan and tick | pic: sensitive-2
+step: Under Cover with, choose Redact, Blur or Pixelate, then add them. One Undo removes them all. | title: Choose the cover | pic: sensitive-3
+step: In videos, covers follow the text as it moves. Check any stretch flagged Needs review, then approve them in Export video. | title: Review videos | pic: sensitive-4
+
+Before a video export, every tracked redaction must be reviewed. Export video lists them with any Needs review ranges; Mark all as reviewed approves them in one step after you have checked them, and Undo takes it back.
+
+Detection helps you review; it can miss things. Check every part before you share.
+
+# Focus
+id: focus
+section: Tools
+where: Insert › Focus
+controls: Focus
+keywords: spotlight, dim, emphasis, attention, darken
+hero: focus-hero
+---
+Focus dims or blurs everything except the area you draw, so attention goes where you want it. Annotations you draw on top stay sharp.
+
+step: On the Insert tab, click Focus. | title: Choose Focus | pic: focus-1
+step: Drag over the part of the image you want to keep clear. | title: Keep an area clear | pic: focus-2
+step: Set how much the rest is blurred and darkened in Properties. | title: Set blur and darkness | pic: focus-3
+
+Add as many Focus areas as you need. They share one backdrop, so the dimming is applied once and every highlighted area stays clear; the strongest blur and darkness among them is used. Magnify views inside them stay bright too.
+
+# Magnify
+id: magnify
+section: Tools
+where: Insert › Magnify
+controls: Magnify, Magnified callout
+keywords: zoom, enlarge, loupe, magnifier, detail
+hero: magnify-hero
+---
+Magnify shows an enlarged copy of a small area in a callout, with a line to where it came from. Drag the source circle and the callout separately.
+
+
+step: On the Insert tab, click Magnify. | title: Choose Magnify | pic: magnify-1
+step: Drag over the small area you want to enlarge. | title: Pick the area | pic: magnify-2
+step: Drag the source circle and the callout separately to place them. | title: Place both parts | pic: magnify-3
+
+# Crop the image
+id: crop
+section: Tools
+where: Insert › Crop
+controls: Crop, Crop image, Ratio
+keywords: trim, cut, size, edges
+hero: crop-hero
+---
+Crop trims the canvas. Drag the edges, then confirm. Objects outside the new edges are kept and can be dragged back in.
+
+step: On the Insert tab, click Crop. | title: Choose Crop | pic: crop-1
+step: Drag the edges to the size you want. | title: Set the size | pic: crop-2
+step: Click Apply crop. | title: Apply the crop | pic: crop-3
+
+For an image object, use Crop image in its Properties to crop just that image. The original pixels stay, and Reset crop brings them back.
+
+# Cut Out
+id: cutout
+section: Tools
+where: Insert › Cut Out
+controls: Cut Out, Edge
+keywords: remove strip, cut, shorten, gap
+hero: cutout-hero
+---
+Cut Out removes a horizontal or vertical strip and closes the gap, which shortens a long screenshot without cropping the ends.
+
+
+step: On the Insert tab, click Cut Out. | title: Choose Cut Out | pic: cutout-1
+step: Drag across the strip you want to remove. | title: Mark the strip | pic: cutout-2
+step: Confirm, and the gap closes. | title: Confirm
+
+# Eraser
+id: eraser
+section: Tools
+where: Insert › Eraser
+controls: Eraser, Hard edge
+keywords: erase, delete pixels, rub out, transparency
+hero: eraser-hero
+---
+Eraser makes parts of the image transparent with a soft brush. Each stroke is an editable object, so you can move it or undo it.
+
+
+step: On the Insert tab, click Eraser. | title: Choose Eraser | pic: eraser-1
+step: Drag over the part you want to make transparent. | title: Erase the area | pic: eraser-2
+
+# Icons and stamps
+id: icons
+section: Tools
+where: Insert › Icons
+controls: Icons, Import images
+keywords: stamp, symbol, emoji, logo, library, import
+hero: icons-hero
+---
+Icons holds ready-made symbols and your own images. Click one to place it. Import adds PNG, JPEG, WebP, SVG or EPS files to your Icons.
+
+
+step: On the Insert tab, click Icons. | title: Choose Icons | pic: icons-1
+step: Click a symbol to place it. | title: Place a symbol | pic: icons-2
+step: Drag it into position and change its colors in Properties. | title: Position and color | pic: icons-3
+
+# Insert an image, SVG or EPS
+id: import-image
+section: Images
+where: Insert › Paste › Image from file
+controls: Image from file…, Paste options, Import…
+keywords: svg, eps, vector, logo, import, insert picture, file, ghostscript
+hero: import-image-hero
+---
+Image from file adds a picture as an image object you can move, resize, crop and tilt.
+
+step: On the Insert tab, open the menu under Paste. | title: Open the Paste menu | pic: import-image-1
+step: Choose Image from file… and pick your file. | title: Pick your file
+step: Move, resize, crop or tilt it like any other image object. | title: Edit the image | pic: import-image-3
+
+An SVG comes in as a vector icon: its shapes stay sharp at any size, and each of its colors (up to five) is its own swatch in Properties, just like ClipCraft's built-in icons. Importing an SVG into Icons works the same way. An SVG with pictures inside or more than five colors stays a drawing instead; it is still sharp, and Recolor draws it in one color. For safety, an SVG never loads web links or other files.
+
+art: svg | The same SVG at two sizes. Both are sharp.
+
+EPS files are PostScript. If Ghostscript is installed, ClipCraft uses it to draw the EPS in high resolution. Without it, ClipCraft uses the small preview stored in the file and tells you.
+
+# Image objects
+id: image-objects
+section: Images
+where: Properties › Style
+controls: Image, Image frame, Image zoom, Reset crop, Replace image…
+keywords: picture, frame, crop, replace, rounded corners, screenshot object
+hero: image-objects-hero
+---
+Captures and pasted pictures are image objects. Move and resize them like shapes, round their corners, or crop them with Crop image. The original pixels are always kept.
+
+
+step: Click an image object to select it. | title: Select the image | pic: image-objects-1
+step: Set its frame shape and shadow in Style. Corners are on the Image tab. | title: Frame and shadow | pic: image-objects-2
+step: On the Image tab, use Crop image to crop just this image. Reset crop brings it back. | title: Crop the image | pic: image-objects-3
+
+# Perspective on an image
+id: perspective
+section: Images
+where: Properties › Image › Perspective
+controls: Perspective, Tilt left, Tilt right, Lay back, Stand up, Free
+keywords: tilt, 3d, angle, skew, product shot
+hero: perspective-hero
+---
+Perspective tilts an image object. Each preset button shows the shape it gives. Pick a preset and adjust Angle and Depth, or choose Free and drag the four corner handles on the canvas.
+
+step: Select an image object. | title: Select the image | pic: perspective-1
+step: On the Image tab, under Perspective, pick a preset. Each button shows the shape it gives. | title: Pick a preset | pic: perspective-2
+step: Adjust Angle and Depth, or choose Free and drag the corners on the canvas. | title: Angle, Depth or Free | pic: perspective-3
+
+The original pixels stay, and None lays the image flat again. Annotations on top stay flat, so arrows and text remain readable. Shadows follow the tilted shape.
+
+loop: Dragging a Free corner handle
+
+# Colors and palettes
+id: colors
+section: Formatting
+where: Properties › any color
+controls: Palette, Recent, Fill, Outline, Text color, Color, Opacity, Fill opacity, Stroke, Thickness, Corner radius, Fill color, Outline color
+keywords: color, colour, palette, swatch, brand, hex, eyedropper, recent
+hero: colors-hero
+---
+Click any color swatch to open the color picker. Choose from the palette, enter an exact hex value, or pick a color from the screen with the eyedropper.
+
+step: Select an object and click any color swatch in Properties. | title: Click a swatch | pic: colors-1
+step: Choose from the palette, enter a hex value, or use the eyedropper. | title: Choose a color
+step: Use + to add the current color to your palette. | title: Add to your palette
+
+Palettes keep your own colors. Choose one from the list at the top of the picker; your choice is shared by every picker and remembered. Use + to add the current color, and right-click a swatch to replace, move or remove it. The ClipCraft palette is built in and can't be changed.
+
+The palette menu makes new palettes, builds one from the colors in the open image, and imports or exports GIMP (.gpl) and Adobe (.ase) palettes. Recent keeps the last colors you used.
+
+# Properties
+id: properties
+section: Formatting
+where: Properties
+controls: Properties, Style, Timing, Motion, Layout, Expand Properties pane, Sides, Preview animation, Start here, End here, Rotation, Reset rotation to 0°, Start all here, End all here
+keywords: settings, inspector, panel, style tab, text tab
+hero: properties-hero
+---
+Properties shows the settings for whatever is selected. Shapes, callouts and steps have Style and Text tabs; in video they also have Timing and Motion. While you type into an object, the other tabs stay available.
+
+tip: Select objects of different kinds together and Properties shows what they share. A note says which objects a setting leaves out.
+
+# Presets and Blocks
+id: presets
+section: Formatting
+where: Properties › Presets
+controls: Presets, Blocks, Group presets, Save as block
+keywords: style, saved style, reuse, template, group preset
+hero: presets-hero
+---
+Presets apply a saved look in one click; the active preset has a border. Blocks are saved groups of objects you can place again, such as a labeled arrow.
+
+
+step: Select an object. | title: Select an object | pic: presets-1
+step: Click a tile in Presets to apply that look. | title: Apply a preset | pic: presets-2
+step: Use Save current to keep your own. | title: Save your own | pic: presets-3
+
+# Arrange and align
+id: arrange
+section: Formatting
+where: Formatting › Arrange
+controls: Arrange, Alignment, Distribution, Bring to front, Send to back, Group, Bring forward, Send backward, Group objects, Ungroup objects, Align top, Center both axes, Align bottom, Horizontal centers, Vertical centers, Horizontal gaps, Vertical gaps
+keywords: align, distribute, order, front, back, group, layer
+hero: arrange-hero
+---
+Align lines up the selected objects, and Distribute spaces them evenly. Bring to front and Send to back change which objects sit on top. Group keeps objects together.
+
+
+step: Select two or more objects. | title: Select the objects | pic: arrange-1
+step: On the Formatting tab, use Alignment or Distribution. | title: Align or distribute | pic: arrange-2
+step: Bring to front and Send to back change which objects sit on top. | title: Change the order
+
+# Layers and flattening
+id: layers
+section: Formatting
+where: Formatting › Grouping
+controls: Flatten all, Layers, Flatten page
+keywords: flatten, merge, layers, burn in
+hero: layers-hero
+---
+Objects stay editable until you flatten them. Flatten page burns every object on the page into the image. Undo reverses it.
+
+
+step: On the Formatting tab, find the Grouping group. | title: Find Grouping | pic: layers-1
+step: Click Flatten page. | title: Flatten
+step: Undo reverses it. | title: Undo if needed
+
+# Resize and rotate the image
+id: resize
+section: Formatting
+where: Formatting › Size, Formatting › Rotate & flip
+controls: Resize image, Resize canvas, Rotate, Flip horizontal, Flip vertical, Rotate clockwise, Rotate counterclockwise, Flip horizontally, Flip vertically, Rotate 180 degrees, Page Setup
+keywords: scale, size, dimensions, rotate, flip, canvas size
+hero: resize-hero
+---
+Resize image changes the output size and keeps objects editable. Resize canvas adds or removes space around the image. Rotate and flip turn the whole image.
+
+
+step: On the Formatting tab, click Resize image. | title: Open Resize image | pic: resize-1
+step: Enter the new size and click Apply. | title: Enter the size | pic: resize-2
+step: Use Rotate & flip for the other changes. | title: Rotate or flip
+
+# Snapping and the pixel grid
+id: snapping
+section: Formatting
+where: Formatting › Guides
+controls: Snapping, Pixel grid, Canvas snapping, Auto-expand canvas, Canvas zoom
+keywords: snap, guides, align, grid, background
+hero: snapping-hero
+---
+Snapping lines objects up with each other's edges and centers while you move them. Pixel grid shows individual pixels when you zoom in. More snapping settings are in File › Preferences › Editor.
+
+
+step: On the Formatting tab, turn on Snapping. | title: Turn on Snapping | pic: snapping-1
+step: Drag an object. It lines up with other objects' edges and centers. | title: Drag to line up | pic: snapping-2
+
+# Grab Text
+id: grab-text
+section: Formatting
+where: Formatting › Tools › Grab Text
+controls: Grab Text
+keywords: ocr, copy text, recognize, extract text, read text
+hero: grab-text-hero
+---
+Grab Text reads the text in the visible canvas or a selected area, so you can copy it. It runs on your PC.
+
+
+step: On the Formatting tab, click Grab Text. | title: Open Grab Text | pic: grab-text-1
+step: Read the text from the visible canvas or a selected area. | title: Read the text
+step: Copy what you need. | title: Copy it
+
+# Export an image or PDF
+id: export
+section: Export
+where: Export
+controls: Export, Export PNG / JPEG / PDF…, Save As, Export image, Copy All, Save As project
+keywords: save, png, jpeg, jpg, pdf, share, output, file
+hero: export-hero
+---
+Export saves a finished picture: PNG keeps transparency, JPEG is smaller, PDF suits documents. The project itself stays editable.
+
+step: Open Export and choose the format. | title: Choose the format | icon: Save As | pic: export-1
+step: Set quality, paper or watermark if you need them. | title: Set the options | pic: export-2
+step: Click Save and choose where. | title: Save
+
+# Watermark
+id: watermark
+section: Export
+where: Export › Watermark
+controls: Add a watermark, Watermark, Use by default, Save preset
+keywords: confidential, draft, logo, stamp, brand, tile, copyright
+hero: watermark-hero
+---
+A watermark is text or a logo laid over everything you export, copy or print. Choose Tile to repeat it, or Once and pick one of nine positions on the grid. For a logo, choose Image, then Choose image. It marks the picture only, not transparent areas. It works for images, PDFs, videos and GIFs.
+
+step: In the Export dialog, turn on Watermark. | title: Turn on Watermark | pic: watermark-1
+step: Choose text or an image, then Tile or Once. | title: Set text or image | pic: watermark-2
+step: Save it as a preset with + to use it again. | title: Save a preset
+
+The project never changes, so you can turn the watermark off any time. Save a watermark as a preset with +, and use the preset menu to rename it, delete it or mark it "Use by default" so it is on from the start of every session.
+
+A watermark marks status or ownership. It doesn't hide anything.
+
+# Print and Page Setup
+id: print
+section: Export
+where: Export › Print
+controls: Print…, Page Setup, Print preview…, Print
+keywords: paper, printer, margins, pages, letter, a4, bleed
+hero: print-hero
+---
+Print opens a preview with paper size and margins, then the Windows print dialog. Page Setup lays out multi-page guides with physical sizes, margins, headers, footers and page numbers.
+
+
+step: Open Export and click Print. | title: Open Print | pic: print-1
+step: Check the preview, paper and margins. | title: Check the preview | pic: print-2
+step: Click Print to open the Windows print dialog. | title: Print
+
+# Copy and paste
+id: copy-paste
+section: Export
+where: Insert › Clipboard
+controls: Paste, Copy, Cut, Format
+keywords: clipboard, ctrl c, ctrl v, paste image, duplicate
+hero: copy-paste-hero
+---
+Ctrl+C copies the selected objects, or the whole image when nothing is selected. Ctrl+V pastes images and ClipCraft objects, which stay editable. With a watermark turned on, copies of the whole image include it.
+
+
+step: Press Ctrl+C or use Copy on the Insert tab. | title: Copy | pic: copy-paste-1
+step: Press Ctrl+V or use Paste. | title: Paste | pic: copy-paste-2
+
+# Projects, Rename and Duplicate
+id: projects
+section: Files
+where: File › Info
+controls: Rename, Duplicate, Save, Info, Library save status, Revert to Original, Undo, Redo
+keywords: rename, duplicate, copy project, iclip, vclip, save as, name, f2
+hero: projects-hero
+---
+Images save as .iclip projects and videos as .vclip projects, which keep every object editable. A video project keeps its media in the .vclip-media folder beside it; keep the two together.
+
+step: Open File › Info. | title: Open Info | pic: projects-1
+step: Click Rename or Duplicate. | title: Rename or duplicate | pic: projects-2
+step: Save keeps every object editable. | title: Save
+
+Rename on File › Info renames the file, its Library entry and the window title together. Press F2 or double-click the name in the title bar to rename as well. Duplicate saves a copy named "(copy)" and opens it.
+
+# Templates
+id: templates
+section: Files
+where: File › New › Templates
+controls: Templates, Save as Template, Apply image template
+keywords: template, guide, steps, how-to, issue report, bug report, release notes, slide, social card, checklist, faq, annotated, zoom, shortcuts, process, flow, do and don't, showcase
+hero: templates-hero
+---
+Templates start a guide with ready-made sections. Steps asks how many steps you want (2 to 8) and whether to stack them or lay them out in a grid. Others include Annotated screen, Zoom detail, Shortcut sheet, Process flow, Do / Don't, Window showcase, Troubleshooting Q&A, Release notes, a 16:9 Tutorial slide and a square Social card. Filter by Guides, Support or Announce & share. Your captures fill the image frames and everything stays editable.
+
+step: Open File › New. | title: Open New | pic: templates-1
+step: Choose a template from the gallery. | title: Choose a template | pic: templates-2
+step: Your captures fill the image frames, and everything stays editable. | title: Fill the frames
+
+Save as Template keeps your own layouts for next time.
+
+# The Library
+id: library
+section: Files
+where: Library
+controls: Library, Recent, Tags, Recent Clips, Show or hide recent clips
+keywords: history, recent, tags, search, find old capture, storage
+hero: library-hero
+---
+The Library keeps your captures and projects with tags and search. Recent shows the latest ones along the bottom of the editor.
+
+step: Open the Library tab. | title: Open Library | pic: library-1
+step: Search or filter by tags and dates. | title: Search or filter | pic: library-2
+step: Double-click a capture to open it. | title: Open a capture
+
+Library storage and recovery sets how much space history uses and can bring back previous versions.
+
+# The video editor
+id: video-editor
+section: Video
+where: Video timeline
+controls: Timeline, Split, Trim, Play / Pause, Play, Pause, Hide track, Add Track, Drag to reorder track, Timeline snapping, Fit preview, Zoom preview in, Zoom preview out, Zoom timeline in, Zoom timeline out, Next, Previous, Follow playhead, Video setup, Video Setup
+keywords: video, timeline, clips, tracks, cut, split, edit video, playhead
+hero: video-editor-hero
+---
+Recordings open in the video editor. The timeline shows the recording, objects, zooms and audio on separate tracks. Drag object edges to set when they appear.
+
+Space plays and pauses. Select a clip and Split cuts it at the playhead.
+
+# Jump to Object
+id: jump
+section: Video
+where: Timeline › Jump to Object
+controls: Jump to Object
+keywords: find on timeline, locate, scroll timeline, f
+hero: jump-hero
+---
+Jump to Object scrolls the timeline to the selected object's clip and flashes it yellow. Press F, use the button on the timeline, or right-click the object on the canvas.
+
+
+step: Select an object on the canvas. | title: Select an object | pic: jump-1
+step: Press F or click Jump to Object on the timeline. | title: Jump to it | pic: jump-2
+
+# Zooms and the cursor
+id: zoom
+section: Video
+where: Insert › Zoom
+controls: Zoom, Follow cursor, Cursor
+keywords: zoom in, pan, cursor, pointer, smooth cursor, follow
+hero: zoom-hero
+---
+Zooms enlarge part of the video for a while. Follow cursor makes a zoom track the recorded pointer. The recorded cursor is an object you can smooth, hide or restyle.
+
+
+step: On the Insert tab, click Zoom. | title: Choose Zoom | pic: zoom-1
+step: Drag the zoom clip on the timeline to set when it happens. | title: Time the zoom | pic: zoom-2
+step: Turn on Follow cursor to track the recorded pointer. | title: Follow the cursor | pic: zoom-3
+
+# Keyframes
+id: keyframes
+section: Video
+where: Properties › Motion
+controls: Keyframes, Add keyframe, Keyframes OFF, Keyframes ON, Previous key, Next key, More key actions
+keywords: animate, animation, motion, move over time, interpolation
+hero: keyframes-hero
+---
+Keyframes change an object's position, size, color or text over time. Turn on Keyframes, move the playhead, and change the object; ClipCraft adds a key. Numbers and colors blend smoothly between keys.
+
+
+step: Select a clip or object and turn on Keyframes. | title: Turn on Keyframes | pic: keyframes-1
+step: Move the playhead and change the object. ClipCraft adds a key. | title: Add a key | pic: keyframes-2
+step: Repeat for each pose. Video clips keep position and size together on each key. | title: Repeat for each pose | pic: keyframes-3
+step: Choose how values blend in Transition. | title: Choose the blend | pic: keyframes-4
+
+# Audio and narration
+id: audio
+section: Video
+where: Properties › Audio
+controls: Audio, Narration studio, Effects Workstation, Microphone, Narration, Audio effects
+keywords: sound, voice, voiceover, narration, mic, volume, noise
+hero: audio-hero
+---
+Each clip's microphone and computer sound can be adjusted, faded or muted. Narration studio records a voiceover while the video plays. Effects Workstation adds noise reduction, EQ and more without changing the original audio.
+
+
+step: Select a clip that has sound. | title: Select a clip | pic: audio-1
+step: Adjust its level and fades on the Audio tab. | title: Level and fades | pic: audio-2
+step: Open Effects Workstation for noise reduction and EQ. | title: Open Effects
+
+# GIF Studio
+id: gif
+section: Video
+where: Export › GIF Studio
+controls: GIF Studio
+keywords: gif, animated, loop, animation, share
+hero: gif-hero
+---
+GIF Studio turns parts of the video into small looping GIFs. Mark the ranges on the timeline, choose size and frame rate, and Audition to preview before exporting.
+
+
+step: Open Export › GIF Studio. | title: Open GIF Studio | pic: gif-1
+step: Mark the ranges on the timeline. | title: Mark the ranges
+step: Choose size and frame rate. | title: Set size and rate | pic: gif-3
+step: Click Audition to preview, then export. | title: Audition and export
+
+# Export a video
+id: export-video
+section: Video
+where: Export › Export video
+controls: Export video, Export MP4, Export frame, Copy frame
+keywords: mp4, save video, render, output
+hero: export-video-hero
+---
+Export video saves an MP4 with all objects, zooms and audio. Redactions and the watermark are burned into the frames; your project stays editable.
+
+
+step: Open Export › Export video. | title: Open Export video | pic: export-video-1
+step: Review any tracked redactions it lists. | title: Review redactions | pic: export-video-2
+step: Set the quality and watermark. | title: Quality and watermark | pic: export-video-3
+step: Click Export and choose where. | title: Export
+
+# Keyboard shortcuts
+id: shortcuts
+section: Reference
+where: File › Preferences › Shortcuts
+controls: Keyboard shortcuts, Shortcuts
+keywords: hotkey, keys, keyboard, shortcut, ctrl
+---
+The Shortcuts page in Help lists every shortcut, including ones you changed. Common ones: Ctrl+S save, Ctrl+Shift+S save as, Ctrl+Z undo, Ctrl+Y redo, Ctrl+C copy, Ctrl+V paste, F jump to object, F2 rename, F1 help.
+
+Change shortcuts in File › Preferences › Shortcuts.
+
+# Tooltips and F1
+id: tooltips
+section: Reference
+keywords: help, tooltip, hover, f1, explain
+---
+Hover over any control to see its name and what it does. When the tooltip ends with "F1 Help", press F1 while it shows to open the article about that control.
+
+# If ClipCraft doesn't start
+id: startup
+section: Reference
+keywords: crash, doesn't open, startup, silent, error, check, laptop
+---
+If ClipCraft doesn't open on a PC, run Check ClipCraft.cmd from the ClipCraft folder. It writes a local report you can share; it uploads nothing and installs nothing.
+
+# Filters and borders
+id: filters-and-borders
+section: Tools
+where: Image tab in Properties
+controls: Brightness, Contrast, Saturation, Warmth, Reset color, Border, Width, Corners, Strength, All sides, Original, Vivid, Muted, Warm, Cool, Mono
+keywords: color, adjust, brightness, contrast, saturation, warmth, border, rounded, torn edge, wave, zigzag, fade
+---
+Filters are starting points that set the Color sliders, so you can adjust one after choosing it. Border adds an outline and rounds the corners. Edge fades or shapes the sides you pick, using the same Torn, Wave and Zigzag shapes as Cut Out. Your original picture is kept, and Reset color returns to it. On a video clip, Filters and Color are on the Style tab.
+
+# Preferences
+id: preferences
+section: Reference
+where: File › Preferences, or Ctrl+Comma
+controls: Preferences, Start with Windows, Keep running in the tray, Show tooltips, Snap while moving, Snap while resizing, Snap while drawing, Show the grid, Grid size, Hold to bypass, Background, Remember zoom and panel sizes, Keep previous versions
+keywords: settings, options, snapping, grid, startup, tray, tooltips, versions
+---
+Preferences gathers ClipCraft's settings in one window. Apply saves your changes, Cancel leaves everything as it was, and Restore defaults affects only the section that is open. Snapping lines objects up with each other, the canvas edges and the grid when it is showing. Hold the bypass key to turn snapping off for one drag. The grid is a guide and never exports.
+
+# Library folders and Recent
+id: library-folders
+section: Reference
+where: Library
+controls: New folder, Folders, By app, By website, Pin, Unpin, Close
+keywords: folder, organize, pin, close, recent, app, website
+---
+Click + beside Folders to make a folder. A capture lives in one folder and can still have any number of tags. Drag captures onto a folder, or right-click one and choose Move to folder. Deleting a folder keeps its captures in the Library. By app and By website fill in by themselves for new captures; a website only appears when the window title names one. Pin keeps an item first in Recent. Close takes an item out of Recent and keeps it in the Library.

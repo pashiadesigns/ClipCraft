@@ -28,6 +28,11 @@ impl Editor {
 
     pub(super) fn canvas_document(&self) -> Document {
         let mut document = self.preview_document();
+        // Whole-image perspective shows flat while an object is edited (FX-003).
+        if self.flat_while_editing() {
+            document.canvas_behavior.perspective = None;
+        }
+        self.lay_selected_flat(&mut document);
         if self.shell.annotations_hidden {
             document.annotations.clear();
             document.object_states.clear();
@@ -111,7 +116,11 @@ impl Editor {
                 let mut formatted = if a.id == edited.id {
                     edited.clone()
                 } else {
-                    capture_core::multi_selection::format_like_change(a, &original, &edited)
+                    capture_core::multi_selection::format_like_change(
+                        a,
+                        &self.keyframe_annotation(&original),
+                        &edited,
+                    )
                 };
                 if rotation_requested && formatted.kind == edited.kind {
                     formatted.rotation_degrees = edited.rotation_degrees;
@@ -138,6 +147,38 @@ impl Editor {
             }
         };
         self.preview_property_batch(batch_preview);
+    }
+
+    /// The objects as a live edit currently shows them.
+    pub(super) fn held_batch(&self) -> Option<Vec<Annotation>> {
+        self.property_preview
+            .as_ref()
+            .map(|p| p.batch_preview.clone())
+    }
+    /// A live edit of one object whose value its control has already checked.
+    /// Falls back to the full batch path for video, where edits become keyframes.
+    pub(super) fn preview_held_object(&mut self, edited: Annotation) {
+        if self.is_video() || self.property_suppressed {
+            self.preview_property_edit_with_rotation(edited, false);
+            return;
+        }
+        let Some(original) = self
+            .session
+            .document
+            .annotations
+            .iter()
+            .find(|a| a.id == edited.id)
+            .cloned()
+        else {
+            return;
+        };
+        self.property_preview = Some(PropertyPreview {
+            batch_originals: vec![original.clone()],
+            batch_preview: vec![edited.clone()],
+            original,
+            preview: edited,
+        });
+        self.needs_render = true;
     }
 
     /// Store a validated live batch while keeping the document and Undo untouched.
@@ -178,6 +219,39 @@ impl Editor {
                 .iter_mut()
                 .find(|a| a.id == value.id)
                 .unwrap() = value.clone();
+        }
+        if document.video.is_some() {
+            let edits: Vec<_> = document
+                .annotations
+                .iter()
+                .filter(|a| {
+                    self.session
+                        .document
+                        .annotations
+                        .iter()
+                        .any(|base| base.id == a.id && base != *a)
+                })
+                .cloned()
+                .collect();
+            for a in &mut document.annotations {
+                if let Some(base) = self
+                    .session
+                    .document
+                    .annotations
+                    .iter()
+                    .find(|base| base.id == a.id)
+                {
+                    *a = base.clone();
+                }
+            }
+            if let Err(error) = capture_core::video::keyframes::edit_annotations(
+                &mut document,
+                &edits,
+                self.video.keyframes.auto_key,
+            ) {
+                self.status = error.to_string();
+                return;
+            }
         }
         document.promote_features();
         if let Err(error) = document.validate() {
@@ -227,7 +301,7 @@ impl Editor {
                     .document
                     .annotations
                     .iter()
-                    .any(|current| current == a)
+                    .any(|current| self.keyframe_annotation(current) == *a)
             })
             && preview.batch_preview != preview.batch_originals
         {
@@ -300,6 +374,40 @@ impl Editor {
         if let Some(step) = &self.step_placement {
             document.annotations.push(step.clone());
         }
+        if document.video.is_some() {
+            let edits: Vec<_> = document
+                .annotations
+                .iter()
+                .filter(|a| {
+                    self.session
+                        .document
+                        .annotations
+                        .iter()
+                        .any(|base| base.id == a.id && base != *a)
+                })
+                .cloned()
+                .collect();
+            for a in &mut document.annotations {
+                if let Some(base) = self
+                    .session
+                    .document
+                    .annotations
+                    .iter()
+                    .find(|base| base.id == a.id)
+                {
+                    *a = base.clone();
+                }
+            }
+            if capture_core::video::keyframes::edit_annotations(
+                &mut document,
+                &edits,
+                self.video.keyframes.auto_key,
+            )
+            .is_err()
+            {
+                return self.session.document.clone();
+            }
+        }
         document.promote_features();
         if let Some(plan) = self.expanding_move_plan()
             && (plan.dimensions != [self.session.document.width, self.session.document.height]
@@ -324,6 +432,7 @@ impl Editor {
             focus: None,
 
             highlighter_rect: false,
+            hard_edge: false,
             group: None,
             rotation_degrees: 0.0,
             mirror_x: false,
@@ -416,6 +525,7 @@ mod tests {
             focus: None,
 
             highlighter_rect: false,
+            hard_edge: false,
             group: None,
             rotation_degrees: 0.0,
             mirror_x: false,

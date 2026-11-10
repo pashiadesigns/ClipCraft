@@ -5,6 +5,7 @@ use std::path::PathBuf;
 use std::sync::mpsc::{Receiver, TryRecvError};
 
 mod backstage;
+mod blank_dialog;
 mod brand;
 mod canvas;
 mod canvas_buttons;
@@ -24,13 +25,20 @@ mod crop;
 mod cut_out;
 mod editor_keybinds;
 mod export_ui;
+mod file_rename;
+mod help;
+mod perspective_ui;
 mod ui_glyphs;
 mod unicode_input;
+mod watermark_ui;
 
+mod capture_source;
+mod finish_ui;
 mod flatten;
 mod footer;
 mod gesture_input;
 mod group_feedback;
+mod group_presets;
 mod group_transform;
 mod guide_display;
 mod guide_sections;
@@ -43,9 +51,11 @@ mod image_transform;
 mod launch;
 mod lifecycle;
 mod line_properties;
+mod mixed_selection;
 mod motion;
 mod move_tool;
 mod multi_select;
+mod native_cursor;
 mod new_image;
 mod object_pane;
 mod object_rotation;
@@ -57,16 +67,22 @@ mod page_setup;
 mod page_setup_fields;
 mod panel_ui;
 mod pixel_grid;
+mod preferences;
 mod privacy_review;
 mod project_sessions;
 mod rich_text;
+mod sensitive_ui;
 mod single_instance;
 mod spelling;
+mod startup;
 mod storage_locations;
 mod text_clipboard;
+mod windows_startup;
 
+mod appearance;
 mod focus_properties;
 mod icon_library;
+mod magnified_callout;
 mod presets;
 mod preview_ui;
 mod property_layout;
@@ -91,6 +107,7 @@ mod template_picker;
 mod text_edit;
 mod text_layout;
 mod text_properties;
+mod tips;
 mod toolbar;
 mod tray;
 
@@ -98,7 +115,24 @@ mod tray;
 // workflow unavailable until they have a native implementation and evidence.
 const CAPTURE_ENABLED: bool = cfg!(windows);
 
-fn main() -> eframe::Result {
+fn main() -> std::process::ExitCode {
+    startup::install();
+    match std::panic::catch_unwind(std::panic::AssertUnwindSafe(run)) {
+        Ok(Ok(())) => std::process::ExitCode::SUCCESS,
+        Ok(Err(error)) => {
+            startup::failure(&format!("The editor could not initialize: {error}"));
+            std::process::ExitCode::FAILURE
+        }
+        Err(_) => {
+            startup::failure(
+                "An unexpected error interrupted ClipCraft. See the startup log for the last completed stage and error.",
+            );
+            std::process::ExitCode::FAILURE
+        }
+    }
+}
+fn run() -> eframe::Result {
+    startup::note("Checking application instance");
     let launch = launch::Request::read();
     #[cfg(windows)]
     let _owner = match single_instance::enter(&launch) {
@@ -122,6 +156,7 @@ fn main() -> eframe::Result {
             .with_min_inner_size([880.0, 580.0]),
         ..Default::default()
     };
+    startup::note("Starting window and graphics");
     eframe::run_native(
         "ClipCraft",
         options,
@@ -172,9 +207,13 @@ struct Editor {
     creation: creation::Creation,
     stroke_points: Vec<[f32; 2]>,
     shape_sides: u32,
+    tool_shapes: creation::ToolShapes,
+    preferences: preferences::Dialog,
     step_number: u32,
     step_letters: bool,
     step_size: u32,
+    /// The marker size the remembered Step style came from; 0 when none has.
+    step_style_size: u32,
     path: Option<PathBuf>,
     last_directory: PathBuf,
     status: String,
@@ -236,6 +275,7 @@ impl Editor {
                 .as_ref()
                 .and_then(|p| p.file_name())
                 .map(|p| p.to_string_lossy().into_owned())
+                .or_else(|| self.shell.untitled_name.clone())
                 .or_else(|| self
                     .history
                     .active
@@ -246,12 +286,13 @@ impl Editor {
         )
     }
     fn new(cc: &eframe::CreationContext<'_>) -> Self {
+        startup::note("Graphics initialized; preparing editor");
         chrome::install_native(cc);
         shell::configure(&cc.egui_ctx);
         text_layout::configure(&cc.egui_ctx);
         let mut startup_path = None;
         let mut startup_history = None;
-        let mut last_directory = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+        let mut last_directory = default_save_folder();
         let mut imported_image = false;
         let mut startup_status = "Open an image, then drag to annotate.".to_string();
         let document = launch::Request::read()
@@ -350,15 +391,18 @@ impl Editor {
 
             cut_out: None,
 
-            color: [239, 85, 55],
+            color: [24, 145, 193],
             width: 3,
             drag_start: None,
             creation: Default::default(),
             stroke_points: Vec::new(),
             shape_sides: 3,
+            tool_shapes: Default::default(),
+            preferences: Default::default(),
             step_number: 1,
             step_letters: false,
             step_size: 44,
+            step_style_size: 0,
             path: startup_path,
             last_directory,
             status: startup_status,
@@ -386,6 +430,7 @@ impl Editor {
         }
         editor.reset_document_tools();
         editor.restore_drawing_defaults(editor.tool);
+        startup::note("Editor initialized");
         editor
     }
     fn execute(&mut self, command: Command) {
@@ -417,6 +462,13 @@ impl Editor {
                 annotations.iter().map(|a| a.id).collect()
             }
             _ => vec![],
+        };
+        let command = match self.keyframe_command(command) {
+            Ok(c) => c,
+            Err(e) => {
+                self.status = e.to_string();
+                return;
+            }
         };
         self.cancel_gesture();
         let dimensions = [self.session.document.width, self.session.document.height];
@@ -596,6 +648,12 @@ impl Editor {
                             .as_ref()
                             .map(|p| capture_core::project_file::image_path(p))
                             .and_then(|p| p.file_name().map(|n| n.to_string_lossy().into_owned()))
+                            .or_else(|| {
+                                self.shell
+                                    .untitled_name
+                                    .as_ref()
+                                    .map(|n| format!("{n}.iclip"))
+                            })
                             .unwrap_or_else(|| "capture.iclip".into()),
                     )
                     .add_filter("ClipCraft image clip", &["iclip"]);
@@ -634,8 +692,8 @@ impl Editor {
     fn copy_all_with(&mut self, write: impl FnOnce(&Document) -> Result<(), String>) {
         if self.is_video() {
             match self.video_frame_document().and_then(|d| write(&d)) {
-                Ok(()) => self.status = "Video frame copied.".into(),
-                Err(e) => self.status = e,
+                Ok(()) => self.status = "Video frame copied to the clipboard.".into(),
+                Err(e) => self.status = format!("The frame could not be copied: {e}"),
             }
             return;
         }
@@ -643,6 +701,24 @@ impl Editor {
             return;
         }
         self.cancel_gesture();
+        // The export watermark also marks copies (FX-003); the copy is flattened.
+        if let Some(w) = self.export_preferences.options.watermark.clone() {
+            let result = self
+                .session
+                .document
+                .render()
+                .and_then(|mut pixels| {
+                    capture_core::watermark::apply(&mut pixels, Some(&w))?;
+                    Document::from_image(pixels)
+                })
+                .map_err(|e| e.to_string())
+                .and_then(|d| write(&d));
+            self.status = match result {
+                Ok(()) => "Copied the complete image with its watermark.".into(),
+                Err(e) => e,
+            };
+            return;
+        }
         self.status = match write(&self.session.document) {
             Ok(()) => {
                 let objects = self.selected_objects();
@@ -662,8 +738,10 @@ impl Editor {
     }
 
     fn editor_shortcuts_idle(&self) -> bool {
-        self.export_dialog.is_none()
+        !self.video.gif.open
+            && self.export_dialog.is_none()
             && !self.clip.video_dialog
+            && !self.clip.clip_dialog
             && !self.history_dialog_open()
             && self.shell.backstage.is_none()
             && self.pending.is_none()
@@ -705,7 +783,7 @@ impl Editor {
             if self.last_directory.is_dir() {
                 self.last_directory.clone()
             } else {
-                std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
+                default_save_folder()
             }
         })
     }
@@ -728,7 +806,9 @@ impl Editor {
         }
         if matches!(action, FileAction::New) {
             self.cancel_gesture();
-            self.new_image = Some(new_image::NewImage::default());
+            self.new_image = Some(new_image::NewImage::remembered(
+                self.quick_controls.blank_defaults(),
+            ));
             return;
         }
         if !self.commit_text() {
@@ -779,7 +859,11 @@ impl Editor {
     fn perform_action(&mut self, action: FileAction, ctx: &egui::Context) {
         match action {
             FileAction::VideoLoaded { session, path } => self.accept_video(session, path),
-            FileAction::New => self.new_image = Some(new_image::NewImage::default()),
+            FileAction::New => {
+                self.new_image = Some(new_image::NewImage::remembered(
+                    self.quick_controls.blank_defaults(),
+                ))
+            }
             FileAction::CreateCanvas(spec) => {
                 let result = Document::canvas(spec.width, spec.height, spec.color)
                     .and_then(Session::unsaved);
@@ -815,8 +899,11 @@ impl Editor {
                 self.drag_start = None;
                 self.needs_render = true;
                 self.shell.return_to_editor();
-                self.status =
-                    "Template created. Edit images, captions and sections on the canvas.".into();
+                if self.is_video() {
+                    self.shell.ribbon_tab = crate::ribbon::RibbonTab::Insert;
+                    self.set_timeline_expanded(true);
+                }
+                self.status = "Template created. All objects and settings remain editable.".into();
                 self.record_history(&title, capture_core::history::Origin::Canvas);
             }
             FileAction::FromClipboard(session) => {
@@ -919,7 +1006,11 @@ impl Editor {
         }
         let settings = self.clip.active.take().unwrap_or_default();
         self.clip.restore_focus = Some(!matches!(&result, Ok(Some(_))) || settings.preview);
+        let frame_target = self.clip.frame_target.take();
         match result {
+            Ok(Some(captured)) if frame_target.is_some() => {
+                self.place_capture_in_frame(frame_target.unwrap(), captured.document);
+            }
             Ok(Some(captured)) => {
                 self.accept_capture_result(captured, settings, clipboard::copy);
             }
@@ -967,6 +1058,17 @@ impl Editor {
         }
     }
 }
+/// Where Save and Open dialogs start before a folder is remembered. Never the
+/// process's working directory: started from the tray or at sign-in that is
+/// the Windows System32 folder.
+fn default_save_folder() -> PathBuf {
+    let profile = std::env::var_os("USERPROFILE").map(PathBuf::from);
+    profile
+        .iter()
+        .flat_map(|home| [home.join("Pictures"), home.join("Documents"), home.clone()])
+        .find(|p| p.is_dir())
+        .unwrap_or_else(|| PathBuf::from("."))
+}
 impl eframe::App for Editor {
     fn logic(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
         self.background_logic(ctx);
@@ -995,6 +1097,7 @@ impl eframe::App for Editor {
     }
 
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        native_cursor::next_frame();
         if ui.input(|i| i.pointer.primary_pressed()) {
             self.session.begin_gesture();
         }
@@ -1009,6 +1112,7 @@ impl eframe::App for Editor {
         self.finish_text_on_outside_click(&ctx);
         self.prepare_property_input(&ctx);
         self.process_keybind_input(&ctx);
+        self.preferences_shortcut(&ctx);
         if self.capture_result.is_some() {
             ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
             ctx.request_repaint_after(std::time::Duration::from_millis(100));
@@ -1020,6 +1124,7 @@ impl eframe::App for Editor {
         let file_workspace_visible = self.shell.backstage.is_some();
         self.show_shell(ui);
         self.settle_property_preview(&ctx);
+        self.sync_tilt_display(&ctx);
         if self.needs_render {
             self.refresh_canvas_display(&ctx);
         }
@@ -1030,7 +1135,7 @@ impl eframe::App for Editor {
                         .fill(if self.shell.library {
                             shell::SURROUND
                         } else {
-                            shell::CANVAS
+                            self.quick_controls.canvas_color()
                         })
                         .inner_margin(if self.shell.library {
                             egui::Margin {
@@ -1051,10 +1156,13 @@ impl eframe::App for Editor {
         self.replace_frame_image_request(&ctx);
         self.show_frame_library_picker(&ctx);
         self.show_new_image(&ctx);
+        self.show_new_video(&ctx);
         self.show_resize(&ctx);
         self.show_resize_canvas(&ctx);
         self.show_export(&ctx, Some(_frame));
         self.show_video_export(&ctx);
+        self.show_gif_studio(&ctx);
+        self.show_video_privacy_review(&ctx);
         self.show_still_frame(&ctx);
         self.show_effects_workstation(&ctx);
         self.show_voiceover_recorder(&ctx);
@@ -1187,14 +1295,17 @@ impl eframe::App for Editor {
         }
         self.confirm_unsaved(&ctx);
         self.video_capture_dialog(&ctx);
+        self.capture_clip_dialog(&ctx);
         self.poll_library_import();
         self.show_history_dialog(&ctx);
         self.presets.reusable.show(&ctx);
+        self.place_group_preset();
         #[cfg(windows)]
         brand::sync_window_icons(self.hotkey_owner);
         self.show_ocr(&ctx);
         self.show_privacy_review(&ctx);
         self.show_rich_text(&ctx);
+        self.show_help(&ctx);
         if ctx.input(|i| !i.pointer.primary_down() || !i.focused) {
             self.session.finish_gesture();
         }

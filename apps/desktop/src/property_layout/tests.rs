@@ -636,7 +636,10 @@ fn selected_step_size_slider_previews_batch_while_held_and_undoes_once() {
         .collect::<Vec<_>>();
     assert!((sizes[0] - sizes[1]).abs() < 0.01);
     for (a, b) in preview.annotations.iter().zip(&doc.annotations) {
-        assert_eq!(a.text, b.text);
+        // The label keeps its text and grows with the marker (BJ10).
+        let (ta, tb) = (a.text.as_ref().unwrap(), b.text.as_ref().unwrap());
+        assert_eq!(ta.content, tb.content);
+        assert!(ta.size_points > tb.size_points);
         assert_eq!(a.color, b.color);
     }
     frame(&ctx, &mut e, events(drag, false));

@@ -4,6 +4,15 @@ use image::RgbaImage;
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, OnceLock};
 
+/// An SVG drawn at a size and color, kept for the next frame.
+type SvgRender = ([u32; 2], Option<[u8; 4]>, Arc<RgbaImage>);
+/// A finished copy of the pixels and the address of what it was made from.
+type FinishRender = (
+    crate::picture_finish::Finish,
+    [u32; 4],
+    usize,
+    Arc<RgbaImage>,
+);
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Bitmap {
@@ -26,6 +35,25 @@ pub struct Bitmap {
     view: Option<crate::image_frame::ImageView>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     focus: Option<[f32; 2]>,
+    /// Perspective (FX-003): where the image's corners land inside the
+    /// object box, top-left, top-right, bottom-right, bottom-left, as 0..1
+    /// fractions. The original pixels are kept; removing it lays them flat.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    perspective: Option<[[f32; 2]; 4]>,
+    /// An imported SVG drawing (EDIT-084). The raster is only a fallback; the
+    /// drawing is redrawn at the size it is shown, so it stays sharp.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    svg: Option<Arc<String>>,
+    /// Recolor: draws the whole SVG in one color (icons and logos).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    tint: Option<[u8; 4]>,
+    /// Filters, border and edge. The original pixels are never changed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    finish: Option<crate::picture_finish::Finish>,
+    #[serde(skip)]
+    finish_cache: Arc<std::sync::Mutex<Option<FinishRender>>>,
+    #[serde(skip)]
+    svg_cache: Arc<std::sync::Mutex<Option<SvgRender>>>,
     #[serde(skip)]
     decoded: OnceLock<std::result::Result<Arc<RgbaImage>, String>>,
     #[serde(skip)]
@@ -43,7 +71,11 @@ impl PartialEq for Bitmap {
             && self.cursor_invert == other.cursor_invert
             && self.view == other.view
             && self.focus == other.focus
+            && self.perspective == other.perspective
+            && self.svg == other.svg
+            && self.tint == other.tint
             && self.frame_opacity == other.frame_opacity
+            && self.finish == other.finish
     }
 }
 
@@ -51,6 +83,10 @@ impl Bitmap {
     /// Remove source pixels whose transformed location is outside the output.
     /// Work happens once at crop commit; moves continue sharing cached pixels.
     pub(crate) fn trimmed_to(&self, a: &mut Annotation, rect: [f32; 4]) -> Result<Self> {
+        // A drawing is redrawn from its SVG; its crop stays in the view.
+        if self.is_svg() {
+            return Ok(self.clone());
+        }
         let mut pixels = (**self.pixels()?).clone();
         let (lo, hi) = a.body_bounds();
         let view = self.view().rect;
@@ -198,6 +234,54 @@ impl Bitmap {
         next.focus = Some(focus);
         Ok(next)
     }
+    /// A sharp, resizable image object from SVG text (EDIT-084).
+    pub fn from_svg(text: &str) -> Result<Self> {
+        let size = crate::vector_import::svg_size(text)?;
+        let pixels = crate::vector_import::render_svg(text, size, None)?;
+        let mut value = Self::new(Arc::new(RasterImage::from_image(&pixels)?))?;
+        value.svg = Some(Arc::new(text.to_owned()));
+        Ok(value)
+    }
+    pub fn is_svg(&self) -> bool {
+        self.svg.is_some()
+    }
+    pub fn tint(&self) -> Option<[u8; 4]> {
+        self.tint
+    }
+    /// Draws the SVG in one color, or in its own colors with `None`.
+    pub fn with_tint(&self, tint: Option<[u8; 4]>) -> Result<Self> {
+        if self.svg.is_none() {
+            return Err(Error::Invalid("Only SVG images can be recolored".into()));
+        }
+        let mut next = self.clone();
+        next.tint = tint;
+        next.svg_cache = Default::default();
+        Ok(next)
+    }
+    /// The SVG drawn at `size`, reused while the size and color stay the same.
+    fn svg_pixels(&self, size: [u32; 2]) -> Option<Arc<RgbaImage>> {
+        let text = self.svg.as_ref()?;
+        let mut cache = self.svg_cache.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some((s, t, pixels)) = cache.as_ref()
+            && *s == size
+            && *t == self.tint
+        {
+            return Some(pixels.clone());
+        }
+        let pixels = Arc::new(crate::vector_import::render_svg(text, size, self.tint).ok()?);
+        *cache = Some((size, self.tint, pixels.clone()));
+        Some(pixels)
+    }
+    pub fn perspective(&self) -> Option<[[f32; 2]; 4]> {
+        self.perspective
+    }
+    /// Sets or clears the perspective corners (see [`Perspective`]).
+    pub fn with_perspective(&self, quad: Option<[[f32; 2]; 4]>) -> Result<Self> {
+        let mut next = self.clone();
+        next.perspective = quad.filter(|q| *q != FLAT);
+        next.validate_view()?;
+        Ok(next)
+    }
     pub fn has_view(&self) -> bool {
         self.view.is_some()
     }
@@ -221,6 +305,17 @@ impl Bitmap {
             .is_some_and(|p| !p.iter().all(|v| v.is_finite() && (0.0..=1.0).contains(v)))
         {
             return Err(Error::Invalid("Invalid image focus point".into()));
+        }
+        if self.svg.as_ref().is_some_and(|s| s.len() > 8 * 1024 * 1024)
+            || (self.svg.is_some() && (self.is_cursor() || self.vector.is_some()))
+            || (self.tint.is_some() && self.svg.is_none())
+        {
+            return Err(Error::Invalid("Invalid SVG image".into()));
+        }
+        if let Some(quad) = self.perspective
+            && (self.is_cursor() || self.vector.is_some() || Homography::new(quad).is_none())
+        {
+            return Err(Error::Invalid("Invalid image perspective".into()));
         }
         if let Some(view) = self.view {
             if self.is_cursor() {
@@ -264,8 +359,14 @@ impl Bitmap {
             icon_name: None,
             vector: None,
             cursor_invert: None,
+            finish: None,
+            finish_cache: Default::default(),
             view: None,
             focus: None,
+            perspective: None,
+            svg: None,
+            tint: None,
+            svg_cache: Default::default(),
             frame_opacity: None,
             decoded: OnceLock::from(Ok(pixels)),
             opaque: OnceLock::new(),
@@ -279,8 +380,14 @@ impl Bitmap {
             icon_name: None,
             vector: None,
             cursor_invert: None,
+            finish: None,
+            finish_cache: Default::default(),
             view: None,
             focus: None,
+            perspective: None,
+            svg: None,
+            tint: None,
+            svg_cache: Default::default(),
             frame_opacity: None,
             decoded: OnceLock::new(),
             opaque: OnceLock::new(),
@@ -293,6 +400,59 @@ impl Bitmap {
     }
     pub fn is_cursor(&self) -> bool {
         self.cursor_invert.is_some()
+    }
+    pub fn finish(&self) -> Option<&crate::picture_finish::Finish> {
+        self.finish.as_ref()
+    }
+    pub fn with_finish(&self, finish: Option<crate::picture_finish::Finish>) -> Self {
+        let mut next = self.clone();
+        next.finish = finish.filter(|f| !f.is_plain());
+        next.finish_cache = Default::default();
+        next
+    }
+    /// What the object shows: the pixels with any finish applied, cached so a
+    /// move or a redraw reuses the same image.
+    pub fn display_pixels(&self, extent: [f32; 2]) -> Result<Arc<RgbaImage>> {
+        let pixels = self.pixels()?.clone();
+        Ok(match self.finish() {
+            Some(finish) => self.finished(finish, pixels, extent),
+            None => pixels,
+        })
+    }
+    /// These pixels with the finish applied to the part the object shows.
+    fn finished(
+        &self,
+        finish: &crate::picture_finish::Finish,
+        source: Arc<RgbaImage>,
+        extent: [f32; 2],
+    ) -> Arc<RgbaImage> {
+        let crop = self.view().rect;
+        let frame = [
+            crop[0] * source.width() as f32,
+            crop[1] * source.height() as f32,
+            crop[2] * source.width() as f32,
+            crop[3] * source.height() as f32,
+        ];
+        let scale = frame[2] / extent[0].max(0.001);
+        let key = [
+            frame[0].to_bits(),
+            frame[1].to_bits(),
+            frame[2].to_bits(),
+            scale.to_bits(),
+        ];
+        let mut cache = self.finish_cache.lock().unwrap();
+        if let Some((f, k, from, image)) = cache.as_ref()
+            && f == finish
+            && *k == key
+            && *from == Arc::as_ptr(&source) as usize
+        {
+            return image.clone();
+        }
+        let mut image = (*source).clone();
+        finish.apply(&mut image, frame, scale);
+        let image = Arc::new(image);
+        *cache = Some((*finish, key, Arc::as_ptr(&source) as usize, image.clone()));
+        image
     }
     pub fn has_inversion(&self) -> bool {
         self.cursor_invert.as_ref().is_some_and(|v| !v.is_empty())
@@ -354,6 +514,7 @@ impl Bitmap {
             focus: None,
 
             highlighter_rect: false,
+            hard_edge: false,
             group: None,
             rotation_degrees: 0.0,
             mirror_x: false,
@@ -375,6 +536,149 @@ impl Bitmap {
 #[cfg(test)]
 mod tests;
 
+/// The flat image corners: no perspective.
+pub const FLAT: [[f32; 2]; 4] = [[0., 0.], [1., 0.], [1., 1.], [0., 1.]];
+/// Perspective presets offered in Properties (FX-003). `amount` is 0..1.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Perspective {
+    TiltLeft,
+    TiltRight,
+    LayBack,
+    StandUp,
+}
+impl Perspective {
+    pub const ALL: [Self; 4] = [
+        Self::TiltLeft,
+        Self::TiltRight,
+        Self::LayBack,
+        Self::StandUp,
+    ];
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::TiltLeft => "Tilt left",
+            Self::TiltRight => "Tilt right",
+            Self::LayBack => "Lay back",
+            Self::StandUp => "Stand up",
+        }
+    }
+    /// Corners for this tilt; `angle` 0..1 narrows the far edge, `depth`
+    /// 0..1 shortens the image along the tilt.
+    pub fn quad(self, angle: f32, depth: f32) -> [[f32; 2]; 4] {
+        let squeeze = angle.clamp(0., 1.) * 0.4;
+        let short = depth.clamp(0., 1.) * 0.25;
+        match self {
+            // The left edge recedes.
+            Self::TiltLeft => [[short, squeeze], [1., 0.], [1., 1.], [short, 1. - squeeze]],
+            Self::TiltRight => [
+                [0., 0.],
+                [1. - short, squeeze],
+                [1. - short, 1. - squeeze],
+                [0., 1.],
+            ],
+            // The top edge recedes.
+            Self::LayBack => [[squeeze, short], [1. - squeeze, short], [1., 1.], [0., 1.]],
+            Self::StandUp => [
+                [0., 0.],
+                [1., 0.],
+                [1. - squeeze, 1. - short],
+                [squeeze, 1. - short],
+            ],
+        }
+    }
+}
+/// Where the unit-square point `s` lands inside `quad` (Heckbert's mapping).
+/// Live previews use this to warp a mesh; export uses the sampler below.
+pub fn warp_point(quad: [[f32; 2]; 4], s: [f32; 2]) -> [f32; 2] {
+    let [[x0, y0], [x1, y1], [x2, y2], [x3, y3]] = quad.map(|c| c.map(f64::from));
+    let (sx, sy) = (x0 - x1 + x2 - x3, y0 - y1 + y2 - y3);
+    let (dx1, dx2, dy1, dy2) = (x1 - x2, x3 - x2, y1 - y2, y3 - y2);
+    let den = dx1 * dy2 - dx2 * dy1;
+    let (g, h) = if den.abs() < 1e-12 {
+        (0., 0.)
+    } else {
+        ((sx * dy2 - dx2 * sy) / den, (dx1 * sy - sx * dy1) / den)
+    };
+    let (u, v) = (f64::from(s[0]), f64::from(s[1]));
+    let w = g * u + h * v + 1.;
+    [
+        (((x1 - x0 + g * x1) * u + (x3 - x0 + h * x3) * v + x0) / w) as f32,
+        (((y1 - y0 + g * y1) * u + (y3 - y0 + h * y3) * v + y0) / w) as f32,
+    ]
+}
+
+/// Projective map from the unit square to a convex quad, with its inverse.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct Homography {
+    inverse: [[f64; 3]; 3],
+}
+impl Homography {
+    pub(crate) fn new(q: [[f32; 2]; 4]) -> Option<Self> {
+        let p = q.map(|c| c.map(f64::from));
+        if !p
+            .iter()
+            .flatten()
+            .all(|v| v.is_finite() && (-0.001..=1.001).contains(v))
+        {
+            return None;
+        }
+        // The quad must be convex, counter-clockwise free and not too thin.
+        let cross = |a: [f64; 2], b: [f64; 2], c: [f64; 2]| {
+            (b[0] - a[0]) * (c[1] - b[1]) - (b[1] - a[1]) * (c[0] - b[0])
+        };
+        let turns: Vec<f64> = (0..4)
+            .map(|i| cross(p[i], p[(i + 1) % 4], p[(i + 2) % 4]))
+            .collect();
+        let area = 0.5
+            * (0..4)
+                .map(|i| p[i][0] * p[(i + 1) % 4][1] - p[(i + 1) % 4][0] * p[i][1])
+                .sum::<f64>();
+        if turns.iter().any(|t| *t <= 1e-6) || area < 0.05 {
+            return None;
+        }
+        // Heckbert's square-to-quad mapping.
+        let [[x0, y0], [x1, y1], [x2, y2], [x3, y3]] = p;
+        let (sx, sy) = (x0 - x1 + x2 - x3, y0 - y1 + y2 - y3);
+        let (dx1, dx2, dy1, dy2) = (x1 - x2, x3 - x2, y1 - y2, y3 - y2);
+        let den = dx1 * dy2 - dx2 * dy1;
+        let (g, h) = if den.abs() < 1e-12 {
+            (0., 0.)
+        } else {
+            ((sx * dy2 - dx2 * sy) / den, (dx1 * sy - sx * dy1) / den)
+        };
+        let m = [
+            [x1 - x0 + g * x1, x3 - x0 + h * x3, x0],
+            [y1 - y0 + g * y1, y3 - y0 + h * y3, y0],
+            [g, h, 1.],
+        ];
+        let det = m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1])
+            - m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0])
+            + m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0]);
+        if det.abs() < 1e-12 {
+            return None;
+        }
+        let c = |r: usize, k: usize| {
+            let (r1, r2) = ((r + 1) % 3, (r + 2) % 3);
+            let (k1, k2) = ((k + 1) % 3, (k + 2) % 3);
+            m[r1][k1] * m[r2][k2] - m[r1][k2] * m[r2][k1]
+        };
+        let inverse = [0, 1, 2].map(|i| [0, 1, 2].map(|j| c(j, i) / det));
+        Some(Self { inverse })
+    }
+    /// The unit-square point that lands at `u`, or `None` outside the image.
+    pub(crate) fn inverse(&self, u: [f64; 2]) -> Option<[f64; 2]> {
+        let m = &self.inverse;
+        let w = m[2][0] * u[0] + m[2][1] * u[1] + m[2][2];
+        if w.abs() < 1e-12 {
+            return None;
+        }
+        let s = [
+            (m[0][0] * u[0] + m[0][1] * u[1] + m[0][2]) / w,
+            (m[1][0] * u[0] + m[1][1] * u[1] + m[1][2]) / w,
+        ];
+        (s.iter().all(|v| (0.0..1.0).contains(v))).then_some(s)
+    }
+}
+
 /// One sampler for export and zoomed display. Sample centers share the vector
 /// coordinate convention; premultiplied interpolation avoids dark alpha fringes.
 pub(crate) fn render(target: &mut RgbaImage, a: &Annotation, view: Viewport) {
@@ -386,12 +690,30 @@ pub(crate) fn render(target: &mut RgbaImage, a: &Annotation, view: Viewport) {
 }
 fn render_impl(target: &mut RgbaImage, a: &Annotation, view: Viewport, fast: bool) {
     let Some(bitmap) = &a.image else { return };
-    let Ok(source) = bitmap.pixels() else { return };
     let (min, max) = a.body_bounds();
     let extent = [max[0] - min[0], max[1] - min[1]];
     if extent.iter().any(|n| *n <= 0.0) {
         return;
     }
+    // SVG images are drawn at the size they appear, so they stay sharp.
+    let source: Arc<RgbaImage> = if bitmap.is_svg() {
+        let crop = bitmap.view().rect;
+        let want = [0, 1].map(|i| f64::from(extent[i]) * view.scale / f64::from(crop[i + 2]));
+        let fit = (f64::from(crate::vector_import::MAX_SIDE) / want[0].max(want[1])).min(1.);
+        let size = want.map(|v| (v * fit).round().max(1.) as u32);
+        match bitmap.svg_pixels(size) {
+            Some(p) => p,
+            None => return,
+        }
+    } else {
+        let Ok(source) = bitmap.pixels() else { return };
+        source.clone()
+    };
+    let source = match bitmap.finish() {
+        Some(finish) => bitmap.finished(finish, source, extent),
+        None => source,
+    };
+    let source = &source;
     let (low, high) = a.bounds();
     let screen = |v: f32, i: usize| (f64::from(v) - view.origin[i]) * view.scale;
     let left = screen(low[0], 0).floor().clamp(0.0, target.width() as f64) as u32;
@@ -410,7 +732,9 @@ fn render_impl(target: &mut RgbaImage, a: &Annotation, view: Viewport, fast: boo
         crop[0] * source.width() as f32,
         crop[1] * source.height() as f32,
     ];
+    let perspective = bitmap.perspective.and_then(Homography::new);
     if fast
+        && perspective.is_none()
         && view.scale == 1.
         && a.rotation_degrees == 0.
         && !a.mirror_x
@@ -467,9 +791,12 @@ fn render_impl(target: &mut RgbaImage, a: &Annotation, view: Viewport, fast: boo
         return;
     }
     if fast
+        && perspective.is_none()
+        && !bitmap.is_svg()
         && a.rotation_degrees == 0.0
         && !a.mirror_x
         && !bitmap.is_cursor()
+        && bitmap.finish.is_none()
         && *bitmap
             .opaque
             .get_or_init(|| source.pixels().all(|p| p[3] == 255))
@@ -484,7 +811,7 @@ fn render_impl(target: &mut RgbaImage, a: &Annotation, view: Viewport, fast: boo
         source.width() as f64 * crop[2] / f64::from(extent[0]),
         source.height() as f64 * crop[3] / f64::from(extent[1]),
     ];
-    let supersample = a.rotation_degrees != 0.0;
+    let supersample = a.rotation_degrees != 0.0 || perspective.is_some();
     let samples: &[[f64; 2]] = if supersample {
         &[[0.25, 0.25], [0.75, 0.25], [0.25, 0.75], [0.75, 0.75]]
     } else {
@@ -504,6 +831,19 @@ fn render_impl(target: &mut RgbaImage, a: &Annotation, view: Viewport, fast: boo
                 ];
                 if a.mirror_x {
                     local[0] = extent[0] as f64 - local[0];
+                }
+                if let Some(h) = &perspective {
+                    // Find which point of the flat image lands here.
+                    let Some(flat) = h.inverse([
+                        local[0] / f64::from(extent[0]),
+                        local[1] / f64::from(extent[1]),
+                    ]) else {
+                        continue;
+                    };
+                    local = [
+                        flat[0] * f64::from(extent[0]),
+                        flat[1] * f64::from(extent[1]),
+                    ];
                 }
                 if local[0] < 0.0
                     || local[1] < 0.0

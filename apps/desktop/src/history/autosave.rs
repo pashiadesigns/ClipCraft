@@ -2,6 +2,7 @@
 //! before replacing or closing the current document. Draft text is recoverable
 //! without adding Undo entries or committing the user's text transaction.
 use super::*;
+use crate::tips::Tip as _;
 use capture_core::{Annotation, Document, RasterImage};
 use std::{
     sync::{Arc, mpsc},
@@ -158,6 +159,7 @@ impl Autosave {
             .spawn(move || {
                 let result = (|| {
                     let mut store = History::open(&root)?;
+                    store.use_picture(crate::video_editor::library_picture(&doc));
                     let entry = match expected {
                         Some(entry) => store.update(&entry, &doc)?,
                         None => store.create(&doc, &label, origin)?,
@@ -330,7 +332,7 @@ impl Editor {
         }
         if let Some(error) = &self.autosave.error {
             ui.colored_label(egui::Color32::LIGHT_RED, "Not saved to Library")
-                .on_hover_text(error);
+                .tip(error);
             if ui.small_button("Retry save").clicked() {
                 self.history.refresh();
                 self.autosave.error = None;
@@ -341,7 +343,7 @@ impl Editor {
         {
             ui.small("Saving to Library…");
         } else if self.library_saved() {
-            ui.small("Saved to Library").on_hover_text("Editable objects and the original image are saved locally. Save As exports an additional project copy.");
+            ui.small("Saved to Library").tip("Editable objects and the original image are saved locally. Save As exports an additional project copy.");
         }
     }
 }

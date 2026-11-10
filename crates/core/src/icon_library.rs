@@ -15,7 +15,27 @@ impl Library {
         Ok(Self(History::open(root)?))
     }
     pub fn import(&mut self, path: &Path) -> Result<Entry> {
-        let document = Document::open_image(path)?;
+        let svg = path
+            .extension()
+            .is_some_and(|e| e.eq_ignore_ascii_case("svg"));
+        // BI11: an SVG icon keeps its shapes and editable colors when it fits
+        // the vector icon format; the stored document holds that one object.
+        let document = match svg
+            .then(|| std::fs::read_to_string(path).ok())
+            .flatten()
+            .and_then(|text| crate::vector_import::svg_vector_icon(&text).ok())
+            .and_then(|icon| crate::bitmap::Bitmap::from_vector(icon).ok())
+        {
+            Some(icon) => {
+                let mut d = Document::canvas(128, 128, [0; 4])?;
+                let mut a = std::sync::Arc::new(icon).annotation(1);
+                a.start = [0., 0.];
+                a.end = [128., 128.];
+                d.annotations.push(a);
+                d
+            }
+            None => Document::open_image(path)?,
+        };
         let name = path
             .file_stem()
             .and_then(|s| s.to_str())
@@ -33,8 +53,15 @@ impl Library {
         self.0.edit_metadata(&entry, name, &[])
     }
     pub fn payload(&self, id: &str) -> Result<ObjectPayload> {
-        let pixels = self.0.load(id)?.render()?;
-        let mut payload = from_pixels(pixels)?;
+        let document = self.0.load(id)?;
+        let vector = (document.annotations.len() == 1)
+            .then(|| document.annotations[0].image.clone())
+            .flatten()
+            .filter(|b| b.vector().is_some());
+        let mut payload = from_pixels(document.render()?)?;
+        if let Some(icon) = vector {
+            payload.objects[0].image = Some(icon);
+        }
         if let Some(entry) = self.0.entries().iter().find(|e| e.id == id) {
             let bitmap = payload.objects[0].image.as_ref().unwrap();
             payload.objects[0].image = Some(std::sync::Arc::new(
@@ -58,6 +85,24 @@ fn from_pixels(pixels: image::RgbaImage) -> Result<ObjectPayload> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    /// BI11: an SVG imported as an icon keeps editable colors.
+    #[test]
+    fn svg_icons_import_as_vector_icons() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("Badge.svg");
+        std::fs::write(
+            &path,
+            r##"<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><circle cx="32" cy="32" r="28" fill="#188b4e"/><path d="M 18 33 L 28 43 L 46 22" stroke="#ffffff" stroke-width="6" fill="none"/></svg>"##,
+        )
+        .unwrap();
+        let mut lib = Library::open(&dir.path().join("icons")).unwrap();
+        let entry = lib.import(&path).unwrap();
+        let payload = lib.payload(&entry.id).unwrap();
+        let icon = payload.objects[0].image.as_ref().unwrap();
+        let vector = icon.vector().expect("kept as a vector icon");
+        assert_eq!(vector.colors.len(), 2);
+        assert_eq!(icon.icon_name(), Some("Badge"));
+    }
     #[test]
     fn icon_import_is_portable_editable_and_one_undo() {
         let dir = tempfile::tempdir().unwrap();

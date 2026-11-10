@@ -229,6 +229,47 @@ fn media_corner_fades_move_duplicate_cancel_and_undo_are_atomic() {
     );
 }
 
+/// Reported: adding a webcam recording failed with "layer order", because the
+/// screen and webcam tracks mapped to one layer on either side of the objects.
+#[test]
+fn a_recording_with_a_webcam_appends_with_the_webcam_on_its_own_track() {
+    use capture_core::video::links::Layer;
+    use capture_core::video::webcam::Webcam;
+    let ctx = egui::Context::default();
+    let mut recording = super::tests::fixture();
+    let camera = Webcam {
+        enabled: true,
+        ..Default::default()
+    };
+    let project = recording.video.as_mut().unwrap();
+    let camera_track = camera.place(project, "camera.mp4".into(), [640, 360], 12000);
+    assert_eq!(project.layers()[0], Layer::Media(camera_track));
+    for new_track in [false, true] {
+        for empty in [true, false] {
+            let mut e = crate::canvas::tests::editor(&ctx);
+            let mut target = super::tests::fixture();
+            if empty {
+                target.annotations.clear();
+                let v = target.video.as_mut().unwrap();
+                v.objects.clear();
+                v.segments.clear();
+            }
+            e.session = Session::new(target).unwrap();
+            let before = e.session.document.video.as_ref().unwrap().segments.len();
+            e.append_recording(&recording, new_track);
+            let p = e.session.document.video.as_ref().unwrap();
+            e.session.document.validate().unwrap();
+            assert_eq!(p.segments.len(), before + 2, "new track {new_track}");
+            let webcam = p.segments.iter().find(|c| c.label == "Webcam").unwrap();
+            let screen = p.segments.iter().rfind(|c| c.label != "Webcam").unwrap();
+            assert_ne!(webcam.track, screen.track);
+            assert_eq!(webcam.rect, camera.rect([960, 540]));
+            assert_eq!(webcam.frame.as_ref().unwrap().shape, crate::Kind::Ellipse);
+            let layers = p.layers();
+            assert!(layers.contains(&Layer::Media(webcam.track)));
+        }
+    }
+}
 #[test]
 fn recording_append_and_new_track_preserve_project_and_single_undo() {
     let ctx = egui::Context::default();

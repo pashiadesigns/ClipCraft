@@ -1,6 +1,8 @@
 //! Original full-window File workspace, using the user's supplied layout reference.
+use crate::tips::Tip as _;
 use crate::{Editor, FileAction, egui};
 use egui::{Color32, RichText};
+use std::sync::Arc;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum Page {
@@ -9,8 +11,6 @@ pub(super) enum Page {
     Open,
     Info,
     Export,
-    Options,
-    Help,
 }
 
 impl Editor {
@@ -78,11 +78,12 @@ impl Editor {
                     self.history.refresh();
                 }
                 ui.with_layout(egui::Layout::bottom_up(egui::Align::Min), |ui| {
-                    if nav(ui, "Help", page == Page::Help).clicked() {
-                        self.shell.backstage = Some(Page::Help);
+                    if nav(ui, "Help", false).clicked() {
+                        crate::help::request(&ctx, None, "");
+                        self.shell.backstage = None;
                     }
-                    if nav(ui, "Options", page == Page::Options).clicked() {
-                        self.shell.backstage = Some(Page::Options);
+                    if nav(ui, "Preferences", false).clicked() {
+                        self.open_preferences(crate::preferences::Section::General);
                     }
                     if nav(ui, "Exit", false).clicked() {
                         self.request_action(FileAction::Close, &ctx);
@@ -90,76 +91,209 @@ impl Editor {
                     ui.separator();
                 });
             });
-        egui::CentralPanel::default().frame(egui::Frame::new()
-            .fill(if page==Page::Options {Color32::from_rgb(56,62,65)} else {Color32::from_rgb(50,50,50)}).inner_margin(egui::Margin { left:40, right:6, top:24, bottom:16 }))
+        if matches!(page, Page::Home | Page::New) {
+            egui::Panel::right("file_templates")
+                .exact_size(TEMPLATES_W)
+                .resizable(false)
+                .frame(
+                    egui::Frame::new()
+                        .fill(Color32::from_rgb(24, 32, 35))
+                        .stroke(egui::Stroke::new(1., LINE))
+                        .inner_margin(egui::Margin {
+                            left: 16,
+                            right: 16,
+                            top: 18,
+                            bottom: 16,
+                        }),
+                )
+                .show(ui, |ui| self.file_templates_panel(ui));
+        }
+        egui::CentralPanel::default()
+            .frame(
+                egui::Frame::new()
+                    .fill(Color32::from_rgb(50, 50, 50))
+                    .inner_margin(egui::Margin {
+                        left: 40,
+                        right: if matches!(page, Page::Home | Page::New) {
+                            22
+                        } else {
+                            6
+                        },
+                        top: 24,
+                        bottom: 16,
+                    }),
+            )
             .show(ui, |ui| {
-                if page==Page::Options {self.show_options(ui);return;}
-                egui::ScrollArea::vertical().id_salt("file_page_scroll").auto_shrink([false, false]).show(ui, |ui| {
-                    if page != Page::Options { ui.set_max_width(ui.available_width().min(1180.0)); }
-                    ui.horizontal(|ui| {
-                        let (r,_) = ui.allocate_exact_size(egui::vec2(32.0,32.0),egui::Sense::hover());
-                        crate::brand::paint(ui,r);
-                        ui.label(RichText::new("ClipCraft").size(26.0).strong());
-                    });
-                    ui.add_space(22.0);
-                    match page {
-                        Page::Home | Page::New => {
-                            ui.heading("New"); ui.add_space(14.0);
-                            ui.horizontal_wrapped(|ui| {
-                                ui.spacing_mut().item_spacing=egui::vec2(22.0,14.0);
-                                if card(ui,"From template","Create an editable layout",Some([34,48,59,255])).clicked() { self.open_template_picker(vec![]); }
-                                for (label,description,spec) in [
-                                    ("Blank image","White canvas",Some([255;4])),
-                                    ("Transparent image","Transparent canvas",Some([0;4])),
-                                    ("Custom size","Choose dimensions",None),
-                                ] {
-                                    if card(ui,label,description,spec).clicked() {
-                                        self.new_image=Some(crate::new_image::NewImage::with_background(spec.unwrap_or([255;4])));
-                                    }
+                egui::ScrollArea::vertical()
+                    .id_salt("file_page_scroll")
+                    .auto_shrink([false, false])
+                    .show(ui, |ui| {
+                        ui.set_max_width(ui.available_width().min(1180.0));
+                        ui.horizontal(|ui| {
+                            let (r, _) = ui
+                                .allocate_exact_size(egui::vec2(32.0, 32.0), egui::Sense::hover());
+                            crate::brand::paint(ui, r);
+                            ui.label(RichText::new("ClipCraft").size(26.0).strong());
+                        });
+                        ui.add_space(22.0);
+                        match page {
+                            Page::Home | Page::New => self.file_new_page(ui, &ctx),
+                            Page::Open => {
+                                ui.heading("Open");
+                                ui.add_space(16.0);
+                                if ui
+                                    .add_sized(
+                                        [220.0, 36.0],
+                                        egui::Button::new("Browse images and projects…"),
+                                    )
+                                    .clicked()
+                                {
+                                    self.request_action(FileAction::Open, &ctx);
                                 }
-                                if card(ui,"Capture","Select a screen region",Some([34,48,59,255])).clicked() {
-                                    self.shell.backstage=None; self.request_action(FileAction::Capture,&ctx);
-                                }
-                                if card(ui,"From clipboard","Create a new image",Some([54,64,60,255])).clicked() {
-                                    self.new_from_clipboard(&ctx);
-                                }
-                            });
-                            ui.add_space(24.0);
-                            ui.heading("Templates");
-                            self.file_template_cards(ui);
-                            if page==Page::Home {ui.add_space(32.0);self.backstage_recent(ui);}
-                        }
-                        Page::Open => {
-                            ui.heading("Open"); ui.add_space(16.0);
-                            if ui.add_sized([220.0,36.0],egui::Button::new("Browse images and projects…")).clicked() {
-                                self.request_action(FileAction::Open,&ctx);
+                                ui.label("Open an image or an editable ClipCraft project.");
+                                ui.add_space(30.0);
+                                self.backstage_recent(ui);
                             }
-                            ui.label("Open an image or an editable ClipCraft project.");
-                            ui.add_space(30.0); self.backstage_recent(ui);
+                            Page::Info => self.file_info(ui),
+                            Page::Export => {
+                                ui.heading("Export");
+                                ui.add_space(18.0);
+                                if ui
+                                    .add_sized(
+                                        [220.0, 38.0],
+                                        egui::Button::new("Export PNG / JPEG / PDF…"),
+                                    )
+                                    .clicked()
+                                {
+                                    self.export();
+                                }
+                                ui.label("Save a flattened image to a location you choose.");
+                                ui.add_space(16.0);
+                                if ui
+                                    .add_sized(
+                                        [220.0, 38.0],
+                                        egui::Button::new("Save editable project…"),
+                                    )
+                                    .clicked()
+                                {
+                                    self.save(true);
+                                }
+                                ui.label(
+                                    "Keep the original image, annotations and formatting editable.",
+                                );
+                                ui.add_space(16.0);
+                                if ui
+                                    .add_sized(
+                                        [220.0, 38.0],
+                                        egui::Button::new("Copy complete image"),
+                                    )
+                                    .clicked()
+                                {
+                                    self.copy_all();
+                                }
+                                ui.add_space(20.0);
+                                if ui
+                                    .add_sized([220.0, 38.0], egui::Button::new("Print preview…"))
+                                    .clicked()
+                                {
+                                    self.begin_export(true);
+                                }
+                            }
                         }
-                        Page::Info => {
-                            ui.heading("Image information");ui.add_space(18.0);
-                            ui.label(self.path.as_ref().map(|p|p.display().to_string()).unwrap_or_else(||"Untitled image".into()));
-                            ui.label(format!("{} × {} pixels",self.session.document.width,self.session.document.height));
-                            ui.label(format!("{} editable annotations",self.session.document.annotations.len()));
-                            ui.add_space(16.0);self.autosave_status(ui);
-                            ui.label("Editable projects retain the original image and separate annotations. PNG exports combine them into one image.");
-                        }
-                        Page::Export => {
-                            ui.heading("Export");ui.add_space(18.0);
-                            if ui.add_sized([220.0,38.0],egui::Button::new("Export PNG / JPEG / PDF…")).clicked(){self.export();}
-                            ui.label("Save a flattened image to a location you choose.");ui.add_space(16.0);
-                            if ui.add_sized([220.0,38.0],egui::Button::new("Save editable project…")).clicked(){self.save(true);}
-                            ui.label("Keep the original image, annotations and formatting editable.");ui.add_space(16.0);
-                            if ui.add_sized([220.0,38.0],egui::Button::new("Copy complete image")).clicked(){self.copy_all();}
-                            ui.add_space(20.0);if ui.add_sized([220.0,38.0],egui::Button::new("Print preview…")).clicked(){self.begin_export(true);}
-                        }
-                        Page::Options => self.show_options(ui),
-                        Page::Help => self.file_help(ui),
-                    }
-
-                });
+                    });
             });
+    }
+    /// File > New (approved AZ mockup 4): quick starts as icon cards in two
+    /// groups, then one row of Recent. Templates live in the right-hand panel.
+    fn file_new_page(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
+        heading(ui, "Image", "New Image", None);
+        ui.add_space(10.);
+        match cards(
+            ui,
+            &[
+                ("Capture", "Capture Clip", "Current capture settings", true),
+                ("Blank page", "Blank image", "Color or transparent", false),
+                ("New clipboard", "From clipboard", "Paste an image", false),
+            ],
+        ) {
+            Some(0) => self.request_action(FileAction::Capture, ctx),
+            Some(1) => {
+                self.new_image = Some(crate::new_image::NewImage::remembered(
+                    self.quick_controls.blank_defaults(),
+                ));
+            }
+            Some(_) => self.new_from_clipboard(ctx),
+            None => {}
+        }
+        ui.add_space(18.);
+        heading(ui, "Camera", "New Video", None);
+        ui.add_space(10.);
+        match cards(
+            ui,
+            &[
+                ("Camera", "Capture Video", "Record your screen", true),
+                ("Blank page", "Blank video", "Size and duration", false),
+                ("Video file", "From file", "Start from a video", false),
+                ("Image", "From images", "Show pictures in order", false),
+            ],
+        ) {
+            Some(0) => {
+                self.open_video_capture();
+                self.clip.recording_target = 0;
+            }
+            Some(1) => self.new_video(capture_core::video::templates::Template::Blank),
+            Some(2) => self.new_video_from_file(),
+            Some(_) => self.new_video_from_images(ctx),
+            None => {}
+        }
+        ui.add_space(18.);
+        self.recent_row(ui);
+    }
+    /// One row of the most recent Library items; Open shows the full list.
+    fn recent_row(&mut self, ui: &mut egui::Ui) {
+        let mut entries = self.history.entries();
+        entries.sort_by_key(|e| std::cmp::Reverse(e.updated_ms.unwrap_or(e.created_ms)));
+        let width = ui.available_width();
+        let columns = (((width + GAP) / (RECENT_MIN + GAP)).floor() as usize).clamp(1, 6);
+        let shown = columns.min(entries.len());
+        let count = format!("· {shown} of {}", entries.len());
+        heading(
+            ui,
+            "",
+            "Recent",
+            (!entries.is_empty()).then_some(count.as_str()),
+        );
+        ui.add_space(10.);
+        if entries.is_empty() {
+            ui.label(
+                RichText::new(
+                    "Your library images appear here. Use Open to browse for an image or project.",
+                )
+                .color(MUTED),
+            );
+            return;
+        }
+        let card = (width - GAP * (columns as f32 - 1.)) / columns as f32;
+        let mut open = None;
+        ui.horizontal(|ui| {
+            ui.spacing_mut().item_spacing.x = GAP;
+            for entry in &entries[..shown] {
+                ui.vertical(|ui| {
+                    ui.set_width(card);
+                    let response = self.history_card(ui, entry, egui::vec2(card, 70.));
+                    let available = self.history.available(&entry.id);
+                    self.history_context(&response, entry, available);
+                    if response.clicked() && available {
+                        open = Some(entry.id.clone());
+                    }
+                    ui.add(egui::Label::new(RichText::new(&entry.label).color(MUTED)).truncate())
+                        .tip(&entry.label);
+                });
+            }
+        });
+        if let Some(id) = open {
+            self.open_history(&id, &ui.ctx().clone());
+        }
     }
     fn backstage_recent(&mut self, ui: &mut egui::Ui) {
         ui.heading("Recent");
@@ -200,7 +334,7 @@ impl Editor {
                                     open = Some(entry.id.clone());
                                 }
                                 ui.add(egui::Label::new(&entry.label).truncate())
-                                    .on_hover_text(&entry.label);
+                                    .tip(&entry.label);
                             });
                         }
                     });
@@ -214,22 +348,8 @@ impl Editor {
             self.open_history(&id, &ui.ctx().clone());
         }
     }
-    fn file_help(&mut self, ui: &mut egui::Ui) {
-        ui.heading("Help & About");
-        ui.label("Independent Rust image editor · alpha preview");
-        ui.add_space(18.0);
-        ui.label("Tools: Clipboard and drawing tools\nAdvanced: text formatting, arrangement, canvas, Restore and Page Setup\nExport: PNG and editable projects\nFile → Open: images and editable projects\nCtrl+S: Save · Ctrl+Shift+S: Save As\nCtrl+Z / Ctrl+Y: Undo / Redo\nText: draw a box and type directly; click away to finish\nAlt+drag an object: duplicate · Shift+drag handles: constrain proportions\nCtrl+wheel: zoom at pointer · middle-drag or Space+drag: pan\nBottom bar: zoom percentage, Fit to Screen and Actual Size");
-        ui.add_space(18.0);
-        if ui.button("Configure capture keybinds…").clicked() {
-            self.shell.backstage = Some(Page::Options);
-            self.options.tab = crate::options::Tab::Keybinds;
-        }
-        ui.label(&self.global_capture_status);
-        ui.add_space(18.0);
-        ui.add_enabled(
-            false,
-            egui::Button::new("Full help and tutorials — planned"),
-        );
+    pub(crate) fn open_keyboard_shortcuts(&mut self) {
+        self.open_preferences(crate::preferences::Section::Shortcuts);
     }
 }
 
@@ -288,89 +408,263 @@ fn nav(ui: &mut egui::Ui, label: &str, selected: bool) -> egui::Response {
         );
     }
     response.widget_info(|| egui::WidgetInfo::selected(egui::Role::Button, true, selected, label));
-    response.on_hover_text(if label == "Back" {
+    response.tip(if label == "Back" {
         "Return to the workspace · Esc"
     } else {
         label
     })
 }
-pub(super) fn card(
-    ui: &mut egui::Ui,
-    label: &str,
-    description: &str,
-    color: Option<[u8; 4]>,
-) -> egui::Response {
-    let (r, response) = ui.allocate_exact_size(egui::vec2(160.0, 126.0), egui::Sense::click());
-    let preview = egui::Rect::from_min_size(r.min, egui::vec2(160.0, 90.0));
-    let rgba = color.unwrap_or([245, 245, 245, 255]);
-    if rgba[3] == 0 {
-        for y in 0..9 {
-            for x in 0..16 {
-                ui.painter().rect_filled(
-                    egui::Rect::from_min_size(
-                        preview.min + egui::vec2(x as f32 * 10.0, y as f32 * 10.0),
-                        egui::vec2(10.0, 10.0),
-                    ),
-                    0.0,
-                    Color32::from_gray(if (x + y) % 2 == 0 { 215 } else { 245 }),
-                );
-            }
+const TEMPLATES_W: f32 = 360.;
+const GAP: f32 = 10.;
+const CARD_MIN: f32 = 170.;
+const RECENT_MIN: f32 = 140.;
+const CARD: Color32 = Color32::from_rgb(36, 43, 46);
+const LINE: Color32 = Color32::from_rgb(52, 61, 64);
+const MUTED: Color32 = Color32::from_gray(150);
+const ICON_HI: Color32 = Color32::from_rgb(125, 214, 237);
+
+/// A group heading with an optional icon and a muted count.
+pub(super) fn heading(ui: &mut egui::Ui, icon: &str, title: &str, count: Option<&str>) {
+    ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = 8.;
+        if !icon.is_empty() {
+            let (r, _) = ui.allocate_exact_size(egui::vec2(18., 18.), egui::Sense::hover());
+            crate::video_editor::ui::icon(ui.painter(), r, icon, Color32::from_rgb(169, 196, 207));
         }
-    } else {
-        ui.painter().rect_filled(
-            preview,
-            2.0,
-            Color32::from_rgba_unmultiplied(rgba[0], rgba[1], rgba[2], rgba[3]),
+        ui.label(
+            RichText::new(title)
+                .size(15.)
+                .strong()
+                .color(Color32::WHITE),
         );
+        if let Some(count) = count {
+            ui.label(RichText::new(count).size(12.).color(MUTED));
+        }
+    });
+}
+
+/// Text cut to one line with an ellipsis.
+fn one_line(ui: &egui::Ui, text: &str, size: f32, color: Color32, width: f32) -> Arc<egui::Galley> {
+    let mut job = egui::text::LayoutJob::single_section(
+        text.to_owned(),
+        egui::TextFormat::simple(egui::FontId::proportional(size), color),
+    );
+    job.wrap = egui::text::TextWrapping {
+        max_width: width.max(1.),
+        max_rows: 1,
+        break_anywhere: true,
+        overflow_character: Some('…'),
+    };
+    ui.painter().layout_job(job)
+}
+
+/// A row-wrapping grid of quick-start icon cards. Returns the clicked index.
+fn cards(ui: &mut egui::Ui, items: &[(&str, &str, &str, bool)]) -> Option<usize> {
+    let width = ui.available_width();
+    let columns = (((width + GAP) / (CARD_MIN + GAP)).floor() as usize).max(1);
+    let card = (width - GAP * (columns as f32 - 1.)) / columns as f32;
+    let mut clicked = None;
+    for (row, chunk) in items.chunks(columns).enumerate() {
+        if row > 0 {
+            ui.add_space(GAP);
+        }
+        ui.horizontal(|ui| {
+            ui.spacing_mut().item_spacing.x = GAP;
+            for (i, (icon, name, description, primary)) in chunk.iter().enumerate() {
+                if new_card(ui, card, icon, name, description, *primary).clicked() {
+                    clicked = Some(row * columns + i);
+                }
+            }
+        });
     }
-    if matches!(label, "Capture" | "From clipboard" | "From template") {
-        crate::ribbon::draw_icon(
-            ui.painter(),
-            preview.center(),
-            if label == "Capture" {
-                "Capture"
-            } else if label == "From template" {
-                "Library"
-            } else {
-                "Paste"
-            },
-            Color32::from_rgb(136, 211, 230),
-        );
-    } else if label == "Custom size" {
-        ui.painter().text(
-            preview.center(),
-            egui::Align2::CENTER_CENTER,
-            "W × H",
-            egui::FontId::proportional(24.0),
-            Color32::from_gray(65),
-        );
-    }
-    ui.painter().rect_stroke(
-        preview,
-        2.0,
-        egui::Stroke::new(
-            if response.hovered() || response.has_focus() {
-                2.0
-            } else {
-                1.0
-            },
-            if response.hovered() || response.has_focus() {
-                Color32::from_rgb(42, 176, 227)
-            } else {
-                Color32::from_gray(160)
-            },
-        ),
+    clicked
+}
+
+fn new_card(
+    ui: &mut egui::Ui,
+    width: f32,
+    icon: &str,
+    name: &str,
+    description: &str,
+    primary: bool,
+) -> egui::Response {
+    let (r, response) = ui.allocate_exact_size(egui::vec2(width, 62.), egui::Sense::click());
+    let hot = response.hovered() || response.has_focus();
+    let p = ui.painter();
+    p.rect_filled(r, 9., CARD);
+    p.rect_stroke(
+        r,
+        9.,
+        egui::Stroke::new(1., if hot { crate::shell::ACCENT } else { LINE }),
         egui::StrokeKind::Inside,
     );
-    ui.painter().text(
-        r.center_top() + egui::vec2(0.0, 108.0),
-        egui::Align2::CENTER_CENTER,
-        label,
-        egui::FontId::proportional(12.0),
+    let tile = egui::Rect::from_min_size(
+        egui::pos2(r.left() + 10., r.center().y - 17.),
+        egui::vec2(34., 34.),
+    );
+    p.rect_filled(
+        tile,
+        8.,
+        if primary {
+            crate::shell::ACCENT
+        } else {
+            Color32::from_rgb(26, 35, 38)
+        },
+    );
+    crate::video_editor::ui::icon(
+        p,
+        egui::Rect::from_center_size(tile.center(), egui::vec2(19., 19.)),
+        icon,
+        if primary { Color32::WHITE } else { ICON_HI },
+    );
+    let left = tile.right() + 10.;
+    let text_w = r.right() - 10. - left;
+    let title = one_line(ui, name, 13.5, Color32::WHITE, text_w);
+    let detail = one_line(ui, description, 11.5, MUTED, text_w);
+    p.galley(
+        egui::pos2(left, r.center().y - title.size().y),
+        title,
         Color32::WHITE,
     );
-    response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, label));
-    response.on_hover_text(description)
+    p.galley(egui::pos2(left, r.center().y + 2.), detail, MUTED);
+    response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, name));
+    response.tip(description)
+}
+
+/// Equal-width two-way switch. Returns the newly chosen side, if any.
+pub(super) fn segmented(ui: &mut egui::Ui, labels: [&str; 2], second: bool) -> Option<bool> {
+    segmented_choice(ui, &labels, usize::from(second)).map(|i| i == 1)
+}
+
+/// Equal-width switch of several choices. Returns the newly chosen one, if any.
+pub(super) fn segmented_choice(
+    ui: &mut egui::Ui,
+    labels: &[&str],
+    selected: usize,
+) -> Option<usize> {
+    let (r, _) =
+        ui.allocate_exact_size(egui::vec2(ui.available_width(), 30.), egui::Sense::hover());
+    ui.painter()
+        .rect_filled(r, 7., Color32::from_rgb(30, 38, 41));
+    ui.painter()
+        .rect_stroke(r, 7., egui::Stroke::new(1., LINE), egui::StrokeKind::Inside);
+    let mut chosen = None;
+    let part = r.width() / labels.len() as f32;
+    for (i, label) in labels.iter().copied().enumerate() {
+        let half = egui::Rect::from_min_size(
+            r.min + egui::vec2(i as f32 * part, 0.),
+            egui::vec2(part, r.height()),
+        )
+        .shrink(3.);
+        let on = i == selected;
+        let response = ui.interact(
+            half,
+            ui.scope_id().with(("segment", label)),
+            egui::Sense::click(),
+        );
+        if on {
+            ui.painter()
+                .rect_filled(half, 5., Color32::from_rgb(35, 65, 74));
+        } else if response.hovered() {
+            ui.painter()
+                .rect_filled(half, 5., Color32::from_rgb(44, 52, 56));
+        }
+        ui.painter().text(
+            half.center(),
+            egui::Align2::CENTER_CENTER,
+            label,
+            egui::FontId::proportional(13.),
+            if on {
+                Color32::WHITE
+            } else {
+                Color32::from_gray(175)
+            },
+        );
+        response.widget_info(|| egui::WidgetInfo::selected(egui::Role::Button, true, on, label));
+        if response.clicked() && !on {
+            chosen = Some(i);
+        }
+    }
+    chosen
+}
+
+/// A template tile: tinted icon header, then name and description. Saved
+/// templates get a dashed inner outline.
+pub(super) fn template_tile(
+    ui: &mut egui::Ui,
+    width: f32,
+    icon: &str,
+    name: &str,
+    description: &str,
+    tint: Color32,
+    mine: bool,
+) -> egui::Response {
+    let (r, response) = ui.allocate_exact_size(egui::vec2(width, 112.), egui::Sense::click());
+    let hot = response.hovered() || response.has_focus();
+    let p = ui.painter();
+    p.rect_filled(r, 8., CARD);
+    let head = egui::Rect::from_min_size(r.min, egui::vec2(width, 74.));
+    let mut mesh = egui::Mesh::default();
+    let dark = Color32::from_rgb(28, 34, 38);
+    let corners = [
+        (head.left_top(), tint),
+        (head.right_top(), dark),
+        (head.right_bottom(), dark),
+        (head.left_bottom(), tint.lerp_to_gamma(dark, 0.5)),
+    ];
+    for (pos, color) in corners {
+        mesh.colored_vertex(pos, color);
+    }
+    mesh.add_triangle(0, 1, 2);
+    mesh.add_triangle(0, 2, 3);
+    p.with_clip_rect(egui::Rect::from_min_max(
+        r.min,
+        egui::pos2(r.right(), head.bottom()),
+    ))
+    .add(egui::Shape::Mesh(mesh.into()));
+    if mine {
+        let inner = head.shrink(6.);
+        for (a, b) in [
+            (inner.left_top(), inner.right_top()),
+            (inner.right_top(), inner.right_bottom()),
+            (inner.right_bottom(), inner.left_bottom()),
+            (inner.left_bottom(), inner.left_top()),
+        ] {
+            p.extend(egui::Shape::dashed_line(
+                &[a, b],
+                egui::Stroke::new(1., Color32::from_rgba_unmultiplied(125, 214, 237, 90)),
+                4.,
+                3.,
+            ));
+        }
+    }
+    crate::video_editor::ui::icon(
+        p,
+        egui::Rect::from_center_size(head.center(), egui::vec2(24., 24.)),
+        icon,
+        Color32::from_white_alpha(200),
+    );
+    let text_w = width - 16.;
+    let title = one_line(ui, name, 12., Color32::WHITE, text_w);
+    let detail = one_line(ui, description, 11., MUTED, text_w);
+    p.galley(
+        egui::pos2(r.left() + 8., head.bottom() + 6.),
+        title,
+        Color32::WHITE,
+    );
+    p.galley(
+        egui::pos2(r.left() + 8., head.bottom() + 22.),
+        detail,
+        MUTED,
+    );
+    p.rect_stroke(
+        r,
+        8.,
+        egui::Stroke::new(1., if hot { crate::shell::ACCENT } else { LINE }),
+        egui::StrokeKind::Inside,
+    );
+    response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, name));
+    response.tip(format!("{name}\n{description}"))
 }
 
 #[cfg(test)]
@@ -378,7 +672,7 @@ mod tests {
     use super::*;
     use crate::property_layout::tests::{PaintedOutput, dump_meshes};
     #[test]
-    fn file_template_cards_align_with_new_options_and_recent_search_stays_under_heading() {
+    fn file_new_has_icon_cards_one_recent_row_and_a_templates_panel() {
         let ctx = egui::Context::default();
         crate::shell::configure(&ctx);
         ctx.style_mut_of(egui::Theme::Dark, |s| s.animation_time = 0.);
@@ -389,35 +683,74 @@ mod tests {
         e.status = "This status must not appear in File".into();
         let mut first = frame(&ctx, &mut e, 1280., vec![]);
         let out = frame(&ctx, &mut e, 1280., vec![]);
-        let from = text_rect(&out, "From template");
+        // Left column: icon cards in two groups, then Recent.
+        let new_image = text_rect(&out, "New Image");
+        let capture = text_rect(&out, "Capture Clip");
         let blank = text_rect(&out, "Blank image");
-        assert!(from.left() < blank.left());
-        assert!((from.center().y - blank.center().y).abs() < 1.);
-        let first_template = text_rect(&out, capture_core::templates::ALL[0].label);
-        assert!((from.center().x - first_template.center().x).abs() < 1.);
-        assert!(
-            crate::color_widgets::tests::text_rect(
-                &out.shapes,
-                capture_core::templates::ALL[5].label
-            )
-            .is_some()
-        );
-        assert!(
-            crate::color_widgets::tests::text_rect(&out.shapes, "Show more templates").is_some()
-        );
+        assert!(capture.left() < blank.left());
+        assert!((capture.center().y - blank.center().y).abs() < 1.);
+        for label in ["From clipboard", "From file", "Blank video"] {
+            text_rect(&out, label);
+        }
+        let new_video = text_rect(&out, "New Video");
         let recent = text_rect(&out, "Recent");
-        let search = text_rect(&out, "Search for an image");
-        assert!(search.top() > recent.bottom());
-        // Eight pixels are the shared filled-input padding.
-        assert!((search.left() - recent.left()).abs() <= 8.1);
+        assert!(new_image.top() < new_video.top() && new_video.top() < recent.top());
+        for gone in [
+            "From template",
+            "Video template",
+            "Custom size",
+            "Image Templates",
+            "Show more templates",
+        ] {
+            assert!(
+                crate::color_widgets::tests::text_rect(&out.shapes, gone).is_none(),
+                "{gone}"
+            );
+        }
+        // Right column: Templates with Image/Video switch, search and tiles.
+        let templates = text_rect(&out, "Templates");
+        assert!(templates.left() > capture.right() + 300.);
+        assert!(templates.right() < 1280.);
+        let first_template = text_rect(&out, capture_core::templates::ALL[0].label);
+        assert!(first_template.left() >= templates.left() - 1.);
+        text_rect(&out, "Search templates");
+        assert!(crate::color_widgets::tests::text_rect(&out.shapes, "Tutorial").is_none());
         assert!(crate::color_widgets::tests::text_rect(&out.shapes, &e.status).is_none());
         first.0.textures_delta.append(out.0.textures_delta.clone());
         if let Ok(dir) = std::env::var("CLIPCRAFT_HEADLESS_FILE_DIR") {
-            dump_meshes(&ctx, &dir, "home-templates", first, out);
+            dump_meshes(&ctx, &dir, "file-new", first, out);
         }
-        click(&ctx, &mut e, from);
-        assert!(e.template_picker.is_some());
-        e.template_picker = None;
+        let out = frame(&ctx, &mut e, 1280., vec![]);
+        click(&ctx, &mut e, text_rect(&out, "Video"));
+        let out = frame(&ctx, &mut e, 1280., vec![]);
+        for label in ["Tutorial", "Product walkthrough", "Announcement"] {
+            assert!(text_rect(&out, label).left() >= templates.left() - 1.);
+        }
+        assert!(
+            crate::color_widgets::tests::text_rect(
+                &out.shapes,
+                capture_core::templates::ALL[0].label
+            )
+            .is_none()
+        );
+        click(&ctx, &mut e, text_rect(&out, "Image"));
+        ctx.data_mut(|d| {
+            d.insert_temp(
+                egui::Id::unique("file-templates-query"),
+                "shortcut".to_string(),
+            )
+        });
+        let out = frame(&ctx, &mut e, 1280., vec![]);
+        text_rect(&out, "Shortcut sheet");
+        text_rect(&out, "· 1");
+        assert!(
+            crate::color_widgets::tests::text_rect(
+                &out.shapes,
+                capture_core::templates::ALL[0].label
+            )
+            .is_none()
+        );
+        ctx.data_mut(|d| d.insert_temp(egui::Id::unique("file-templates-query"), String::new()));
         let out = frame(&ctx, &mut e, 1280., vec![]);
         let template = text_rect(&out, capture_core::templates::ALL[2].label);
         click(&ctx, &mut e, template);
@@ -460,7 +793,7 @@ mod tests {
                 .iter()
                 .filter_map(|s| {
                     if let egui::Shape::Text(t) = &s.shape {
-                        (t.galley.text() == "IMAGE").then_some(t.pos)
+                        (t.galley.text() == "Image").then_some(t.pos)
                     } else {
                         None
                     }
@@ -493,21 +826,33 @@ mod tests {
         width: f32,
         events: Vec<egui::Event>,
     ) -> PaintedOutput {
-        PaintedOutput(ctx.run_ui(
-            egui::RawInput {
-                screen_rect: Some(egui::Rect::from_min_size(
-                    egui::Pos2::ZERO,
-                    egui::vec2(width, 720.0),
-                )),
-                events,
-                focused: true,
-                ..Default::default()
-            },
-            |ui| {
-                e.show_shell(ui);
-                e.show_new_image(ui.ctx());
-            },
-        ))
+        PaintedOutput(
+            ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        egui::vec2(
+                            width,
+                            if ctx
+                                .data(|d| d.get_temp::<bool>(egui::Id::unique("tall-file-test")))
+                                .unwrap_or(false)
+                            {
+                                2100.
+                            } else {
+                                720.
+                            },
+                        ),
+                    )),
+                    events,
+                    focused: true,
+                    ..Default::default()
+                },
+                |ui| {
+                    e.show_shell(ui);
+                    e.show_new_image(ui.ctx());
+                },
+            ),
+        )
     }
     fn text_rect(output: &PaintedOutput, label: &str) -> egui::Rect {
         output
@@ -543,6 +888,19 @@ mod tests {
         }
     }
     #[test]
+    fn capture_clip_keeps_the_view_behind_its_dialog() {
+        let ctx = egui::Context::default();
+        let mut e = crate::canvas::tests::editor(&ctx);
+        for page in [None, Some(Page::Home)] {
+            e.shell.backstage = page;
+            e.open_clip();
+            assert!(e.clip.clip_dialog);
+            assert_eq!(e.shell.backstage, page);
+            e.clip.clip_dialog = false;
+            assert_eq!(e.shell.backstage, page, "cancel stays there too");
+        }
+    }
+    #[test]
     fn file_navigation_and_cancel_preserve_document_and_editor_selection() {
         let ctx = egui::Context::default();
         crate::shell::configure(&ctx);
@@ -561,8 +919,6 @@ mod tests {
             ("Open", Page::Open),
             ("Info", Page::Info),
             ("Export", Page::Export),
-            ("Options", Page::Options),
-            ("Help", Page::Help),
             ("New", Page::New),
         ] {
             let output = frame(&ctx, &mut e, 1280.0, vec![]);
@@ -570,7 +926,7 @@ mod tests {
             assert_eq!(e.shell.backstage, Some(page));
         }
         let output = frame(&ctx, &mut e, 1280.0, vec![]);
-        click(&ctx, &mut e, text_rect(&output, "Transparent image"));
+        click(&ctx, &mut e, text_rect(&output, "Blank image"));
         assert!(e.new_image.is_some());
         let output = frame(&ctx, &mut e, 1280.0, vec![]);
         click(&ctx, &mut e, text_rect(&output, "Cancel"));
@@ -600,15 +956,7 @@ mod tests {
     #[test]
     fn full_window_file_pages_render_at_compact_and_wide_sizes() {
         for width in [900.0, 1280.0] {
-            for page in [
-                Page::Home,
-                Page::New,
-                Page::Open,
-                Page::Info,
-                Page::Export,
-                Page::Options,
-                Page::Help,
-            ] {
+            for page in [Page::Home, Page::New, Page::Open, Page::Info, Page::Export] {
                 let ctx = egui::Context::default();
                 crate::shell::configure(&ctx);
                 let mut e = crate::canvas::tests::editor(&ctx);
@@ -616,18 +964,7 @@ mod tests {
                 let before = e.session.document.clone();
                 let first = frame(&ctx, &mut e, width, vec![]);
                 let output = frame(&ctx, &mut e, width, vec![]);
-                assert!(
-                    text_rect(
-                        &output,
-                        if page == Page::Options {
-                            "Settings"
-                        } else {
-                            "ClipCraft"
-                        }
-                    )
-                    .max
-                    .x < width
-                );
+                assert!(text_rect(&output, "ClipCraft").max.x < width);
                 assert_eq!(
                     serde_json::to_value(&before).unwrap(),
                     serde_json::to_value(&e.session.document).unwrap()

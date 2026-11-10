@@ -1,4 +1,5 @@
 use crate::egui;
+use crate::tips::Tip as _;
 use capture_core::reusable_presets::{Payload, Store};
 #[derive(Default)]
 pub(crate) struct State {
@@ -14,9 +15,79 @@ pub(crate) struct State {
     edit: Option<(Option<u64>, String, Payload)>,
     focus: bool,
     delete: Option<u64>,
+    group_only: bool,
+    placed_group: Option<capture_core::group_presets::Composition>,
+    group_thumbs: std::collections::BTreeMap<u64, egui::TextureHandle>,
 }
 
 impl State {
+    pub(crate) fn open_groups(&mut self) {
+        self.init();
+        self.group_only = true;
+        self.current = None;
+        self.query.clear();
+        self.open = true;
+        self.focus = true;
+    }
+    /// The payload waiting in the save dialog, for tests.
+    #[cfg(test)]
+    pub(crate) fn pending_save(&self) -> Option<&Payload> {
+        self.edit.as_ref().map(|(_, _, p)| p)
+    }
+    pub(crate) fn take_group(&mut self) -> Option<capture_core::group_presets::Composition> {
+        self.placed_group.take()
+    }
+    pub(crate) fn save_payload(&mut self, payload: Payload) {
+        self.init();
+        self.current = Some(payload.clone());
+        self.edit = Some((None, String::new(), payload));
+        self.focus = true;
+        self.open = true;
+        self.error.clear();
+    }
+    fn group_thumb(
+        &mut self,
+        ui: &mut egui::Ui,
+        id: u64,
+        c: &capture_core::group_presets::Composition,
+    ) {
+        if let std::collections::btree_map::Entry::Vacant(entry) = self.group_thumbs.entry(id) {
+            let mut doc = capture_core::Document::blank(
+                c.objects.source_canvas[0],
+                c.objects.source_canvas[1],
+            )
+            .unwrap();
+            doc.annotations = c.objects.objects.clone();
+            let mut lo = [f32::INFINITY; 2];
+            let mut hi = [f32::NEG_INFINITY; 2];
+            for a in &doc.annotations {
+                let (l, h) = a.bounds();
+                for i in 0..2 {
+                    lo[i] = lo[i].min(l[i]);
+                    hi[i] = hi[i].max(h[i]);
+                }
+            }
+            let scale =
+                (100. / (hi[0] - lo[0]).max(1.) as f64).min(64. / (hi[1] - lo[1]).max(1.) as f64);
+            if let Ok(list) = doc.display_list()
+                && let Ok(p) = list.render_viewport(capture_core::display::Viewport {
+                    size: [112, 76],
+                    origin: [lo[0] as f64 - 6. / scale, lo[1] as f64 - 6. / scale],
+                    scale,
+                })
+            {
+                entry.insert(ui.ctx().load_texture(
+                    format!("group-preset-{id}"),
+                    egui::ColorImage::from_rgba_unmultiplied([112, 76], p.as_raw()),
+                    egui::TextureOptions::LINEAR,
+                ));
+            }
+        }
+        if let Some(t) = self.group_thumbs.get(&id) {
+            ui.image((t.id(), egui::vec2(112., 76.)));
+        }
+    }
+
     fn init(&mut self) {
         if self.initialized {
             return;
@@ -99,6 +170,7 @@ impl State {
                             });
                         crate::panel_ui::divider(ui);
                         if ui.button("Manage / share presets…").clicked() {
+                            self.group_only = false;
                             self.current = Some(current.clone());
                             self.open = true;
                             self.focus = true;
@@ -107,9 +179,10 @@ impl State {
                     });
                 if ui
                     .button("+ Save")
-                    .on_hover_text("Save the current settings as a reusable preset")
+                    .tip("Save the current settings as a reusable preset")
                     .clicked()
                 {
+                    self.group_only = false;
                     self.current = Some(current.clone());
                     self.edit = Some((None, String::new(), current.clone()));
                     self.focus = true;
@@ -129,7 +202,7 @@ impl State {
         let mut cancel_edit = false;
         let response=crate::controls::Modal::new(egui::Id::unique("creative-presets-manager")).show(ctx,|ui|{
             ui.set_width((ctx.content_rect().width()-48.).clamp(260.,620.));
-            ui.label(crate::panel_ui::title(if self.edit.is_some(){"Save preset"}else{"Preset library"},18.));
+            ui.label(crate::panel_ui::title(if self.edit.is_some(){"Save preset"}else if self.group_only{"Blocks"}else{"Preset library"},20.));
             crate::panel_ui::divider(ui);
             if let Some((id,label,payload))=&mut self.edit {
                 ui.label(format!("{} · Name",payload.category()));
@@ -153,11 +226,12 @@ impl State {
                     crate::controls::toggle(ui,&mut self.favorites,"Favorites");
                 });
                 let entries=self.store.as_ref().map(|s|s.entries().to_vec()).unwrap_or_default();
-                let query=self.query.to_lowercase();let favorites=self.favorites;
+                let query=self.query.to_lowercase();let favorites=self.favorites;let group_only=self.group_only;
                 egui::ScrollArea::vertical().id_salt("preset-library-entries").max_height((ctx.content_rect().height()-230.).clamp(100.,360.)).auto_shrink([false,false]).show(ui,|ui|{
-                    for e in entries.iter().filter(|e|(!favorites||e.favorite)&&(e.name.to_lowercase().contains(&query)||e.payload.category().to_lowercase().contains(&query))) {
+                    for e in entries.iter().filter(|e|(!group_only||matches!(e.payload,Payload::Group(_)))&&(!favorites||e.favorite)&&(e.name.to_lowercase().contains(&query)||e.payload.category().to_lowercase().contains(&query))) {
                         ui.push_id(e.id,|ui|{
                             ui.horizontal(|ui|{
+                                if let Payload::Group(c)=&e.payload{self.group_thumb(ui,e.id,c);if ui.add(crate::controls::dialog_button("Insert",true)).clicked(){self.placed_group=Some(c.clone());close=true;}}
                                 if favorite_button(ui,e.favorite).clicked(){self.result(|s|s.favorite(e.id,!e.favorite));}
                                 ui.vertical(|ui|{ui.label(crate::panel_ui::title(&e.name,13.));ui.small(e.payload.category());});
                                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center),|ui| {ui.menu_button("…",|ui|{
@@ -200,6 +274,7 @@ if ui.button("Cancel").clicked(){self.delete=None;}});}
             match result {
                 Ok(()) => {
                     self.edit = None;
+                    self.group_thumbs.clear();
                     self.query.clear();
                     self.error.clear();
                 }
@@ -217,6 +292,7 @@ if ui.button("Cancel").clicked(){self.delete=None;}});}
         }
     }
     fn result(&mut self, f: impl FnOnce(&mut Store) -> capture_core::Result<()>) {
+        self.group_thumbs.clear();
         self.error = match self.store.as_mut() {
             Some(s) => f(s).err().map(|e| e.to_string()).unwrap_or_default(),
             None => "Local preset storage is unavailable.".into(),
@@ -240,7 +316,7 @@ fn favorite_button(ui: &mut egui::Ui, value: bool) -> egui::Response {
     r.widget_info(|| {
         egui::WidgetInfo::selected(egui::Role::CheckBox, true, value, "Favorite preset")
     });
-    r.on_hover_text("Favorite preset")
+    r.tip("Favorite preset")
 }
 
 #[cfg(test)]

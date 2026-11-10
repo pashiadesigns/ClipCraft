@@ -1,4 +1,5 @@
 use super::*;
+use crate::tips::Tip as _;
 use capture_core::{
     Kind,
     selection::Handle,
@@ -11,6 +12,48 @@ pub(super) struct Drag {
     from: [f32; 2],
     handle: Option<Handle>,
     crop: bool,
+    /// Alt+drag: `index` is a copy that exists only in `original` until the drop.
+    duplicate: bool,
+    source: usize,
+}
+/// A copy of clip `index` on a track of its own, so it doesn't crossfade with
+/// the original. Returns the project and the copy's index.
+pub(super) fn duplicate_clip(p: &Project, index: usize) -> Option<(Project, usize)> {
+    let mut copy = p.clone();
+    let first_new = copy.next_media_id();
+    let clip = copy.segments.get(index)?.clone();
+    copy.edit_linked(index, clip, true).ok()?;
+    let at = copy.segments.iter().position(|c| {
+        c.id >= first_new && c.kind() != capture_core::video::editor::MediaKind::Audio
+    })?;
+    let track = copy.add_media_track();
+    copy.segments[at].track = track;
+    Some((copy, at))
+}
+/// Corner inset (0), Circle inset (1) or Fullscreen (2), placed absolutely.
+pub(super) fn apply_clip_preset(
+    c: &mut capture_core::video::editor::Segment,
+    preset: usize,
+    ratio: f32,
+) {
+    let f = c.frame.get_or_insert_with(Frame::default);
+    match preset {
+        0 => {
+            c.rect = [0.69, 0.62, 0.28, 0.32];
+            f.shape = Kind::Rectangle;
+            f.radius = 20.;
+        }
+        1 => {
+            c.rect = [0.97 - 0.32 / ratio, 0.65, 0.32 / ratio, 0.32];
+            f.shape = Kind::Ellipse;
+            f.radius = 0.;
+        }
+        _ => {
+            c.rect = [0., 0., 1., 1.];
+            f.shape = Kind::Rectangle;
+            f.radius = 0.;
+        }
+    }
 }
 impl Editor {
     pub(super) fn video_frame_properties(
@@ -18,6 +61,9 @@ impl Editor {
         ui: &mut egui::Ui,
         c: &mut capture_core::video::editor::Segment,
     ) {
+        let keyed_base = c.clone();
+        let age = self.video_time().saturating_sub(c.at);
+        *c = keyed_base.keyed(self.video_time());
         use super::property_design as design;
         design::heading(ui, "Presets", "Presets");
         ui.horizontal(|ui| {
@@ -32,29 +78,27 @@ impl Editor {
                     }
                 };
                 if design::preset(ui, name, preset, selected, width) {
-                    let f = c.frame.get_or_insert_with(Frame::default);
-                    match preset {
-                        0 => {
-                            c.rect = [0.69, 0.62, 0.28, 0.32];
-                            f.shape = Kind::Rectangle;
-                            f.radius = 20.;
-                        }
-                        1 => {
-                            let ratio = self.session.document.width as f32
-                                / self.session.document.height as f32;
-                            c.rect = [0.97 - 0.32 / ratio, 0.65, 0.32 / ratio, 0.32];
-                            f.shape = Kind::Ellipse;
-                        }
-                        _ => {
-                            c.rect = [0., 0., 1., 1.];
-                            f.shape = Kind::Rectangle;
-                            f.radius = 0.;
-                        }
-                    }
+                    let ratio =
+                        self.session.document.width as f32 / self.session.document.height as f32;
+                    apply_clip_preset(c, preset, ratio);
+                    // Every selected clip takes the whole preset, not the change.
+                    self.video.clip_preset = Some(preset);
                 }
             }
         });
         design::end(ui);
+        let mut color = c.frame.as_ref().map_or_else(Default::default, |f| f.color);
+        let old_color = color;
+        crate::finish_ui::color_controls(ui, &mut color, crate::finish_ui::Place::Pane);
+        if color != old_color {
+            let fill = self.session.document.video.as_ref().is_some_and(|v| v.fill);
+            c.frame
+                .get_or_insert_with(|| Frame {
+                    fill,
+                    ..Default::default()
+                })
+                .color = color;
+        }
         let before = c.frame.clone().unwrap_or(Frame {
             radius: 0.,
             ..Default::default()
@@ -261,6 +305,8 @@ impl Editor {
         if f != before {
             c.frame = Some(f);
         }
+        let mut keys = keyed_base.keyframes.clone();
+        *c = keys.edit_media(&keyed_base, c, age, self.video.keyframes.auto_key);
     }
     pub(crate) fn video_frame_input(
         &mut self,
@@ -314,7 +360,16 @@ impl Editor {
         let point = t.image_point(pos);
         let size = [self.session.document.width, self.session.document.height];
         if let Some(d) = &self.video.frame_drag {
+            // The copy has no decoded frame yet; show it with the original's.
+            let copy_layer = d.duplicate.then(|| {
+                (
+                    d.original.segments[d.index].id,
+                    d.original.segments.get(d.source).map(|c| c.id),
+                )
+            });
             let mut p = d.original.clone();
+            let original = p.segments[d.index].clone();
+            p.segments[d.index] = original.keyed(p.cursor);
             let c = &mut p.segments[d.index];
             let mut a = geometry(c, size);
             if d.crop {
@@ -340,6 +395,7 @@ impl Editor {
                             from_center: i.modifiers.alt,
                         }),
                     )
+                    .map(|moved| capture_core::steps::label_follows(&a, moved))
                 } else {
                     a.translated([point[0] - d.from[0], point[1] - d.from[1]], size)
                 };
@@ -362,6 +418,13 @@ impl Editor {
                     }
                 }
             }
+            let mut keys = original.keyframes.clone();
+            p.segments[d.index] = keys.edit_media(
+                &original,
+                c,
+                p.cursor.saturating_sub(original.at),
+                self.video.keyframes.auto_key,
+            );
             self.video.timing_preview = Some(p);
             ui.ctx().set_cursor_icon(if d.crop {
                 egui::CursorIcon::Grabbing
@@ -369,17 +432,62 @@ impl Editor {
                 d.handle
                     .map_or(egui::CursorIcon::Move, crate::canvas_cursor::handle_cursor)
             });
+            if d.duplicate {
+                ui.ctx().set_cursor_icon(egui::CursorIcon::Copy);
+            }
             if ui.input(|i| i.pointer.any_released()) {
+                // A press with Alt that never moved leaves no copy behind.
+                let unmoved =
+                    d.duplicate && (point[0] - d.from[0]).hypot(point[1] - d.from[1]) < 2.;
+                let (duplicate, copied, source) = (d.duplicate, d.index, d.source);
                 self.video.frame_drag = None;
-                if let Some(p) = self.video.timing_preview.take() {
+                let next = self.video.timing_preview.take().filter(|_| !unmoved);
+                self.video.selected = Selection::Recording(source);
+                if let Some(p) = next {
                     self.commit_video(p);
+                    if duplicate {
+                        self.video.selected = Selection::Recording(copied);
+                    }
                 }
+            }
+            if let Some((copy, Some(source))) = copy_layer
+                && !self.video.frame_layers.iter().any(|(id, _)| *id == copy)
+                && let Some(bitmap) = self
+                    .video
+                    .frame_layers
+                    .iter()
+                    .find(|(id, _)| *id == source)
+                    .map(|(_, b)| b.clone())
+            {
+                self.video.frame_layers.push((copy, bitmap));
+                self.needs_render = true;
             }
             ui.ctx().request_repaint();
             return true;
         }
         if !enabled || !t.viewport.intersect(t.image).contains(pos) {
             return false;
+        }
+        // While the button is held, decide by where the press began: a drag that
+        // started on an object or its handle stays with the canvas even after the
+        // pointer crosses footage during egui's drag threshold.
+        let pos = ui
+            .input(|i| i.pointer.primary_down().then(|| i.pointer.press_origin()))
+            .flatten()
+            .unwrap_or(pos);
+        let point = t.image_point(pos);
+        // A selected object's resize and rotation handles sit above the footage
+        // and may extend past the object; they belong to the object, not the frame.
+        if self.selected.is_some() {
+            let object_t = self.video_annotation_transform(base_t, Some(pos));
+            let on_handle = self.selected_annotation().is_some_and(|a| {
+                self.session.document.object_editable(a.id)
+                    && a.hit_handle(object_t.image_point(pos), 7. / object_t.scale)
+                        .is_some()
+            });
+            if on_handle || self.rotation_hit(pos, object_t) {
+                return false;
+            }
         }
         let p = self.session.document.video.as_ref().unwrap();
         let mut hit = None;
@@ -389,7 +497,7 @@ impl Editor {
             && c.active(p.cursor)
             && !c.hidden
         {
-            let a = geometry(c, size);
+            let a = geometry(&c.keyed(p.cursor), size);
             if let Some(handle) = a.hit_handle(point, 7. / t.scale).filter(|h| !h.is_radius()) {
                 hit = Some((i, Some(handle)));
             }
@@ -406,7 +514,7 @@ impl Editor {
                                     base_t.image_point(pos),
                                     3. / base_t.scale,
                                 );
-                                a.hit_test(point, tol)
+                                self.keyframe_annotation(a).hit_test(point, tol)
                             }
                         }) {
                             break;
@@ -418,7 +526,7 @@ impl Editor {
                                 && c.kind() != capture_core::video::editor::MediaKind::Audio
                                 && c.active(p.cursor)
                                 && !c.hidden
-                                && geometry(c, size).hit_test(
+                                && geometry(&c.keyed(p.cursor), size).hit_test(
                                     self.video_layer_transform(base_t, Layer::Media(track))
                                         .image_point(pos),
                                     0.,
@@ -437,7 +545,7 @@ impl Editor {
         let t = self.video_layer_transform(base_t, Layer::Media(p.segments[index].track));
         let point = t.image_point(pos);
         let original = p.clone();
-        let a = geometry(&p.segments[index], size);
+        let a = geometry(&p.segments[index].keyed(p.cursor), size);
         let (lo, hi) = a.bounds();
         let area =
             egui::Rect::from_two_pos(t.screen_point(lo), t.screen_point(hi)).intersect(t.viewport);
@@ -507,12 +615,26 @@ impl Editor {
             self.select_only(None);
             self.video.selected = Selection::Recording(index);
             self.video.tab = PropertyTab::Style;
+            let crop = self.video.frame_crop;
+            let wanted = !crop
+                && handle.is_none()
+                && ui.input(|i| {
+                    self.gesture_matches(crate::gesture_input::Gesture::DuplicateDrag, i.modifiers)
+                });
+            let copy = wanted.then(|| duplicate_clip(&original, index)).flatten();
+            let source = index;
+            let (original, index, duplicate) = match copy {
+                Some((project, copied)) => (project, copied, true),
+                None => (original, index, false),
+            };
             self.video.frame_drag = Some(Drag {
                 original,
                 index,
                 from: point,
                 handle,
-                crop: self.video.frame_crop,
+                crop,
+                duplicate,
+                source,
             });
         }
         ui.ctx().set_cursor_icon(if self.video.frame_crop {
@@ -543,7 +665,7 @@ impl Editor {
         };
         let t = self.video_layer_transform(t, Layer::Media(c.track));
         let a = geometry(
-            c,
+            &c.keyed(p.cursor),
             [self.session.document.width, self.session.document.height],
         );
         let mut hit = false;
@@ -568,7 +690,7 @@ impl Editor {
                     egui::Id::unique(("video-frame-zoom", i)),
                     egui::Sense::click(),
                 )
-                .on_hover_text(if i == 0 {
+                .tip(if i == 0 {
                     "Zoom footage out"
                 } else {
                     "Zoom footage in"
@@ -592,11 +714,19 @@ impl Editor {
         }
         if let Some(factor) = factor {
             let mut next = p.clone();
+            let base = next.segments[index].clone();
+            next.segments[index] = base.keyed(p.cursor);
             let f = next.segments[index]
                 .frame
                 .get_or_insert_with(Frame::default);
             if let Ok(view) = f.view.zoomed(factor) {
                 f.view = view;
+                next.segments[index] = base.keyframes.clone().edit_media(
+                    &base,
+                    &next.segments[index],
+                    p.cursor.saturating_sub(base.at),
+                    self.video.keyframes.auto_key,
+                );
                 self.commit_video(next);
             }
         }
@@ -624,7 +754,7 @@ impl Editor {
         }
         let t = self.video_layer_transform(t, Layer::Media(c.track));
         let a = geometry(
-            c,
+            &c.keyed(p.cursor),
             [self.session.document.width, self.session.document.height],
         );
         let painter = ui.painter().with_clip_rect(t.viewport.intersect(t.image));
@@ -673,7 +803,7 @@ impl Editor {
                 egui::Sense::hover(),
             )
             .on_hover_cursor(egui::CursorIcon::Grab)
-            .on_hover_text("Drag to reposition footage inside its frame");
+            .tip("Drag to reposition footage inside its frame");
         crate::image_frame::paint_pan_handle(&painter, grip, response.hovered());
     }
 }

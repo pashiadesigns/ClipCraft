@@ -1,4 +1,5 @@
 use super::*;
+use crate::tips::Tip as _;
 use capture_core::video::links::Layer;
 use egui::{Color32, Rect, Sense, Stroke};
 
@@ -21,17 +22,25 @@ impl Editor {
         painter.rect_filled(clip, 0., Color32::from_rgb(31, 35, 37));
         for (row, layer) in p.layers().into_iter().enumerate() {
             let rect = Rect::from_min_size(
-                egui::pos2(viewport.left(), top + row as f32 * 39.),
+                egui::pos2(
+                    viewport.left(),
+                    super::keyframes::row_y(top, row, self.video.keyframes.rows),
+                ),
                 egui::vec2(width - 4., 34.),
             );
-            if !rect.intersects(clip) {
+            if !rect.intersects(clip) || super::keyframes::row_hidden(row) {
                 continue;
             }
             let label = match layer {
-                Layer::Zoom(id) => format!(
-                    "Zoom {}{}",
-                    id,
-                    if p.zooms.iter().any(|z| z.id == id && z.pinned) {
+                Layer::Zoom(t) => format!(
+                    "Zooms {}{}",
+                    p.layers()
+                        .iter()
+                        .filter(|l| matches!(l, Layer::Zoom(_)))
+                        .position(|l| *l == Layer::Zoom(t))
+                        .unwrap_or(0)
+                        + 1,
+                    if p.zooms.iter().any(|z| z.track() == t && z.pinned) {
                         " · pinned"
                     } else {
                         ""
@@ -72,7 +81,7 @@ impl Editor {
                 let r = ui
                     .interact(grip, egui::Id::unique(("track-grip", layer)), Sense::drag())
                     .on_hover_cursor(egui::CursorIcon::Grab)
-                    .on_hover_text("Drag to reorder track");
+                    .tip("Drag to reorder track");
                 for x in [8., 13.] {
                     for y in [11., 17., 23.] {
                         ui.painter().circle_filled(
@@ -199,7 +208,7 @@ impl Editor {
                             egui::Id::unique(("track-visibility", layer)),
                             Sense::click(),
                         )
-                        .on_hover_text(if hidden { "Show track" } else { "Hide track" })
+                        .tip(if hidden { "Show track" } else { "Hide track" })
                         .clicked()
                     {
                         let mut next = p.clone();
@@ -228,7 +237,7 @@ impl Editor {
                     );
                     if ui
                         .interact(r, egui::Id::unique(("track-mute", id)), Sense::click())
-                        .on_hover_text(if muted { "Unmute track" } else { "Mute track" })
+                        .tip(if muted { "Unmute track" } else { "Mute track" })
                         .clicked()
                     {
                         let mut next = p.clone();
@@ -263,7 +272,7 @@ impl Editor {
         if let Some(layer) = self.video.track_drag
             && let Some(pos) = ui.input(|i| i.pointer.interact_pos())
         {
-            let row = (((pos.y - top) / 39.).floor().max(0.) as usize)
+            let row = (super::keyframes::row_at(top, pos.y, self.video.keyframes.rows))
                 .min(p.layers().len().saturating_sub(1));
             let ghost = Rect::from_min_size(
                 egui::pos2(viewport.left() + 4., pos.y - 15.),
@@ -279,8 +288,14 @@ impl Editor {
             );
             painter.line_segment(
                 [
-                    egui::pos2(viewport.left(), top + row as f32 * 39.),
-                    egui::pos2(viewport.left() + width, top + row as f32 * 39.),
+                    egui::pos2(
+                        viewport.left(),
+                        super::keyframes::row_y(top, row, self.video.keyframes.rows),
+                    ),
+                    egui::pos2(
+                        viewport.left() + width,
+                        super::keyframes::row_y(top, row, self.video.keyframes.rows),
+                    ),
                 ],
                 Stroke::new(2., crate::shell::ACCENT),
             );

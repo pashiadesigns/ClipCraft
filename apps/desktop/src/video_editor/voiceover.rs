@@ -356,6 +356,10 @@ impl Editor {
                         .is_some_and(|s| s.path == take.path.to_string_lossy())
             })
         }) {
+            let _ = capture_core::history::media_cleanup::mark_created(&take.path);
+            if let Some(camera) = &take.camera {
+                let _ = capture_core::history::media_cleanup::mark_created(&camera.path);
+            }
             take.keep = true;
             self.video.voiceover = State::default();
             self.select_only(None);

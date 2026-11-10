@@ -91,12 +91,9 @@ fn recording_conflicts_and_cancel_are_isolated_from_document_and_capture() {
     crate::text_layout::configure(&ctx);
     ctx.style_mut_of(egui::Theme::Dark, |s| s.animation_time = 0.);
     let mut e = crate::canvas::tests::editor(&ctx);
-    e.shell.backstage = Some(crate::backstage::Page::Options);
+    e.open_preferences(crate::preferences::Section::Shortcuts);
     let document = serde_json::to_vec(&e.session.document).unwrap();
     frame(&ctx, &mut e, 980., vec![]);
-    let o = frame(&ctx, &mut e, 980., vec![]);
-    click(&ctx, &mut e, text(&o, "Keybinds"));
-    assert!(e.options.tab == Tab::Keybinds);
     let o = frame(&ctx, &mut e, 980., vec![]);
     click(&ctx, &mut e, text(&o, "Print Screen"));
     assert_eq!(
@@ -160,7 +157,10 @@ fn recording_conflicts_and_cancel_are_isolated_from_document_and_capture() {
         vec![key(egui::Key::Escape, egui::Modifiers::NONE)],
     );
     assert!(e.options.recording.is_none());
-    assert_eq!(e.shell.backstage, Some(crate::backstage::Page::Options));
+    assert_eq!(
+        e.preferences.section(),
+        Some(crate::preferences::Section::Shortcuts)
+    );
     e.options.recording = Some(ShortcutAction::Capture(Action::Fullscreen));
     let o = frame(&ctx, &mut e, 980., vec![]);
     click(&ctx, &mut e, text(&o, "Use Print Screen"));
@@ -183,37 +183,80 @@ fn recording_conflicts_and_cancel_are_isolated_from_document_and_capture() {
     assert!(e.capture_result.is_none());
 }
 #[test]
-fn options_tabs_and_keybinds_fit_compact_and_wide_views() {
+fn preferences_sections_fit_compact_and_wide_views() {
+    use crate::preferences::Section as S;
     for width in [900., 1280.] {
-        for (tab, label) in [(Tab::General, "General"), (Tab::Keybinds, "Keybinds")] {
+        for section in [
+            S::General,
+            S::Editor,
+            S::Capture,
+            S::Library,
+            S::Shortcuts,
+            S::Toolbar,
+        ] {
             let ctx = egui::Context::default();
             crate::shell::configure(&ctx);
             crate::text_layout::configure(&ctx);
             ctx.style_mut_of(egui::Theme::Dark, |s| s.animation_time = 0.);
             let mut e = crate::canvas::tests::editor(&ctx);
-            e.shell.backstage = Some(crate::backstage::Page::Options);
-            e.options.tab = tab;
-            let first = frame(&ctx, &mut e, width, vec![]);
+            e.open_preferences(section);
+            frame(&ctx, &mut e, width, vec![]);
             let o = frame(&ctx, &mut e, width, vec![]);
-            let content = ctx
-                .data(|d| d.get_temp::<egui::Rect>(egui::Id::unique("options-content-bounds")))
-                .unwrap();
-            assert!(
-                content.width() <= 681.,
-                "Settings fields must remain compact at {width}: {content:?}"
-            );
-            for label in ["General", "Keybinds"] {
-                assert!(text(&o, label).max.x < width);
+            for label in ["General", "Toolbar", "Apply", "Cancel"] {
+                assert!(text(&o, label).max.x < width, "{section:?} {label}");
             }
-            if e.options.tab == Tab::Keybinds {
-                assert!(text(&o, "Save shortcuts").max.y < 690.);
-                assert!(text(&o, "Restore defaults").max.x < width);
-            }
-            if let Ok(root) = std::env::var("CLIPCRAFT_HEADLESS_KEYBINDS_DIR") {
-                dump_meshes(&ctx, &root, &format!("{label}-{width}"), first, o);
+            assert!(text(&o, "Apply").max.y < 690., "{section:?}");
+            if section == S::Shortcuts {
+                assert!(text(&o, "Save shortcuts").max.y < text(&o, "Apply").min.y);
             }
         }
     }
+}
+
+#[test]
+fn preferences_apply_saves_cancel_restores_and_defaults_stay_in_their_section() {
+    use crate::preferences::Section as S;
+    let ctx = egui::Context::default();
+    crate::shell::configure(&ctx);
+    crate::text_layout::configure(&ctx);
+    ctx.style_mut_of(egui::Theme::Dark, |s| s.animation_time = 0.);
+    let mut e = crate::canvas::tests::editor(&ctx);
+    let before = e.quick_controls.workspace();
+    e.open_preferences(S::Editor);
+    frame(&ctx, &mut e, 1280., vec![]);
+    let o = frame(&ctx, &mut e, 1280., vec![]);
+    let _ = &o;
+    e.edit_preferences_draft(|d| d.workspace.show_grid = true);
+    assert_eq!(
+        e.quick_controls.workspace(),
+        before,
+        "nothing saves until Apply"
+    );
+    let o = frame(&ctx, &mut e, 1280., vec![]);
+    click(&ctx, &mut e, text(&o, "Cancel"));
+    assert!(e.preferences.section().is_none());
+    assert_eq!(e.quick_controls.workspace(), before);
+    e.open_preferences(S::Editor);
+    frame(&ctx, &mut e, 1280., vec![]);
+    let o = frame(&ctx, &mut e, 1280., vec![]);
+    let _ = &o;
+    e.edit_preferences_draft(|d| d.workspace.show_grid = true);
+    let o = frame(&ctx, &mut e, 1280., vec![]);
+    click(&ctx, &mut e, text(&o, "Apply"));
+    assert!(e.quick_controls.workspace().show_grid);
+    assert_eq!(e.quick_controls.snap_grid(), Some(20));
+    // Restore defaults here leaves the Library switch alone.
+    let mut w = e.quick_controls.workspace();
+    w.keep_versions = false;
+    e.quick_controls.remember_workspace_for_test(w);
+    e.open_preferences(S::Editor);
+    frame(&ctx, &mut e, 1280., vec![]);
+    let o = frame(&ctx, &mut e, 1280., vec![]);
+    click(&ctx, &mut e, text(&o, "Restore defaults"));
+    let o = frame(&ctx, &mut e, 1280., vec![]);
+    click(&ctx, &mut e, text(&o, "Apply"));
+    assert!(!e.quick_controls.workspace().show_grid);
+    assert!(!e.quick_controls.workspace().keep_versions);
 }
 
 #[test]
@@ -223,8 +266,7 @@ fn keybind_categories_keep_navigation_fixed_and_restore_their_scroll_positions()
     crate::text_layout::configure(&ctx);
     ctx.style_mut_of(egui::Theme::Dark, |s| s.animation_time = 0.);
     let mut e = crate::canvas::tests::editor(&ctx);
-    e.shell.backstage = Some(crate::backstage::Page::Options);
-    e.options.tab = Tab::Keybinds;
+    e.open_preferences(crate::preferences::Section::Shortcuts);
     e.options.category = 2;
     let first = frame(&ctx, &mut e, 980., vec![]);
     let before = frame(&ctx, &mut e, 980., vec![]);
@@ -279,7 +321,7 @@ fn global_keybinds_work_from_options_but_wait_for_recording_and_ocr_dialogs() {
         .present(Err("synthetic recognition failure".into()), true, false);
     assert!(!e.accepts_global_capture(&ctx));
     e.ocr = Default::default();
-    e.shell.backstage = Some(crate::backstage::Page::Options);
+    e.open_preferences(crate::preferences::Section::Shortcuts);
     assert!(e.accepts_global_capture(&ctx));
     e.options.recording = Some(ShortcutAction::Capture(Action::Saved));
     assert!(!e.accepts_global_capture(&ctx));
@@ -292,8 +334,7 @@ fn global_keybinds_work_from_options_but_wait_for_recording_and_ocr_dialogs() {
 fn global_capture_dispatch_from_options_and_stale_input_focus_reaches_capture_request() {
     let ctx = egui::Context::default();
     let mut e = crate::canvas::tests::editor(&ctx);
-    e.shell.backstage = Some(crate::backstage::Page::Options);
-    e.options.tab = Tab::Keybinds;
+    e.open_preferences(crate::preferences::Section::Shortcuts);
     let _output = PaintedOutput(ctx.run_ui(Default::default(), |ui| {
         let mut text = String::from("synthetic field");
         ui.text_edit_singleline(&mut text).request_focus();
@@ -313,8 +354,7 @@ fn inset_clear_has_its_own_hit_target_and_category_rows_do_not_overlap() {
     crate::shell::configure(&ctx);
     crate::text_layout::configure(&ctx);
     let mut e = crate::canvas::tests::editor(&ctx);
-    e.shell.backstage = Some(crate::backstage::Page::Options);
-    e.options.tab = Tab::Keybinds;
+    e.open_preferences(crate::preferences::Section::Shortcuts);
     e.options.category = 1;
     frame(&ctx, &mut e, 980., vec![]);
     frame(&ctx, &mut e, 980., vec![]);

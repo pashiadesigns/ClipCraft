@@ -19,8 +19,24 @@ pub(super) struct Dialog {
     format: capture_core::export::Format,
     error: String,
     focus_pending: bool,
+    cleanup: bool,
+    cleanup_summary: String,
 }
 impl Editor {
+    fn cleanup_protected(&self, entries: &[Entry]) -> Vec<std::path::PathBuf> {
+        let ids: Vec<_> = entries.iter().map(|e| e.id.clone()).collect();
+        let mut paths = self.project_sessions.retained_media(&ids);
+        if !self
+            .history
+            .active
+            .as_ref()
+            .is_some_and(|id| ids.contains(id))
+        {
+            paths.extend(self.session.retained_media());
+        }
+        paths.extend(self.template_root());
+        paths
+    }
     pub(super) fn begin_global_tag(&mut self, tag: &str, delete: bool) {
         let entries = self
             .history
@@ -82,6 +98,8 @@ impl Editor {
                     ui.close();
                 }
             }
+            let ids: Vec<String> = self.history.library.selected.iter().cloned().collect();
+            self.folder_menu(ui, &ids);
         });
         if let Some(action) = action {
             let entries = self
@@ -115,11 +133,29 @@ impl Editor {
                     } else {
                         "Capture".into()
                     },
-                    entries,
+                    entries: entries.clone(),
                     editable: self.export_preferences.library_format.is_none(),
                     format: self.export_preferences.library_format.unwrap_or_default(),
                     error: String::new(),
                     focus_pending: true,
+                    cleanup: false,
+                    cleanup_summary: if action == Action::Delete {
+                        self.history
+                            .store
+                            .as_ref()
+                            .unwrap()
+                            .media_cleanup_plan(&entries, &self.cleanup_protected(&entries))
+                            .map(|files| {
+                                format!(
+                                    "{} unshared managed file(s) · {:.1} MB eligible",
+                                    files.len(),
+                                    files.iter().map(|f| f.bytes).sum::<u64>() as f64 / 1048576.
+                                )
+                            })
+                            .unwrap_or_else(|e| format!("Media will be kept: {e}"))
+                    } else {
+                        String::new()
+                    },
                 };
                 if action == Action::Duplicate {
                     self.status = self.apply_library_management(&dialog).unwrap_or_else(|e| e);
@@ -130,7 +166,8 @@ impl Editor {
             Err(e) => self.history.error = e,
         }
     }
-    fn apply_library_management(&mut self, d: &Dialog) -> Result<String, String> {
+    pub(super) fn apply_library_management(&mut self, d: &Dialog) -> Result<String, String> {
+        let protected = self.cleanup_protected(&d.entries);
         let active = self
             .history
             .active
@@ -151,6 +188,13 @@ impl Editor {
             .filter(|s| !s.is_empty())
             .map(str::to_owned)
             .collect::<Vec<_>>();
+        let cleanup = if d.action == Action::Delete && d.cleanup {
+            store
+                .media_cleanup_plan(&d.entries, &protected)
+                .map_err(|e| e.to_string())?
+        } else {
+            vec![]
+        };
         match d.action {
             Action::RenameTag | Action::DeleteTag => store
                 .replace_tag(
@@ -182,6 +226,21 @@ impl Editor {
             Action::Export => unreachable!(),
         }
         .map_err(|e| e.to_string())?;
+        let cleanup_message = if d.action == Action::Delete && d.cleanup {
+            match store.remove_unused_media(&cleanup, &protected) {
+                Ok((n, bytes)) => format!(
+                    " Removed {n} unshared media file(s), {:.1} MB.",
+                    bytes as f64 / 1048576.
+                ),
+                Err(e) => format!(" Project deletion completed; some media was kept: {e}"),
+            }
+        } else {
+            String::new()
+        };
+        if d.action == Action::Delete {
+            self.project_sessions
+                .forget_deleted(&d.entries.iter().map(|e| e.id.clone()).collect::<Vec<_>>());
+        }
         if active {
             if d.action == Action::Delete {
                 self.detach_deleted_history();
@@ -212,7 +271,11 @@ impl Editor {
         if d.action == Action::Delete {
             self.history.library.selected.clear();
         }
-        Ok(format!("Updated {} Library item(s).", d.entries.len()))
+        Ok(format!(
+            "Updated {} Library item(s).{}",
+            d.entries.len(),
+            cleanup_message
+        ))
     }
     pub(super) fn show_library_management(&mut self, ctx: &egui::Context) {
         let Some(mut d) = self.history.manage.take() else {
@@ -231,7 +294,7 @@ impl Editor {
                     } else {ui.label("Remove this tag from every Library item? Images and projects are kept.");}
                 },
                 Action::AddTags|Action::RemoveTags=>{ui.horizontal(|ui|{ui.label("Operation");ui.selectable_value(&mut d.action,Action::AddTags,"Add tags");ui.selectable_value(&mut d.action,Action::RemoveTags,"Remove tags");});ui.label(format!("{} selected captures",d.entries.len()));ui.label("Tags (comma separated)");let input=ui.text_edit_singleline(&mut d.tags);crate::controls::focus_once(&input,&mut d.focus_pending);},
-                Action::Delete=>{ui.label(format!("Delete {} selected capture(s) from Library?",d.entries.len()));ui.label("Stored projects are removed permanently. Exported files are kept. Deleting the open project clears its canvas.");},
+                Action::Delete=>{ui.label(format!("Delete {} selected capture(s) from Library?",d.entries.len()));ui.label("Stored projects are removed permanently. Exported files are kept. Deleting the open project clears its canvas.");ui.add_space(12.);crate::controls::toggle(ui,&mut d.cleanup,"Also delete unused ClipCraft media");ui.small(&d.cleanup_summary);ui.small("Imported originals, shared files and media needed by other projects or Undo are always kept. Leave this off to keep all separate media.");},
                 Action::Export|Action::Rename=>{
                     ui.label(format!("{} selected captures",d.entries.len()));
                     ui.label(if d.entries.len()>1 {"Base name"}else{"Name"});
@@ -519,6 +582,8 @@ mod tests {
             format: Default::default(),
             error: String::new(),
             focus_pending: true,
+            cleanup: false,
+            cleanup_summary: String::new(),
         };
         e.apply_library_management(&d).unwrap();
         assert!(

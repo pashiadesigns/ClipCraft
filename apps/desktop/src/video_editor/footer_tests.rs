@@ -179,9 +179,8 @@ fn footer_docks_preserve_geometry_documents_and_view_state() {
         assert!(timeline.right() > properties.left());
         for key in [
             "footer-recent",
-            "footer-timeline",
-            "footer-priority",
             "footer-snap",
+            "footer-follow",
             "footer-fit",
             "footer-video-setup",
         ] {
@@ -190,7 +189,9 @@ fn footer_docks_preserve_geometry_documents_and_view_state() {
                 "{width}: {key} outside center controls"
             );
         }
-        click(&ctx, &mut e, width, "footer-priority");
+        e.video.properties_priority = !e.video.properties_priority;
+        render(&ctx, &mut e, width, vec![]);
+        render(&ctx, &mut e, width, vec![]);
         assert!(e.video.properties_priority);
         let dock = rect(&ctx, "timeline-panel");
         let pane = rect(&ctx, "properties-panel");
@@ -198,16 +199,22 @@ fn footer_docks_preserve_geometry_documents_and_view_state() {
         assert!(pane.bottom() > dock.top() + 200.);
         assert!((dock.height() - timeline.height()).abs() < 1.);
         assert!((pane.width() - properties.width()).abs() < 1.);
-        click(&ctx, &mut e, width, "footer-timeline");
+        e.set_timeline_expanded(e.video.collapsed);
+        render(&ctx, &mut e, width, vec![]);
+        render(&ctx, &mut e, width, vec![]);
         assert!(e.video.collapsed);
         assert!(rect(&ctx, "timeline-panel").height() < 60.);
         click(&ctx, &mut e, width, "footer-recent");
         assert!(e.history.recent && e.video.collapsed);
         assert!(rect(&ctx, "recent-panel").right() <= rect(&ctx, "properties-panel").left());
-        click(&ctx, &mut e, width, "footer-timeline");
+        e.set_timeline_expanded(e.video.collapsed);
+        render(&ctx, &mut e, width, vec![]);
+        render(&ctx, &mut e, width, vec![]);
         assert!(!e.history.recent && !e.video.collapsed);
         assert!((rect(&ctx, "timeline-panel").height() - timeline.height()).abs() < 1.);
-        click(&ctx, &mut e, width, "footer-priority");
+        e.video.properties_priority = !e.video.properties_priority;
+        render(&ctx, &mut e, width, vec![]);
+        render(&ctx, &mut e, width, vec![]);
         assert!(!e.video.properties_priority);
         assert!((rect(&ctx, "timeline-panel").right() - timeline.right()).abs() < 1.);
         assert_eq!(serde_json::to_vec(&e.session.document).unwrap(), original);
@@ -261,8 +268,10 @@ fn footer_controls_edit_only_their_intended_target() {
     for _ in 0..3 {
         render(&ctx, &mut e, 1440., vec![]);
     }
-    click(&ctx, &mut e, 1440., "footer-priority");
-    assert!(!e.shell.preview_ui && e.shell.properties && e.video.properties_priority);
+    click(&ctx, &mut e, 1440., "footer-follow");
+    assert!(!e.video.follow_playhead);
+    e.shell.preview_ui = false;
+    e.video.properties_priority = true;
     e.path = Some(PathBuf::from("footer-video.vclip"));
     e.switch_session(
         Session::new(Document::blank(320, 180).unwrap()).unwrap(),

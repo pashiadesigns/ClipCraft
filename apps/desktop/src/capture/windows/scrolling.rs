@@ -149,11 +149,23 @@ pub(super) fn record(
             right: origin[0] + size[0] as i32,
             bottom: origin[1] + size[1] as i32,
         })?;
+        // BB2: automatic scrolling wheels over the right edge of the selected
+        // area, where page hover effects (links, expanding boxes) are least
+        // likely, rather than over its center.
+        let edge = POINT {
+            x: origin[0] + size[0] as i32 - 6,
+            y: center.y,
+        };
+        let park = if size[0] > 40 && GetAncestor(WindowFromPoint(edge), GA_ROOT) == target {
+            edge
+        } else {
+            center
+        };
         let mut cursor = POINT::default();
         GetCursorPos(&mut cursor);
         let mut cursor_guard = AutoCursor {
             original: cursor,
-            placed: center,
+            placed: park,
             enabled: false,
         };
         let mut stitch = None::<Stitcher>;
@@ -262,7 +274,7 @@ pub(super) fn record(
                 countdown = None;
                 if GetForegroundWindow() != target || IsIconic(target) != 0 {
                     status = "Activate the selected window, then click Record again.".into();
-                } else if SetCursorPos(center.x, center.y) == 0 {
+                } else if SetCursorPos(park.x, park.y) == 0 {
                     status = "Cannot position automatic scrolling. Switch to Manual.".into();
                 } else {
                     cursor_guard.enabled = true;
@@ -307,8 +319,8 @@ pub(super) fn record(
                             .into();
                 } else if automatic
                     && (GetForegroundWindow() != target
-                        || p.x.abs_diff(center.x) > 4
-                        || p.y.abs_diff(center.y) > 4)
+                        || p.x.abs_diff(park.x) > 4
+                        || p.y.abs_diff(park.y) > 4)
                 {
                     running = false;
                     status="Automatic scrolling stopped: focus or pointer changed. Click Record to resume.".into();

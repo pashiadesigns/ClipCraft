@@ -1,5 +1,6 @@
 //! Non-ribbon navigation and settings styling. Ribbon defaults remain untouched.
 use crate::egui;
+use crate::tips::Tip as _;
 use egui::{Color32, FontId, Response, RichText, Sense, Stroke};
 
 pub(crate) const RULE: Color32 = Color32::from_rgb(81, 92, 96);
@@ -84,7 +85,7 @@ pub(crate) fn tab(
             egui::StrokeKind::Inside,
         );
     }
-    response.on_hover_text(label)
+    response.tip_title(label)
 }
 pub(crate) fn heading(ui: &mut egui::Ui, glyph: &str, label: &str) {
     ui.add_space(10.);
@@ -115,5 +116,5 @@ pub(crate) fn setting(
         );
         response = Some(crate::controls::toggle(ui, value, ""));
     });
-    response.unwrap().on_hover_text(label)
+    response.unwrap().tip_title(label)
 }

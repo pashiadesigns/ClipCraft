@@ -1,5 +1,6 @@
 //! Image and video panes share the same visual structure, while their content
 //! remains contextual. Presentation choices are session-only and never Undo.
+use crate::tips::Tip as _;
 use crate::video_editor::property_design as design;
 use crate::{Annotation, Editor, Kind, egui};
 
@@ -10,6 +11,17 @@ enum Tab {
     Text,
     Image,
     Layout,
+}
+/// A Help picture of this object's Image tab.
+#[cfg(test)]
+pub(crate) fn show_image_tab(ctx: &egui::Context, a: &crate::Annotation) {
+    let context = Some((a.kind as u8, a.is_image_frame()));
+    ctx.data_mut(|d| {
+        d.insert_temp(
+            egui::Id::unique(("image-properties-tab", context)),
+            Tab::Image,
+        )
+    });
 }
 impl Tab {
     fn label(self) -> &'static str {
@@ -30,6 +42,9 @@ impl Tab {
     }
 }
 pub(crate) fn identity(a: &Annotation) -> (&'static str, &'static str) {
+    if a.focus.and_then(|f| f.magnify).is_some() {
+        return ("Magnify", "Magnify");
+    }
     if a.focus.is_some() {
         return ("Focus", "Focus");
     }
@@ -51,6 +66,32 @@ pub(crate) fn identity(a: &Annotation) -> (&'static str, &'static str) {
         Kind::Blur => ("Obfuscate", "Blur"),
         Kind::Pixelate => ("Obfuscate", "Pixelate"),
         _ => ("Shape", "Shape"),
+    }
+}
+/// Marker size and Step label, shared by the image and video panes.
+pub(crate) fn marker_fields(ui: &mut egui::Ui, a: &mut Annotation, canvas: [u32; 2]) {
+    let (lo, hi) = a.body_bounds();
+    let mut size = hi[0] - lo[0];
+    if crate::property_layout::slider(
+        ui,
+        "Marker size",
+        egui::Slider::new(&mut size, 1. ..=16384.).logarithmic(true),
+    )
+    .changed()
+        && let Ok(next) = capture_core::steps::resized_marker(a, size, canvas)
+    {
+        *a = next;
+    }
+    if let Some(t) = &mut a.text {
+        ui.horizontal(|ui| {
+            ui.label("Step label");
+            ui.add_sized(
+                [90., 28.],
+                crate::unicode_input::TextEdit::singleline(&mut t.content)
+                    .char_limit(8)
+                    .align(egui::Align2::CENTER_CENTER),
+            );
+        });
     }
 }
 impl Editor {
@@ -148,13 +189,22 @@ impl Editor {
                                 14.,
                             ));
                             ui.label(
-                                egui::RichText::new(kind)
-                                    .size(12.)
-                                    .color(crate::panel_ui::MUTED),
+                                egui::RichText::new(if self.mixed_selection() {
+                                    "Mixed"
+                                } else {
+                                    kind
+                                })
+                                .size(12.)
+                                .color(crate::panel_ui::MUTED),
                             );
                         });
                     });
                 });
+            if self.mixed_selection() {
+                egui::Frame::new()
+                    .inner_margin(egui::Margin::symmetric(12, 0))
+                    .show(ui, |ui| self.mixed_chips(ui));
+            }
             let mut tabs = vec![Tab::Style];
             if a.focus.is_none() && !a.is_image_frame() && (a.text.is_some() || a.is_shape()) {
                 tabs.push(Tab::Text);
@@ -167,7 +217,7 @@ impl Editor {
             }
             tabs.push(Tab::Layout);
             if !self.selection_same_kind() {
-                tabs = vec![Tab::Layout];
+                tabs = vec![Tab::Style, Tab::Layout];
             }
             if !tabs.contains(&tab) {
                 tab = tabs[0];
@@ -344,6 +394,10 @@ impl Editor {
         }
     }
     fn image_style_groups(&mut self, ui: &mut egui::Ui) {
+        if self.mixed_selection() {
+            self.mixed_style_groups(ui);
+            return;
+        }
         let Some(mut a) = self.selected_annotation() else {
             return;
         };
@@ -369,96 +423,10 @@ impl Editor {
         // A preset may have replaced the selection in this very frame.
         a = self.selected_annotation().unwrap_or(a);
         let before = a.clone();
-        if a.kind == Kind::Step {
-            design::heading(ui, "Steps", "Marker");
-            let (lo, hi) = a.body_bounds();
-            let mut size = hi[0] - lo[0];
-            if crate::property_layout::slider(
-                ui,
-                "Marker size",
-                egui::Slider::new(&mut size, 1. ..=16384.).logarithmic(true),
-            )
-            .changed()
-                && let Ok(next) = capture_core::steps::resized_marker(
-                    &a,
-                    size,
-                    [self.session.document.width, self.session.document.height],
-                )
-            {
-                a = next;
-            }
-            if let Some(t) = &mut a.text {
-                ui.horizontal(|ui| {
-                    ui.label("Step label");
-                    ui.add_sized(
-                        [90., 28.],
-                        crate::unicode_input::TextEdit::singleline(&mut t.content)
-                            .char_limit(8)
-                            .align(egui::Align2::CENTER_CENTER),
-                    );
-                });
-            }
-            self.step_properties(ui);
-            design::end(ui);
-        }
-        if matches!(a.kind, Kind::Redact | Kind::Blur | Kind::Pixelate) {
-            design::heading(ui, "Sensitive search", "Privacy & Security");
-        } else {
-            design::heading(ui, "Palette", "Color & outline");
-        }
+        let canvas = [self.session.document.width, self.session.document.height];
         match a.kind {
-            Kind::Rectangle | Kind::Ellipse | Kind::Polygon => {
-                crate::shape_properties::show(ui, &mut a)
-            }
-            Kind::Image => {
-                if a.image.as_ref().is_some_and(|b| b.vector().is_some()) {
-                    crate::image_frame::properties_content(ui, &mut a, false);
-                }
-                crate::property_layout::slider(
-                    ui,
-                    "Opacity",
-                    egui::Slider::new(&mut a.color[3], 0..=255),
-                );
-            }
-            Kind::Callout => {
-                crate::property_layout::color_row(ui, 5, |ui| {
-                    if let Some(c) = &mut a.callout {
-                        crate::property_layout::swatch(ui, "Fill", &mut c.fill);
-                        crate::property_layout::swatch(ui, "Outline", &mut c.outline);
-                    }
-                    crate::text_properties::color_swatch(ui, &mut a.text, a.color);
-                });
-                crate::property_layout::slider(
-                    ui,
-                    "Outline width",
-                    egui::Slider::new(&mut a.width, 1..=32),
-                );
-                crate::line_properties::outline(ui, &mut a);
-            }
-            Kind::Text => crate::text_properties::show(ui, &mut a),
-            Kind::Step => {
-                let mut stroke = a.step_outline.clone().unwrap_or_default();
-                let original = stroke.color;
-                crate::property_layout::color_row(ui, 5, |ui| {
-                    crate::property_layout::swatch(ui, "Fill", &mut a.color);
-                    crate::property_layout::swatch(ui, "Outline", &mut stroke.color);
-                    let ink = capture_core::steps::foreground(&a).color;
-                    crate::text_properties::color_swatch(ui, &mut a.text, ink);
-                });
-                let mut outline = a.step_outline.is_some() || stroke.color != original;
-                crate::controls::toggle(ui, &mut outline, "Show outline");
-                if outline {
-                    crate::property_layout::slider(
-                        ui,
-                        "Outline width",
-                        egui::Slider::new(&mut stroke.width, 0. ..=32.),
-                    );
-                    a.step_outline = Some(stroke);
-                } else {
-                    a.step_outline = None;
-                }
-            }
             Kind::Redact | Kind::Blur | Kind::Pixelate => {
+                design::heading(ui, "Sensitive search", "Privacy & Security");
                 crate::obscure_properties::show(ui, &mut a);
                 if a.kind == Kind::Redact {
                     crate::controls::toggle(
@@ -478,14 +446,26 @@ impl Editor {
                 {
                     self.open_privacy_review();
                 }
+                design::end(ui);
             }
-            _ => {
-                if a.kind != Kind::Eraser {
-                    ui.horizontal(|ui| crate::property_layout::swatch(ui, "Color", &mut a.color));
+            Kind::Image => {
+                design::heading(ui, "Style", "Appearance");
+                if a.image.as_ref().is_some_and(|b| b.vector().is_some()) {
+                    crate::image_frame::properties_content(ui, &mut a, false);
                 }
                 crate::property_layout::slider(
                     ui,
-                    "Width",
+                    "Opacity",
+                    egui::Slider::new(&mut a.color[3], 0..=255),
+                );
+                crate::shadow_properties::show(ui, &mut a);
+                design::end(ui);
+            }
+            Kind::Eraser => {
+                design::heading(ui, "Style", "Appearance");
+                crate::property_layout::slider(
+                    ui,
+                    "Thickness",
                     egui::Slider::new(&mut a.width, 1..=32),
                 );
                 crate::property_layout::slider(
@@ -493,42 +473,28 @@ impl Editor {
                     "Opacity",
                     egui::Slider::new(&mut a.color[3], 0..=255),
                 );
-                crate::line_properties::show(ui, &mut a);
+                crate::controls::toggle(ui, &mut a.hard_edge, "Hard edge");
+                design::end(ui);
+            }
+            _ => {
+                // Properties audit: one Appearance group, shared with video.
+                design::heading(ui, "Style", "Appearance");
+                crate::appearance::show(ui, &mut a);
+                design::end(ui);
             }
         }
-        design::end(ui);
-        if !matches!(
-            a.kind,
-            Kind::Redact | Kind::Blur | Kind::Pixelate | Kind::Eraser
-        ) {
-            design::group(
-                ui,
-                "Style",
-                "Appearance",
-                if a.shadow.is_some() {
-                    "Shadow on"
-                } else {
-                    "No shadow"
-                },
-                |ui| {
-                    if matches!(a.kind, Kind::Rectangle | Kind::Callout) {
-                        let max = a.max_corner_radius();
-                        crate::property_layout::slider(
-                            ui,
-                            "Corner radius",
-                            egui::Slider::new(&mut a.corner_radius, 0. ..=max),
-                        );
-                    }
-                    crate::shadow_properties::show(ui, &mut a);
-                },
-            );
+        if a.kind == Kind::Step {
+            design::heading(ui, "Steps", "Marker");
+            marker_fields(ui, &mut a, canvas);
+            self.step_properties(ui);
+            design::end(ui);
         }
         if a != before {
             self.update_text_sidebar(a, false);
         }
     }
     pub(crate) fn image_text_groups(&mut self, ui: &mut egui::Ui) {
-        let Some(mut a) = self.selected_annotation() else {
+        let Some(a) = self.selected_annotation() else {
             return;
         };
         if a.text.is_none() {
@@ -537,26 +503,10 @@ impl Editor {
             }
             return;
         }
-        design::heading(ui, "Text", "Font");
+        // Properties audit: Font and Paragraph form one Text group; colors and
+        // text stroke live in Appearance; fitting has its own group.
+        design::heading(ui, "Text", "Text");
         self.show_font_controls(ui, true);
-        let Some(current) = self.selected_annotation() else {
-            return;
-        };
-        a = current;
-        let before = a.clone();
-        crate::property_layout::color_row(ui, 3, |ui| {
-            let ink = if a.kind == Kind::Step {
-                capture_core::steps::foreground(&a).color
-            } else {
-                a.color
-            };
-            crate::text_properties::color_swatch(ui, &mut a.text, ink);
-        });
-        if a != before {
-            self.update_text_sidebar(a, false);
-        }
-        design::end(ui);
-        design::heading(ui, "Align left", "Paragraph");
         self.common_paragraph_controls(ui);
         self.show_justification_grid(ui);
         if let Some(mut a) = self.selected_annotation() {
@@ -601,28 +551,25 @@ impl Editor {
                         p.after = after;
                     });
                 }
-                crate::controls::toggle(ui, &mut s.wrap, "Wrap text");
             }
             if a != before {
                 self.update_text_sidebar(a, false);
             }
         }
         self.rich_text_buttons(ui);
+        let step = a.kind == Kind::Step;
+        if step {
+            // Step labels are sized by the marker, so steps have no Text fitting.
+            self.caret_formatting_toggle(ui);
+        }
         design::end(ui);
-        design::group(ui, "Motion", "Text effects", "Text stroke & shadow", |ui| {
-            if let Some(mut a) = self.selected_annotation() {
-                let before = a.clone();
-                crate::text_properties::outline_controls(ui, &mut a);
-                crate::shadow_properties::show(ui, &mut a);
-                if a != before {
-                    self.update_text_sidebar(a, false);
-                }
-            }
-        });
+        if step {
+            return;
+        }
         design::group(
             ui,
             "Text",
-            "Editing & fit",
+            "Text fitting",
             if self.rich_text.caret_formatting {
                 "Typing at caret"
             } else {
@@ -692,6 +639,14 @@ impl Editor {
                 }
             }
             design::end(ui);
+            if let Some(b) = a.image.clone() {
+                let mut finish = b.finish().copied().unwrap_or_default();
+                let old = finish;
+                crate::finish_ui::finish_controls(ui, &mut finish, crate::finish_ui::Place::Pane);
+                if finish != old {
+                    a.image = Some(std::sync::Arc::new(b.with_finish(Some(finish))));
+                }
+            }
             if a != before {
                 self.preview_property_edit_with_rotation(a, false);
             }
@@ -753,9 +708,7 @@ impl Editor {
                 ui.available_width(),
                 false,
             )
-            .on_hover_text(
-                "Restore the position and size from when Layout was first opened for this object.",
-            )
+            .tip("Restore the position and size from when Layout was first opened for this object.")
             .clicked()
             {
                 a.start = original.start;
@@ -800,7 +753,7 @@ impl Editor {
                         width,
                         false,
                     )
-                    .on_hover_text(label)
+                    .tip_title(label)
                     .clicked()
                     {
                         self.begin_image_transform(action);
@@ -831,7 +784,7 @@ impl Editor {
                                     ["Align top", "Align middle", "Align bottom"],
                                 ][axis][anchor];
                                 if crate::video_editor::ui::button(ui, label, "", 32., false)
-                                    .on_hover_text(label)
+                                    .tip_title(label)
                                     .clicked()
                                 {
                                     let annotations = self

@@ -37,7 +37,12 @@ pub fn record_ui_geometry(ui: &egui::Ui) {
 use crate::egui::{
     self, Color32, CursorIcon, Pos2, Rect, ResizeDirection, Sense, Stroke, ViewportCommand,
 };
+use crate::tips::Tip as _;
 
+/// Set for one frame when the project name in the title bar is double-clicked.
+pub fn rename_request_id() -> egui::Id {
+    egui::Id::unique("title_rename_request")
+}
 pub fn title_and_controls(ui: &mut egui::Ui, title: &str) -> bool {
     let ctx = ui.ctx().clone();
     let maximized = ctx.input(|i| i.viewport().maximized.unwrap_or(false));
@@ -97,7 +102,7 @@ pub fn title_and_controls(ui: &mut egui::Ui, title: &str) -> bool {
                         .line_segment([r.left_center(), r.right_center()], stroke);
                 }
             }
-            if response.clone().on_hover_text(name).clicked() {
+            if response.clone().tip_title(name).clicked() {
                 match symbol {
                     0 => close = true,
                     1 => ctx.send_viewport_cmd(ViewportCommand::Maximized(!maximized)),
@@ -113,7 +118,7 @@ pub fn title_and_controls(ui: &mut egui::Ui, title: &str) -> bool {
             rect.min + egui::vec2(8., 0.),
             rect.max - egui::vec2(8., 0.),
         ));
-        painter.text(
+        let name = painter.text(
             rect.center(),
             egui::Align2::CENTER_CENTER,
             title,
@@ -133,7 +138,16 @@ pub fn title_and_controls(ui: &mut egui::Ui, title: &str) -> bool {
                 }
             });
         }
-        if response.double_clicked() {
+        let on_name = response
+            .interact_pointer_pos()
+            .is_some_and(|p| name.expand(4.).contains(p));
+        if response.double_clicked() && on_name {
+            // Double-clicking the project name renames it (FILE-007).
+            ctx.data_mut(|d| {
+                d.remove::<Pos2>(drag_id);
+                d.insert_temp(rename_request_id(), true);
+            });
+        } else if response.double_clicked() {
             ctx.data_mut(|d| d.remove::<Pos2>(drag_id));
             ctx.send_viewport_cmd(ViewportCommand::Maximized(!maximized));
         } else if !maximized
@@ -152,7 +166,7 @@ pub fn title_and_controls(ui: &mut egui::Ui, title: &str) -> bool {
         if maximized || !ctx.input(|i| i.focused && i.pointer.primary_down()) {
             ctx.data_mut(|d| d.remove::<Pos2>(drag_id));
         }
-        response.on_hover_text(title);
+        response.tip_title(title);
     });
     close
 }

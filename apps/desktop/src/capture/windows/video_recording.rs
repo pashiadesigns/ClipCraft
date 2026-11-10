@@ -84,7 +84,10 @@ impl Frames {
                 origin[1],
                 source[0] as i32,
                 source[1] as i32,
-                SRCCOPY | CAPTUREBLT,
+                // BA1: CAPTUREBLT makes Windows hide and redraw the live pointer on
+                // every copy (a visible blink at the recording frame rate). With DWM
+                // composition, layered windows are captured without it.
+                SRCCOPY,
             ) == 0
             {
                 return Err(win_error("Cannot capture video frame"));
@@ -133,11 +136,12 @@ pub(super) fn record(
         .tempfile_in(parent)
         .map_err(|e| format!("Cannot create video in this folder: {e}"))?
         .into_temp_path();
-    let mut encoder = Encoder::new(
+    let mut encoder = Encoder::with_bitrate(
         &temp,
         size,
         options.fps,
         options.microphone || options.system_audio,
+        options.quality.bitrate(options.fps),
     )
     .map_err(|e| format!("Cannot start the Windows MP4 encoder: {e}"))?;
     let mic = if options.microphone {
@@ -149,6 +153,21 @@ pub(super) fn record(
         Some(video_audio::Input::open(true).map_err(|e| {
             format!("Cannot open system audio. Check the default playback device: {e}")
         })?)
+    } else {
+        None
+    };
+    // AS13: the webcam opens before the countdown so its first frames are ready
+    // when the screen recording starts. A busy or missing camera never stops the
+    // screen recording; the warning says it was left out.
+    let mut webcam_warning = String::new();
+    let mut webcam = if options.webcam.enabled {
+        match Webcam::open(&options.webcam.device, parent.to_path_buf()) {
+            Ok(w) => Some(w),
+            Err(e) => {
+                webcam_warning = format!("Recorded without the webcam: {e}");
+                None
+            }
+        }
     } else {
         None
     };
@@ -182,6 +201,8 @@ pub(super) fn record(
             Caption::Video {
                 seconds: 0,
                 countdown: countdown_seconds,
+                steps: options.instruction.enabled.then_some(0),
+                webcam: webcam.is_some(),
             },
         )?;
         let mut window_frames = window.map(|_| {
@@ -191,7 +212,7 @@ pub(super) fn record(
                 origin,
                 source,
                 size,
-                options.cursor,
+                false,
                 options.fps,
             )
         });
@@ -210,6 +231,8 @@ pub(super) fn record(
                     seconds: 0,
                     countdown: countdown_seconds
                         .saturating_sub(countdown.elapsed().as_secs() as u32),
+                    steps: options.instruction.enabled.then_some(0),
+                    webcam: webcam.is_some(),
                 },
                 false,
                 false,
@@ -240,16 +263,20 @@ pub(super) fn record(
             },
             size,
             fps: options.fps,
-            bitrate: 8_000_000,
+            bitrate: options.quality.bitrate(options.fps),
             microphone: options.microphone,
             system_audio: options.system_audio,
             cursor: options.cursor,
         };
         let mut session = Session::new(config).map_err(|e| e.to_string())?;
         let mut frames = Frames::new(size)?;
+        let mut input = super::video_input::Recorder::new(
+            options.cursor || options.instruction.enabled,
+            options.instruction.enabled,
+        )?;
         let mut audio = Audio::new(mic, system, parent)?;
         let mut poster = None;
-        let mut warning = String::new();
+        let mut warning = webcam_warning;
         let mut finish = false;
         let origin_clock = now()?;
         session.start(origin_clock).map_err(|e| e.to_string())?;
@@ -298,6 +325,9 @@ pub(super) fn record(
             }
             let clock = now()?;
             let elapsed = session.elapsed(clock);
+            if let Some(w) = &webcam {
+                w.update(&session, origin_clock, clock);
+            }
             if elapsed >= 36_000_000_000 {
                 warning = "One-hour recording limit reached.".into();
                 finish = true;
@@ -318,6 +348,7 @@ pub(super) fn record(
                 }
             }
             if session.phase() == Phase::Recording {
+                input.sample(elapsed / 10_000, origin, source, size, transport.hwnd());
                 let audio_result = audio.collect(&session);
                 if let Err(e) = audio_result {
                     audio.broken = true;
@@ -347,7 +378,7 @@ pub(super) fn record(
                             Err(e) => return Err(e),
                         }
                     } else {
-                        frames.capture(origin, source, options.cursor)?
+                        frames.capture(origin, source, false)?
                     };
                     encoder
                         .video(pts, pixels)
@@ -366,13 +397,18 @@ pub(super) fn record(
                     }
                 }
             }
+            if session.phase() != Phase::Recording {
+                input.pause();
+            }
             if disk_check.elapsed() > Duration::from_secs(2) {
                 disk_check = Instant::now();
                 if free_bytes(parent)? < 128 * 1024 * 1024 {
                     warning = "Recording stopped because storage is running low.".into();
                     finish = true;
                 }
-                if std::fs::metadata(&temp).map_err(|e| e.to_string())?.len() > 4_000_000_000 {
+                if std::fs::metadata(&temp).map_err(|e| e.to_string())?.len()
+                    > video::RECORDING_LIMIT_BYTES
+                {
                     warning = "The 4 GB recording limit was reached.".into();
                     finish = true;
                 }
@@ -384,6 +420,8 @@ pub(super) fn record(
                 Caption::Video {
                     seconds: elapsed / 10_000_000,
                     countdown: 0,
+                    steps: options.instruction.enabled.then_some(input.events.len()),
+                    webcam: webcam.is_some(),
                 },
                 false,
                 poster.is_some(),
@@ -395,6 +433,25 @@ pub(super) fn record(
             audio.pause(&mut session, &mut encoder)?;
         }
         let elapsed = session.elapsed(now()?);
+        let webcam_take = match webcam.take().map(|w| w.finish((elapsed / 10_000).max(1))) {
+            Some(Ok(Some(take))) => Some(take),
+            Some(Ok(None)) => {
+                warning = "The webcam sent no frames, so the recording has no webcam clip.".into();
+                None
+            }
+            Some(Err(e)) => {
+                warning = format!(
+                    "The webcam stopped ({e}); the screen recording is complete without it."
+                );
+                None
+            }
+            None => None,
+        };
+        if warning.is_empty()
+            && let Some(advice) = session.frame_advice(options.quality)
+        {
+            warning = advice;
+        }
         session.finish().map_err(|e| e.to_string())?;
         let result = encoder.finish();
         session
@@ -425,6 +482,7 @@ pub(super) fn record(
             (elapsed / 10_000).max(1),
             options.fps,
         );
+        project.recorded_quality = Some(options.quality);
         for (index, writer) in audio.retained.iter_mut().enumerate() {
             if let Some(writer) = writer.take() {
                 let path = writer.finish().map_err(|e| {
@@ -446,7 +504,50 @@ pub(super) fn record(
             }
         }
         document.video = Some(project);
+        for path in document.video.as_ref().unwrap().media_paths() {
+            if let Err(e) =
+                capture_core::history::media_cleanup::mark_created(std::path::Path::new(path))
+            {
+                warning = format!(
+                    "Recording saved; media cleanup ownership could not be registered: {e}"
+                );
+            }
+        }
         document.canvas_behavior.dynamic_expansion = false;
+        input.poll();
+        input.fill_cursor_gaps();
+        video::instruction::apply(
+            &mut document,
+            Some(input.path.clone()),
+            &input.events,
+            &options.instruction,
+        )
+        .map_err(|e| e.to_string())?;
+        if let Some(take) = webcam_take {
+            let path = keep_webcam_clip(take.path, &request.destination);
+            let before = document.video.clone();
+            let project = document.video.as_mut().unwrap();
+            options.webcam.place(
+                project,
+                path.to_string_lossy().into_owned(),
+                take.size,
+                take.duration,
+            );
+            // The screen recording always opens; a webcam clip the project
+            // rejects is left out with the reason and its file kept (BH5).
+            if let Err(e) = document.validate() {
+                document.video = before;
+                warning = format!(
+                    "The webcam clip was left out ({e}). It is saved at {}; add it from Insert.",
+                    path.display()
+                );
+            }
+            if let Err(e) = capture_core::history::media_cleanup::mark_created(&path) {
+                warning = format!(
+                    "Recording saved; media cleanup ownership could not be registered: {e}"
+                );
+            }
+        }
         Ok(Some(super::super::Captured {
             document,
             warning,
@@ -459,6 +560,175 @@ pub(super) fn record(
             }),
         }))
     }
+}
+/// Webcam picture-in-picture during screen recording (AS13). The camera and its
+/// encoder run on their own thread so the recording loop, which also feeds the
+/// audio devices, never waits for them (BG8). Camera frames are placed on the
+/// screen recording's own timeline from a clock snapshot the loop publishes:
+/// frames from before the first screen frame are dropped and paused time is
+/// skipped, so the webcam clip starts with the screen video however long the
+/// area selection and countdown took.
+struct Webcam {
+    clock: std::sync::Arc<std::sync::Mutex<WebcamClock>>,
+    /// 0 while recording; otherwise the final duration in ms plus one, or
+    /// `u64::MAX` to discard the clip.
+    stop: std::sync::Arc<std::sync::atomic::AtomicU64>,
+    worker: Option<std::thread::JoinHandle<WebcamResult>>,
+}
+type WebcamResult = Result<Option<crate::video_editor::voiceover_capture::CameraTake>, String>;
+#[derive(Clone, Copy, Default)]
+struct WebcamClock {
+    recording: bool,
+    /// Recording clock (100 ns) of the first screen frame.
+    start: u64,
+    /// Recorded time (100 ns) at `clock`.
+    elapsed: u64,
+    clock: u64,
+}
+impl WebcamClock {
+    /// Where a frame captured at recording-clock time `at` falls in the recording.
+    fn position(&self, at: i128) -> Option<u64> {
+        (self.recording && at >= self.start as i128)
+            .then(|| (self.elapsed as i128 + at - self.clock as i128).max(0) as u64)
+    }
+}
+impl Webcam {
+    fn open(device: &str, folder: std::path::PathBuf) -> Result<Self, String> {
+        use crate::video_editor::camera;
+        use std::sync::atomic::Ordering;
+        let clock = std::sync::Arc::new(std::sync::Mutex::new(WebcamClock::default()));
+        let stop = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0));
+        let (ready_tx, ready) = std::sync::mpsc::channel();
+        let (shared, stopping, device) = (clock.clone(), stop.clone(), device.to_owned());
+        let worker = std::thread::spawn(move || -> WebcamResult {
+            let _runtime = Runtime::new().map_err(|e| e.to_string())?;
+            let opened = (|| -> Result<_, String> {
+                let devices = camera::devices()?;
+                let id = devices
+                    .iter()
+                    .find(|(id, _)| *id == device)
+                    .or_else(|| devices.first())
+                    .map(|(id, _)| id.clone())
+                    .ok_or("no camera is connected")?;
+                let source = camera::Source::open(&id, 720)?;
+                let offset = camera::clock() as i128 - now()? as i128;
+                Ok((source, offset))
+            })();
+            let (mut source, offset) = match opened {
+                Ok(v) => {
+                    let _ = ready_tx.send(Ok(()));
+                    v
+                }
+                Err(e) => {
+                    let _ = ready_tx.send(Err(e.clone()));
+                    return Err(e);
+                }
+            };
+            let mut recording: Option<camera::Recording> = None;
+            loop {
+                let stopped = stopping.load(Ordering::Acquire);
+                if stopped == u64::MAX {
+                    return Ok(None);
+                }
+                while let Some((at, pixels)) = source.poll()? {
+                    let snapshot = *shared.lock().map_err(|_| "webcam clock poisoned")?;
+                    let Some(position) = snapshot.position(at as i128 - offset) else {
+                        continue;
+                    };
+                    match &mut recording {
+                        Some(r) => r.push(position, pixels)?,
+                        None => {
+                            let mut r =
+                                camera::Recording::new(&folder, source.size, 0, pixels.clone())?;
+                            r.push(position, pixels)?;
+                            recording = Some(r);
+                        }
+                    }
+                }
+                if stopped != 0 {
+                    return recording.map(|r| r.finish(stopped - 1)).transpose();
+                }
+                std::thread::sleep(Duration::from_millis(4));
+            }
+        });
+        match ready.recv_timeout(Duration::from_secs(10)) {
+            Ok(Ok(())) => Ok(Self {
+                clock,
+                stop,
+                worker: Some(worker),
+            }),
+            Ok(Err(e)) => Err(e),
+            Err(_) => {
+                stop.store(u64::MAX, Ordering::Release);
+                Err("the camera did not respond".into())
+            }
+        }
+    }
+    /// Publishes the recording clock for the webcam thread.
+    fn update(&self, session: &Session, start: u64, clock: u64) {
+        if let Ok(mut c) = self.clock.lock() {
+            *c = WebcamClock {
+                recording: session.phase() == Phase::Recording,
+                start,
+                elapsed: session.elapsed(clock),
+                clock,
+            };
+        }
+    }
+    /// Stops the webcam thread and returns its clip, `duration` ms long.
+    fn finish(mut self, duration: u64) -> WebcamResult {
+        self.stop
+            .store(duration.max(1) + 1, std::sync::atomic::Ordering::Release);
+        self.worker.take().map_or(Ok(None), |w| {
+            w.join()
+                .map_err(|_| "the webcam thread stopped".to_string())?
+        })
+    }
+}
+impl Drop for Webcam {
+    fn drop(&mut self) {
+        // A cancelled recording discards the webcam clip.
+        if self.worker.is_some() {
+            self.stop
+                .store(u64::MAX, std::sync::atomic::Ordering::Release);
+        }
+    }
+}
+#[test]
+fn webcam_frames_land_on_the_recording_timeline_and_skip_pauses() {
+    let c = WebcamClock {
+        recording: true,
+        start: 1_000,
+        elapsed: 50_000,
+        clock: 60_000,
+    };
+    assert_eq!(c.position(500), None, "before the first screen frame");
+    assert_eq!(c.position(70_000), Some(60_000));
+    assert_eq!(c.position(55_000), Some(45_000));
+    let paused = WebcamClock {
+        recording: false,
+        ..c
+    };
+    assert_eq!(paused.position(70_000), None, "paused time is skipped");
+}
+/// Moves the finished webcam clip next to the recording as `<name>-webcam.mp4`.
+fn keep_webcam_clip(path: std::path::PathBuf, destination: &std::path::Path) -> std::path::PathBuf {
+    let stem = destination
+        .file_stem()
+        .map_or_else(|| "recording".into(), |s| s.to_string_lossy().into_owned());
+    let folder = destination.parent().unwrap_or(std::path::Path::new("."));
+    for n in 0..100 {
+        let name = if n == 0 {
+            format!("{stem}-webcam.mp4")
+        } else {
+            format!("{stem}-webcam-{n}.mp4")
+        };
+        let target = folder.join(name);
+        if !target.exists() && std::fs::rename(&path, &target).is_ok() {
+            return target;
+        }
+    }
+    path
 }
 /// Audio is flushed through the pause boundary before device queues are reset.
 /// Both devices always advance against one output sample cursor, including silence.

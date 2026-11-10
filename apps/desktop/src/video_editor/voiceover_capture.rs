@@ -12,7 +12,7 @@ pub(super) enum Event {
     Take(Take),
     Error(String),
 }
-pub(super) struct CameraTake {
+pub(crate) struct CameraTake {
     pub path: PathBuf,
     pub size: [u32; 2],
     pub duration: u64,
@@ -328,7 +328,7 @@ pub(super) fn devices() -> mpsc::Receiver<Result<Vec<(String, String)>, String>>
     rx
 }
 
-pub(super) fn cameras() -> mpsc::Receiver<Result<Vec<(String, String)>, String>> {
+pub(crate) fn cameras() -> mpsc::Receiver<Result<Vec<(String, String)>, String>> {
     let (tx, rx) = mpsc::channel();
     std::thread::spawn(move || {
         #[cfg(windows)]

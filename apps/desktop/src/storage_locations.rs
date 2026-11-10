@@ -1,3 +1,4 @@
+use crate::tips::Tip as _;
 use crate::{Editor, egui};
 use capture_core::quick_preferences::{Choice, Folder};
 use std::path::PathBuf;
@@ -68,7 +69,7 @@ impl Editor {
                     .map(|p| p.display().to_string())
                     .unwrap_or_else(|| "Not configured".into());
                 ui.add_sized([width, 28.], egui::Label::new(&text).truncate())
-                    .on_hover_text(&text);
+                    .tip(&text);
                 if ui
                     .add_sized([80., 28.], egui::Button::new("Browse…"))
                     .clicked()

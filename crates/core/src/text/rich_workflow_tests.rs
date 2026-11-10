@@ -117,7 +117,7 @@ fn privacy_suggestions_apply_atomically_and_keep_originals_only_in_project() {
     let original = serde_json::to_vec(&d).unwrap();
     let mut session = Session::new(d.clone()).unwrap();
     session
-        .execute(crate::privacy::redact(&d, findings))
+        .execute(crate::privacy::cover(&d, findings, crate::Kind::Redact, 1))
         .unwrap();
     assert_eq!(
         session.document.annotations.last().unwrap().kind,

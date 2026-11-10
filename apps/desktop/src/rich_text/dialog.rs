@@ -505,7 +505,7 @@ fn style_fields(ui: &mut egui::Ui, state: &mut State) {
                 MUTED,
             );
         } else {
-            response.clone().on_hover_text(detail);
+            response.clone().tip(detail);
         }
         response
             .widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, preset.label()));
@@ -759,7 +759,7 @@ fn icon_button(ui: &mut egui::Ui, name: &str, label: &str, selected: bool) -> eg
     let response = ui.add_sized([30., 28.], egui::Button::new("").selected(selected));
     icon(ui, response.rect.center(), name);
     response.widget_info(|| egui::WidgetInfo::selected(egui::Role::Button, true, selected, label));
-    response.on_hover_text(label)
+    response.tip_title(label)
 }
 fn icon(ui: &egui::Ui, center: egui::Pos2, name: &str) {
     let px = (16. * ui.ctx().pixels_per_point()).round().clamp(16., 128.) as u16;

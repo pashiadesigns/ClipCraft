@@ -13,6 +13,7 @@ fn annotation() -> Annotation {
         focus: None,
 
         highlighter_rect: false,
+        hard_edge: false,
         group: None,
         rotation_degrees: 0.0,
         mirror_x: false,
@@ -30,6 +31,8 @@ fn annotation() -> Annotation {
         fill: None,
         points: Vec::new(),
         callout: Some(CalloutStyle {
+            shape: Default::default(),
+            tail: Default::default(),
             fill: [200, 40, 80, 128],
             outline: [10, 60, 120, 255],
             pointer: [50.0, 100.0],
@@ -179,4 +182,44 @@ fn tiny_fractional_bodies_and_coincident_pointer_render_without_panics() {
             doc.render().unwrap();
         }
     }
+}
+
+#[test]
+fn oval_cloud_and_bubble_callouts_follow_their_shape() {
+    use crate::callout::{CalloutShape as S, CalloutTail as T};
+    let with = |shape, tail| {
+        let mut doc = Document::canvas(128, 128, [0; 4]).unwrap();
+        let mut a = annotation();
+        let style = a.callout.as_mut().unwrap();
+        style.shape = shape;
+        style.tail = tail;
+        style.fill[3] = 255;
+        doc.annotations.push(a);
+        doc
+    };
+    // The corner of the box is empty for rounded bodies and filled for a box.
+    let corner = |doc: &Document| doc.render().unwrap().get_pixel(23, 23).0[3];
+    assert_ne!(corner(&with(S::Box, T::Wedge)), 0);
+    assert_eq!(corner(&with(S::Oval, T::Wedge)), 0);
+    assert_eq!(corner(&with(S::Cloud, T::Wedge)), 0);
+    for shape in [S::Oval, S::Cloud] {
+        let doc = with(shape, T::Wedge);
+        // Inside the wedge, below the body.
+        assert_ne!(doc.render().unwrap().get_pixel(53, 76).0[3], 0, "{shape:?}");
+    }
+    let bubbles = with(S::Oval, T::Bubbles);
+    let a = &bubbles.annotations[0];
+    let trail = a.callout_bubbles();
+    assert_eq!(trail.len(), 3);
+    assert!(trail[0].1 > trail[2].1);
+    let image = bubbles.render().unwrap();
+    let c = trail[1].0;
+    assert_ne!(image.get_pixel(c[0] as u32, c[1] as u32).0[3], 0);
+    assert!(a.hit_test(c, 0.));
+    // Saved projects from before these styles still mean a box and wedge.
+    let plain: CalloutStyle = serde_json::from_str(
+        r#"{"fill":[0,0,0,0],"outline":[0,0,0,0],"pointer":[0,0],"padding":0}"#,
+    )
+    .unwrap();
+    assert_eq!((plain.shape, plain.tail), (S::Box, T::Wedge));
 }

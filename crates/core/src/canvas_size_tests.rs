@@ -93,6 +93,7 @@ fn canvas_preserves_editable_styles_and_pointer_geometry_then_reverts_original_a
         focus: None,
 
         highlighter_rect: false,
+        hard_edge: false,
         group: None,
         rotation_degrees: 0.0,
         mirror_x: false,
@@ -110,6 +111,8 @@ fn canvas_preserves_editable_styles_and_pointer_geometry_then_reverts_original_a
         fill: None,
         points: Vec::new(),
         callout: Some(crate::callout::CalloutStyle {
+            shape: Default::default(),
+            tail: Default::default(),
             pointer: [110.0, 80.0],
             fill: [200, 220, 240, 160],
             outline: [20, 40, 60, 255],
@@ -168,6 +171,7 @@ fn canvas_invalid_inputs_clipped_objects_and_noop_preserve_saved_state_and_redo(
         focus: None,
 
         highlighter_rect: false,
+        hard_edge: false,
         group: None,
         rotation_degrees: 0.0,
         mirror_x: false,
@@ -229,6 +233,7 @@ fn repeated_canvas_edits_use_current_pixels_while_history_shares_rasters() {
                 focus: None,
 
                 highlighter_rect: false,
+                hard_edge: false,
                 group: None,
                 rotation_degrees: 0.0,
                 mirror_x: false,

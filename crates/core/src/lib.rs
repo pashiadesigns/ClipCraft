@@ -29,6 +29,8 @@ pub mod editor_keybinds;
 pub mod ellipse;
 pub mod export;
 pub mod focus;
+pub mod gif_studio;
+pub mod group_presets;
 pub mod groups;
 pub mod guide_sections;
 pub mod history;
@@ -36,7 +38,9 @@ pub mod icon_library;
 pub mod image_frame;
 pub mod image_transform;
 pub mod keybinds;
-mod obscure;
+pub mod magnified;
+pub mod obscure;
+pub mod picture_finish;
 pub mod privacy;
 pub mod project_file;
 pub mod redaction_labels;
@@ -67,6 +71,7 @@ pub mod line_style;
 pub mod multi_selection;
 pub mod object_state;
 pub mod object_styles;
+pub mod palettes;
 pub mod polygon;
 pub mod quick_preferences;
 #[cfg(test)]
@@ -92,7 +97,10 @@ pub mod text;
 mod text_fit_tests;
 #[cfg(test)]
 mod text_padding_tests;
+pub mod tilt;
 pub mod toolbar;
+pub mod vector_import;
+pub mod watermark;
 const MAX_FILE_BYTES: u64 = 160_000_000;
 
 #[derive(Debug, thiserror::Error)]
@@ -136,6 +144,9 @@ pub struct Annotation {
     pub focus: Option<focus::Focus>,
     #[serde(default, skip_serializing_if = "text::is_false")]
     pub highlighter_rect: bool,
+    /// Eraser only: no soft edge.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub hard_edge: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub image: Option<std::sync::Arc<bitmap::Bitmap>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -292,6 +303,21 @@ impl Document {
         if fs::metadata(path)?.len() > MAX_FILE_BYTES {
             return Err(Error::Invalid("Image file is too large".into()));
         }
+        // SVG and EPS open as finished images (EDIT-084); Insert keeps SVG sharp.
+        match path
+            .extension()
+            .and_then(|e| e.to_str())
+            .map(str::to_ascii_lowercase)
+            .as_deref()
+        {
+            Some("svg") => {
+                let text = fs::read_to_string(path)?;
+                let size = vector_import::svg_size(&text)?;
+                return Self::from_image(vector_import::render_svg(&text, size, None)?);
+            }
+            Some("eps") => return Self::from_image(vector_import::eps_image(&fs::read(path)?)?.0),
+            _ => {}
+        }
         let (width, height) = image::image_dimensions(path)?;
         validate_dimensions(width, height)?;
         Self::from_image(image::open(path)?.into_rgba8())
@@ -310,6 +336,29 @@ impl Document {
             ));
         }
         validate_dimensions(self.width, self.height)?;
+        if let Some(tilt) = &self.canvas_behavior.perspective {
+            if self.video.is_some() {
+                return Err(Error::Invalid(
+                    "Whole-image perspective is for images. Use perspective on image clips instead."
+                        .into(),
+                ));
+            }
+            tilt.validate()?;
+        }
+        if let Some(finish) = &self.canvas_behavior.finish {
+            if self.video.is_some() {
+                return Err(Error::Invalid(
+                    "Filters and border for the whole picture are for images. Use them on clips instead."
+                        .into(),
+                ));
+            }
+            finish.validate()?;
+        }
+        for a in &self.annotations {
+            if let Some(finish) = a.image.as_ref().and_then(|b| b.finish()) {
+                finish.validate()?;
+            }
+        }
 
         if let Some(v) = &self.video {
             v.validate(self)?;
@@ -503,6 +552,9 @@ impl Document {
                     (2..=8192).contains(&annotation.points.len())
                 }
                 Kind::Polygon => (3..=64).contains(&annotation.points.len()),
+                Kind::Blur | Kind::Pixelate => {
+                    annotation.points.is_empty() || (3..=8192).contains(&annotation.points.len())
+                }
                 _ => annotation.points.is_empty(),
             };
             if !valid_path {
@@ -590,7 +642,20 @@ impl Document {
         }
     }
 
+    /// The finished image, including a whole-image perspective (FX-003).
     pub fn render(&self) -> Result<RgbaImage> {
+        let mut flat = self.render_flat()?;
+        if let Some(finish) = &self.canvas_behavior.finish {
+            let frame = [0., 0., flat.width() as f32, flat.height() as f32];
+            finish.apply(&mut flat, frame, 1.);
+        }
+        match &self.canvas_behavior.perspective {
+            Some(tilt) => tilt::apply(&flat, tilt),
+            None => Ok(flat),
+        }
+    }
+    /// The finished image before any whole-image perspective.
+    pub fn render_flat(&self) -> Result<RgbaImage> {
         let mut image = self.base_image()?;
         if (!self.canvas_behavior.page_owners.is_empty()
             || self.annotations.iter().any(|a| a.focus.is_some()))
@@ -612,23 +677,31 @@ impl Document {
                         .filter(|a| g.page_at(a.start) == page)
                         .cloned(),
                 );
-                for a in crate::canvas_expansion::translated(&objects, [-(x as f32), -(y as f32)])?
-                {
-                    render_annotation(&mut pixels, &a);
+                let objects =
+                    crate::canvas_expansion::translated(&objects, [-(x as f32), -(y as f32)])?;
+                let backdrop = focus::Backdrop::new(&objects);
+                for a in &objects {
+                    if !backdrop.render(&mut pixels, a) {
+                        render_annotation(&mut pixels, a);
+                    }
                 }
                 image::imageops::replace(&mut image, &pixels, x as i64, y as i64);
             }
             return Ok(image);
         }
-        for annotation in self
+        let mut objects: Vec<Annotation> = self
             .annotations
             .iter()
             .filter(|a| self.object_visible(a.id))
-        {
-            render_annotation(&mut image, annotation);
-        }
-        for a in self.page_furniture() {
-            render_annotation(&mut image, &a);
+            .cloned()
+            .collect();
+        objects.extend(self.page_furniture());
+        // Overlapping Focus effects share one backdrop (BJ).
+        let backdrop = focus::Backdrop::new(&objects);
+        for a in &objects {
+            if !backdrop.render(&mut image, a) {
+                render_annotation(&mut image, a);
+            }
         }
         Ok(image)
     }
@@ -812,6 +885,11 @@ fn atomic_write(path: &Path, bytes: &[u8]) -> Result<()> {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "command", rename_all = "snake_case")]
 pub enum Command {
+    /// Atomic timeline composition edit, including editable generated objects.
+    VideoComposition {
+        project: video::editor::Project,
+        annotations: Vec<Annotation>,
+    },
     /// Place objects with session motion defaults as one undoable action.
     AddTimed {
         annotations: Vec<Annotation>,
@@ -921,11 +999,15 @@ pub enum Command {
         axis: cut_out::CutAxis,
         start: u32,
         end: u32,
+        #[serde(default)]
+        edge: cut_out::EdgeShape,
     },
     CutOutPages {
         axis: cut_out::CutAxis,
         start: u32,
         end: u32,
+        #[serde(default)]
+        edge: cut_out::EdgeShape,
         page: usize,
         all_pages: bool,
     },
@@ -935,6 +1017,14 @@ pub enum Command {
     },
     SetCanvasExpansion {
         enabled: bool,
+    },
+    /// Whole-image perspective (FX-003); `None` lays the image flat.
+    /// Filters, border and edge for the whole picture.
+    SetFinish {
+        finish: Option<picture_finish::Finish>,
+    },
+    SetPerspective {
+        tilt: Option<tilt::Tilt>,
     },
     /// Crop the canvas in one reversible operation.
     CropImage {
@@ -1072,6 +1162,23 @@ pub struct Session {
 }
 
 impl Session {
+    /// Retain dependencies referenced by live edits, including Undo and Redo.
+    pub fn retained_media(&self) -> Vec<std::path::PathBuf> {
+        self.document
+            .video
+            .iter()
+            .chain(
+                self.undo
+                    .iter()
+                    .chain(&self.redo)
+                    .chain(self.gesture.iter())
+                    .chain(self.saved_state.iter())
+                    .filter_map(|s| s.video.as_ref()),
+            )
+            .flat_map(|v| v.media_paths())
+            .map(std::path::PathBuf::from)
+            .collect()
+    }
     pub fn new(document: Document) -> Result<Self> {
         document.validate()?;
         Ok(Self {
@@ -1129,6 +1236,20 @@ impl Session {
             .as_ref()
             .is_some_and(|state| state.matches(&self.document))
     }
+    /// After a project's media folder is renamed, points the document and
+    /// every Undo state at the moved files, so Undo keeps working (FILE-007).
+    pub fn relocate_media(&mut self, from: &Path, to: &Path) {
+        project_file::relocate(&mut self.document.video, from, to);
+        for state in self
+            .undo
+            .iter_mut()
+            .chain(self.redo.iter_mut())
+            .chain(self.saved_state.iter_mut())
+            .chain(self.gesture.iter_mut())
+        {
+            project_file::relocate(&mut state.video, from, to);
+        }
+    }
     pub fn save(&mut self, path: &Path) -> Result<()> {
         self.document.save(path)?;
         self.saved_state = Some(EditState::from_document(&self.document));
@@ -1158,6 +1279,8 @@ impl Session {
                     | Command::CutOutPages { .. }
                     | Command::TransformImage { .. }
                     | Command::SetCanvasExpansion { .. }
+                    | Command::SetPerspective { .. }
+                    | Command::SetFinish { .. }
                     | Command::CropImage { .. }
                     | Command::ResizeImage { .. }
                     | Command::ResizeImageFlattened { .. }
@@ -1228,6 +1351,14 @@ impl Session {
                         self.document
                             .annotations
                             .retain(|a| !removed.contains(&a.id));
+                    }
+                    Command::VideoComposition {
+                        project,
+                        annotations,
+                    } => {
+                        self.document.video = Some(project);
+                        self.document.annotations = annotations;
+                        self.document.prune_object_states();
                     }
                     Command::Video { project } => {
                         self.document.video = Some(project);
@@ -1310,18 +1441,24 @@ impl Session {
                             return Ok(());
                         }
                     }
-                    Command::CutOut { axis, start, end } => {
-                        self.document.cut_out(axis, start, end)?;
+                    Command::CutOut {
+                        axis,
+                        start,
+                        end,
+                        edge,
+                    } => {
+                        self.document.cut_out(axis, start, end, edge)?;
                     }
                     Command::CutOutPages {
                         axis,
                         start,
                         end,
+                        edge,
                         page,
                         all_pages,
                     } => {
                         let mut next = self.document.clone();
-                        next.cut_out_pages(axis, start, end, page, all_pages)?;
+                        next.cut_out_pages(axis, start, end, edge, page, all_pages)?;
                         self.document = next;
                     }
 
@@ -1329,6 +1466,24 @@ impl Session {
                         if !self.document.set_canvas_expansion(enabled) {
                             return Ok(());
                         }
+                    }
+                    Command::SetFinish { finish } => {
+                        if self.document.canvas_behavior.finish == finish {
+                            return Ok(());
+                        }
+                        if let Some(f) = &finish {
+                            f.validate()?;
+                        }
+                        self.document.canvas_behavior.finish = finish;
+                    }
+                    Command::SetPerspective { tilt } => {
+                        if self.document.canvas_behavior.perspective == tilt {
+                            return Ok(());
+                        }
+                        if let Some(t) = &tilt {
+                            t.validate()?;
+                        }
+                        self.document.canvas_behavior.perspective = tilt;
                     }
                     Command::CropImage {
                         x,
@@ -1586,6 +1741,46 @@ impl Session {
                 if let Some(v) = self.document.video.as_mut() {
                     v.sync(&self.document.annotations);
                 }
+                if let Some((old, new)) = previous.video.as_ref().zip(self.document.video.as_mut())
+                {
+                    let changed = previous.width != self.document.width
+                        || previous.height != self.document.height
+                        || previous.annotations != self.document.annotations
+                        || previous.object_states != self.document.object_states
+                        || old.track_settings != new.track_settings
+                        || old.source != new.source
+                        || old.segments != new.segments
+                        || old.zooms != new.zooms
+                        || old.layer_order != new.layer_order
+                        || old.crop != new.crop
+                        || old.fill != new.fill
+                        || old.background != new.background
+                        || old.objects.iter().any(|(id, t)| {
+                            new.objects.get(id).is_none_or(|n| {
+                                (t.start, t.end, t.track) != (n.start, n.end, n.track)
+                                    || reusable_presets::Motion::from(t)
+                                        != reusable_presets::Motion::from(n)
+                                    || t.keyframes != n.keyframes
+                                    || t.motion_path
+                                        .as_ref()
+                                        .map(|p| (&p.nodes, p.enabled, p.smooth, p.offset_ms))
+                                        != n.motion_path
+                                            .as_ref()
+                                            .map(|p| (&p.nodes, p.enabled, p.smooth, p.offset_ms))
+                            })
+                        });
+                    if changed {
+                        for (id, t) in &mut new.objects {
+                            if old.objects.contains_key(id)
+                                && let Some(path) = &mut t.motion_path
+                                && path.purpose == video::motion_path::Purpose::Redaction
+                            {
+                                std::sync::Arc::make_mut(path).reviewed = false;
+                            }
+                        }
+                    }
+                }
+
                 self.document.prune_groups();
                 self.document.reconcile_guide();
                 self.document.prune_object_states();
@@ -1671,6 +1866,7 @@ mod tests {
             focus: None,
 
             highlighter_rect: false,
+            hard_edge: false,
             group: None,
             rotation_degrees: 0.0,
             mirror_x: false,

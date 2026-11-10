@@ -1,4 +1,5 @@
 //! Compact original vector previews shared by templates and category dropdowns.
+use crate::tips::Tip as _;
 use crate::{Kind, egui};
 use capture_core::object_styles::ObjectStyle;
 
@@ -64,6 +65,9 @@ fn paint_tile(
     let fill = style.fill.map(c).unwrap_or(egui::Color32::TRANSPARENT);
     let p = ui.painter();
     match style.kind {
+        _ if style.focus.and_then(|f| f.magnify).is_some() => {
+            crate::icons::draw_scaled(p, r, "Magnified callout", color, 1.2);
+        }
         _ if style.focus.is_some() => {
             let effect = style.focus.unwrap();
             let outer = egui::Rect::from_center_size(r.center(), egui::vec2(64., 28.));
@@ -134,7 +138,11 @@ fn paint_tile(
             );
         }
         Kind::Blur | Kind::Pixelate => {
-            if let Some(texture) = effect_thumbnail(ui.ctx(), style.kind, style.width) {
+            let region = match style.outline_shape {
+                Some(capture_core::object_styles::Outline::Region(region)) => region,
+                _ => Default::default(),
+            };
+            if let Some(texture) = effect_thumbnail(ui.ctx(), style.kind, style.width, region) {
                 p.image(
                     texture.id(),
                     egui::Rect::from_center_size(r.center(), egui::vec2(64.0, 28.0)),
@@ -181,17 +189,22 @@ fn paint_tile(
             }
         }
         Kind::Polygon => {
-            p.add(egui::Shape::convex_polygon(
-                vec![
-                    r.center_top(),
-                    r.right_center(),
-                    r.right_bottom(),
-                    r.left_bottom(),
-                    r.left_center(),
-                ],
-                fill,
-                stroke,
-            ));
+            use capture_core::object_styles::Outline;
+            let (lo, hi) = ([r.left(), r.top()], [r.right(), r.bottom()]);
+            let points = match style.outline_shape {
+                Some(Outline::Ready(shape)) => shape.outline(lo, hi),
+                Some(Outline::Regular(n)) => capture_core::polygon::outline(lo, hi, n),
+                _ => capture_core::polygon::outline(lo, hi, 5),
+            };
+            let points: Vec<_> = points.iter().map(|q| egui::pos2(q[0], q[1])).collect();
+            if fill.a() > 0 {
+                p.add(egui::Shape::convex_polygon(
+                    points.clone(),
+                    fill,
+                    egui::Stroke::NONE,
+                ));
+            }
+            p.add(egui::Shape::closed_line(points, stroke));
         }
         Kind::Pen => {
             let points = (0..=64)
@@ -332,7 +345,7 @@ fn paint_tile(
             egui::StrokeKind::Inside,
         );
     }
-    response.on_hover_text(format!(
+    response.tip(format!(
         "{label}\nClick to apply to the selection and use for new objects."
     ))
 }
@@ -358,6 +371,11 @@ fn callout_thumbnail(ctx: &egui::Context, style: &ObjectStyle) -> Option<egui::T
     a.shadow = None;
     let (fill, outline) = style.callout_colors()?;
     a.callout = Some(capture_core::callout::CalloutStyle {
+        shape: match style.outline_shape {
+            Some(capture_core::object_styles::Outline::Callout(shape)) => shape,
+            _ => Default::default(),
+        },
+        tail: Default::default(),
         fill,
         outline,
         pointer: [36., 62.],
@@ -377,13 +395,23 @@ fn callout_thumbnail(ctx: &egui::Context, style: &ObjectStyle) -> Option<egui::T
 
 // Fixed synthetic content only, shared with the document effect renderer. Cache
 // by the bounded intensity so repainting never reruns filtering or uploads.
-fn effect_thumbnail(ctx: &egui::Context, kind: Kind, width: u32) -> Option<egui::TextureHandle> {
+fn effect_thumbnail(
+    ctx: &egui::Context,
+    kind: Kind,
+    width: u32,
+    region: capture_core::obscure::Region,
+) -> Option<egui::TextureHandle> {
     let width = width.clamp(1, 32);
-    let key = egui::Id::unique(("effect-style-thumbnail", kind == Kind::Pixelate, width));
+    let key = egui::Id::unique((
+        "effect-style-thumbnail",
+        kind == Kind::Pixelate,
+        width,
+        region as u8,
+    ));
     if let Some(texture) = ctx.data(|d| d.get_temp::<egui::TextureHandle>(key)) {
         return Some(texture);
     }
-    let image = effect_sample(kind, width).ok()?;
+    let image = effect_sample_shaped(kind, width, region).ok()?;
     let texture = ctx.load_texture(
         "Synthetic effect style",
         egui::ColorImage::from_rgba_unmultiplied(
@@ -396,7 +424,11 @@ fn effect_thumbnail(ctx: &egui::Context, kind: Kind, width: u32) -> Option<egui:
     Some(texture)
 }
 
-fn effect_sample(kind: Kind, width: u32) -> capture_core::Result<image::RgbaImage> {
+fn effect_sample_shaped(
+    kind: Kind,
+    width: u32,
+    region: capture_core::obscure::Region,
+) -> capture_core::Result<image::RgbaImage> {
     let mut document = capture_core::Document::blank(128, 56)?;
     document.annotations.push(crate::Annotation {
         id: 1,
@@ -421,6 +453,7 @@ fn effect_sample(kind: Kind, width: u32) -> capture_core::Result<image::RgbaImag
         focus: None,
 
         highlighter_rect: false,
+        hard_edge: false,
         group: None,
         rotation_degrees: 0.0,
         mirror_x: false,
@@ -429,18 +462,148 @@ fn effect_sample(kind: Kind, width: u32) -> capture_core::Result<image::RgbaImag
         line_style: None,
         shadow: None,
     });
+    use capture_core::obscure::Region;
+    // Shaped regions sit over crisp bars so the blurred shape itself shows:
+    // a circle for Ellipse and a squiggle for Freehand (BT, user review BS16).
+    if region != Region::Rectangle {
+        document.annotations[0].text = None;
+        document.annotations[0].kind = Kind::Rectangle;
+        document.annotations[0].fill = Some([255, 255, 255, 255]);
+        document.annotations[0].color = [255, 255, 255, 255];
+        for i in 0..16 {
+            let mut bar = document.annotations[0].clone();
+            bar.id = 10 + i;
+            let x = 2. + i as f32 * 8.;
+            bar.start = [x, 0.];
+            bar.end = [x + 4., 56.];
+            bar.fill = Some([0, 0, 0, 255]);
+            bar.color = [0, 0, 0, 255];
+            document.annotations.push(bar);
+        }
+    }
     let mut effect = document.annotations[0].clone();
     effect.id = 2;
     effect.kind = kind;
     effect.width = width;
     effect.text = None;
+    effect.fill = None;
+    effect.start = [0., 0.];
+    effect.end = [128., 56.];
+    effect.points = match region {
+        Region::Rectangle => vec![],
+        Region::Ellipse => capture_core::obscure::ellipse_region([40., 4.], [88., 52.]),
+        Region::Freehand => {
+            // A wavy band: the top edge left to right, the bottom edge back.
+            let wave = |x: f32| 28. + 13. * (x / 128. * std::f32::consts::TAU * 1.5).sin();
+            let xs: Vec<f32> = (0..=24).map(|i| 10. + i as f32 * 4.5).collect();
+            xs.iter()
+                .map(|x| [*x, wave(*x) - 8.])
+                .chain(xs.iter().rev().map(|x| [*x, wave(*x) + 8.]))
+                .collect()
+        }
+    };
     document.annotations.push(effect);
     document.render()
+}
+
+/// The dashed "Save current" tile that ends the saved presets (approved option B).
+pub(super) fn save_tile(ui: &mut egui::Ui) -> egui::Response {
+    let (rect, response) = ui.allocate_exact_size(egui::vec2(82.0, 52.0), egui::Sense::click());
+    response.widget_info(|| {
+        egui::WidgetInfo::labeled(egui::Role::Button, ui.is_enabled(), "Save current")
+    });
+    let hover = response.hovered() && ui.is_enabled();
+    let p = ui.painter();
+    if hover {
+        p.rect_filled(
+            rect,
+            6.,
+            egui::Color32::from_rgba_unmultiplied(24, 145, 193, 20),
+        );
+    }
+    let color = if hover {
+        crate::shell::ACCENT
+    } else {
+        egui::Color32::from_rgb(86, 102, 107)
+    };
+    let corners = [
+        rect.left_top(),
+        rect.right_top(),
+        rect.right_bottom(),
+        rect.left_bottom(),
+        rect.left_top(),
+    ];
+    for edge in corners.windows(2) {
+        p.add(egui::Shape::dashed_line(
+            &[edge[0], edge[1]],
+            egui::Stroke::new(1., color),
+            4.,
+            3.,
+        ));
+    }
+    let ink = if ui.is_enabled() {
+        egui::Color32::from_rgb(125, 214, 237)
+    } else {
+        egui::Color32::from_gray(110)
+    };
+    let c = rect.center() - egui::vec2(0., 8.);
+    let plus = egui::Stroke::new(1.6, ink);
+    p.line_segment([c - egui::vec2(6., 0.), c + egui::vec2(6., 0.)], plus);
+    p.line_segment([c - egui::vec2(0., 6.), c + egui::vec2(0., 6.)], plus);
+    p.text(
+        rect.center() + egui::vec2(0., 12.),
+        egui::Align2::CENTER_CENTER,
+        "Save current",
+        egui::FontId::proportional(10.5),
+        ink,
+    );
+    #[cfg(test)]
+    ui.ctx()
+        .data_mut(|d| d.insert_temp(egui::Id::unique("preset-save-tile"), rect));
+    response.tip("Save the selected object's formatting as a preset")
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn shaped_effect_tiles_show_a_blurred_circle_and_squiggle_over_crisp_bars() {
+        use capture_core::obscure::Region;
+        let crisp = |p: &image::Rgba<u8>| p[0] == 0 || p[0] == 255;
+        for kind in [Kind::Blur, Kind::Pixelate] {
+            let circle = effect_sample_shaped(kind, 8, Region::Ellipse).unwrap();
+            let squiggle = effect_sample_shaped(kind, 8, Region::Freehand).unwrap();
+            if let Ok(dir) = std::env::var("CLIPCRAFT_EFFECT_TILES_DIR") {
+                circle.save(format!("{dir}/{kind:?}-ellipse.png")).unwrap();
+                squiggle
+                    .save(format!("{dir}/{kind:?}-freehand.png"))
+                    .unwrap();
+            }
+            // Inside the circle the bars soften; outside it they stay sharp.
+            assert!(!crisp(circle.get_pixel(64, 28)), "{kind:?} circle centre");
+            assert!(
+                crisp(circle.get_pixel(8, 28)),
+                "{kind:?} left of the circle"
+            );
+            assert!(
+                crisp(circle.get_pixel(120, 28)),
+                "{kind:?} right of the circle"
+            );
+            // The squiggle dips at x=64 (y 7..23) and rises near x=24.
+            assert!(
+                !crisp(squiggle.get_pixel(64, 15)),
+                "{kind:?} on the squiggle"
+            );
+            assert!(
+                crisp(squiggle.get_pixel(64, 48)),
+                "{kind:?} below the squiggle"
+            );
+            assert!(
+                crisp(squiggle.get_pixel(64, 2)),
+                "{kind:?} above the squiggle"
+            );
+        }
+    }
     #[test]
     fn callout_previews_render_valid_callouts_and_reuse_textures() {
         let ctx = egui::Context::default();
@@ -462,7 +625,11 @@ mod tests {
         let mut all = vec![];
         for kind in [Kind::Blur, Kind::Pixelate] {
             for style in capture_core::object_styles::presets(kind) {
-                let sample = effect_sample(kind, style.width).unwrap();
+                let region = match style.outline_shape {
+                    Some(capture_core::object_styles::Outline::Region(r)) => r,
+                    _ => Default::default(),
+                };
+                let sample = effect_sample_shaped(kind, style.width, region).unwrap();
                 assert_eq!(sample.dimensions(), (128, 56));
                 assert!(
                     sample
@@ -471,8 +638,8 @@ mod tests {
                 );
                 assert!(!all.contains(&sample));
                 all.push(sample);
-                let first = effect_thumbnail(&ctx, kind, style.width).unwrap();
-                let again = effect_thumbnail(&ctx, kind, style.width).unwrap();
+                let first = effect_thumbnail(&ctx, kind, style.width, region).unwrap();
+                let again = effect_thumbnail(&ctx, kind, style.width, region).unwrap();
                 assert_eq!(first.id(), again.id());
                 assert_eq!(first.size(), [128, 56]);
             }

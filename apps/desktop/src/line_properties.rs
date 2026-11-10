@@ -1,3 +1,4 @@
+use crate::tips::Tip as _;
 use crate::{Annotation, Kind, egui, property_layout};
 use capture_core::line_style::{Curve, Endpoint, Pattern, Style};
 
@@ -34,7 +35,7 @@ pub(super) fn show(ui: &mut egui::Ui, a: &mut Annotation) {
                 #[cfg(test)] ui.ctx().data_mut(|d|d.insert_temp(egui::Id::unique(("line-curve-choice",label)),r.rect));
                 if r.clicked() && curve!=Curve::Straight && style.bend==0. {style.bend=0.25;}
             }
-        }).response.on_hover_text("Drag the middle node to bend the line. Circular arcs retain a true circular shape as endpoints move.");
+        }).response.tip("Drag the middle node to bend the line. Circular arcs retain a true circular shape as endpoints move.");
     });
     if before != style {
         if style.curve == Curve::Circular {
@@ -52,11 +53,18 @@ pub(super) fn outline(ui: &mut egui::Ui, a: &mut Annotation) {
         pattern_picker(ui, &mut pattern);
     });
     if pattern != before {
-        a.line_style = (pattern != Pattern::Solid).then_some(Style {
-            pattern,
-            ..Style::for_kind(a.kind)
-        });
+        a.line_style = with_pattern(a, pattern);
     }
+}
+/// The object's line style with only the pattern changed. The curve, ends and
+/// everything else stay as they were.
+pub(crate) fn with_pattern(a: &Annotation, pattern: Pattern) -> Option<Style> {
+    let plain = Style::for_kind(a.kind);
+    let next = Style {
+        pattern,
+        ..a.line_style.unwrap_or(plain)
+    };
+    (next != plain).then_some(next)
 }
 fn pattern_picker(ui: &mut egui::Ui, pattern: &mut Pattern) {
     let response = egui::ComboBox::from_id_salt("line-pattern")
@@ -74,7 +82,7 @@ fn pattern_picker(ui: &mut egui::Ui, pattern: &mut Pattern) {
             }
         })
         .response
-        .on_hover_text(format!("Line pattern: {}", pattern.label()));
+        .tip(format!("Line pattern: {}", pattern.label()));
     paint_pattern(
         ui,
         response
@@ -108,7 +116,7 @@ fn endpoint(ui: &mut egui::Ui, label: &str, value: &mut Endpoint) {
             }
         })
         .response
-        .on_hover_text(format!("{label} endpoint: {}", value.label()));
+        .tip(format!("{label} endpoint: {}", value.label()));
     paint_endpoint(
         ui,
         response
@@ -138,6 +146,7 @@ pub(super) fn sample(kind: Endpoint, start: bool) -> Annotation {
         focus: None,
 
         highlighter_rect: false,
+        hard_edge: false,
         group: None,
         rotation_degrees: 0.,
         mirror_x: false,

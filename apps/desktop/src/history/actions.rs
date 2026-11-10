@@ -1,5 +1,6 @@
 //! One menu and action path for Library cards and the Recent strip.
 use super::*;
+use crate::tips::Tip as _;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Action {
@@ -180,7 +181,7 @@ fn menu(ui: &mut egui::Ui, available: bool, busy: bool) -> Option<Action> {
             ui.close();
         }
         if busy && !enabled {
-            response.on_hover_text("Finishing the current Library save…");
+            response.tip("Finishing the current Library save…");
         }
     }
     chosen
@@ -202,13 +203,40 @@ impl Editor {
         let mut action = None;
         response.context_menu(|ui| {
             action = menu(ui, available, busy);
+            self.folder_menu(ui, std::slice::from_ref(&entry.id));
             if crate::controls::menu_action(ui, "Previous versions…").clicked() {
                 self.start_library_scan(ui.ctx(), Some(entry.id.clone()));
+                ui.close();
+            }
+            if entry.kind == capture_core::history::MediaKind::Video
+                && crate::controls::menu_action(ui, "Show recording file").clicked()
+            {
+                self.show_library_recording(entry);
                 ui.close();
             }
         });
         if let Some(action) = action {
             self.history_action(entry, action, &response.ctx);
+        }
+    }
+    fn show_library_recording(&mut self, entry: &Entry) {
+        let path = self
+            .history
+            .store
+            .as_ref()
+            .ok_or_else(|| "Library is unavailable".to_owned())
+            .and_then(|store| store.load(&entry.id).map_err(|e| e.to_string()))
+            .and_then(|document| {
+                document
+                    .video
+                    .as_ref()
+                    .and_then(|v| v.recording_path())
+                    .map(std::path::PathBuf::from)
+                    .filter(|p| p.is_file())
+                    .ok_or_else(|| "This project has no single recording file to show.".to_owned())
+            });
+        if let Err(e) = path.and_then(|p| crate::export_ui::show_in_explorer(&p)) {
+            self.status = e;
         }
     }
     fn history_action(&mut self, entry: &Entry, action: Action, ctx: &egui::Context) {
@@ -244,6 +272,10 @@ impl Editor {
             };
             self.history.refresh();
         } else {
+            if action == Action::Delete {
+                self.begin_library_management(super::manage::Action::Delete, vec![entry.clone()]);
+                return;
+            }
             self.history.dialog = Some(Dialog {
                 entry: entry.clone(),
                 action,

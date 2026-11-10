@@ -1,3 +1,4 @@
+use crate::tips::Tip as _;
 use crate::{Command, Editor, egui};
 #[derive(Default)]
 pub(super) struct Panel {
@@ -39,6 +40,44 @@ impl Panel {
     pub(super) fn disarm(&mut self) {
         self.cancel_drag();
     }
+    /// Alt+wheel while placing: grows or shrinks the icon about its center.
+    pub(super) fn is_armed(&self) -> bool {
+        self.armed.is_some()
+    }
+    pub(super) fn resize_armed(&mut self, steps: i32, canvas: [u32; 2]) -> Option<f32> {
+        let payload = &mut self.armed.as_mut()?.payload;
+        let a = payload.objects.first_mut()?;
+        let size = [a.end[0] - a.start[0], a.end[1] - a.start[1]];
+        let longest = size[0].abs().max(size[1].abs()).max(1.);
+        let target = (longest * 1.08f32.powi(steps)).clamp(12., largest_fit(a, canvas));
+        resize_about_center(a, target / longest);
+        reseat(payload);
+        Some(target)
+    }
+}
+/// The longest side at which `a` still fits the canvas, as Steps are limited.
+fn largest_fit(a: &crate::Annotation, canvas: [u32; 2]) -> f32 {
+    let width = (a.end[0] - a.start[0]).abs().max(1.);
+    let height = (a.end[1] - a.start[1]).abs().max(1.);
+    let ratio = (canvas[0] as f32 / width).min(canvas[1] as f32 / height);
+    (width.max(height) * ratio).clamp(12., 16384.)
+}
+/// A payload is checked against the canvas it came from, so a resized icon
+/// carries a canvas of its own size (the reason a large icon could not be placed).
+fn reseat(payload: &mut capture_core::clipboard_payload::ObjectPayload) {
+    if let Some(a) = payload.objects.first_mut() {
+        let size = [(a.end[0] - a.start[0]).abs(), (a.end[1] - a.start[1]).abs()];
+        a.start = [0., 0.];
+        a.end = size;
+        payload.source_canvas = size.map(|side| side.ceil().max(1.) as u32);
+    }
+}
+fn resize_about_center(a: &mut crate::Annotation, ratio: f32) {
+    let center = [(a.start[0] + a.end[0]) * 0.5, (a.start[1] + a.end[1]) * 0.5];
+    for (axis, middle) in center.into_iter().enumerate() {
+        a.start[axis] = middle + (a.start[axis] - middle) * ratio;
+        a.end[axis] = middle + (a.end[axis] - middle) * ratio;
+    }
 }
 impl Editor {
     pub(super) fn icon_properties(&mut self, ui: &mut egui::Ui) {
@@ -57,7 +96,10 @@ impl Editor {
             if ui.button("Import images…").clicked() {
                 self.suspend_global_capture();
                 if let Some(paths) = rfd::FileDialog::new()
-                    .add_filter("Images", &["png", "jpg", "jpeg", "bmp", "gif", "webp"])
+                    .add_filter(
+                        "Images",
+                        &["png", "jpg", "jpeg", "bmp", "gif", "webp", "svg", "eps"],
+                    )
                     .pick_files()
                     && let Some(store) = &mut self.icon_library.store
                 {
@@ -198,13 +240,13 @@ impl Editor {
                                     )
                                     .min_size(egui::vec2(cell_width, 46.)),
                                 )
-                                .on_hover_text(format!("Place {}", entry.label));
+                                .tip(format!("Place {}", entry.label));
                             if response.clicked() {
                                 place = Some(entry.id.clone());
                             }
                         }
                         ui.add(egui::Label::new(&entry.label).truncate())
-                            .on_hover_text(&entry.label);
+                            .tip(&entry.label);
                     });
                     if i % 4 == 3 {
                         ui.end_row();
@@ -269,6 +311,7 @@ impl Editor {
         }
         if annotation.kind == crate::Kind::Step {
             self.step_size = (annotation.end[0] - annotation.start[0]).abs().round() as u32;
+            self.step_style_size = self.step_size;
             self.step_letters = annotation
                 .text
                 .as_ref()
@@ -370,6 +413,16 @@ impl Editor {
             && let Some(origin) =
                 crate::step_tool::placement_origin(ui).filter(|p| visible.contains(*p))
         {
+            // A selected icon's handles sit outside its body; a press on one
+            // resizes or rotates it and must not place another icon (BJ10).
+            let on_handle = self.selected_annotation().is_some_and(|a| {
+                a.image.as_ref().is_some_and(|b| b.is_icon())
+                    && a.hit_handle(transform.image_point(origin), 7. / transform.scale)
+                        .is_some()
+            }) || self.rotation_hit(origin, transform);
+            if on_handle {
+                return false;
+            }
             let hit = self
                 .session
                 .document
@@ -495,7 +548,19 @@ impl Editor {
         let Some(armed) = &self.icon_library.armed else {
             return;
         };
-        let payload = armed.payload.clone();
+        let mut payload = armed.payload.clone();
+        let canvas = [self.session.document.width, self.session.document.height];
+        if let Some(a) = payload.objects.first_mut() {
+            let longest = (a.end[0] - a.start[0])
+                .abs()
+                .max((a.end[1] - a.start[1]).abs())
+                .max(1.);
+            let most = largest_fit(a, canvas);
+            if longest > most {
+                resize_about_center(a, most / longest);
+            }
+        }
+        reseat(&mut payload);
         let before = self.session.document.annotations.len();
         self.execute(Command::PasteObjects { payload, center });
         if self.session.document.annotations.len() <= before {
@@ -903,6 +968,33 @@ mod tests {
             90.
         );
         assert_eq!(armed.preview.as_ref().unwrap().1, [90, 90]);
+        // Alt+wheel resizes what is about to be placed, within its limits.
+        let canvas = [e.session.document.width, e.session.document.height];
+        let grown = e.icon_library.resize_armed(4, canvas).expect("armed icon");
+        assert!(grown > 90.);
+        assert!(e.icon_library.is_armed());
+        let shrunk = e
+            .icon_library
+            .resize_armed(-200, canvas)
+            .expect("armed icon");
+        assert_eq!(shrunk, 12.);
+        // Grown as far as it goes, it still fits the canvas and can be placed.
+        let most = e
+            .icon_library
+            .resize_armed(400, canvas)
+            .expect("armed icon");
+        assert!(most <= canvas[0].max(canvas[1]) as f32);
+        let before = e.session.document.annotations.len();
+        e.place_icon([canvas[0] as f32 * 0.5, canvas[1] as f32 * 0.5]);
+        assert_eq!(
+            e.session.document.annotations.len(),
+            before + 1,
+            "{}",
+            e.status
+        );
+        let placed = e.session.document.annotations.last().unwrap();
+        assert!(placed.end[0] - placed.start[0] <= canvas[0] as f32 + 0.5);
+        assert!(placed.end[1] - placed.start[1] <= canvas[1] as f32 + 0.5);
     }
 
     #[test]

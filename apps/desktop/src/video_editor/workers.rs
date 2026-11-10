@@ -189,6 +189,25 @@ pub(crate) fn load(path: &Path) -> Result<Document, String> {
     #[cfg(not(windows))]
     Err("Video playback requires Windows.".into())
 }
+/// The Library's picture of a video project: the frame at the playhead, as it
+/// exports, with every edit on it. `None` when the media can't be read now.
+pub(crate) fn library_picture(doc: &Document) -> Option<image::RgbaImage> {
+    let project = doc.video.as_ref()?;
+    #[cfg(windows)]
+    {
+        let _runtime = media::Runtime::new().ok()?;
+        let mut reader = media::Visuals::new();
+        let mut cache = capture_core::video::frame::CompositeCache::default();
+        let ms = project.cursor.min(project.duration().saturating_sub(1));
+        let layers = reader.layers(project, [doc.width, doc.height], ms).ok()?;
+        cache.composite(doc, &layers, ms).ok()
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = project;
+        None
+    }
+}
 pub(crate) fn open(path: PathBuf) -> mpsc::Receiver<Result<(Document, PathBuf), String>> {
     let (tx, rx) = mpsc::channel();
     std::thread::spawn(move || {
@@ -276,13 +295,14 @@ pub(crate) struct Export {
     pub progress: mpsc::Receiver<f32>,
     pub result: mpsc::Receiver<Result<PathBuf, String>>,
 }
-pub(crate) fn export(doc: Document, path: PathBuf) -> Export {
+/// Saves the recording as it is, with no render.
+pub(crate) fn save_copy(source: PathBuf, path: PathBuf) -> Export {
     let cancel = Arc::new(AtomicBool::new(false));
     let stop = cancel.clone();
     let (progress_tx, progress) = mpsc::channel();
     let (tx, result) = mpsc::channel();
     std::thread::spawn(move || {
-        let output = export_sync(&doc, &path, &stop, |p| {
+        let output = copy_recording(&source, &path, &stop, |p| {
             let _ = progress_tx.send(p);
         })
         .map(|_| path);
@@ -294,13 +314,99 @@ pub(crate) fn export(doc: Document, path: PathBuf) -> Export {
         result,
     }
 }
+pub(crate) fn copy_recording(
+    source: &Path,
+    path: &Path,
+    stop: &AtomicBool,
+    progress: impl Fn(f32),
+) -> Result<(), String> {
+    use std::io::{Read as _, Write as _};
+    let same = |a: &Path, b: &Path| {
+        let full = |p: &Path| p.canonicalize().or_else(|_| std::path::absolute(p));
+        matches!((full(a), full(b)), (Ok(a), Ok(b))
+            if a.to_string_lossy().eq_ignore_ascii_case(&b.to_string_lossy()))
+    };
+    if same(source, path) {
+        return Err(
+            "Choose a different output filename to preserve the original recording.".into(),
+        );
+    }
+    let mut from =
+        std::fs::File::open(source).map_err(|e| format!("Cannot read the recording: {e}"))?;
+    let total = from.metadata().map_err(|e| e.to_string())?.len().max(1);
+    let mut temp = tempfile::Builder::new()
+        .prefix(".clipcraft-export-")
+        .suffix(".tmp")
+        .tempfile_in(path.parent().unwrap_or(Path::new(".")))
+        .map_err(|e| e.to_string())?;
+    let mut buffer = vec![0; 1 << 20];
+    let mut done = 0u64;
+    loop {
+        if stop.load(Ordering::Relaxed) {
+            return Err("Video export cancelled. The destination was not replaced.".into());
+        }
+        let count = from
+            .read(&mut buffer)
+            .map_err(|e| format!("Cannot read the recording: {e}"))?;
+        if count == 0 {
+            break;
+        }
+        temp.write_all(&buffer[..count])
+            .map_err(|e| e.to_string())?;
+        done += count as u64;
+        progress(done as f32 / total as f32);
+    }
+    temp.persist(path).map_err(|e| e.to_string())?;
+    progress(1.);
+    Ok(())
+}
+pub(crate) fn export(
+    doc: Document,
+    path: PathBuf,
+    watermark: Option<capture_core::watermark::Watermark>,
+    bitrate: u32,
+) -> Export {
+    let cancel = Arc::new(AtomicBool::new(false));
+    let stop = cancel.clone();
+    let (progress_tx, progress) = mpsc::channel();
+    let (tx, result) = mpsc::channel();
+    std::thread::spawn(move || {
+        let output = export_marked(&doc, &path, &stop, watermark.as_ref(), bitrate, |p| {
+            let _ = progress_tx.send(p);
+        })
+        .map(|_| path);
+        let _ = tx.send(output);
+    });
+    Export {
+        cancel,
+        progress,
+        result,
+    }
+}
+#[cfg(test)]
 pub(crate) fn export_sync(
     doc: &Document,
     path: &Path,
     stop: &AtomicBool,
     progress: impl Fn(f32),
 ) -> Result<(), String> {
+    export_marked(doc, path, stop, None, 8_000_000, progress)
+}
+/// Video export with the export watermark laid over every frame (FX-003).
+pub(crate) fn export_marked(
+    doc: &Document,
+    path: &Path,
+    stop: &AtomicBool,
+    watermark: Option<&capture_core::watermark::Watermark>,
+    bitrate: u32,
+    progress: impl Fn(f32),
+) -> Result<(), String> {
+    let layer = watermark
+        .map(|w| w.layer([doc.width, doc.height]))
+        .transpose()
+        .map_err(|e| e.to_string())?;
     doc.validate().map_err(|e| e.to_string())?;
+    capture_core::privacy::tracking::require_review(doc).map_err(|e| e.to_string())?;
     let project = doc.video.as_ref().ok_or("Open a video before exporting.")?;
     let absolute = path
         .canonicalize()
@@ -332,11 +438,12 @@ pub(crate) fn export_sync(
             .tempfile_in(folder)
             .map_err(|e| e.to_string())?
             .into_temp_path();
-        let mut encoder = media::Encoder::new(
+        let mut encoder = media::Encoder::with_bitrate(
             &temp,
             [doc.width, doc.height],
             project.fps,
             project.has_audio(),
+            bitrate,
         )
         .map_err(|e| e.to_string())?;
         let count = (project.duration() * project.fps as u64).div_ceil(1000);
@@ -358,9 +465,12 @@ pub(crate) fn export_sync(
             }
             #[cfg(test)]
             let stage = Instant::now();
-            let pixels = compositor
+            let mut pixels = compositor
                 .composite(doc, &layers, ms)
                 .map_err(|e| e.to_string())?;
+            if let Some(layer) = &layer {
+                capture_core::watermark::blend(&mut pixels, layer);
+            }
             #[cfg(test)]
             {
                 profile[1] += stage.elapsed().as_secs_f64();

@@ -1,3 +1,4 @@
+use crate::tips::Tip as _;
 use crate::{Command, Editor, Kind, egui};
 use capture_core::styles::{ArrowStyle, Store};
 
@@ -72,10 +73,55 @@ impl Editor {
         let header = crate::property_layout::section(ui, "Presets");
         crate::property_layout::help_at(
             ui,
-            header.right_center() - egui::vec2(46.0, 0.0),
+            crate::property_layout::beside_title(ui, header, "Presets"),
             "Presets",
-            "Select an object to view its formatting templates. Click a style to apply it; the triangle opens variations. The active style is outlined. Use + to save selected formatting. Right-click a saved style to update or delete it.",
+            "Select an object to view its formatting templates. Click a style to apply it; the triangle opens variations. The active style is outlined. Use Save current (or +) to save the selected formatting. Right-click a saved style to update or delete it.",
         );
+        let rect = egui::Rect::from_center_size(
+            header.right_center() - egui::vec2(16.0, 0.0),
+            egui::vec2(24.0, 24.0),
+        );
+        self.preset_save_button(ui, tool, Some(rect))
+    }
+    /// The "+" that saves the selected object's formatting as a preset. The
+    /// redesigned property panes place it in their Presets section (AX4).
+    pub(crate) fn preset_save_button(
+        &mut self,
+        ui: &mut egui::Ui,
+        tool: Option<Kind>,
+        rect: Option<egui::Rect>,
+    ) -> egui::Response {
+        // A drawn plus stays centered in its button at every scale (BB8).
+
+        let button = egui::Button::new("");
+        let response = match rect {
+            Some(rect) => ui.put(rect, button),
+            None => ui.add_sized([24.0, 24.0], button),
+        }
+        .tip("Save custom style");
+        let c = response.rect.center();
+        let plus = egui::Stroke::new(1.6, ui.visuals().text_color());
+        ui.painter()
+            .line_segment([c - egui::vec2(5.5, 0.0), c + egui::vec2(5.5, 0.0)], plus);
+        ui.painter()
+            .line_segment([c - egui::vec2(0.0, 5.5), c + egui::vec2(0.0, 5.5)], plus);
+        #[cfg(test)]
+        ui.ctx()
+            .data_mut(|d| d.insert_temp(egui::Id::unique("preset-save-button"), response.rect));
+        response.widget_info(|| {
+            egui::WidgetInfo::labeled(egui::Role::Button, true, "Save custom style")
+        });
+        self.preset_save_popup(ui, &response, tool);
+        response
+    }
+    /// The name-and-save popup for the selected object's formatting, opened by
+    /// the "Save current" preset tile (approved option B) or the + button.
+    pub(crate) fn preset_save_popup(
+        &mut self,
+        ui: &mut egui::Ui,
+        response: &egui::Response,
+        tool: Option<Kind>,
+    ) {
         let kind = self.selected_annotation().map(|a| a.kind).or(tool);
         let arrow = kind == Some(Kind::Arrow);
         let objects = self.selected_objects();
@@ -84,17 +130,7 @@ impl Editor {
         } else {
             objects.len() == 1 && self.presets.templates.is_some()
         };
-        let rect = egui::Rect::from_center_size(
-            header.right_center() - egui::vec2(16.0, 0.0),
-            egui::vec2(24.0, 24.0),
-        );
-        let response = ui
-            .put(rect, egui::Button::new(egui::RichText::new("+").size(20.0)))
-            .on_hover_text("Save custom style");
-        response.widget_info(|| {
-            egui::WidgetInfo::labeled(egui::Role::Button, true, "Save custom style")
-        });
-        egui::Popup::menu(&response)
+        egui::Popup::menu(response)
             .id(response.id.with("save-custom-style"))
             .frame(egui::Frame::popup(ui.style()).inner_margin(14))
             .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
@@ -107,7 +143,7 @@ impl Editor {
                         let r = ui.label("Preset name");
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                             if crate::video_editor::ui::button(ui, "Close", "", 26., false)
-                                .on_hover_text("Close")
+                                .tip("Close")
                                 .clicked()
                             {
                                 ui.close();
@@ -185,7 +221,7 @@ impl Editor {
                             .fill(crate::shell::ACCENT)
                             .min_size(egui::vec2(240.0, 30.0)),
                     )
-                    .on_disabled_hover_text("Select one object with available local style storage.")
+                    .tip_disabled("Select one object with available local style storage.")
                     .clicked()
                 {
                     let saved = if arrow {
@@ -207,7 +243,6 @@ impl Editor {
                     ui.colored_label(egui::Color32::LIGHT_RED, error);
                 }
             });
-        response
     }
     fn save_arrow_style(&mut self) -> bool {
         let name = if self.presets.name.trim().is_empty() {
@@ -359,12 +394,14 @@ impl Editor {
         let mut removed = None;
         let mut updated = None;
         let mut remember = None;
+        let mut save = None;
         egui::ScrollArea::vertical()
             .id_salt("arrow_presets")
             .max_height(214.0)
             .show(ui, |ui| {
                 let saved_columns = crate::style_tile::columns(ui.available_width(), false);
-                if !saved.is_empty() {
+                // Approved option B: "Save current" always ends the saved presets.
+                {
                     ui.small("Your styles");
                     egui::Grid::new("saved_arrow_styles")
                         .spacing([5.0, 5.0])
@@ -404,6 +441,13 @@ impl Editor {
                                     ui.end_row();
                                 }
                             }
+                            save = Some(
+                                ui.add_enabled_ui(
+                                    objects.len() == 1 && enabled,
+                                    crate::style_tile::save_tile,
+                                )
+                                .inner,
+                            );
                         });
                     ui.separator();
                 }
@@ -459,6 +503,9 @@ impl Editor {
                     }
                 });
             });
+        if let Some(save) = save {
+            self.preset_save_popup(ui, &save, Some(Kind::Arrow));
+        }
         if let Some(style) = chosen {
             self.apply_arrow_style(&style);
             if let Some(key) = remember {

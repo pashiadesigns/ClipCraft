@@ -12,6 +12,8 @@ pub struct Plan {
     pub output: [u32; 4],
     pub work: [u32; 4],
     objects: Vec<Annotation>,
+    /// The Focus backdrop shared by all objects shown with this one (BJ).
+    backdrop: crate::focus::Backdrop,
 }
 
 fn intersects(a: [u32; 4], b: [u32; 4]) -> bool {
@@ -68,6 +70,169 @@ fn effect_bounds(a: &Annotation, canvas: [u32; 2]) -> Option<[u32; 4]> {
     }
 }
 impl Plan {
+    pub fn magnified_region(&self) -> Option<[u32; 4]> {
+        self.lens_region(self.objects.last()?)
+    }
+    /// For the Focus drawing a shared backdrop: each later member with a
+    /// Magnify view and the source region that view reads.
+    pub fn member_lens_regions(&self) -> Vec<(u64, [u32; 4])> {
+        let Some(last) = self.objects.last() else {
+            return vec![];
+        };
+        if self.backdrop.lead() != Some(last.id) {
+            return vec![];
+        }
+        self.backdrop
+            .members()
+            .iter()
+            .filter(|m| self.backdrop.is_quiet(m))
+            .filter_map(|m| Some((m.id, self.lens_region(m)?)))
+            .collect()
+    }
+    fn lens_region(&self, a: &Annotation) -> Option<[u32; 4]> {
+        a.focus?.magnify?;
+        let (lo, hi) = a.bounds();
+        let [x, y, w, h] = self.output;
+        let left = (lo[0].floor() - 1.).clamp(x as f32, (x + w) as f32) as u32;
+        let top = (lo[1].floor() - 1.).clamp(y as f32, (y + h) as f32) as u32;
+        let right = (hi[0].ceil() + 1.).clamp(left as f32, (x + w) as f32) as u32;
+        let bottom = (hi[1].ceil() + 1.).clamp(top as f32, (y + h) as f32) as u32;
+        (right > left && bottom > top).then_some([left, top, right - left, bottom - top])
+    }
+    /// Keep the magnified detail at source resolution without recompositing the
+    /// entire native-size video. Nested raster effects retain their dependencies.
+    pub fn render_magnified_region(
+        &self,
+        base: &RgbaImage,
+        offset: [i32; 2],
+        region: [u32; 4],
+    ) -> Result<RgbaImage> {
+        let (lower, _) = self
+            .focus_surfaces()
+            .ok_or_else(|| crate::Error::Invalid("Expected a magnified callout".into()))?;
+        if lower.objects.iter().any(needs_pixels) {
+            let pixels = lower.render(base, offset)?;
+            return Ok(image::imageops::crop_imm(
+                &pixels,
+                region[0] - self.output[0],
+                region[1] - self.output[1],
+                region[2],
+                region[3],
+            )
+            .to_image());
+        }
+        lower
+            .clipped(region)
+            .ok_or_else(|| crate::Error::Invalid("Callout source is outside the canvas".into()))?
+            .render(base, offset)
+    }
+    /// Build a Focus backdrop once, then derive its affected surface. Live video
+    /// uses display-sized surfaces; saved/exported pixels never use this path.
+    pub fn render_focus_surfaces(
+        &self,
+        base: &RgbaImage,
+        offset: [i32; 2],
+        density: f32,
+    ) -> Result<(RgbaImage, RgbaImage)> {
+        let (lower, _) = self.focus_surfaces().ok_or_else(|| {
+            crate::Error::Invalid("Focus surface requested for another effect".into())
+        })?;
+        let last = self.objects.last().unwrap();
+        // A later member of a shared backdrop adds no dimming of its own; the
+        // first member dims with the strongest settings of the group.
+        let focus = if self.backdrop.is_quiet(last) {
+            crate::focus::quiet(last).focus.unwrap()
+        } else {
+            self.backdrop.settings(last).unwrap()
+        };
+        let density = density.clamp(0.05, 1.);
+        let [x, y, w, h] = self.output;
+        let size = [
+            (w as f32 * density).ceil().max(1.) as u32,
+            (h as f32 * density).ceil().max(1.) as u32,
+        ];
+        let clear = if density == 1. || lower.objects.iter().any(needs_pixels) {
+            let pixels = lower.render(base, offset)?;
+            if density == 1. {
+                pixels
+            } else {
+                image::imageops::resize(
+                    &pixels,
+                    size[0],
+                    size[1],
+                    image::imageops::FilterType::Triangle,
+                )
+            }
+        } else {
+            let mut pixels = RgbaImage::new(size[0], size[1]);
+            let uniform = offset == [0, 0]
+                && x + w <= base.width()
+                && y + h <= base.height()
+                && base.pixels().all(|p| p == base.get_pixel(0, 0));
+            if uniform {
+                pixels.pixels_mut().for_each(|p| *p = *base.get_pixel(0, 0));
+            } else {
+                super::viewport::replace(
+                    &mut pixels,
+                    base,
+                    [0, 0],
+                    super::Viewport {
+                        size,
+                        origin: [
+                            (x as i64 - offset[0] as i64) as f64,
+                            (y as i64 - offset[1] as i64) as f64,
+                        ],
+                        scale: density as f64,
+                    },
+                );
+            }
+            let viewport = super::Viewport {
+                size,
+                origin: [x as f64, y as f64],
+                scale: density as f64,
+            };
+            for a in &lower.objects {
+                if let Some(shadow) = crate::shadow::patch(a) {
+                    super::viewport::blend_patch(&mut pixels, &shadow, viewport);
+                }
+                if a.image.is_some() {
+                    let mut shell = a.clone();
+                    shell.image = None;
+                    shell.text = None;
+                    shell.color[3] = 0;
+                    if a.is_shape() {
+                        super::viewport::render_vector(&mut pixels, &shell, viewport);
+                    }
+                    if !super::focus_preview::bitmap(&mut pixels, a, viewport) {
+                        super::viewport::render_vector(&mut pixels, a, viewport);
+                    } else if a.is_shape() {
+                        shell.color = a.color;
+                        shell.fill = None;
+                        super::viewport::render_vector(&mut pixels, &shell, viewport);
+                    }
+                } else {
+                    super::viewport::render_vector(&mut pixels, a, viewport);
+                }
+            }
+            pixels
+        };
+        let mut affected = if focus.blur > 0. {
+            super::focus_preview::blur(&clear, focus.blur * density)
+        } else {
+            clear.clone()
+        };
+        for (out, original) in affected.pixels_mut().zip(clear.pixels()) {
+            for c in 0..3 {
+                out[c] = (original[c] as f32 * (1. - focus.opacity)
+                    + out[c] as f32 * (1. - focus.darken) * focus.opacity
+                    + 0.5) as u8;
+            }
+            out[3] = (original[3] as f32 * (1. - focus.opacity)
+                + out[3] as f32 * focus.opacity
+                + 0.5) as u8;
+        }
+        Ok((clear, affected))
+    }
     /// Cache Focus sampling independently of its movable window. The first
     /// plan is the lower composite; the second treats every pixel as outside.
     pub fn focus_surfaces(&self) -> Option<(Self, Self)> {
@@ -76,7 +241,13 @@ impl Plan {
         let mut lower = self.clone();
         lower.objects.pop();
         let mut outside = self.clone();
+        // The cached surfaces depend on the strongest settings, not on where
+        // any window is, so dragging one Focus rebuilds nothing (BJ4).
+        let settings = self.backdrop.settings(last)?;
+        outside.backdrop = Default::default();
         let a = outside.objects.last_mut()?;
+        a.focus = Some(settings);
+        a.focus.as_mut()?.magnify = None;
         a.start = [-4., -4.];
         a.end = [-2., -2.];
         a.kind = Kind::Rectangle;
@@ -89,6 +260,7 @@ impl Plan {
         Some((lower, outside))
     }
     pub fn new(objects: &[Annotation], index: usize, canvas: [u32; 2]) -> Option<Self> {
+        let all = objects;
         let effect = objects.get(index)?;
         if !needs_pixels(effect) {
             return None;
@@ -113,7 +285,13 @@ impl Plan {
             output,
             work,
             objects,
+            backdrop: crate::focus::Backdrop::new(all),
         })
+    }
+    /// The backdrop this plan shares when `new` was given only part of the page.
+    pub fn with_backdrop(mut self, backdrop: crate::focus::Backdrop) -> Self {
+        self.backdrop = backdrop;
+        self
     }
     pub fn clipped(mut self, bounds: [u32; 4]) -> Option<Self> {
         let intersect = |r: [u32; 4]| {
@@ -149,8 +327,15 @@ impl Plan {
             let len = (right - left) as usize * 4;
             pixels.as_mut()[dst..dst + len].copy_from_slice(&base.as_raw()[src..src + len]);
         }
-        for a in crate::canvas_expansion::translated(&self.objects, [-(x as f32), -(y as f32)])? {
-            crate::render_annotation(&mut pixels, &a);
+        let shift = [-(x as f32), -(y as f32)];
+        let backdrop = crate::focus::Backdrop::new(&crate::canvas_expansion::translated(
+            self.backdrop.members(),
+            shift,
+        )?);
+        for a in crate::canvas_expansion::translated(&self.objects, shift)? {
+            if !backdrop.render(&mut pixels, &a) {
+                crate::render_annotation(&mut pixels, &a);
+            }
         }
         let [ox, oy, ow, oh] = self.output;
         Ok(image::imageops::crop_imm(&pixels, ox - x, oy - y, ow, oh).to_image())
@@ -158,8 +343,88 @@ impl Plan {
 }
 
 #[cfg(test)]
+mod edge_tests {
+    use super::*;
+    /// Tracked redactions follow scrolling text and can sit partly or fully
+    /// outside the canvas. Their patches must still render, or the whole video
+    /// preview stops after its background (the AZ16 grey canvas).
+    #[test]
+    fn redactions_at_and_beyond_the_canvas_edges_render() {
+        let canvas = [320u32, 180u32];
+        let base = RgbaImage::from_pixel(canvas[0], canvas[1], image::Rgba([90, 90, 90, 255]));
+        let mut frame =
+            crate::steps::marker(1, [160., 90.], 40, [0; 4], (1, false), canvas).unwrap();
+        frame.kind = Kind::Rectangle;
+        frame.text = None;
+        frame.start = [0., 0.];
+        frame.end = [320., 180.];
+        frame.fill = Some([10, 200, 60, 255]);
+        for (start, end) in [
+            ([300., 170.], [340., 190.]),
+            ([-30., -10.], [20., 8.]),
+            ([330., 50.], [380., 70.]),
+            ([100., 185.], [150., 200.]),
+            ([-60., 50.], [-10., 70.]),
+            ([319.6, 179.6], [325., 185.]),
+        ] {
+            let mut r = frame.clone();
+            r.id = 2;
+            r.kind = Kind::Redact;
+            r.fill = None;
+            r.color = [0, 0, 0, 255];
+            r.start = start;
+            r.end = end;
+            let objects = vec![frame.clone(), r];
+            if let Some(plan) = Plan::new(&objects, 1, canvas) {
+                let out = plan.render(&base, [0, 0]);
+                assert!(
+                    out.is_ok(),
+                    "{start:?}-{end:?}: {:?} {:?}",
+                    plan.output,
+                    out.err()
+                );
+            }
+        }
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn shared_focus_surfaces_match_exact_pixels_and_preview_bounds() {
+        let base = RgbaImage::from_fn(160, 100, |x, y| {
+            image::Rgba([(x * 7 % 256) as u8, (y * 9 % 256) as u8, 80, 255])
+        });
+        for blur in [0., 4.] {
+            let mut a =
+                crate::steps::marker(1, [70., 50.], 20, [0; 4], (1, false), [160, 100]).unwrap();
+            a.kind = Kind::Rectangle;
+            a.text = None;
+            a.focus = Some(crate::focus::Focus {
+                blur,
+                darken: 0.4,
+                opacity: 0.7,
+                magnify: Some(Default::default()),
+            });
+            let plan = Plan::new(&[a], 0, [160, 100]).unwrap();
+            let (lower, outside) = plan.focus_surfaces().unwrap();
+            let (clear, affected) = plan.render_focus_surfaces(&base, [0, 0], 1.).unwrap();
+            assert_eq!(clear, lower.render(&base, [0, 0]).unwrap());
+            assert_eq!(affected, outside.render(&base, [0, 0]).unwrap());
+            let (small, blurred) = plan.render_focus_surfaces(&base, [0, 0], 0.5).unwrap();
+            assert_eq!(small.dimensions(), (80, 50));
+            assert_eq!(blurred.dimensions(), (80, 50));
+            assert_eq!(base.dimensions(), (160, 100));
+            let region = plan.magnified_region().unwrap();
+            let detail = plan.render_magnified_region(&base, [0, 0], region).unwrap();
+            assert_eq!(
+                detail,
+                image::imageops::crop_imm(&clear, region[0], region[1], region[2], region[3])
+                    .to_image()
+            );
+        }
+    }
     #[test]
     fn patches_match_at_canvas_edges_and_with_translated_background() {
         let base = RgbaImage::from_fn(160, 100, |x, y| {

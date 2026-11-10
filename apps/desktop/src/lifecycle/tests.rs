@@ -99,7 +99,7 @@ fn close_hides_without_destroying_document_or_capture_shortcuts_and_exit_is_expl
     e.tray_action(tray::Action::Editor, &ctx);
     assert!(!e.lifecycle.hidden);
     e.tray_action(tray::Action::Clip, &ctx);
-    assert_eq!(e.shell.ribbon_tab, crate::ribbon::RibbonTab::Clip);
+    assert!(e.clip.clip_dialog);
     e.close_editor_window(&ctx);
     assert!(e.lifecycle.hidden);
     e.tray_action(tray::Action::Exit, &ctx);
@@ -138,9 +138,9 @@ fn startup_preference_file_override_and_tray_failure_have_accessible_windows() {
             e.quick_controls.test_lifecycle(true, StartupWindow::Clip);
             e.apply_startup_window(&ctx, explicit_file, e.quick_controls.startup_window());
             assert!(!e.lifecycle.hidden);
-            assert_eq!(
-                e.shell.ribbon_tab == crate::ribbon::RibbonTab::Clip,
-                !explicit_file
+            assert!(
+                !e.clip.clip_dialog,
+                "startup never opens the Capture Clip window"
             );
         }
     }

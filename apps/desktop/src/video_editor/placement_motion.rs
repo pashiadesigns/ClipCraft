@@ -41,9 +41,20 @@ impl Editor {
             }
             _ => return command,
         };
+        // Drawn objects take their kind's motion. A Step or icon uses the one last
+        // set on that kind, then its kind's motion, wherever it was placed from.
+        let drawn = matches!(command, Command::Add { .. });
         let motion: std::collections::BTreeMap<_, _> = annotations
             .iter()
-            .filter_map(|a| Some((a.id, self.video.placement_motion[slot(a)?].clone()?)))
+            .filter_map(|a| {
+                let remembered = slot(a).and_then(|s| self.video.placement_motion[s].clone());
+                let motion = remembered.or_else(|| {
+                    (drawn || slot(a).is_some())
+                        .then(|| Motion::for_new_object(a))
+                        .flatten()
+                })?;
+                Some((a.id, motion))
+            })
             .collect();
         if motion.is_empty() {
             command

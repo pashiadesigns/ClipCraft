@@ -79,6 +79,12 @@ impl Editor {
         let Some(mut target) = self.session.document.video.clone() else {
             return;
         };
+        use capture_core::video::links::Layer;
+        if target.zooms.len() + v.zooms.len() > 64 {
+            self.status = "This project already has too many Zoom clips to append the recording. Open the saved recording from Library, or remove unused Zoom clips first.".into();
+            return;
+        }
+        let previous_order = target.layers();
         let track = if new_track {
             target.add_media_track()
         } else {
@@ -89,6 +95,23 @@ impl Editor {
         } else {
             target.duration()
         };
+        // The recording's main video goes on `track`. Any other video track,
+        // such as the webcam, keeps its own track, frame and corner.
+        let main = v
+            .segments
+            .iter()
+            .find(|c| c.label != "Webcam")
+            .or(v.segments.first())
+            .map(|c| c.track);
+        let mut media_tracks = std::collections::BTreeMap::new();
+        for old in &v.media_tracks {
+            let id = if Some(*old) == main {
+                track
+            } else {
+                target.add_typed_track(v.track_kind(*old))
+            };
+            media_tracks.insert(*old, id);
+        }
         let mut clips = v.segments.clone();
         for c in &mut clips {
             if c.source.is_none() {
@@ -100,18 +123,112 @@ impl Editor {
                 });
             }
         }
-        let mut cursor = at;
+        let mut index = 0;
         for mut c in clips {
             c.id = target.next_media_id();
-            c.at = cursor;
-            c.track = track;
-            cursor = c.until();
+            c.at += at;
+            let is_main = Some(c.track) == main;
+            c.track = media_tracks[&c.track];
+            if is_main {
+                // Fit the new recording to the project, matching its editable overlays.
+                // Do not inherit a different crop/fill from the destination recording.
+                c.frame = Some(capture_core::video::frame::Frame {
+                    fill: false,
+                    radius: 0.,
+                    ..Default::default()
+                });
+                index = target.segments.len();
+            }
             target.segments.push(c);
         }
-        // Recording plus its track is one undoable edit.
+        let scale = (self.session.document.width as f32 / doc.width as f32)
+            .min(self.session.document.height as f32 / doc.height as f32);
+        let offset = [
+            (self.session.document.width as f32 - doc.width as f32 * scale) / 2.,
+            (self.session.document.height as f32 - doc.height as f32 * scale) / 2.,
+        ];
+        let added = capture_core::groups::scaled(&doc.annotations, [0., 0.], scale)
+            .and_then(|a| capture_core::canvas_expansion::translated(&a, offset));
+        let mut added = match added {
+            Ok(a) => a,
+            Err(e) => {
+                self.status = e.to_string();
+                return;
+            }
+        };
+        let mut tracks = std::collections::BTreeMap::new();
+        for old in v.tracks.iter().rev() {
+            let id = target.add_track();
+            tracks.insert(*old, id);
+            target
+                .track_settings_mut(capture_core::video::links::Layer::Annotation(id))
+                .name = v
+                .track_settings
+                .iter()
+                .find(|s| s.layer == capture_core::video::links::Layer::Annotation(*old))
+                .map(|s| s.name.clone())
+                .unwrap_or_default();
+        }
+        for (next, a) in (self.session.next_id()..).zip(added.iter_mut()) {
+            let old = a.id;
+            a.id = next;
+            if let Some(mut timing) = v.objects.get(&old).cloned() {
+                timing.start += at;
+                timing.end += at;
+                timing.track = tracks[&timing.track];
+                target.place(a.id, timing);
+            }
+        }
+        if let Err(e) = capture_core::groups::freshen(&mut added, &self.session.document) {
+            self.status = e.to_string();
+            return;
+        }
+        let mut annotations = self.session.document.annotations.clone();
+        annotations.extend(added);
+        // Zoom tracks (BB6) map to the first imported zoom of each source track.
+        let mut zoom_tracks = std::collections::BTreeMap::new();
+        for z in &v.zooms {
+            let old_track = z.track();
+            let mut z = z.clone();
+            z.id = target
+                .zooms
+                .iter()
+                .flat_map(|z| [z.id, z.lane])
+                .max()
+                .unwrap_or(0)
+                + 1;
+            z.lane = *zoom_tracks.entry(old_track).or_insert(z.id);
+            z.start += at;
+            z.end += at;
+            z.center = [
+                (z.center[0] * doc.width as f32 * scale + offset[0])
+                    / self.session.document.width as f32,
+                (z.center[1] * doc.height as f32 * scale + offset[1])
+                    / self.session.document.height as f32,
+            ];
+            target.zooms.push(z);
+        }
+        let mut order: Vec<_> = v
+            .layers()
+            .into_iter()
+            .map(|layer| match layer {
+                Layer::Annotation(id) => Layer::Annotation(tracks[&id]),
+                Layer::Zoom(t) => Layer::Zoom(zoom_tracks[&t]),
+                Layer::Media(id) => Layer::Media(media_tracks[&id]),
+            })
+            .collect();
+        // Preserve captions above automatic zooms and cursor/highlights below.
+        order.extend(
+            previous_order
+                .into_iter()
+                .filter(|l| *l != Layer::Media(track)),
+        );
+        target.layer_order = order;
         target.cursor = at;
-        let index = target.segments.len() - 1;
-        self.commit_video(target);
+        self.execute(Command::VideoComposition {
+            project: target,
+            annotations,
+        });
         self.select_only(None);
         self.video.selected = Selection::Recording(index);
         self.set_timeline_expanded(true);

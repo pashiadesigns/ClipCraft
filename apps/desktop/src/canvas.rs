@@ -96,7 +96,7 @@ impl Editor {
                         || Self::tool_matches(self.tool, a.kind))
                     && {
                         let (point, tolerance) = self.video_object_point(a.id, point, tolerance);
-                        a.hit_test(point, tolerance)
+                        self.keyframe_annotation(a).hit_test(point, tolerance)
                     }
             })
             .map(|a| a.id)
@@ -125,7 +125,7 @@ impl Editor {
                             .annotations
                             .iter()
                             .find(|a| Some(a.id) == self.selected)
-                            .cloned()
+                            .map(|a| self.keyframe_annotation(a))
                     })
             })
     }
@@ -140,7 +140,7 @@ impl Editor {
         if self.crop.is_some() {
             // Keep drawing, navigation and crop handles above the dock. The
             // parent UI still owns the full area for the controls below it.
-            viewport.max.y = (viewport.max.y - 160.).max(viewport.min.y + 32.);
+            viewport.max.y = (viewport.max.y - 216.).max(viewport.min.y + 32.);
         }
         // Reserve workspace gutters for guide section actions; never place
         // those buttons over the screenshot or include them in its export.
@@ -158,6 +158,7 @@ impl Editor {
             });
         let navigation_enabled = pointer_on_canvas_layer
             && !self.video.export_dialog
+            && !self.video.gif.open
             && self.video.still_frame.is_none()
             && self.pending.is_none()
             && self.new_image.is_none()
@@ -177,7 +178,11 @@ impl Editor {
                 .transform(image_viewport, dimensions, ui.ctx().pixels_per_point());
         transform.viewport = viewport;
         interactive &= !self.image_frame_buttons_hovered(ui, transform)
-            && !self.guide_controls_hovered(ui, self.guide_transform(transform));
+            && !self.guide_controls_hovered(ui, self.guide_transform(transform))
+            && !crate::perspective_ui::corner_hovered(
+                ui.ctx(),
+                ui.input(|i| i.pointer.interact_pos().or(i.pointer.hover_pos())),
+            );
         let response = ui.interact(
             viewport,
             ui.scope_id().with("canvas"),
@@ -191,6 +196,7 @@ impl Editor {
             self.video.pause();
         }
         interactive &= !self.zoom_canvas_input(ui, transform, interactive);
+        interactive &= !self.magnified_input(ui, transform, interactive);
         interactive &= !self.video_frame_input(ui, transform, interactive);
         self.frame_context(ui, &response, transform);
         let gesture_idle = self.guide_drag.is_none()
@@ -370,13 +376,13 @@ impl Editor {
             if let Some(texture) = self.ensure_raster_texture(ui.ctx()) {
                 self.cut_out_canvas(ui, &response, transform, interactive, texture);
             }
-            self.canvas_pointer(ui, &response, transform, interactive);
+            self.canvas_pointer(ui, &response, transform, transform, interactive);
             return;
         }
 
         if self.crop.is_some() {
             self.crop_canvas(ui, &response, transform, interactive);
-            self.canvas_pointer(ui, &response, transform, interactive);
+            self.canvas_pointer(ui, &response, transform, transform, interactive);
             return;
         }
         let base_transform = transform;
@@ -717,11 +723,12 @@ impl Editor {
                         self.drag_start = Some(origin);
                         self.creation = Default::default();
                         self.stroke_points.clear();
-                        if matches!(
+                        if (matches!(
                             self.tool,
                             Some(Kind::Pen | Kind::Highlighter | Kind::Eraser)
-                        ) && (self.tool != Some(Kind::Highlighter)
-                            || !self.drawing_rectangle_highlighter())
+                        ) || self.drawing_freehand_region())
+                            && (self.tool != Some(Kind::Highlighter)
+                                || !self.drawing_rectangle_highlighter())
                         {
                             self.stroke_points.push(origin);
                         }
@@ -739,10 +746,10 @@ impl Editor {
                 }
                 if (self.tool != Some(Kind::Highlighter) || !self.drawing_rectangle_highlighter())
                     && self.drag_start.is_some()
-                    && matches!(
+                    && (matches!(
                         self.tool,
                         Some(Kind::Pen | Kind::Highlighter | Kind::Eraser)
-                    )
+                    ) || self.drawing_freehand_region())
                 {
                     let p = [
                         pointer[0].clamp(0.0, dimensions.x),
@@ -777,11 +784,23 @@ impl Editor {
                             })
                             .unwrap_or(i.modifiers.alt)
                     });
+                    self.creation.bypass =
+                        ui.input(|i| !self.quick_controls.snap_when(|w| w.snap_draw, i.modifiers));
                     self.update_creation(start, pointer, kind, drawing_shift(ui), alt);
                 }
                 let motion_scale = self
                     .selected
                     .map_or(1., |id| self.video_object_motion(id).1);
+                let move_tolerance = ui
+                    .input(|i| self.quick_controls.snap_when(|w| w.snap_move, i.modifiers))
+                    .then_some(6.0 * motion_scale / scale);
+                let resize_tolerance = ui
+                    .input(|i| {
+                        self.quick_controls
+                            .snap_when(|w| w.snap_resize, i.modifiers)
+                    })
+                    .then_some(6.0 / scale);
+                let grid = self.quick_controls.snap_grid();
                 if let Some(drag) = &mut self.group_drag {
                     let result = if let Some(p) = self
                         .session
@@ -821,12 +840,13 @@ impl Editor {
                                 (pointer[0] - drag.from[0]) * motion_scale,
                                 (pointer[1] - drag.from[1]) * motion_scale,
                             ],
-                            self.quick_controls
-                                .snapping()
-                                .then_some(6.0 * motion_scale / scale),
+                            move_tolerance,
                             drag.duplicate,
                             self.quick_controls.snap_candidates(),
                         )
+                        .and_then(|result| {
+                            capture_core::snapping::settled(result, canvas, grid, move_tolerance)
+                        })
                         .map(|result| {
                             self.snapping_guides = result.guides;
                             result.annotations
@@ -853,15 +873,36 @@ impl Editor {
                             Some(handle) if handle.is_radius() => {
                                 drag.original.rounded_by_drag(handle, drag.from, pointer)
                             }
-                            Some(handle) => drag.original.resized_with_modifiers(
-                                handle,
-                                pointer,
-                                canvas,
-                                ui.input(|i| capture_core::resize_modifiers::ResizeModifiers {
-                                    constrain: i.modifiers.shift,
-                                    from_center: i.modifiers.alt,
-                                }),
-                            ),
+                            Some(handle) => {
+                                let exclude = [drag.original.id];
+                                let (snapped, guides) =
+                                    resize_tolerance.map_or((pointer, [None; 2]), |tolerance| {
+                                        capture_core::snapping::point(
+                                            pointer,
+                                            capture_core::snapping::Targets {
+                                                all: &self.session.document.annotations,
+                                                exclude: &exclude,
+                                                canvas,
+                                                grid,
+                                            },
+                                            tolerance,
+                                        )
+                                    });
+                                self.snapping_guides = guides;
+                                drag.original
+                                    .resized_with_modifiers(
+                                        handle,
+                                        snapped,
+                                        canvas,
+                                        ui.input(|i| {
+                                            capture_core::resize_modifiers::ResizeModifiers {
+                                                constrain: i.modifiers.shift,
+                                                from_center: i.modifiers.alt,
+                                            }
+                                        }),
+                                    )
+                                    .map(|a| capture_core::steps::label_follows(&drag.original, a))
+                            }
                             None => crate::canvas_expansion::move_with_candidates(
                                 &self.session.document,
                                 std::slice::from_ref(&drag.original),
@@ -869,12 +910,18 @@ impl Editor {
                                     (pointer[0] - drag.from[0]) * motion_scale,
                                     (pointer[1] - drag.from[1]) * motion_scale,
                                 ],
-                                self.quick_controls
-                                    .snapping()
-                                    .then_some(6.0 * motion_scale / scale),
+                                move_tolerance,
                                 false,
                                 self.quick_controls.snap_candidates(),
                             )
+                            .and_then(|result| {
+                                capture_core::snapping::settled(
+                                    result,
+                                    canvas,
+                                    grid,
+                                    move_tolerance,
+                                )
+                            })
                             .map(|mut result| {
                                 self.snapping_guides = result.guides;
                                 result.annotations.remove(0)
@@ -984,6 +1031,7 @@ impl Editor {
                 self.cancel_gesture();
             }
         }
+        self.paint_grid(ui, transform);
         self.paint_creation(ui, transform);
         if interactive {
             let visible = transform.image.intersect(transform.viewport);
@@ -1088,7 +1136,7 @@ impl Editor {
                 );
             }
         }
-        self.canvas_pointer(ui, &response, transform, interactive);
+        self.canvas_pointer(ui, &response, transform, base_transform, interactive);
         self.show_image_frame_buttons(ui, transform);
         self.frame_file_drop(ui, transform);
         self.show_guide_controls(ui, transform);
@@ -1096,6 +1144,7 @@ impl Editor {
         self.paint_rotation_node(ui, transform);
         self.paint_group_handles(ui, transform);
         self.paint_zoom_focus(ui, base_transform);
+        self.paint_magnified_handles(ui, transform);
         if self.view.panning {
             ui.ctx().set_cursor_icon(egui::CursorIcon::Grabbing);
         }
@@ -1157,9 +1206,12 @@ pub(crate) mod tests {
             creation: Default::default(),
             stroke_points: Vec::new(),
             shape_sides: 3,
+            tool_shapes: Default::default(),
+            preferences: Default::default(),
             step_number: 1,
             step_letters: false,
             step_size: 44,
+            step_style_size: 0,
             path: None,
             last_directory: std::path::PathBuf::from("."),
             status: String::new(),
@@ -1191,7 +1243,7 @@ pub(crate) mod tests {
         let preset = capture_core::styles::presets()[2].clone();
         let before = serde_json::to_vec(&editor.session.document).unwrap();
         editor.apply_arrow_style(&preset);
-        assert_eq!(editor.color, [38, 155, 194]);
+        assert_eq!(editor.color, [240, 85, 55]);
         assert_eq!(editor.width, 3);
         assert_eq!(
             serde_json::to_vec(&editor.session.document).unwrap(),
@@ -1421,6 +1473,7 @@ pub(crate) mod tests {
                 focus: None,
 
                 highlighter_rect: false,
+                hard_edge: false,
                 group: None,
                 rotation_degrees: 0.0,
                 mirror_x: false,
@@ -1594,6 +1647,7 @@ pub(crate) mod tests {
                 focus: None,
 
                 highlighter_rect: false,
+                hard_edge: false,
                 group: None,
                 rotation_degrees: 0.0,
                 mirror_x: false,
@@ -1662,6 +1716,7 @@ pub(crate) mod tests {
                     focus: None,
 
                     highlighter_rect: false,
+                    hard_edge: false,
                     group: None,
                     rotation_degrees: 0.0,
                     mirror_x: false,
@@ -1784,6 +1839,7 @@ pub(crate) mod tests {
                 focus: None,
 
                 highlighter_rect: false,
+                hard_edge: false,
                 group: None,
                 rotation_degrees: 0.0,
                 mirror_x: false,
@@ -3192,7 +3248,7 @@ pub(crate) mod tests {
             .unwrap()
             .rect();
         assert!(
-            bounds.width() <= 305.0 && bounds.height() <= 215.0,
+            bounds.width() <= 385.0 && bounds.height() <= 400.0,
             "{bounds:?}"
         );
         let outside = egui::pos2(10.0, 10.0);

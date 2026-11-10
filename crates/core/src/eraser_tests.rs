@@ -11,6 +11,7 @@ fn eraser(opacity: u8) -> Annotation {
         focus: None,
 
         highlighter_rect: false,
+        hard_edge: false,
         group: None,
         rotation_degrees: 0.0,
         mirror_x: false,
@@ -50,7 +51,10 @@ fn eraser_alpha_coverage_is_once_per_stroke_and_preserves_outside_pixels() {
             } else {
                 assert_eq!(output, source);
             }
-            let edge_opacity = (u16::from(opacity) * 128 + 127) / 255;
+            // Half a pixel inside the edge of a soft eraser that fades over
+            // 60% of its 4 px radius.
+            let edge = ((0.5f64 / 2.4) * 255.0).round() as u16;
+            let edge_opacity = (u16::from(opacity) * edge + 127) / 255;
             assert_eq!(
                 output.get_pixel(30, 16)[3],
                 ((u16::from(source_alpha) * (255 - edge_opacity) + 127) / 255) as u8
@@ -159,4 +163,26 @@ fn eraser_dot_clips_edges_and_invalid_paths_preserve_history() {
         assert!(session.document.annotations.is_empty());
         assert!(session.can_redo());
     }
+}
+
+#[test]
+fn a_hard_eraser_leaves_a_clean_edge_and_a_soft_one_fades() {
+    let partial = |hard: bool| {
+        let mut doc = Document::canvas(80, 40, [200, 40, 40, 255]).unwrap();
+        let mut a = eraser(255);
+        a.width = 16;
+        a.hard_edge = hard;
+        a.start = [10., 20.];
+        a.end = [70., 20.];
+        a.points = vec![[10., 20.], [70., 20.]];
+        doc.annotations.push(a);
+        let image = doc.render().unwrap();
+        image.pixels().filter(|p| p[3] != 0 && p[3] != 255).count()
+    };
+    let (soft, hard) = (partial(false), partial(true));
+    assert_eq!(hard, 0, "Hard edge has no partly erased pixels");
+    assert!(
+        soft > 150,
+        "the soft edge fades across several pixels: {soft}"
+    );
 }

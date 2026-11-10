@@ -61,14 +61,14 @@ impl ArrowStyle {
 }
 pub fn presets() -> Vec<ArrowStyle> {
     let mut result: Vec<_> = [
-        ("Coral", [240, 85, 55, 255], 3),
+        ("ClipCraft Blue", [24, 145, 193, 255], 3),
         ("Lime", [135, 196, 105, 255], 3),
-        ("Ocean", [38, 155, 194, 255], 3),
+        ("Coral", [240, 85, 55, 255], 3),
         ("Gold", [220, 190, 80, 255], 3),
         ("White", [255, 255, 255, 255], 3),
         ("Plum", [191, 140, 207, 255], 3),
+        ("Bold ClipCraft Blue", [24, 145, 193, 255], 6),
         ("Bold Coral", [240, 85, 55, 255], 6),
-        ("Bold Ocean", [38, 155, 194, 255], 6),
     ]
     .into_iter()
     .map(|(name, color, width)| ArrowStyle {
@@ -103,7 +103,7 @@ pub fn connector_presets(kind: Kind) -> Vec<ArrowStyle> {
     .map(|(i, (name, start, end, pattern))| ArrowStyle {
         name: name.into(),
         color: [
-            [38, 155, 194, 255],
+            [24, 145, 193, 255],
             [240, 85, 55, 255],
             [135, 196, 105, 255],
         ][i % 3],
@@ -254,6 +254,7 @@ mod tests {
                 focus: None,
 
                 highlighter_rect: false,
+                hard_edge: false,
                 group: None,
                 rotation_degrees: 0.0,
                 mirror_x: false,
@@ -371,10 +372,10 @@ mod tests {
         assert_eq!(first.entries().len(), 2);
         let mut changed = presets[0].clone();
         changed.color[3] = 0;
-        changed.name = "CORAL".into();
+        changed.name = "CLIPCRAFT BLUE".into();
         first.save(changed.clone()).unwrap();
         assert_eq!(Store::open(dir.path()).unwrap().entries()[0], changed);
-        stale.remove("coral").unwrap();
+        stale.remove("clipcraft blue").unwrap();
         assert_eq!(stale.entries(), &presets[1..2]);
         assert_eq!(
             fs::read_to_string(dir.path().join("unrelated.txt")).unwrap(),

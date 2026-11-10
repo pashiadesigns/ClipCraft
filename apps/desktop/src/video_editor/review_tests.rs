@@ -392,6 +392,34 @@ fn live_sources_keep_pixels_shared_apply_geometry_immediately_and_coalesce_seek_
 }
 
 #[test]
+fn save_group_uses_a_timeline_multi_selection() {
+    use capture_core::video::editing::Item;
+    let ctx = egui::Context::default();
+    crate::shell::configure(&ctx);
+    let mut e = crate::canvas::tests::editor(&ctx);
+    e.session = Session::new(tests::fixture()).unwrap();
+    assert!(e.group_preset_ids().len() < 2);
+    e.timeline_focus(Item::Annotation(1), false);
+    e.timeline_focus(Item::Annotation(3), true);
+    e.timeline_focus(
+        Item::Media(e.session.document.video.as_ref().unwrap().segments[0].id),
+        true,
+    );
+    assert!(
+        e.selected_objects().len() < 2,
+        "the canvas holds one object"
+    );
+    assert_eq!(e.group_preset_ids(), vec![1, 3]);
+    e.save_group_preset();
+    assert!(e.status.is_empty(), "{}", e.status);
+    match e.presets.reusable.pending_save() {
+        Some(capture_core::reusable_presets::Payload::Group(c)) => {
+            assert_eq!(c.objects.objects.len(), 2)
+        }
+        _ => panic!("a group preset is being saved"),
+    }
+}
+#[test]
 fn timeline_selection_context_menu_and_zoom_preserve_project_playback_position() {
     use egui::{Event, Modifiers, PointerButton, Pos2, Rect};
     let ctx = egui::Context::default();

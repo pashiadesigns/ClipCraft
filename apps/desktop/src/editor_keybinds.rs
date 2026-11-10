@@ -83,7 +83,8 @@ fn resolve(events: &mut Vec<egui::Event>, keys: &Keybinds) -> Vec<Action> {
                     | Function::VideoPlayback
                     | Function::ToggleRecent
                     | Function::ToggleAnnotations
-                    | Function::FitCanvas,
+                    | Function::FitCanvas
+                    | Function::JumpToObject,
                 ),
             ) => {
                 if !repeat && !direct.contains(&a) {
@@ -152,6 +153,11 @@ impl Editor {
                 Action::Function(Function::ToggleAnnotations) => {
                     self.toggle_annotations();
                 }
+                Action::Function(Function::JumpToObject) => {
+                    if self.is_video() && self.shell.canvas_enabled() {
+                        self.jump_to_object();
+                    }
+                }
                 Action::Function(Function::FitCanvas) => {
                     self.view.apply(
                         crate::canvas_view::ZoomAction::Set(crate::canvas_view::ZoomMode::Fit),
@@ -189,6 +195,7 @@ impl Editor {
             ToolId::Text => "Draw a text box.",
             ToolId::Shape => "Draw a shape.",
             ToolId::Steps => "Place the next step marker.",
+            ToolId::MagnifiedCallout => "Magnified callout: connect an area to an enlarged view.",
             ToolId::Focus => "Keep a clear window and soften or darken the content outside it.",
             ToolId::Obfuscate => "Blur, pixelate or redact an area.",
             ToolId::Penlighter => "Write or highlight with a freehand stroke.",

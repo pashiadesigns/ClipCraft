@@ -11,6 +11,7 @@ fn sample(kind: Kind) -> Annotation {
         focus: None,
 
         highlighter_rect: false,
+        hard_edge: false,
         group: None,
         rotation_degrees: 0.0,
         mirror_x: false,

@@ -1,4 +1,5 @@
 //! Original editable guide layouts; all images retain their complete source.
+mod layouts;
 pub mod library;
 use crate::{
     Annotation, Document, Error, Kind, Result,
@@ -16,138 +17,634 @@ pub struct Template {
     pub id: &'static str,
     pub label: &'static str,
     pub category: &'static str,
+    /// Gallery group: Guides, Support or Announce & share (bi-proposal 2).
+    pub group: &'static str,
     pub slots: usize,
     pub columns: usize,
     pub width: u32,
     pub row_height: f32,
     pub side_text: bool,
     pub timeline: bool,
+    /// Placeholder text: header subtitle, per-slot headings, side body, footer.
+    pub subtitle: Option<&'static str>,
+    pub labels: &'static [&'static str],
+    pub body: Option<&'static str>,
+    pub footer: Option<&'static str>,
+    pub layout: Arrangement,
+    /// Numbered markers beside each slot heading.
+    pub markers: bool,
 }
+pub const GROUPS: [&str; 3] = ["Guides", "Support", "Announce & share"];
+/// How a template lays out its content (bj-proposal 2).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Arrangement {
+    /// A header, rows of screenshot slots with captions, and a footer.
+    Grid,
+    /// One large screenshot with numbered callouts and a legend.
+    Annotated,
+    /// One screenshot with two Magnify insets.
+    ZoomDetail,
+    /// Key caps beside what they do, in two columns.
+    Shortcuts,
+    /// Screens left to right, joined by arrows.
+    Flow,
+    /// Two columns with check and cross badges.
+    DoDont,
+    /// The screenshot in a window frame on a color backdrop.
+    Showcase,
+}
+const BASE: Template = Template {
+    id: "",
+    label: "",
+    category: "",
+    group: "Guides",
+    slots: 1,
+    columns: 1,
+    width: 1200,
+    row_height: 400.,
+    side_text: false,
+    timeline: false,
+    subtitle: None,
+    labels: &[],
+    body: None,
+    footer: None,
+    layout: Arrangement::Grid,
+    markers: false,
+};
+/// The gallery: 14 templates, each with its own job (bj-proposal 2, BJ3 review).
 pub const ALL: &[Template] = &[
     Template {
-        id: "two-steps",
-        label: "Two steps · Portrait",
-        category: "Steps",
-        slots: 2,
+        id: "steps",
+        label: "Steps",
+        category: "Guide",
+        group: "Guides",
+        slots: 4,
         columns: 1,
         width: 900,
-        row_height: 370.,
-        side_text: false,
-        timeline: false,
-    },
-    Template {
-        id: "three-steps",
-        label: "Three steps · Portrait",
-        category: "Steps",
-        slots: 3,
-        columns: 1,
-        width: 900,
-        row_height: 270.,
+        row_height: 260.,
         side_text: true,
         timeline: false,
+        subtitle: Some("What you will do · Time needed · What you need"),
+        labels: &[],
+        body: Some(
+            "Do this: Describe the action in one sentence.\nYou should see: Describe what changes on screen.",
+        ),
+        footer: None,
+        layout: Arrangement::Grid,
+        markers: true,
     },
     Template {
-        id: "four-steps",
-        label: "Four steps · Grid",
-        category: "Steps",
-        slots: 4,
-        columns: 2,
-        width: 900,
-        row_height: 320.,
-        side_text: false,
-        timeline: false,
-    },
-    Template {
-        id: "comparison",
-        label: "Before / After · Landscape",
+        id: "before-after",
+        label: "Before / After",
         category: "Comparison",
+        group: "Guides",
         slots: 2,
         columns: 2,
-        width: 1200,
-        row_height: 420.,
-        side_text: false,
-        timeline: false,
-    },
-    Template {
-        id: "overview",
-        label: "Overview · Landscape",
-        category: "Overview",
-        slots: 1,
-        columns: 1,
         width: 1200,
         row_height: 440.,
-        side_text: true,
+        side_text: false,
         timeline: false,
+        subtitle: Some("What changed and why it matters"),
+        labels: &["Before: the old screen", "After: the new screen"],
+        body: None,
+        footer: Some("Changed in version ______  ·  Applies to ____________________"),
+        layout: Arrangement::Grid,
+        markers: false,
     },
     Template {
         id: "timeline",
         label: "Timeline · Portrait",
         category: "Timeline",
+        group: "Guides",
         slots: 5,
         columns: 1,
         width: 900,
         row_height: 240.,
         side_text: true,
         timeline: true,
+        subtitle: None,
+        labels: &[],
+        body: None,
+        footer: None,
+        layout: Arrangement::Grid,
+        markers: true,
     },
     Template {
-        id: "sop",
-        label: "Standard operating procedure",
-        category: "Business",
-        slots: 4,
+        id: "tutorial-slide",
+        label: "Tutorial slide · 16:9",
+        category: "Slide",
+        group: "Guides",
+        slots: 1,
         columns: 1,
-        width: 900,
-        row_height: 275.,
+        width: 1280,
+        row_height: 512.,
         side_text: true,
         timeline: false,
+        subtitle: Some("Step 1 of 5 · Short lesson title"),
+        labels: &["Click the highlighted control"],
+        body: Some(
+            "Explain why this step matters.\nTip: Add a shortcut or a common mistake to avoid.",
+        ),
+        footer: Some("Next: Name the next step"),
+        layout: Arrangement::Grid,
+        markers: true,
     },
     Template {
         id: "troubleshooting",
-        label: "Troubleshooting guide",
+        label: "Troubleshooting Q&A",
         category: "Business",
+        group: "Support",
         slots: 3,
         columns: 1,
         width: 900,
         row_height: 290.,
         side_text: true,
         timeline: false,
+        subtitle: Some("The questions people ask, with the fix for each"),
+        labels: &[
+            "Symptom: What do you see?",
+            "Cause: Why does it happen?",
+            "Fix: What should you do?",
+        ],
+        body: Some(
+            "What to check: Describe the evidence.\nNext action: Explain the result and where to go next.",
+        ),
+        footer: Some("Owner: ____________________  ·  Version: ______  ·  Reviewed: __________"),
+        layout: Arrangement::Grid,
+        markers: true,
     },
     Template {
-        id: "onboarding",
-        label: "Onboarding checklist",
-        category: "Business",
+        id: "checklist",
+        label: "Checklist",
+        category: "Support",
+        group: "Support",
         slots: 4,
+        columns: 2,
+        width: 1200,
+        row_height: 300.,
+        side_text: false,
+        timeline: false,
+        subtitle: Some("Tick each item when it is done"),
+        labels: &[
+            "☐ First item",
+            "☐ Second item",
+            "☐ Third item",
+            "☐ Fourth item",
+        ],
+        body: None,
+        footer: Some("Completed by: ____________________  ·  Date: __________"),
+        layout: Arrangement::Grid,
+        markers: false,
+    },
+    Template {
+        id: "release-notes",
+        label: "Release notes",
+        category: "Announcement",
+        group: "Announce & share",
+        slots: 3,
         columns: 1,
         width: 900,
-        row_height: 250.,
+        row_height: 290.,
         side_text: true,
         timeline: false,
+        subtitle: Some("Version ______ · Released __________"),
+        labels: &[
+            "New: Name the feature",
+            "Improved: Name the change",
+            "Fixed: Name the problem",
+        ],
+        body: Some(
+            "Describe the change in one or two sentences.\nSay who benefits and how to try it.",
+        ),
+        footer: Some("Full change list: ____________________"),
+        layout: Arrangement::Grid,
+        markers: false,
+    },
+    Template {
+        id: "social-card",
+        label: "Social card · Square",
+        category: "Announcement",
+        group: "Announce & share",
+        slots: 1,
+        columns: 1,
+        width: 1080,
+        row_height: 872.,
+        side_text: false,
+        timeline: false,
+        subtitle: Some("Add a short supporting line"),
+        labels: &["Write a headline"],
+        body: None,
+        footer: Some("yourwebsite.example"),
+        layout: Arrangement::Grid,
+        markers: false,
+    },
+    Template {
+        id: "annotated-screen",
+        label: "Annotated screen",
+        category: "Annotated",
+        group: "Guides",
+        slots: 1,
+        width: 1200,
+        row_height: 600.,
+        subtitle: Some("Point out the parts of one screen"),
+        layout: Arrangement::Annotated,
+        ..BASE
+    },
+    Template {
+        id: "zoom-detail",
+        label: "Zoom detail",
+        category: "Annotated",
+        group: "Guides",
+        slots: 1,
+        width: 1200,
+        row_height: 600.,
+        subtitle: Some("The full screen, with the small parts that matter enlarged"),
+        layout: Arrangement::ZoomDetail,
+        ..BASE
+    },
+    Template {
+        id: "shortcut-sheet",
+        label: "Shortcut sheet",
+        category: "Reference",
+        group: "Support",
+        slots: 0,
+        width: 1200,
+        row_height: 520.,
+        subtitle: Some("Keyboard shortcuts at a glance"),
+        layout: Arrangement::Shortcuts,
+        ..BASE
+    },
+    Template {
+        id: "process-flow",
+        label: "Process flow",
+        category: "Steps",
+        group: "Guides",
+        slots: 3,
+        width: 1200,
+        row_height: 420.,
+        subtitle: Some("How the work moves from one screen to the next"),
+        layout: Arrangement::Flow,
+        ..BASE
+    },
+    Template {
+        id: "do-dont",
+        label: "Do / Don't",
+        category: "Comparison",
+        group: "Support",
+        slots: 2,
+        width: 1200,
+        row_height: 540.,
+        subtitle: Some("The right way, and the mistake to avoid"),
+        layout: Arrangement::DoDont,
+        ..BASE
+    },
+    Template {
+        id: "window-showcase",
+        label: "Window showcase",
+        category: "Announcement",
+        group: "Announce & share",
+        slots: 1,
+        width: 1200,
+        row_height: 600.,
+        subtitle: Some("Add a short supporting line"),
+        footer: Some("yourwebsite.example"),
+        layout: Arrangement::Showcase,
+        ..BASE
+    },
+];
+/// Templates folded into others in BJ. They stay buildable by id (projects
+/// made from them are ordinary documents) but are no longer in the gallery.
+const RETIRED: &[Template] = &[
+    Template {
+        id: "issue-report",
+        label: "Issue report",
+        category: "Support",
+        group: "Support",
+        slots: 3,
+        columns: 1,
+        width: 900,
+        row_height: 280.,
+        side_text: true,
+        timeline: false,
+        subtitle: Some("Status: Bug · Known issue · Fixed  ·  Product · Version · Reported by"),
+        labels: &[
+            "Steps to reproduce",
+            "Expected and actual result",
+            "Workaround",
+        ],
+        body: Some(
+            "Describe exactly what you did or saw.\nInclude error text, times and file names.",
+        ),
+        footer: Some("Severity: ______  ·  Frequency: ______  ·  Ticket: __________"),
+        layout: Arrangement::Grid,
+        markers: true,
     },
     Template {
         id: "quick-reference",
         label: "Quick reference",
         category: "Business",
+        group: "Support",
         slots: 4,
         columns: 2,
         width: 1200,
         row_height: 320.,
         side_text: false,
         timeline: false,
+        subtitle: Some("Essential actions at a glance"),
+        labels: &[
+            "Navigation",
+            "Common actions",
+            "Keyboard shortcuts",
+            "Get help",
+        ],
+        body: None,
+        footer: Some("Owner: ____________________  ·  Version: ______  ·  Reviewed: __________"),
+        layout: Arrangement::Grid,
+        markers: true,
+    },
+    Template {
+        id: "feature-spotlight",
+        label: "Feature spotlight",
+        category: "Announcement",
+        group: "Announce & share",
+        slots: 1,
+        columns: 1,
+        width: 1200,
+        row_height: 560.,
+        side_text: true,
+        timeline: false,
+        subtitle: Some("One feature, explained in a minute"),
+        labels: &["Name the feature"],
+        body: Some(
+            "What it does: One sentence.\nTip 1: Where to find it.\nTip 2: A shortcut.\nTip 3: A common use.",
+        ),
+        footer: Some("Learn more: ____________________"),
+        layout: Arrangement::Grid,
+        markers: false,
+    },
+    Template {
+        id: "two-steps",
+        label: "Two steps · Portrait",
+        category: "Steps",
+        group: "Guides",
+        slots: 2,
+        columns: 1,
+        width: 900,
+        row_height: 370.,
+        side_text: false,
+        timeline: false,
+        subtitle: None,
+        labels: &[],
+        body: None,
+        footer: None,
+        layout: Arrangement::Grid,
+        markers: true,
+    },
+    Template {
+        id: "three-steps",
+        label: "Three steps · Portrait",
+        category: "Steps",
+        group: "Guides",
+        slots: 3,
+        columns: 1,
+        width: 900,
+        row_height: 270.,
+        side_text: true,
+        timeline: false,
+        subtitle: None,
+        labels: &[],
+        body: None,
+        footer: None,
+        layout: Arrangement::Grid,
+        markers: true,
+    },
+    Template {
+        id: "four-steps",
+        label: "Four steps · Grid",
+        category: "Steps",
+        group: "Guides",
+        slots: 4,
+        columns: 2,
+        width: 900,
+        row_height: 320.,
+        side_text: false,
+        timeline: false,
+        subtitle: None,
+        labels: &[],
+        body: None,
+        footer: None,
+        layout: Arrangement::Grid,
+        markers: true,
+    },
+    Template {
+        id: "comparison",
+        label: "Before / After · Landscape",
+        category: "Comparison",
+        group: "Guides",
+        slots: 2,
+        columns: 2,
+        width: 1200,
+        row_height: 420.,
+        side_text: false,
+        timeline: false,
+        subtitle: None,
+        labels: &["Before", "After"],
+        body: None,
+        footer: None,
+        layout: Arrangement::Grid,
+        markers: false,
+    },
+    Template {
+        id: "overview",
+        label: "Overview · Landscape",
+        category: "Overview",
+        group: "Announce & share",
+        slots: 1,
+        columns: 1,
+        width: 1200,
+        row_height: 440.,
+        side_text: true,
+        timeline: false,
+        subtitle: None,
+        labels: &["Key information"],
+        body: None,
+        footer: None,
+        layout: Arrangement::Grid,
+        markers: false,
+    },
+    Template {
+        id: "sop",
+        label: "Standard operating procedure",
+        category: "Business",
+        group: "Guides",
+        slots: 4,
+        columns: 1,
+        width: 900,
+        row_height: 275.,
+        side_text: true,
+        timeline: false,
+        subtitle: Some("Purpose · Scope · Owner · Last reviewed"),
+        labels: &[
+            "Purpose & prerequisites",
+            "Prepare",
+            "Perform the procedure",
+            "Verify the result",
+        ],
+        body: Some(
+            "Action: Describe what to do.\nExpected result: Explain how to confirm success.",
+        ),
+        footer: Some("Owner: ____________________  ·  Version: ______  ·  Reviewed: __________"),
+        layout: Arrangement::Grid,
+        markers: true,
+    },
+    Template {
+        id: "onboarding",
+        label: "Onboarding checklist",
+        category: "Business",
+        group: "Guides",
+        slots: 4,
+        columns: 1,
+        width: 900,
+        row_height: 250.,
+        side_text: true,
+        timeline: false,
+        subtitle: Some("Name: ____________________   Team: ____________________"),
+        labels: &[
+            "Account & access",
+            "Set up your workspace",
+            "Practice the workflow",
+            "Review & sign off",
+        ],
+        body: Some("Task: Describe the activity.\nCompleted: __________  Reviewed by: __________"),
+        footer: Some("Owner: ____________________  ·  Version: ______  ·  Reviewed: __________"),
+        layout: Arrangement::Grid,
+        markers: true,
     },
     Template {
         id: "training",
         label: "Training handout",
         category: "Business",
+        group: "Guides",
         slots: 3,
         columns: 1,
         width: 900,
         row_height: 290.,
         side_text: true,
         timeline: false,
+        subtitle: Some("Learning objective · Audience · Prerequisites"),
+        labels: &["Learn", "Practice", "Check your understanding"],
+        body: Some(
+            "Explain the concept and show an example.\nPractice: Add a task for the learner.",
+        ),
+        footer: Some("Owner: ____________________  ·  Version: ______  ·  Reviewed: __________"),
+        layout: Arrangement::Grid,
+        markers: true,
+    },
+    Template {
+        id: "how-to",
+        label: "How-to",
+        category: "Guide",
+        group: "Guides",
+        slots: 4,
+        columns: 1,
+        width: 900,
+        row_height: 260.,
+        side_text: true,
+        timeline: false,
+        subtitle: Some("What you will do · Time needed · What you need"),
+        labels: &[
+            "Open the starting point",
+            "Make the change",
+            "Save or confirm",
+            "Check the result",
+        ],
+        body: Some(
+            "Do this: Describe the action in one sentence.\nYou should see: Describe what changes on screen.",
+        ),
+        footer: None,
+        layout: Arrangement::Grid,
+        markers: true,
+    },
+    Template {
+        id: "bug-report",
+        label: "Bug report",
+        category: "Support",
+        group: "Support",
+        slots: 3,
+        columns: 1,
+        width: 900,
+        row_height: 280.,
+        side_text: true,
+        timeline: false,
+        subtitle: Some("Product · Version · Operating system · Reported by"),
+        labels: &["Steps to reproduce", "Expected result", "Actual result"],
+        body: Some(
+            "Describe exactly what you did or saw.\nInclude error text, times and file names.",
+        ),
+        footer: Some("Severity: ______  ·  Frequency: ______  ·  Ticket: __________"),
+        layout: Arrangement::Grid,
+        markers: true,
+    },
+    Template {
+        id: "known-issue",
+        label: "Known issue",
+        category: "Support",
+        group: "Support",
+        slots: 2,
+        columns: 1,
+        width: 900,
+        row_height: 320.,
+        side_text: true,
+        timeline: false,
+        subtitle: Some("Status: Investigating · Last updated: __________"),
+        labels: &["Who is affected", "Workaround"],
+        body: Some(
+            "Describe the symptom and when it happens.\nList the steps that avoid the problem for now.",
+        ),
+        footer: Some("Fix expected in: __________  ·  Contact: ____________________"),
+        layout: Arrangement::Grid,
+        markers: true,
+    },
+    Template {
+        id: "faq",
+        label: "FAQ",
+        category: "Support",
+        group: "Support",
+        slots: 3,
+        columns: 1,
+        width: 900,
+        row_height: 270.,
+        side_text: true,
+        timeline: false,
+        subtitle: Some("Answers to common questions"),
+        labels: &[
+            "Question: How do I…?",
+            "Question: Where can I find…?",
+            "Question: What happens when…?",
+        ],
+        body: Some("Answer: Give the short answer first.\nThen show where to click."),
+        footer: None,
+        layout: Arrangement::Grid,
+        markers: false,
     },
 ];
 pub fn find(id: &str) -> Option<&'static Template> {
-    ALL.iter().find(|t| t.id == id)
+    ALL.iter().chain(RETIRED).find(|t| t.id == id)
+}
+/// The Steps template with its step count (2–8) and Stacked or Grid layout,
+/// chosen in the gallery before it opens.
+pub fn steps(count: usize, grid: bool) -> Result<Template> {
+    if !(2..=8).contains(&count) {
+        return Err(Error::Invalid("Choose 2 to 8 steps.".into()));
+    }
+    let base = *find("steps").expect("built-in Steps template");
+    Ok(Template {
+        slots: count,
+        columns: if grid { 2 } else { 1 },
+        row_height: if grid { 320. } else { 260. },
+        side_text: !grid,
+        ..base
+    })
 }
 pub fn placeholder() -> Result<Arc<Bitmap>> {
     let image = image::RgbaImage::from_fn(240, 150, |x, y| {
@@ -223,6 +720,7 @@ pub(crate) fn text(id: u64, rect: [f32; 4], content: &str, size: f32, bold: bool
         focus: None,
 
         highlighter_rect: false,
+        hard_edge: false,
         group: None,
         rotation_degrees: 0.,
         mirror_x: false,
@@ -239,6 +737,17 @@ pub(crate) fn text(id: u64, rect: [f32; 4], content: &str, size: f32, bold: bool
 }
 pub fn build(id: &str, title: &str, images: &[Arc<Bitmap>], scale: Scale) -> Result<Document> {
     let t = find(id).ok_or_else(|| Error::Invalid("Unknown image template".into()))?;
+    build_template(t, title, images, scale)
+}
+pub fn build_template(
+    t: &Template,
+    title: &str,
+    images: &[Arc<Bitmap>],
+    scale: Scale,
+) -> Result<Document> {
+    if t.layout != Arrangement::Grid {
+        return layouts::build(t, title, images, scale);
+    }
     if images.len() > t.slots || title.chars().count() > 120 {
         return Err(Error::Invalid(format!(
             "This template accepts at most {} images and a title of 120 characters.",
@@ -277,16 +786,7 @@ pub fn build(id: &str, title: &str, images: &[Arc<Bitmap>], scale: Scale) -> Res
             text(
                 0,
                 [32., 92., t.width as f32 - 64., 35.],
-                match t.id {
-                    "sop" => "Purpose · Scope · Owner · Last reviewed",
-                    "troubleshooting" => {
-                        "Identify the symptom, check the cause, and verify the fix."
-                    }
-                    "onboarding" => "Name: ____________________   Team: ____________________",
-                    "quick-reference" => "Essential actions at a glance",
-                    "training" => "Learning objective · Audience · Prerequisites",
-                    _ => "Add a subtitle or introduction",
-                },
+                t.subtitle.unwrap_or("Add a subtitle or introduction"),
                 17.,
                 false,
             ),
@@ -340,42 +840,11 @@ pub fn build(id: &str, title: &str, images: &[Arc<Bitmap>], scale: Scale) -> Res
             };
             let caption_y = if side { top + 30. } else { top + image_h + 30. };
             let caption_w = if side { cw - image_w - 24. } else { cw };
-            let label = if t.category == "Business" {
-                match t.id {
-                    "sop" => [
-                        "Purpose & prerequisites",
-                        "Prepare",
-                        "Perform the procedure",
-                        "Verify the result",
-                    ][index],
-                    "troubleshooting" => {
-                        ["Symptom", "Check the likely cause", "Resolve & verify"][index]
-                    }
-                    "onboarding" => [
-                        "Account & access",
-                        "Set up your workspace",
-                        "Practice the workflow",
-                        "Review & sign off",
-                    ][index],
-                    "quick-reference" => [
-                        "Navigation",
-                        "Common actions",
-                        "Keyboard shortcuts",
-                        "Get help",
-                    ][index],
-                    _ => ["Learn", "Practice", "Check your understanding"][index],
-                }
-                .into()
-            } else if t.id == "comparison" {
-                if index == 0 {
-                    "Before".into()
-                } else {
-                    "After".into()
-                }
-            } else {
-                format!("Step {}", index + 1)
-            };
-            let marker_id = if t.category == "Steps" || t.timeline || t.category == "Business" {
+            let label = t
+                .labels
+                .get(index)
+                .map_or_else(|| format!("Step {}", index + 1), |l| (*l).to_owned());
+            let marker_id = if t.markers {
                 let a = crate::steps::marker(
                     1,
                     [caption_x + 14., caption_y + 14.],
@@ -400,11 +869,7 @@ pub fn build(id: &str, title: &str, images: &[Arc<Bitmap>], scale: Scale) -> Res
                 text(
                     0,
                     [caption_x + offset, caption_y, caption_w - offset, 32.],
-                    if t.id == "overview" {
-                        "Key information"
-                    } else {
-                        &label
-                    },
+                    &label,
                     20.,
                     true,
                 ),
@@ -415,25 +880,7 @@ pub fn build(id: &str, title: &str, images: &[Arc<Bitmap>], scale: Scale) -> Res
                     text(
                         0,
                         [caption_x, caption_y + 46., caption_w, t.row_height - 110.],
-                        match t.id {
-                            "sop" => {
-                                "Action: Describe what to do.
-Expected result: Explain how to confirm success."
-                            }
-                            "troubleshooting" => {
-                                "What to check: Describe the evidence.
-Next action: Explain the result and where to go next."
-                            }
-                            "onboarding" => {
-                                "Task: Describe the activity.
-Completed: __________  Reviewed by: __________"
-                            }
-                            "training" => {
-                                "Explain the concept and show an example.
-Practice: Add a task for the learner."
-                            }
-                            _ => "Describe the action or key point.",
-                        },
+                        t.body.unwrap_or("Describe the action or key point."),
                         17.,
                         false,
                     ),
@@ -454,11 +901,7 @@ Practice: Add a task for the learner."
         text(
             0,
             [32., height - 44., t.width as f32 - 64., 28.],
-            if t.category == "Business" {
-                "Owner: ____________________  ·  Version: ______  ·  Reviewed: __________"
-            } else {
-                "Created with ClipCraft"
-            },
+            t.footer.unwrap_or("Created with ClipCraft"),
             13.,
             false,
         ),
@@ -484,6 +927,52 @@ Practice: Add a task for the learner."
 #[cfg(test)]
 mod tests {
     use super::*;
+    /// bj-proposal 2 and the BJ3 review: 8 kept + 6 new layouts; Steps takes 2–8 steps,
+    /// stacked or as a grid; retired templates still build by id.
+    #[test]
+    fn gallery_is_consolidated_and_steps_are_configurable() {
+        assert_eq!(ALL.len(), 14);
+        let ids: Vec<_> = ALL.iter().map(|t| t.id).collect();
+        for gone in ["two-steps", "how-to", "faq", "comparison", "bug-report"] {
+            assert!(!ids.contains(&gone), "{gone} left the gallery");
+            assert!(find(gone).is_some(), "{gone} still builds");
+        }
+        for (count, grid) in [(2, false), (5, false), (8, true)] {
+            let t = steps(count, grid).unwrap();
+            let d = build_template(&t, "Guide", &[], Scale::Fit).unwrap();
+            let frames = d
+                .annotations
+                .iter()
+                .filter(|a| a.kind == Kind::Image)
+                .count();
+            assert_eq!(frames, count);
+            let lefts: std::collections::BTreeSet<i32> = d
+                .annotations
+                .iter()
+                .filter(|a| a.kind == Kind::Image)
+                .map(|a| a.start[0] as i32)
+                .collect();
+            assert_eq!(lefts.len(), if grid { 2 } else { 1 }, "{count} {grid}");
+        }
+        assert!(steps(1, false).is_err() && steps(9, true).is_err());
+        // Each new layout is its own look: no two render alike.
+        let looks: Vec<_> = ALL
+            .iter()
+            .filter(|t| t.layout != Arrangement::Grid)
+            .map(|t| {
+                build(t.id, "Guide", &[], Scale::Fit)
+                    .unwrap()
+                    .render()
+                    .unwrap()
+            })
+            .collect();
+        assert_eq!(looks.len(), 6);
+        for (i, a) in looks.iter().enumerate() {
+            for b in &looks[i + 1..] {
+                assert_ne!(a, b);
+            }
+        }
+    }
     #[test]
     fn templates_keep_editable_sections_sources_and_exact_roundtrips() {
         for t in ALL {
@@ -499,31 +988,34 @@ mod tests {
                     ))
                     .unwrap(),
                 );
-                let d = build(
-                    t.id,
-                    "Deployment guide",
-                    std::slice::from_ref(&source),
-                    scale,
-                )
-                .unwrap();
+                let given: &[Arc<Bitmap>] = if t.slots == 0 {
+                    &[]
+                } else {
+                    std::slice::from_ref(&source)
+                };
+                let d = build(t.id, "Deployment guide", given, scale).unwrap();
                 assert_eq!(d.version, crate::MAX_PROJECT_VERSION);
+                // Picture frames, not icon badges.
                 assert_eq!(
                     d.annotations
                         .iter()
-                        .filter(|a| a.kind == Kind::Image)
+                        .filter(|a| a.kind == Kind::Image && !a.image.as_ref().unwrap().is_icon())
                         .count(),
-                    t.slots
+                    t.slots,
+                    "{}",
+                    t.id
                 );
                 let saved = serde_json::to_vec(&d).unwrap();
                 let copy: Document = serde_json::from_slice(&saved).unwrap();
                 copy.validate().unwrap();
                 assert_eq!(d.render().unwrap(), copy.render().unwrap());
-                let first = d
+                if let Some(first) = d
                     .annotations
                     .iter()
-                    .find(|a| a.kind == Kind::Image)
-                    .unwrap();
-                assert_eq!(first.image.as_ref().unwrap().size(), source.size());
+                    .find(|a| a.kind == Kind::Image && !a.image.as_ref().unwrap().is_icon())
+                {
+                    assert_eq!(first.image.as_ref().unwrap().size(), source.size());
+                }
                 let mut s = crate::Session::new(d.clone()).unwrap();
                 s.execute(crate::Command::Guide {
                     action: crate::guide_sections::Action::Duplicate { id: 2 },
@@ -560,6 +1052,13 @@ mod tests {
             }
         }
         assert!(build("unknown", "", &[], Scale::Fit).is_err());
+        // Every gallery template is in a gallery group (14 after the BJ3 review).
+        assert_eq!(ALL.len(), 14);
+        assert!(ALL.iter().all(|t| GROUPS.contains(&t.group)));
+        let slide = build("tutorial-slide", "", &[], Scale::Fit).unwrap();
+        assert_eq!((slide.width, slide.height), (1280, 720));
+        let card = build("social-card", "", &[], Scale::Fit).unwrap();
+        assert_eq!((card.width, card.height), (1080, 1080));
         assert!(build("overview", "", &vec![placeholder().unwrap(); 2], Scale::Fit).is_err());
     }
 }

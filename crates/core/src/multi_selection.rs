@@ -101,6 +101,141 @@ pub fn translated(
         .collect()
 }
 
+/// A plain drawn shape: not a frame holding an image, not Focus or Magnify.
+fn plain_shape(a: &Annotation) -> bool {
+    a.is_shape() && !a.is_image_frame() && a.focus.is_none()
+}
+pub fn can_fill(a: &Annotation) -> bool {
+    a.focus.is_none()
+        && (a.kind == crate::Kind::Step || a.kind == crate::Kind::Callout || plain_shape(a))
+}
+pub fn fill(a: &Annotation) -> [u8; 4] {
+    match (&a.callout, a.kind) {
+        (_, crate::Kind::Step) => a.color,
+        (Some(c), _) => c.fill,
+        _ => a.fill.unwrap_or([0; 4]),
+    }
+}
+pub fn set_fill(a: &mut Annotation, color: [u8; 4]) {
+    if !can_fill(a) {
+        return;
+    }
+    if a.kind == crate::Kind::Step {
+        a.color = color;
+    } else if let Some(c) = a.callout.as_mut() {
+        c.fill = color;
+    } else {
+        a.fill = Some(color);
+    }
+}
+pub fn can_outline(a: &Annotation) -> bool {
+    a.focus.is_none()
+        && (a.is_shape()
+            || matches!(
+                a.kind,
+                crate::Kind::Step
+                    | crate::Kind::Line
+                    | crate::Kind::Arrow
+                    | crate::Kind::Pen
+                    | crate::Kind::Highlighter
+                    | crate::Kind::Callout
+            ))
+}
+pub fn outline(a: &Annotation) -> [u8; 4] {
+    match (&a.callout, a.kind) {
+        (_, crate::Kind::Step) => a.step_outline.clone().unwrap_or_default().color,
+        (Some(c), _) => c.outline,
+        _ => a.color,
+    }
+}
+pub fn set_outline(a: &mut Annotation, color: [u8; 4]) {
+    if !can_outline(a) {
+        return;
+    }
+    if a.kind == crate::Kind::Step {
+        a.step_outline.get_or_insert_with(Default::default).color = color;
+    } else if let Some(c) = a.callout.as_mut() {
+        c.outline = color;
+    } else {
+        // A shape's label inherits this color until it has its own.
+        if a.is_shape()
+            && let Some(text) = a.text.as_mut()
+        {
+            text.color.get_or_insert(a.color);
+        }
+        a.color = color;
+    }
+}
+pub fn thickness(a: &Annotation) -> f32 {
+    if a.kind == crate::Kind::Step {
+        a.step_outline.as_ref().map_or(0., |o| o.width)
+    } else {
+        a.width as f32
+    }
+}
+pub fn set_thickness(a: &mut Annotation, width: f32) {
+    if !can_outline(a) {
+        return;
+    }
+    if a.kind == crate::Kind::Step {
+        if width > 0. {
+            a.step_outline.get_or_insert_with(Default::default).width = width;
+        } else {
+            a.step_outline = None;
+        }
+    } else {
+        a.width = (width.round() as u32).clamp(1, 32);
+    }
+}
+/// Privacy effects stay fully opaque, and Focus has its own strength controls.
+pub fn can_fade(a: &Annotation) -> bool {
+    a.focus.is_none()
+        && !matches!(
+            a.kind,
+            crate::Kind::Redact | crate::Kind::Blur | crate::Kind::Pixelate | crate::Kind::Eraser
+        )
+}
+pub fn opacity(a: &Annotation) -> u8 {
+    a.color[3]
+}
+pub fn set_opacity(a: &mut Annotation, value: u8) {
+    if !can_fade(a) {
+        return;
+    }
+    a.color[3] = value;
+    if let Some(fill) = a.fill.as_mut() {
+        fill[3] = value;
+    }
+    if let Some(o) = a.step_outline.as_mut() {
+        o.color[3] = value;
+    }
+    if let Some(c) = a.callout.as_mut() {
+        c.fill[3] = value;
+        c.outline[3] = value;
+    }
+}
+pub fn can_shadow(a: &Annotation) -> bool {
+    !matches!(
+        a.kind,
+        crate::Kind::Redact | crate::Kind::Blur | crate::Kind::Pixelate | crate::Kind::Eraser
+    )
+}
+/// Text objects, Steps and callouts hold text. A plain shape takes text settings
+/// too, kept for when text is added.
+pub fn can_hold_text(a: &Annotation) -> bool {
+    a.text.is_some() || plain_shape(a)
+}
+/// Gives a plain shape an empty text style so its settings have somewhere to live.
+pub fn with_room_for_text(mut a: Annotation) -> Annotation {
+    if a.text.is_none() && plain_shape(&a) {
+        a.text = Some(crate::text::TextStyle {
+            content: String::new(),
+            ..Default::default()
+        });
+    }
+    a
+}
+
 /// Copy only changed formatting to another object of exactly the same type.
 /// Text content, position, path geometry, callout tail and identity stay intact.
 pub fn format_like_change(
@@ -256,6 +391,42 @@ mod tests {
 
     fn fixture() -> Document {
         serde_json::from_str(include_str!("../tests/fixtures/translation.capture.json")).unwrap()
+    }
+    #[test]
+    fn shared_settings_reach_each_kind_where_it_keeps_them() {
+        let step = crate::steps::marker(1, [50., 50.], 44, [9; 4], (1, false), [200, 200]).unwrap();
+        let mut shape = step.clone();
+        shape.kind = crate::Kind::Rectangle;
+        shape.text = None;
+        let mut line = shape.clone();
+        line.kind = crate::Kind::Line;
+        let mut s = step;
+        set_fill(&mut s, [1, 2, 3, 255]);
+        set_outline(&mut s, [4, 5, 6, 255]);
+        set_thickness(&mut s, 5.);
+        assert_eq!(s.color, [1, 2, 3, 255]);
+        let o = s.step_outline.clone().unwrap();
+        assert_eq!((o.color, o.width), ([4, 5, 6, 255], 5.));
+        set_thickness(&mut s, 0.);
+        assert!(s.step_outline.is_none(), "0 means no outline on a marker");
+        set_fill(&mut shape, [1, 2, 3, 255]);
+        set_outline(&mut shape, [4, 5, 6, 255]);
+        assert_eq!(shape.fill, Some([1, 2, 3, 255]));
+        assert_eq!(shape.color, [4, 5, 6, 255]);
+        let before = line.clone();
+        set_fill(&mut line, [1, 2, 3, 255]);
+        assert_eq!(line, before, "lines have no fill");
+        set_outline(&mut line, [4, 5, 6, 255]);
+        set_thickness(&mut line, 7.);
+        assert_eq!((line.color, line.width), ([4, 5, 6, 255], 7));
+        let mut redact = before.clone();
+        redact.kind = crate::Kind::Redact;
+        let held = redact.clone();
+        set_opacity(&mut redact, 10);
+        set_outline(&mut redact, [4, 5, 6, 255]);
+        assert_eq!(redact, held, "a redaction never fades or recolors");
+        let empty = with_room_for_text(shape);
+        assert!(empty.text.is_some());
     }
     #[test]
     fn duplicate_batch_preserves_source_labels_order_and_one_undo_after_reopen() {

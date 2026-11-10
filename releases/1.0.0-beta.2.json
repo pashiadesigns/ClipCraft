@@ -1,0 +1,41 @@
+{
+  "version": "1.0.0-beta.2",
+  "date": "2026-11-10",
+  "channel": "beta",
+  "title": "ClipCraft 1.0 beta 2",
+  "summary": "A large update to the 1.0 beta: tracked video redaction with review, built-in illustrated Help, keyframes, GIF Studio, webcam picture-in-picture, filters and borders, Preferences, a clearer Library and a simpler ribbon.",
+  "changes": {
+    "Privacy and review": [
+      "Video redactions follow moving and scrolling text, hold briefly when lost, and flag uncertain moments for review.",
+      "Export video lists every tracked redaction that needs review; Show and Previous/Next step through flagged moments.",
+      "Detection assists review only. Exported redactions remove the covered content; projects keep the originals."
+    ],
+    "Video": [
+      "Recorded cursor with adjustable smoothing, clicks, and zooms that can follow the cursor.",
+      "Webcam picture-in-picture that starts with the first screen frame and skips pauses.",
+      "Keyframes for position, size and color with Smooth, Linear and Hold; GIF Studio for short loops.",
+      "Recording quality and size estimates, edit several clips and zooms at once, Alt+drag to copy a clip frame.",
+      "New video from pictures, with each picture fading into the next; clip color, filters, borders and edges."
+    ],
+    "Image editing": [
+      "Ready-made shapes, oval and cloud callouts, and ellipse or freehand blur and pixelate, all as presets.",
+      "Perspective for image objects, filters, color, borders and edges, crop ratios, Cut Out edges and a hard-edged Eraser.",
+      "Snapping to objects, edges and an optional grid; color palettes; watermarks; SVG and EPS import.",
+      "ClipCraft Blue is the first preset for every drawing tool; lines and arrows start at thickness 3."
+    ],
+    "Workspace": [
+      "Help window with illustrated, searchable articles; press F1 over any control.",
+      "Formatting now holds what Advanced had; Preferences (Ctrl+Comma) replaces the Options page.",
+      "A clearer Library: labeled sidebar with counts, folders, By app and By website, filter chips and pinning in Recent.",
+      "Open and closed hand cursors, tooltips sized to their text, and faster editing on styled images."
+    ]
+  },
+  "limitations": [
+    "Unsigned Windows 10/11 x64 beta. Old development project formats are unsupported; back up work before updating.",
+    "Automatic detection and tracking of sensitive information does not guarantee complete coverage. Review every flagged range and the whole video before sharing. Focus and Magnify are emphasis, not privacy tools; blur and pixelation may leave information inferable.",
+    "Framed crossfades involving rotation, transparency or different frames can preview less smoothly than they export.",
+    "Scrolling capture is Region-only. By website fills in only when the window title names the site.",
+    "Silent startup on some older Windows 11 laptops is still being investigated.",
+    "PDF text is outlined, not searchable. No automatic updater."
+  ]
+}

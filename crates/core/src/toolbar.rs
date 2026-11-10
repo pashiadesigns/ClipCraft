@@ -12,6 +12,7 @@ pub enum ToolId {
     Text,
     Shape,
     Focus,
+    MagnifiedCallout,
     Icons,
     Steps,
     #[serde(rename = "pen")]
@@ -22,7 +23,7 @@ pub enum ToolId {
     Eraser,
 }
 
-pub const ALL: [ToolId; 12] = [
+pub const ALL: [ToolId; 13] = [
     ToolId::Move,
     ToolId::Lines,
     ToolId::Text,
@@ -35,6 +36,7 @@ pub const ALL: [ToolId; 12] = [
     ToolId::CutOut,
     ToolId::Eraser,
     ToolId::Focus,
+    ToolId::MagnifiedCallout,
 ];
 pub fn default_order() -> Vec<ToolId> {
     let mut order = vec![ToolId::Move, ToolId::Text, ToolId::Shape, ToolId::Steps];
@@ -89,7 +91,11 @@ pub fn group(tool: ToolId, favorites: &[ToolId]) -> Group {
     match tool {
         ToolId::Move | ToolId::Penlighter | ToolId::Obfuscate => Group::General,
         ToolId::Text | ToolId::Steps => Group::Text,
-        ToolId::Focus | ToolId::Shape | ToolId::Lines | ToolId::Icons => Group::Shape,
+        ToolId::Focus
+        | ToolId::MagnifiedCallout
+        | ToolId::Shape
+        | ToolId::Lines
+        | ToolId::Icons => Group::Shape,
         ToolId::Crop | ToolId::CutOut | ToolId::Eraser => Group::Canvas,
     }
 }

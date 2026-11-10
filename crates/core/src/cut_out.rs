@@ -9,6 +9,102 @@ pub enum CutAxis {
     Vertical,
 }
 
+/// The look of a joined seam, also used by image edges.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum EdgeShape {
+    #[default]
+    Straight,
+    Torn,
+    Wave,
+    Zigzag,
+}
+impl EdgeShape {
+    pub const ALL: [Self; 4] = [Self::Straight, Self::Torn, Self::Wave, Self::Zigzag];
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Straight => "Straight",
+            Self::Torn => "Torn",
+            Self::Wave => "Wave",
+            Self::Zigzag => "Zigzag",
+        }
+    }
+    /// How far the edge swings at this distance along it, from -1 to 1.
+    pub fn offset(self, along: f32) -> f32 {
+        match self {
+            Self::Straight => 0.,
+            Self::Wave => (along * std::f32::consts::TAU / 48.).sin(),
+            Self::Zigzag => {
+                let t = (along / 24.).rem_euclid(1.);
+                4. * (t - 0.5).abs() - 1.
+            }
+            Self::Torn => {
+                0.5 * (along * 0.13).sin()
+                    + 0.3 * (along * 0.37 + 1.).sin()
+                    + 0.2 * (along * 0.91 + 2.).sin()
+            }
+        }
+    }
+}
+
+/// Where a cut's two sides meet.
+#[derive(Clone, Copy, Debug)]
+pub struct Seam {
+    dimension: usize,
+    start: f32,
+    removed: u32,
+    swing: f32,
+    edge: EdgeShape,
+}
+impl Seam {
+    /// `size` is the page before the cut. The seam may only swing into pixels
+    /// that exist on both sides.
+    pub fn new(axis: CutAxis, start: u32, end: u32, edge: EdgeShape, size: [u32; 2]) -> Self {
+        let dimension = axis.dimension();
+        let swing = 8
+            .min((end - start) / 2)
+            .min(start)
+            .min(size[dimension] - end);
+        Self {
+            dimension,
+            start: start as f32,
+            removed: end - start,
+            swing: swing as f32,
+            edge,
+        }
+    }
+    /// Where the seam sits, measured along the cut direction.
+    pub fn at(&self, along: f32) -> f32 {
+        self.start + self.edge.offset(along) * self.swing
+    }
+    /// The source pixel for a pixel of the joined image, and how strongly the
+    /// seam line darkens it. A straight cut has no line.
+    pub fn map(&self, p: [u32; 2]) -> ([u32; 2], f32) {
+        let along = p[1 - self.dimension] as f32;
+        let at = self.at(along);
+        let middle = p[self.dimension] as f32 + 0.5;
+        let mut source = p;
+        if middle >= at {
+            source[self.dimension] += self.removed;
+        }
+        let distance = (middle - at).abs();
+        let shade = if self.edge != EdgeShape::Straight && self.swing > 0. && distance < 1. {
+            0.35 * (1. - distance)
+        } else {
+            0.
+        };
+        (source, shade)
+    }
+}
+fn shaded(mut pixel: image::Rgba<u8>, shade: f32) -> image::Rgba<u8> {
+    if shade > 0. {
+        for c in 0..3 {
+            pixel[c] = (pixel[c] as f32 * (1. - shade)).round() as u8;
+        }
+    }
+    pixel
+}
+
 impl CutAxis {
     pub fn dimension(self) -> usize {
         if self == Self::Horizontal { 1 } else { 0 }
@@ -73,6 +169,7 @@ impl Document {
         axis: CutAxis,
         start: u32,
         end: u32,
+        edge: EdgeShape,
         page: usize,
         all_pages: bool,
     ) -> Result<()> {
@@ -114,12 +211,11 @@ impl Document {
             let page_size = layout.page_size(i, size);
             let affected = all_pages || i == page;
             if affected {
+                let old_size = old.page_size(i, [self.width, self.height]);
+                let seam = Seam::new(axis, start, end, edge, old_size);
                 let pixels = image::RgbaImage::from_fn(page_size[0], page_size[1], |x, y| {
-                    let mut p = [x, y];
-                    if p[axis.dimension()] >= start {
-                        p[axis.dimension()] += end - start;
-                    }
-                    *source.get_pixel(from[0] + p[0], from[1] + p[1])
+                    let (p, shade) = seam.map([x, y]);
+                    shaded(*source.get_pixel(from[0] + p[0], from[1] + p[1]), shade)
                 });
                 next_object = next_object
                     .checked_add(1)
@@ -182,15 +278,19 @@ impl Document {
         self.validate()
     }
 
-    pub(crate) fn cut_out(&mut self, axis: CutAxis, start: u32, end: u32) -> Result<()> {
+    pub(crate) fn cut_out(
+        &mut self,
+        axis: CutAxis,
+        start: u32,
+        end: u32,
+        edge: EdgeShape,
+    ) -> Result<()> {
         let size = axis.output_size([self.width, self.height], start, end)?;
         let source = self.render()?;
+        let seam = Seam::new(axis, start, end, edge, [self.width, self.height]);
         let result = image::RgbaImage::from_fn(size[0], size[1], |x, y| {
-            let mut p = [x, y];
-            if p[axis.dimension()] >= start {
-                p[axis.dimension()] += end - start;
-            }
-            *source.get_pixel(p[0], p[1])
+            let (p, shade) = seam.map([x, y]);
+            shaded(*source.get_pixel(p[0], p[1]), shade)
         });
         let raster = std::sync::Arc::new(RasterImage::from_image(&result)?);
         self.source_size = Some(self.source_size.unwrap_or([self.width, self.height]));
@@ -257,6 +357,7 @@ mod tests {
                     let mut s = Session::new(d.clone()).unwrap();
                     s.execute(Command::CutOutPages {
                         axis,
+                        edge: Default::default(),
                         start: 40,
                         end: 80,
                         page,
@@ -300,6 +401,7 @@ mod tests {
                     assert!(
                         s.execute(Command::CutOutPages {
                             axis,
+                            edge: Default::default(),
                             start: 0,
                             end: 280,
                             page,
@@ -312,6 +414,53 @@ mod tests {
                 }
             }
         }
+    }
+    #[test]
+    fn shaped_seams_stay_inside_the_image_and_a_cut_at_the_border_stays_straight() {
+        let image = RgbaImage::from_fn(200, 120, |x, y| Rgba([x as u8, y as u8, 40, 255]));
+        let doc = Document::from_image(image.clone()).unwrap();
+        for edge in EdgeShape::ALL {
+            for axis in [CutAxis::Horizontal, CutAxis::Vertical] {
+                for (start, end) in [(30, 60), (40, 41), (0, 30)] {
+                    let mut s = Session::new(doc.clone()).unwrap();
+                    s.execute(Command::CutOut {
+                        axis,
+                        start,
+                        end,
+                        edge,
+                    })
+                    .unwrap();
+                    let expected = [
+                        200 - if axis == CutAxis::Vertical {
+                            end - start
+                        } else {
+                            0
+                        },
+                        120 - if axis == CutAxis::Horizontal {
+                            end - start
+                        } else {
+                            0
+                        },
+                    ];
+                    assert_eq!([s.document.width, s.document.height], expected);
+                    if start == 0 {
+                        let i = axis.dimension();
+                        let out = s.document.render().unwrap();
+                        let mut p = [0, 0];
+                        p[1 - i] = 7;
+                        let mut q = p;
+                        q[i] = end;
+                        assert_eq!(out.get_pixel(p[0], p[1]), image.get_pixel(q[0], q[1]));
+                    }
+                    s.execute(Command::Undo).unwrap();
+                    assert_eq!(s.document.render().unwrap(), image);
+                }
+            }
+        }
+        // The seam moves with the shape, so the two sides meet unevenly.
+        let seam = Seam::new(CutAxis::Horizontal, 30, 60, EdgeShape::Wave, [200, 120]);
+        let heights: Vec<f32> = (0..48).map(|x| seam.at(x as f32)).collect();
+        assert!(heights.iter().any(|h| *h > 36.) && heights.iter().any(|h| *h < 24.));
     }
     #[test]
     fn strip_seams_and_edges_preserve_exact_rgba_history_persistence_and_original() {
@@ -330,7 +479,12 @@ mod tests {
             ] {
                 let mut session = Session::new(doc.clone()).unwrap();
                 session
-                    .execute(Command::CutOut { axis, start, end })
+                    .execute(Command::CutOut {
+                        axis,
+                        start,
+                        end,
+                        edge: Default::default(),
+                    })
                     .unwrap();
                 let actual = session.document.render().unwrap();
                 for (x, y, p) in actual.enumerate_pixels() {
@@ -387,7 +541,12 @@ mod tests {
         ] {
             assert!(
                 session
-                    .execute(Command::CutOut { axis, start, end })
+                    .execute(Command::CutOut {
+                        axis,
+                        start,
+                        end,
+                        edge: Default::default()
+                    })
                     .is_err()
             );
             assert_eq!(serde_json::to_vec(&session.document).unwrap(), original);

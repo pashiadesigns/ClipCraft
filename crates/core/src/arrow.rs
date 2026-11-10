@@ -17,7 +17,14 @@ fn distance_squared(p: [f64; 2], a: [f64; 2], b: [f64; 2]) -> f64 {
     };
     (p[0] - a[0] - t * d[0]).powi(2) + (p[1] - a[1] - t * d[1]).powi(2)
 }
-fn segment(mask: &mut GrayImage, a: [f64; 2], b: [f64; 2], radius: f64, origin: [u32; 2]) {
+fn segment(
+    mask: &mut GrayImage,
+    a: [f64; 2],
+    b: [f64; 2],
+    radius: f64,
+    feather: f64,
+    origin: [u32; 2],
+) {
     let extent = radius + 0.5;
     let top = (a[1].min(b[1]) - extent).floor().max(f64::from(origin[1])) as u32;
     let bottom = (a[1].max(b[1]) + extent)
@@ -38,7 +45,7 @@ fn segment(mask: &mut GrayImage, a: [f64; 2], b: [f64; 2], radius: f64, origin: 
             .min(f64::from(origin[0] + mask.width())) as u32;
         for x in left..right {
             let distance = distance_squared([f64::from(x), f64::from(y)], a, b).sqrt();
-            let coverage = ((extent - distance).clamp(0.0, 1.0) * 255.0).round() as u8;
+            let coverage = (((extent - distance) / feather).clamp(0.0, 1.0) * 255.0).round() as u8;
             let pixel = mask.get_pixel_mut(x - origin[0], y - origin[1]);
             pixel[0] = pixel[0].max(coverage);
         }
@@ -104,13 +111,27 @@ pub(crate) fn render(image: &mut RgbaImage, annotation: &Annotation) {
         .ceil()
         .clamp(f64::from(top), f64::from(image.height())) as u32;
     let mut mask = GrayImage::new(right - left, bottom - top);
+    // A soft eraser fades over most of its radius; Hard edge cuts cleanly.
+    let feather = if annotation.kind == Kind::Eraser && !annotation.hard_edge {
+        (radius * 0.6).max(1.0)
+    } else {
+        1.0
+    };
     for (a, b) in segments {
-        segment(&mut mask, a, b, radius, [left, top]);
+        segment(&mut mask, a, b, radius, feather, [left, top]);
     }
     for (x, y, Luma([coverage])) in mask.enumerate_pixels() {
         if *coverage == 0 {
             continue;
         }
+        let coverage = if annotation.kind == Kind::Eraser && annotation.hard_edge {
+            if *coverage < 128 {
+                continue;
+            }
+            &255
+        } else {
+            coverage
+        };
         let mut color = annotation.color;
         color[3] = ((u16::from(color[3]) * u16::from(*coverage) + 127) / 255) as u8;
         let pixel = image.get_pixel_mut(left + x, top + y);
@@ -141,6 +162,7 @@ mod tests {
             focus: None,
 
             highlighter_rect: false,
+            hard_edge: false,
             group: None,
             rotation_degrees: 0.0,
             mirror_x: false,

@@ -1,3 +1,4 @@
+use crate::tips::Tip as _;
 use crate::{Editor, egui};
 use capture_core::keybinds::{Action, Chord, Keybinds};
 
@@ -34,18 +35,11 @@ impl ShortcutAction {
     }
 }
 
-#[derive(Default, PartialEq, Eq)]
-pub(super) enum Tab {
-    #[default]
-    General,
-    Keybinds,
-}
 #[derive(Default)]
 pub(super) struct Options {
-    pub tab: Tab,
     pub category: usize,
     pub recording: Option<ShortcutAction>,
-    draft: Option<Keybinds>,
+    pub draft: Option<Keybinds>,
     message: String,
     error: bool,
 }
@@ -81,9 +75,7 @@ pub(super) fn status(keys: &Keybinds) -> String {
 }
 impl Editor {
     pub(super) fn process_keybind_input(&mut self, ctx: &egui::Context) {
-        if self.shell.backstage != Some(crate::backstage::Page::Options)
-            || self.options.tab != Tab::Keybinds
-        {
+        if self.preferences.section() != Some(crate::preferences::Section::Shortcuts) {
             self.options.recording = None;
             return;
         }
@@ -185,119 +177,19 @@ impl Editor {
             }
         }
     }
-    fn save_lifecycle_option(&mut self, choice: capture_core::quick_preferences::Choice) {
-        match self.quick_controls.save_lifecycle(choice) {
-            Ok(()) => self.status = "Startup and closing preferences saved.".into(),
-            Err(e) => {
-                self.lifecycle.error = e;
-            }
+    /// Apply in Preferences saves shortcut changes that weren't saved here.
+    pub(super) fn apply_shortcut_draft(&mut self, ctx: &egui::Context) {
+        if self.options.draft.as_ref() != Some(&self.quick_controls.keybinds()) {
+            self.save_keybinds(ctx);
         }
+        self.options.draft = None;
     }
-    pub(super) fn show_options(&mut self, ui: &mut egui::Ui) {
-        ui.label(crate::panel_ui::title("Settings", 22.));
-        ui.add_space(12.);
-        crate::panel_ui::rail(ui, |ui| {
-            ui.horizontal(|ui| {
-                let w = (ui.available_width() - 4.) / 2.;
-                for (tab, label) in [(Tab::General, "General"), (Tab::Keybinds, "Keybinds")] {
-                    if crate::panel_ui::tab(ui, label, label, self.options.tab == tab, w, true)
-                        .clicked()
-                    {
-                        self.options.tab = tab;
-                        self.options.recording = None;
-                    }
-                }
-            });
-        });
-        ui.add_space(12.);
-        let width = ui.available_width().min(680.);
-        let rect =
-            egui::Rect::from_min_size(ui.cursor().min, egui::vec2(width, ui.available_height()));
-        let _contents = ui.scope_builder(egui::UiBuilder::new().max_rect(rect), |ui| {
-            ui.set_width(width);
-            self.options_contents(ui);
-        });
-        #[cfg(test)]
-        ui.ctx().data_mut(|d| {
-            d.insert_temp(
-                egui::Id::unique("options-content-bounds"),
-                _contents.response.rect,
-            )
-        });
+    pub(super) fn discard_shortcut_draft(&mut self) {
+        self.options.draft = None;
+        self.options.recording = None;
+        self.options.message.clear();
     }
-    fn options_contents(&mut self, ui: &mut egui::Ui) {
-        if self.options.tab == Tab::General {
-            egui::ScrollArea::vertical()
-                .id_salt("general-options")
-                .auto_shrink([false, false])
-                .show(ui, |ui| {
-                    crate::panel_ui::heading(ui, "Startup", "Startup & closing");
-                    let mut close = self.quick_controls.close_to_tray();
-                    if crate::panel_ui::setting(
-                        ui,
-                        "Close to tray",
-                        "Keep capture shortcuts available when the window closes.",
-                        &mut close,
-                    )
-                    .changed()
-                    {
-                        self.save_lifecycle_option(
-                            capture_core::quick_preferences::Choice::CloseToTray(close),
-                        );
-                    }
-                    ui.horizontal(|ui| {
-                        ui.label("Open on startup");
-                        use capture_core::quick_preferences::{Choice, StartupWindow};
-                        let mut startup = self.quick_controls.startup_window();
-                        let before = startup;
-                        egui::ComboBox::from_id_salt("startup-window")
-                            .selected_text(if startup == StartupWindow::Editor {
-                                "Editor"
-                            } else {
-                                "Clip tab"
-                            })
-                            .show_ui(ui, |ui| {
-                                ui.selectable_value(&mut startup, StartupWindow::Editor, "Editor");
-                                ui.selectable_value(&mut startup, StartupWindow::Clip, "Clip tab");
-                            });
-                        if startup != before {
-                            self.save_lifecycle_option(Choice::StartupWindow(startup));
-                        }
-                    });
-                    ui.add_space(12.);
-                    crate::panel_ui::divider(ui);
-                    crate::panel_ui::heading(ui, "Properties", "Editor");
-                    let mut auto = self.quick_controls.auto_switch_tool();
-                    if crate::panel_ui::setting(
-                        ui,
-                        "Switch tools on selection",
-                        "Use the selected object's tool automatically.",
-                        &mut auto,
-                    )
-                    .changed()
-                    {
-                        self.quick_controls.set_auto_switch_tool(auto);
-                    }
-                    let mut snap = self.quick_controls.snapping();
-                    if crate::panel_ui::setting(
-                        ui,
-                        "Canvas snapping",
-                        "Align objects with nearby edges and centers.",
-                        &mut snap,
-                    )
-                    .changed()
-                    {
-                        self.quick_controls.set_snapping(snap);
-                    }
-                    crate::panel_ui::divider(ui);
-                    self.library_storage_settings(ui);
-                    self.storage_location_options(ui);
-                    if !self.lifecycle.error.is_empty() {
-                        ui.colored_label(egui::Color32::LIGHT_RED, &self.lifecycle.error);
-                    }
-                });
-            return;
-        }
+    pub(super) fn shortcuts_section(&mut self, ui: &mut egui::Ui) {
         let saved = self.quick_controls.keybinds();
         let draft = self.options.draft.get_or_insert_with(|| saved.clone());
         crate::panel_ui::setting(
@@ -630,8 +522,8 @@ fn shortcut_field(
         )
     });
     (
-        record.on_hover_text(format!("Set {action} shortcut")),
-        clear.on_hover_text(format!("Clear {action} shortcut")),
+        record.tip(format!("Set {action} shortcut")),
+        clear.tip(format!("Clear {action} shortcut")),
     )
 }
 

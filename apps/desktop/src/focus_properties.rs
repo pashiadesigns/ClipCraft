@@ -1,3 +1,4 @@
+use crate::tips::Tip as _;
 use crate::{Annotation, Editor, Kind, egui};
 use capture_core::focus::Focus;
 
@@ -9,6 +10,8 @@ pub(super) struct State {
     pub effect: Focus,
     pub color: [u8; 4],
     pub width: u32,
+    /// Outline pattern (solid, dashed, dotted, wavy, …); presets keep it (AX4).
+    pub line_style: Option<capture_core::line_style::Style>,
 }
 impl Default for State {
     fn default() -> Self {
@@ -19,6 +22,7 @@ impl Default for State {
             effect: Default::default(),
             color: [24, 145, 193, 255],
             width: 2,
+            line_style: None,
         }
     }
 }
@@ -36,6 +40,7 @@ impl State {
         self.radius = a.corner_radius;
         self.color = a.color;
         self.width = a.width;
+        self.line_style = a.line_style;
     }
     pub fn apply(&self, a: &mut Annotation) {
         a.focus = Some(self.effect);
@@ -60,6 +65,7 @@ impl State {
         a.shadow = None;
         a.color = self.color;
         a.width = self.width;
+        a.line_style = self.line_style;
         a.points.clear();
     }
 }
@@ -80,6 +86,7 @@ impl Editor {
             state.color = a.color;
             state.width = a.width;
             state.radius = a.corner_radius;
+            state.line_style = a.line_style;
         }
         self.presets_header(ui, self.tool);
         let mut sample = selected
@@ -93,7 +100,11 @@ impl Editor {
             .map(|s| {
                 s.entries()
                     .iter()
-                    .filter(|s| s.focus.is_some())
+                    .filter(|s| {
+                        s.focus.is_some()
+                            && s.focus.and_then(|f| f.magnify).is_some()
+                                == state.effect.magnify.is_some()
+                    })
                     .cloned()
                     .collect()
             })
@@ -101,6 +112,7 @@ impl Editor {
         let mut chosen = None;
         ui.horizontal_wrapped(|ui| {
             for (name, blur, darken) in [
+                ("Clear", 0., 0.),
                 ("Darken", 0., 0.6),
                 ("Blur", 8., 0.),
                 ("Blur + darken", 8., 0.5),
@@ -110,6 +122,7 @@ impl Editor {
                 a.focus = Some(Focus {
                     blur,
                     darken,
+                    magnify: state.effect.magnify,
                     ..Default::default()
                 });
                 let preset =
@@ -147,17 +160,68 @@ impl Editor {
             state.color = a.color;
             state.width = a.width;
             state.radius = a.corner_radius;
+            state.line_style = a.line_style;
         }
         design::end(ui);
-        design::heading(ui, "Focus", "Focus window");
-        ui.horizontal_wrapped(|ui| {
-            for (i, name) in ["Rectangle", "Rounded rectangle", "Circle"]
-                .iter()
-                .enumerate()
-            {
-                ui.selectable_value(&mut state.shape, i as u8, *name);
+        let magnified = state.effect.magnify.is_some();
+        design::heading(
+            ui,
+            if magnified { "Magnify" } else { "Focus" },
+            if magnified { "Magnify" } else { "Focus window" },
+        );
+        if let Some(m) = state.effect.magnify.as_mut() {
+            crate::property_layout::slider(
+                ui,
+                "Magnification",
+                egui::Slider::new(&mut m.scale, 1. ..=8.).suffix("×"),
+            );
+            crate::controls::toggle(ui, &mut m.connectors, "Connector lines");
+            crate::property_layout::slider(
+                ui,
+                "Horizontal offset",
+                egui::Slider::new(&mut m.offset[0], -10. ..=10.),
+            );
+            crate::property_layout::slider(
+                ui,
+                "Vertical offset",
+                egui::Slider::new(&mut m.offset[1], -10. ..=10.),
+            );
+            ui.weak("Drag the enlarged view's center to move it, or its corner to resize it.");
+            crate::property_layout::divider(ui);
+        }
+        let shape_before = state.shape;
+        // Shape buttons show their shape before the name (AV1), in image and video.
+        ui.horizontal(|ui| {
+            let gap = ui.spacing().item_spacing.x;
+            let names = [
+                ("Shape rectangle", "Rectangle"),
+                ("Shape rounded", "Rounded"),
+                ("Shape circle", "Circle"),
+            ];
+            let w = ((ui.available_width() - gap * 2.) / 3.).max(60.);
+            for (i, (icon, name)) in names.iter().enumerate() {
+                let active = state.shape == i as u8;
+                if crate::video_editor::ui::button(ui, icon, name, w, active)
+                    .tip(match i {
+                        0 => "Rectangle window",
+                        1 => "Rounded rectangle window; set the corner radius below",
+                        _ => "Circular window",
+                    })
+                    .clicked()
+                {
+                    state.shape = i as u8;
+                }
             }
         });
+        // A square-cornered window has no radius to keep; choosing Rounded
+        // must visibly round it, or it reads back as a plain rectangle.
+        if state.shape == 1 && shape_before != 1 && state.radius <= 0. {
+            let side = selected.as_ref().map_or(80., |a| {
+                let (lo, hi) = a.body_bounds();
+                (hi[0] - lo[0]).abs().min((hi[1] - lo[1]).abs())
+            });
+            state.radius = (side * 0.2).clamp(4., 40.);
+        }
         ui.weak("The center stays clear. Only layers below this object are affected.");
         if state.shape == 1 {
             crate::property_layout::slider(
@@ -203,6 +267,7 @@ impl Editor {
                 a.end = end;
             }
             crate::line_properties::outline(ui, a);
+            state.line_style = a.line_style;
         }
         design::end(ui);
         state.active = self.shell.focus.active;
@@ -211,6 +276,39 @@ impl Editor {
             && before != after
         {
             self.execute(capture_core::Command::Update { annotation: after });
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn focus_state_keeps_the_outline_pattern() {
+        for pattern in [
+            capture_core::line_style::Pattern::Dashed,
+            capture_core::line_style::Pattern::Dotted,
+            capture_core::line_style::Pattern::Wavy,
+        ] {
+            let mut source =
+                capture_core::steps::marker(1, [60., 60.], 40, [0; 4], (1, false), [320, 180])
+                    .unwrap();
+            source.kind = Kind::Rectangle;
+            source.text = None;
+            source.focus = Some(Focus {
+                magnify: Some(Default::default()),
+                ..Default::default()
+            });
+            source.line_style = Some(capture_core::line_style::Style {
+                pattern,
+                ..capture_core::line_style::Style::for_kind(Kind::Rectangle)
+            });
+            let mut state = State::default();
+            state.remember(&source);
+            let mut next = source.clone();
+            next.line_style = None;
+            state.apply(&mut next);
+            assert_eq!(next.line_style.map(|s| s.pattern), Some(pattern));
         }
     }
 }

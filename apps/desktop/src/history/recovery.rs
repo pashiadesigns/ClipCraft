@@ -59,15 +59,6 @@ impl Editor {
         ui.ctx().data_mut(|d| d.insert_temp(key, limits));
         let mut scan = false;
         ui.horizontal(|ui| {
-            if ui
-                .add(crate::controls::dialog_button("Save capacity", true))
-                .clicked()
-            {
-                self.history.error = store
-                    .set_limits(limits)
-                    .map(|_| "Library capacity saved.".into())
-                    .unwrap_or_else(|e| e.to_string());
-            }
             scan = ui.button("Check Library / Recover…").clicked();
         });
         if let Some(root) = self.history.root() {
@@ -80,6 +71,23 @@ impl Editor {
         if scan {
             self.start_library_scan(ui.ctx(), None);
         }
+    }
+    pub(crate) fn save_library_capacity(&mut self, ctx: &egui::Context) {
+        let key = egui::Id::unique("library-capacity-draft");
+        if let (Some(limits), Some(store)) = (
+            ctx.data_mut(|d| d.remove_temp::<capture_core::history::Limits>(key)),
+            self.history.store.as_mut(),
+        ) && store.limits().ok() != Some(limits)
+        {
+            self.history.error = store
+                .set_limits(limits)
+                .map(|_| "Library capacity saved.".into())
+                .unwrap_or_else(|e| e.to_string());
+        }
+    }
+    pub(crate) fn discard_library_capacity(&mut self, ctx: &egui::Context) {
+        let key = egui::Id::unique("library-capacity-draft");
+        ctx.data_mut(|d| d.remove::<capture_core::history::Limits>(key));
     }
     pub(crate) fn start_library_scan(&mut self, ctx: &egui::Context, filter: Option<String>) {
         let Some(root) = self.history.root() else {
@@ -109,13 +117,13 @@ impl Editor {
         let mut close = false;
         let mut restore = None;
         let modal=crate::controls::Modal::new(key).show(ctx,|ui|{
-            ui.set_width(620.);crate::property_layout::section_help(ui,"Library check & previous versions","Check validates current projects and thumbnails without modifying them. Recover copy validates the saved revision, creates a separate Library item, and leaves the original untouched. Older builds did not retain previous revisions.");
+            ui.set_width(480.);crate::property_layout::section_help(ui,"Library check & previous versions","Check validates current projects and thumbnails without modifying them. Recover copy validates the saved revision, creates a separate Library item, and leaves the original untouched. Older builds did not retain previous revisions.");
             match &result {
                 None=>{ui.spinner();ui.label("Checking local Library…");ctx.request_repaint_after(std::time::Duration::from_millis(100));},
                 Some(Err(e))=>{ui.colored_label(egui::Color32::LIGHT_RED,e);},
                 Some(Ok(rows))=>{
                     ui.label(format!("{} items checked · {} need attention",rows.len(),rows.iter().filter(|r|!r.problems.is_empty()).count()));
-                    egui::ScrollArea::vertical().auto_shrink([false,false]).max_height((ctx.content_rect().height()-200.).max(100.)).show(ui,|ui|{
+                    egui::ScrollArea::vertical().auto_shrink([false,true]).max_height((ctx.content_rect().height()-200.).clamp(100.,360.)).show(ui,|ui|{
                         for row in rows.iter().filter(|r|scan.filter.as_ref().is_none_or(|id|*id==r.entry.id)){
                             ui.push_id(&row.entry.id,|ui|{ui.separator();ui.strong(&row.entry.label);if row.problems.is_empty(){ui.label("Current project and thumbnail checked.");}else{for p in &row.problems{ui.colored_label(egui::Color32::LIGHT_RED,p);}}
                                 if row.revisions.is_empty(){ui.small("No earlier versions retained.");}
@@ -247,7 +255,7 @@ mod tests {
                     focused: true,
                     ..Default::default()
                 },
-                |ui| e.show_options(ui),
+                |ui| e.preferences_library(ui, &mut true),
             ))
         };
         let first = frame(&mut e);

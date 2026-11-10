@@ -144,6 +144,7 @@ pub(super) fn generate_frame(
             .as_nanos();
         let path = folder.join(format!("Still-{stamp}-{id}.png"));
         pixels.save(&path).map_err(|e| e.to_string())?;
+        let _ = capture_core::history::media_cleanup::mark_created(&path);
         Ok(path)
     }
     #[cfg(not(windows))]

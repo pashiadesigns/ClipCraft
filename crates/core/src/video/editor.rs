@@ -62,6 +62,10 @@ impl Animation {
 }
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Timing {
+    #[serde(default, skip_serializing_if = "super::keyframes::Set::is_empty")]
+    pub keyframes: super::keyframes::Set,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub motion_path: Option<std::sync::Arc<super::motion_path::Path>>,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub label: String,
     pub track: u64,
@@ -90,6 +94,8 @@ pub struct Timing {
 impl Timing {
     pub fn new(track: u64, start: u64, end: u64) -> Self {
         Self {
+            keyframes: Default::default(),
+            motion_path: None,
             label: String::new(),
             track,
             start,
@@ -112,6 +118,22 @@ impl Timing {
     pub fn active(&self, t: u64) -> bool {
         self.start <= t && t < self.end
     }
+    /// The time to draw at. A redaction stamped slightly after a frame still
+    /// covers that frame, so its first frame is never left bare.
+    fn drawn_at(&self, time: u64) -> u64 {
+        let redaction = self
+            .motion_path
+            .as_ref()
+            .is_some_and(|p| p.purpose == super::motion_path::Purpose::Redaction);
+        if redaction
+            && time < self.start
+            && self.start - time <= super::motion_path::NEAREST_FRAME_MS
+        {
+            self.start
+        } else {
+            time
+        }
+    }
     pub fn stack_compatible(primary: Animation, stack: &[Animation], candidate: Animation) -> bool {
         candidate != Animation::None
             && candidate != primary
@@ -122,6 +144,55 @@ impl Timing {
                     (Animation::Fade, Animation::Float) | (Animation::Float, Animation::Fade)
                 )
             }))
+    }
+    /// Gives this object, `a`, what the edit from `before` to `after` changed on
+    /// another selected object. Start and End move by the same amount, so the
+    /// objects keep their arrangement. Animations `a` cannot use are left alone.
+    pub fn copy_change(&mut self, before: &Timing, after: &Timing, a: &Annotation) {
+        let shift = after.start as i64 - before.start as i64;
+        let stretch = after.end as i64 - before.end as i64;
+        if shift != 0 || stretch != 0 {
+            let start = self.start.saturating_add_signed(shift);
+            self.end = self.end.saturating_add_signed(stretch).max(start + 1);
+            self.start = start;
+            if shift != 0 {
+                if let Some(path) = self.motion_path.as_mut() {
+                    let path = std::sync::Arc::make_mut(path);
+                    path.offset_ms = path.offset_ms.saturating_add_signed(shift);
+                }
+                self.keyframes.trim_start(shift);
+            }
+        }
+        macro_rules! copy {
+            ($($field:ident),+) => {$(
+                if after.$field != before.$field {
+                    self.$field = after.$field.clone();
+                }
+            )+};
+        }
+        copy!(
+            entrance_ms,
+            exit_ms,
+            paired,
+            smooth,
+            direction,
+            path_reverse,
+            retract_from_start
+        );
+        if after.entrance != before.entrance && after.entrance.supports(a) {
+            self.entrance = after.entrance;
+        }
+        if after.exit != before.exit && after.exit.supports(a) {
+            self.exit = after.exit;
+        }
+        if after.entrance_stack != before.entrance_stack {
+            self.entrance_stack = after.entrance_stack.clone();
+        }
+        if after.exit_stack != before.exit_stack {
+            self.exit_stack = after.exit_stack.clone();
+        }
+        copy!(entrance_durations, exit_durations);
+        self.normalize_stacks(a);
     }
     pub fn normalize_stacks(&mut self, a: &Annotation) {
         for (primary, stack) in [
@@ -198,6 +269,8 @@ pub struct Source {
 }
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Segment {
+    #[serde(default, skip_serializing_if = "super::keyframes::Set::is_empty")]
+    pub keyframes: super::keyframes::Set,
     #[serde(default)]
     pub mono: bool,
     pub id: u64,
@@ -235,6 +308,50 @@ impl Segment {
             + ((t.saturating_sub(self.at) as f64 * self.speed).round() as u64)
                 .min(self.end.saturating_sub(self.start + 1))
     }
+    /// Gives this clip what the edit from `before` to `after` changed on another
+    /// selected clip. Moving keeps the clips' spacing; position on the canvas and
+    /// the source range stay each clip's own.
+    pub fn copy_change(&mut self, before: &Segment, after: &Segment) {
+        self.at = self
+            .at
+            .saturating_add_signed(after.at as i64 - before.at as i64);
+        macro_rules! copy {
+            ($($field:ident),+) => {$(
+                if after.$field != before.$field {
+                    self.$field = after.$field.clone();
+                }
+            )+};
+        }
+        copy!(mono, fade_in, fade_out, hidden);
+        if let (Some(mine), Some(old), Some(new)) = (
+            self.frame.as_mut(),
+            before.frame.as_ref(),
+            after.frame.as_ref(),
+        ) {
+            mine.copy_change(old, new);
+        } else if before.frame.is_none() && after.frame.is_some() {
+            self.frame = after.frame.clone();
+        }
+        for (mine, (old, new)) in self
+            .audio
+            .iter_mut()
+            .zip(before.audio.iter().zip(&after.audio))
+        {
+            if old.volume != new.volume {
+                mine.volume = new.volume;
+            }
+            if old.muted != new.muted {
+                mine.muted = new.muted;
+            }
+            if old.fade_in != new.fade_in {
+                mine.fade_in = new.fade_in;
+            }
+            if old.fade_out != new.fade_out {
+                mine.fade_out = new.fade_out;
+            }
+        }
+        self.clamp_fades();
+    }
     pub fn clamp_fades(&mut self) {
         self.fade_in = self.fade_in.min(self.duration());
         self.fade_out = self.fade_out.min(self.duration() - self.fade_in);
@@ -246,6 +363,7 @@ impl Segment {
             .map(|n| n.to_string_lossy().into_owned())
             .unwrap_or_else(|| "Recording".into());
         Self {
+            keyframes: Default::default(),
             mono: false,
             id,
             at,
@@ -292,9 +410,14 @@ impl TrackKind {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Project {
     #[serde(default)]
+    pub gif_ranges: Vec<crate::gif_studio::Range>,
+    #[serde(default)]
     pub track_settings: Vec<super::editing::TrackSettings>,
     #[serde(default)]
     pub zooms: Vec<super::zoom::Zoom>,
+    /// The quality this project was recorded at. None for imported video.
+    #[serde(default)]
+    pub recorded_quality: Option<super::Quality>,
     pub source: String,
     pub source_duration: u64,
     pub source_size: [u32; 2],
@@ -340,8 +463,10 @@ impl Project {
     }
     pub fn new(source: String, size: [u32; 2], duration: u64, fps: u32) -> Self {
         Self {
+            gif_ranges: vec![],
             track_settings: vec![],
             zooms: vec![],
+            recorded_quality: None,
             source,
             source_duration: duration,
             source_size: size,
@@ -377,6 +502,7 @@ impl Project {
         let mut a = self.clone();
         let mut b = other.clone();
         for p in [&mut a, &mut b] {
+            p.gif_ranges.clear();
             p.clip_effects.clear();
             p.track_effects.clear();
             p.media_levels.clear();
@@ -513,7 +639,7 @@ impl Project {
         let n = self.tracks.iter().copied().max().unwrap_or(0) + 1;
         let mut order = self.layers();
         self.tracks.push(n);
-        let insert = order.iter().take_while(|l| matches!(l, super::links::Layer::Zoom(id) if self.zooms.iter().any(|z| z.id == *id && z.pinned))).count();
+        let insert = order.iter().take_while(|l| matches!(l, super::links::Layer::Zoom(t) if self.zooms.iter().any(|z| z.track() == *t && z.pinned))).count();
         order.insert(insert, super::links::Layer::Annotation(n));
         self.layer_order = order;
         n
@@ -541,6 +667,61 @@ impl Project {
                 });
         }
         self.objects.insert(id, t);
+    }
+    /// Puts each listed zoom on the first zoom track it fits without overlapping
+    /// another zoom, starting a new zoom track only when every existing one
+    /// overlaps (BB6). Zooms are packed in start order.
+    pub fn pack_zooms(&mut self, ids: &[u64]) {
+        let mut order: Vec<_> = ids.to_vec();
+        order.sort_by_key(|id| {
+            self.zooms
+                .iter()
+                .find(|z| z.id == *id)
+                .map_or(0, |z| z.start)
+        });
+        for id in order {
+            let Some(index) = self.zooms.iter().position(|z| z.id == id) else {
+                continue;
+            };
+            let (start, end) = (self.zooms[index].start, self.zooms[index].end);
+            let mut tracks: Vec<u64> = self
+                .zooms
+                .iter()
+                .filter(|z| z.id != id)
+                .map(|z| z.track())
+                .collect();
+            tracks.dedup();
+            let free = tracks.into_iter().find(|t| {
+                self.zooms
+                    .iter()
+                    .filter(|z| z.id != id && z.track() == *t)
+                    .all(|z| z.end <= start || end <= z.start)
+            });
+            let track = free.unwrap_or_else(|| {
+                self.zooms
+                    .iter()
+                    .flat_map(|z| [z.id, z.lane])
+                    .max()
+                    .unwrap_or(0)
+                    + 1
+            });
+            self.zooms[index].lane = track;
+        }
+    }
+    /// Rebuilds following zooms from the project's recorded cursor (BA4).
+    pub fn refollow_zooms(&mut self, size: [u32; 2]) {
+        if self.zooms.iter().all(|z| z.follow.is_none()) {
+            return;
+        }
+        let Some((start, path)) = self.objects.values().find_map(|t| {
+            t.motion_path
+                .as_ref()
+                .filter(|p| p.purpose == super::motion_path::Purpose::Cursor)
+                .map(|p| (t.start, p.clone()))
+        }) else {
+            return;
+        };
+        super::instruction::refollow(&mut self.zooms, &path, start, size);
     }
     pub fn prune_automatic_tracks(&mut self) {
         let empty: Vec<_> = self
@@ -595,12 +776,25 @@ impl Project {
         self.prune_automatic_tracks();
     }
     pub fn validate(&self, doc: &Document) -> Result<()> {
-        let invalid = || {
-            Error::Invalid("Invalid video timeline. Use a local video up to one hour, valid object ranges, and even dimensions up to 1920 × 1080.".into())
+        // The failing rule is named so a report can be traced (BH5).
+        let invalid = |why: &str| {
+            Error::Invalid(format!(
+                "Invalid video timeline ({why}). Use a local video up to one hour, valid object ranges, and even dimensions up to 1920 × 1080 (landscape or portrait)."
+            ))
         };
+        if self.gif_ranges.len() > 64 {
+            return Err(invalid("too many GIF ranges"));
+        }
+        let mut gif_ids = std::collections::BTreeSet::new();
+        for range in &self.gif_ranges {
+            range.validate()?;
+            if !gif_ids.insert(range.id) {
+                return Err(invalid("duplicate GIF range"));
+            }
+        }
         let mut zoom_ids = std::collections::BTreeSet::new();
         if self.zooms.len() > 64 {
-            return Err(invalid());
+            return Err(invalid("too many zooms"));
         }
         for z in &self.zooms {
             z.validate()?;
@@ -615,7 +809,7 @@ impl Project {
                 return Err(Error::Invalid("Overlapping Zoom effects cannot exceed 32× combined magnification. Lower a Zoom value or separate their timing.".into()));
             }
             if !zoom_ids.insert(z.id) {
-                return Err(invalid());
+                return Err(invalid("duplicate zoom"));
             }
         }
         if self.source.is_empty()
@@ -629,8 +823,8 @@ impl Project {
             || ![15, 30, 60].contains(&self.fps)
             || doc.width < 64
             || doc.height < 64
-            || doc.width > 1920
-            || doc.height > 1080
+            || doc.width.max(doc.height) > 1920
+            || doc.width.min(doc.height) > 1080
             || !doc.width.is_multiple_of(2)
             || !doc.height.is_multiple_of(2)
             || doc.guide.is_some()
@@ -649,19 +843,19 @@ impl Project {
             || self.media_tracks.is_empty()
             || self.media_tracks.len() > 64
         {
-            return Err(invalid());
+            return Err(invalid("source video, size or frame rate"));
         }
         if self
             .media_kinds
             .keys()
             .any(|id| !self.media_tracks.contains(id))
         {
-            return Err(invalid());
+            return Err(invalid("track type"));
         }
         if self.media_levels.iter().any(|(id, gain)| {
             !self.media_tracks.contains(id) || !gain.is_finite() || !(0. ..=2.).contains(gain)
         }) {
-            return Err(invalid());
+            return Err(invalid("track volume"));
         }
         let layers = self.layers();
         let mut settings = std::collections::BTreeSet::new();
@@ -670,7 +864,7 @@ impl Project {
             .iter()
             .any(|s| !layers.contains(&s.layer) || !settings.insert(s.layer) || s.name.len() > 320)
         {
-            return Err(invalid());
+            return Err(invalid("track settings"));
         }
         let mut order = std::collections::BTreeSet::new();
         if self.layer_order.iter().any(|l| {
@@ -678,30 +872,31 @@ impl Project {
                 || match l {
                     super::links::Layer::Annotation(id) => !self.tracks.contains(id),
                     super::links::Layer::Media(id) => !self.media_tracks.contains(id),
-                    super::links::Layer::Zoom(id) => !self.zooms.iter().any(|z| z.id == *id),
+                    super::links::Layer::Zoom(t) => !self.zooms.iter().any(|z| z.track() == *t),
                 }
         }) {
-            return Err(invalid());
+            return Err(invalid("layer order"));
         }
         let mut ids = std::collections::BTreeSet::new();
         for (track, chain) in &self.track_effects {
             if !self.media_tracks.contains(track) {
-                return Err(invalid());
+                return Err(invalid("track effects"));
             }
             chain.validate()?;
         }
         for (track, chain) in &self.clip_effects {
             if !self.segments.iter().any(|c| c.id == *track) {
-                return Err(invalid());
+                return Err(invalid("clip effects"));
             }
             chain.validate()?;
         }
         for s in &self.segments {
+            s.keyframes.validate_media(s)?;
             if let Some(frame) = &s.frame {
                 frame.validate()?;
             }
             if s.link == Some(0) {
-                return Err(invalid());
+                return Err(invalid("clip link"));
             }
             let concurrent: Vec<_> = self.segments.iter().filter(|c| c.active(s.at)).collect();
             if concurrent
@@ -739,7 +934,7 @@ impl Project {
                 || s.rect[0] + s.rect[2] > 1.001
                 || s.rect[1] + s.rect[3] > 1.001
             {
-                return Err(invalid());
+                return Err(invalid("clip range or placement"));
             }
             if let Some(a) = &s.source
                 && (a.duration == 0
@@ -752,7 +947,7 @@ impl Project {
                     || a.size.contains(&0)
                     || a.size.iter().any(|n| *n > 8192))
             {
-                return Err(invalid());
+                return Err(invalid("clip media"));
             }
             if self.segments.iter().any(|o| {
                 o.id != s.id
@@ -781,7 +976,7 @@ impl Project {
                     || a.fade_in > s.duration()
                     || a.fade_out > s.duration()
                 {
-                    return Err(invalid());
+                    return Err(invalid("clip audio"));
                 }
             }
         }
@@ -792,7 +987,7 @@ impl Project {
             .len()
             != self.media_tracks.len()
         {
-            return Err(invalid());
+            return Err(invalid("duplicate media track"));
         }
         for path in self.media_paths() {
             if path.is_empty()
@@ -801,12 +996,12 @@ impl Project {
                 || path.contains("://")
                 || !local_media_path(path)
             {
-                return Err(invalid());
+                return Err(invalid("media path"));
             }
         }
         let duration = self.duration();
         if duration > 14_400_000 {
-            return Err(invalid());
+            return Err(invalid("project longer than four hours"));
         }
         let [x, y, w, h] = self.crop;
         if w == 0
@@ -814,17 +1009,24 @@ impl Project {
             || x as u64 + w as u64 > self.source_size[0] as u64
             || y as u64 + h as u64 > self.source_size[1] as u64
         {
-            return Err(invalid());
+            return Err(invalid("crop"));
         }
         let unique: std::collections::BTreeSet<_> = self.tracks.iter().collect();
         if unique.len() != self.tracks.len() {
-            return Err(invalid());
+            return Err(invalid("duplicate track"));
         }
         if self.objects.len() != doc.annotations.len() {
-            return Err(invalid());
+            return Err(invalid("object count"));
         }
         for a in &doc.annotations {
-            let t = self.objects.get(&a.id).ok_or_else(invalid)?;
+            let t = self
+                .objects
+                .get(&a.id)
+                .ok_or_else(|| invalid("object timing missing"))?;
+            t.keyframes.validate()?;
+            if let Some(path) = &t.motion_path {
+                path.validate()?;
+            }
             if t.start >= t.end
                 || t.end > duration
                 || !self.tracks.contains(&t.track)
@@ -845,7 +1047,7 @@ impl Project {
                             })
                     })
             {
-                return Err(invalid());
+                return Err(invalid("object timing"));
             }
         }
         Ok(())
@@ -889,6 +1091,10 @@ impl Project {
             }
         }
         for t in self.objects.values_mut() {
+            t.keyframes.remap_time(t.start, map, &[s.at, s.at + old]);
+            if let Some(path) = &mut t.motion_path {
+                std::sync::Arc::make_mut(path).remap_time(t.start, map, &[s.at, s.at + old]);
+            }
             t.start = map(t.start);
             t.end = map(t.end).max(t.start + 1);
             t.clamp_animations();
@@ -924,6 +1130,7 @@ impl Project {
         let mut next_link = self.next_link();
         let mut id = self.next_media_id();
         for s in &self.segments {
+            s.keyframes.validate_media(s)?;
             for (part, (lo, hi)) in [(s.at, start.min(s.until())), (end.max(s.at), s.until())]
                 .into_iter()
                 .enumerate()
@@ -933,6 +1140,7 @@ impl Project {
                 }
                 let mut c = s.clone();
                 c.at = map(lo);
+                c.keyframes.trim_start((lo - s.at) as i64);
                 c.start = s.start + ((lo - s.at) as f64 * s.speed).round() as u64;
                 c.end = (s.start + ((hi - s.at) as f64 * s.speed).round() as u64).min(s.end);
                 if part == 1 && start > s.at {
@@ -966,6 +1174,14 @@ impl Project {
             .retain(|id, _| self.segments.iter().any(|c| c.id == *id));
         let mut removed = vec![];
         for (id, t) in &mut self.objects {
+            t.keyframes.remap_time(t.start, map, &[start, end]);
+            if let Some(path) = &mut t.motion_path {
+                std::sync::Arc::make_mut(path).remap_time(
+                    t.start,
+                    map,
+                    &[start.saturating_sub(1), end],
+                );
+            }
             t.start = map(t.start);
             t.end = map(t.end);
             t.clamp_animations();
@@ -984,7 +1200,7 @@ impl Project {
         }
         self.zooms.retain(|z| z.end > z.start);
         self.layer_order.retain(|layer| {
-            !matches!(layer, super::links::Layer::Zoom(id) if !self.zooms.iter().any(|z| z.id == *id))
+            !matches!(layer, super::links::Layer::Zoom(t) if !self.zooms.iter().any(|z| z.track() == *t))
         });
         self.cursor = map(self.cursor).min(self.duration().saturating_sub(1));
         Ok(removed)
@@ -992,9 +1208,18 @@ impl Project {
 }
 
 pub fn animated(a: &Annotation, t: &Timing, time: u64) -> Option<Annotation> {
+    let time = t.drawn_at(time);
     if !t.active(time) {
         return None;
     }
+    let keyed = (!t.keyframes.is_empty()).then(|| t.keyframes.annotation(a, time - t.start));
+    let a = keyed.as_ref().unwrap_or(a);
+    let sampled = t.motion_path.as_ref().map(|p| p.apply(a, time - t.start));
+    let a = match &sampled {
+        Some(Some(a)) => a,
+        Some(None) => return None,
+        None => a,
+    };
     let age = time - t.start;
     let left = t.end - time;
     let (anim, progress, exit) = if t.entrance_ms > 0 && age < t.entrance_ms {
@@ -1021,62 +1246,9 @@ fn animated_effect(
     if t.smooth && anim != Animation::Typewriter {
         p = p * p * (3. - 2. * p);
     }
-    let alpha = |c: &mut [u8; 4]| c[3] = (c[3] as f32 * p).round() as u8;
     match anim {
         Animation::Fade | Animation::Float => {
-            if let Some(focus) = a.focus.as_mut() {
-                focus.opacity *= p;
-            }
-            alpha(&mut a.color);
-            if let Some(c) = a.fill.as_mut() {
-                alpha(c)
-            }
-            if let Some(s) = a.text.as_mut()
-                && let Some(c) = s.color.as_mut()
-            {
-                alpha(c)
-            }
-            if let Some(s) = a.shadow.as_mut() {
-                alpha(&mut s.color)
-            }
-            if let Some(c) = a.callout.as_mut() {
-                alpha(&mut c.fill);
-                alpha(&mut c.outline);
-            }
-            if let Some(text) = a.text.as_mut()
-                && let Some(outline) = text.outline.as_mut()
-            {
-                alpha(&mut outline.color);
-            }
-            if let Some(text) = a.text.as_mut()
-                && let Some(typography) = text.typography.as_mut()
-                && let Some(highlight) = typography.highlight.as_mut()
-            {
-                alpha(highlight);
-            }
-            if let Some(outline) = a.step_outline.as_mut() {
-                alpha(&mut outline.color);
-            }
-            if let Some(text) = a.text.as_mut()
-                && let Some(rich) = text.rich.as_mut()
-            {
-                for run in &mut rich.runs {
-                    if let Some(color) = run.format.color.as_mut() {
-                        alpha(color)
-                    }
-                    if let Some(outline) = run.format.outline.as_mut() {
-                        alpha(&mut outline.color);
-                    }
-                    if let Some(highlight) = run.format.typography.highlight.as_mut() {
-                        alpha(highlight);
-                    }
-                }
-            }
-            if let Some(bitmap) = a.image.as_mut() {
-                *bitmap = bitmap
-                    .with_frame_opacity((bitmap.frame_opacity() as f32 * p).round() as u8)
-                    .into();
-            }
+            apply_opacity(&mut a, p);
             if anim == Animation::Float {
                 let d = 40. * (1. - p);
                 let offset = match t.direction {
@@ -1219,9 +1391,18 @@ pub fn objects_at(doc: &Document, time: u64) -> Vec<Annotation> {
 /// Compose independent body, outline and text animation channels. The original
 /// annotation stays editable; these transient parts are used only for rendering.
 pub fn animated_parts(a: &Annotation, t: &Timing, time: u64) -> Vec<Annotation> {
+    let time = t.drawn_at(time);
     if !t.active(time) {
         return vec![];
     }
+    let keyed = (!t.keyframes.is_empty()).then(|| t.keyframes.annotation(a, time - t.start));
+    let a = keyed.as_ref().unwrap_or(a);
+    let sampled = t.motion_path.as_ref().map(|p| p.apply(a, time - t.start));
+    let a = match &sampled {
+        Some(Some(a)) => a,
+        Some(None) => return vec![],
+        None => a,
+    };
     let exit = if time - t.start < t.animation_span(false) {
         false
     } else if t.end - time < t.animation_span(true) {
@@ -1286,8 +1467,12 @@ pub fn composite(doc: &Document, frame: &image::RgbaImage, time: u64) -> Result<
         return Err(Error::Invalid("Video composite dimensions changed.".into()));
     }
     let mut output = frame.clone();
-    for a in objects_at(doc, time) {
-        crate::render_annotation(&mut output, &a);
+    let objects: Vec<_> = objects_at(doc, time).into_iter().collect();
+    let backdrop = crate::focus::Backdrop::new(&objects);
+    for a in &objects {
+        if !backdrop.render(&mut output, a) {
+            crate::render_annotation(&mut output, a);
+        }
     }
     Ok(output)
 }
@@ -1299,4 +1484,64 @@ pub fn local_media_path(path: &str) -> bool {
         return b.len() > 3 && b[0].is_ascii_alphabetic() && b[1] == b':' && b[2] == b'\\';
     }
     !path.starts_with(r"\\")
+}
+
+pub(crate) fn apply_opacity(a: &mut Annotation, p: f32) {
+    if matches!(a.kind, Kind::Redact | Kind::Blur | Kind::Pixelate) {
+        return;
+    }
+    let alpha = |c: &mut [u8; 4]| c[3] = (c[3] as f32 * p.clamp(0., 1.)).round() as u8;
+    if let Some(focus) = a.focus.as_mut() {
+        focus.opacity *= p;
+    }
+    alpha(&mut a.color);
+    if let Some(c) = a.fill.as_mut() {
+        alpha(c)
+    }
+    if let Some(s) = a.text.as_mut()
+        && let Some(c) = s.color.as_mut()
+    {
+        alpha(c)
+    }
+    if let Some(s) = a.shadow.as_mut() {
+        alpha(&mut s.color)
+    }
+    if let Some(c) = a.callout.as_mut() {
+        alpha(&mut c.fill);
+        alpha(&mut c.outline);
+    }
+    if let Some(text) = a.text.as_mut()
+        && let Some(outline) = text.outline.as_mut()
+    {
+        alpha(&mut outline.color);
+    }
+    if let Some(text) = a.text.as_mut()
+        && let Some(typography) = text.typography.as_mut()
+        && let Some(highlight) = typography.highlight.as_mut()
+    {
+        alpha(highlight);
+    }
+    if let Some(outline) = a.step_outline.as_mut() {
+        alpha(&mut outline.color);
+    }
+    if let Some(text) = a.text.as_mut()
+        && let Some(rich) = text.rich.as_mut()
+    {
+        for run in &mut rich.runs {
+            if let Some(color) = run.format.color.as_mut() {
+                alpha(color)
+            }
+            if let Some(outline) = run.format.outline.as_mut() {
+                alpha(&mut outline.color);
+            }
+            if let Some(highlight) = run.format.typography.highlight.as_mut() {
+                alpha(highlight);
+            }
+        }
+    }
+    if let Some(bitmap) = a.image.as_mut() {
+        *bitmap = bitmap
+            .with_frame_opacity((bitmap.frame_opacity() as f32 * p).round() as u8)
+            .into();
+    }
 }

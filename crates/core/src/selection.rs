@@ -127,6 +127,13 @@ impl Annotation {
         if !point.iter().all(|v| v.is_finite()) || !tolerance.is_finite() || tolerance < 0.0 {
             return false;
         }
+        if let Some(lens) = crate::magnified::lens(self) {
+            let p = lens.rotation().inverse_point(point);
+            let (lo, hi) = lens.body_bounds();
+            if (0..2).all(|i| p[i] >= lo[i] - tolerance && p[i] <= hi[i] + tolerance) {
+                return true;
+            }
+        }
         let point = self.rotation().inverse_point(point);
         let tolerance = tolerance
             + if matches!(self.kind, Kind::Blur | Kind::Pixelate) || self.highlighter_rect {
@@ -134,7 +141,9 @@ impl Annotation {
             } else {
                 self.width as f32 / 2.0
             };
-        if self.kind == Kind::Polygon {
+        if self.kind == Kind::Polygon
+            || (matches!(self.kind, Kind::Blur | Kind::Pixelate) && !self.points.is_empty())
+        {
             return crate::callout::hit_polygon(&self.points, point, tolerance);
         }
         if self.kind == Kind::Ellipse {
@@ -365,6 +374,7 @@ mod tests {
             focus: None,
 
             highlighter_rect: false,
+            hard_edge: false,
             group: None,
             rotation_degrees: 0.0,
             mirror_x: false,
@@ -396,6 +406,7 @@ mod tests {
             focus: None,
 
             highlighter_rect: false,
+            hard_edge: false,
             group: None,
             rotation_degrees: 0.0,
             mirror_x: false,

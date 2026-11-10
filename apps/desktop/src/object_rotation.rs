@@ -150,11 +150,7 @@ impl Editor {
             .input(|i| i.pointer.hover_pos())
             .is_some_and(|p| p.distance(pos) <= 9.0);
         if self.rotation_drag.is_some() || hover {
-            ui.ctx().set_cursor_icon(if self.rotation_drag.is_some() {
-                egui::CursorIcon::Grabbing
-            } else {
-                egui::CursorIcon::Grab
-            });
+            crate::native_cursor::request_hand(ui.ctx(), self.rotation_drag.is_some());
             painter.text(
                 pos + egui::vec2(13.0, 0.0),
                 egui::Align2::LEFT_CENTER,

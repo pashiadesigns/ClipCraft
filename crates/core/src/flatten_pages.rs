@@ -74,6 +74,7 @@ mod tests {
         }
         s.execute(Command::CutOutPages {
             axis: CutAxis::Horizontal,
+            edge: Default::default(),
             start: 180,
             end: 200,
             page: 0,

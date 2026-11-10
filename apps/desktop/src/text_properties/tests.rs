@@ -458,3 +458,64 @@ fn regular_text_resize_fit_can_be_chosen_from_actual_properties_popup() {
         TextFit::ResizeShape
     );
 }
+
+/// BI2: while typing with text selected, the Style swatches show the selected
+/// text's format and a change there reaches only the field that was changed,
+/// so the swatch does not snap back after the picker closes.
+#[test]
+fn style_swatches_show_and_edit_the_selected_text_format() {
+    use capture_core::text::rich::{format_at, format_range};
+    let ctx = egui::Context::default();
+    crate::shell::configure(&ctx);
+    let mut e = fixture(&ctx);
+    let id = e.session.document.annotations[0].id;
+    e.select_only(Some(id));
+    e.begin_text_edit();
+    let red = [220, 30, 30, 255];
+    {
+        let d = e.text_draft.as_mut().unwrap();
+        d.selection = 0..4;
+        d.selection_active = true;
+        format_range(d.preview.text.as_mut().unwrap(), 0..4, |f| {
+            f.color = Some(red)
+        });
+    }
+    let a = e.selected_annotation().unwrap();
+    let shown = e
+        .selection_view(&a)
+        .expect("the selection's format is shown");
+    assert_eq!(shown.text.as_ref().unwrap().color, Some(red));
+    let blue = [20, 60, 220, 255];
+    let mut edited = shown.clone();
+    edited.text.as_mut().unwrap().outline = Some(capture_core::text::outline::Outline {
+        color: blue,
+        width: 2.,
+    });
+    e.update_text_sidebar_seen(edited, false, Some(shown));
+    let text = e.text_draft.as_ref().unwrap().preview.text.clone().unwrap();
+    let first = format_at(&text, 0);
+    assert_eq!(first.color, Some(red), "the selection keeps its color");
+    assert_eq!(
+        first.outline.map(|o| o.color),
+        Some(blue),
+        "and gains the stroke"
+    );
+    let rest = format_at(&text, 8);
+    assert_ne!(
+        rest.color,
+        Some(red),
+        "text outside the selection keeps its color"
+    );
+    assert!(rest.outline.is_none_or(|o| o.color != blue));
+    let a = e.selected_annotation().unwrap();
+    let again = e.selection_view(&a).unwrap();
+    assert_eq!(
+        again.text.as_ref().unwrap().color,
+        Some(red),
+        "no snap back"
+    );
+    assert_eq!(
+        again.text.as_ref().unwrap().outline.map(|o| o.color),
+        Some(blue)
+    );
+}

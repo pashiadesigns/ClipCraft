@@ -14,6 +14,47 @@ pub(super) fn draw_scaled(p: &Painter, rect: Rect, name: &str, color: Color32, s
     };
     let box_rect = Rect::from_center_size(c, egui::vec2(22.0, 18.0) * scale);
     match name {
+        "Group presets" | "Save group" => {
+            p.rect_stroke(
+                Rect::from_center_size(at(-4., -3.), egui::vec2(14., 12.) * scale),
+                2.,
+                stroke,
+                StrokeKind::Inside,
+            );
+            p.rect_stroke(
+                Rect::from_center_size(at(4., 4.), egui::vec2(14., 12.) * scale),
+                2.,
+                stroke,
+                StrokeKind::Inside,
+            );
+            if name == "Save group" {
+                line(at(9., -11.), at(9., -3.));
+                line(at(5., -7.), at(13., -7.));
+            }
+        }
+        "Magnify" | "Magnified callout" => {
+            p.rect_stroke(
+                Rect::from_center_size(at(-9., 3.), egui::vec2(8., 7.) * scale),
+                1.,
+                stroke,
+                StrokeKind::Inside,
+            );
+            p.circle_stroke(at(6., -2.), 8. * scale, stroke);
+            line(at(-5., 0.), at(-1., -7.));
+            line(at(-5., 6.), at(2., 5.));
+            line(at(3., -2.), at(9., -2.));
+            line(at(6., -5.), at(6., 1.));
+        }
+        "GIF Studio" => {
+            p.rect_stroke(box_rect, 3., stroke, StrokeKind::Inside);
+            p.text(
+                c,
+                egui::Align2::CENTER_CENTER,
+                "GIF",
+                egui::FontId::proportional(9. * scale),
+                color,
+            );
+        }
         "Focus" => {
             p.rect_filled(box_rect, 3., color.gamma_multiply(0.25));
             p.rect_stroke(box_rect, 3., stroke, StrokeKind::Inside);
@@ -29,14 +70,14 @@ pub(super) fn draw_scaled(p: &Painter, rect: Rect, name: &str, color: Color32, s
             }
         }
         "Zoom" | "Zoom in" => crate::video_editor::ui::icon(p, rect, "Zoom in", color),
-        "Expand canvas on" | "Expand canvas off" => {
+        "Expand canvas on" | "Expand canvas off" | "Auto-expand canvas" => {
             p.rect_stroke(
                 Rect::from_center_size(c, egui::vec2(16., 14.) * scale),
                 1. * scale,
                 stroke,
                 StrokeKind::Inside,
             );
-            if name == "Expand canvas on" {
+            if name != "Expand canvas off" {
                 for (x, y) in [(-1., -1.), (1., -1.), (-1., 1.), (1., 1.)] {
                     line(at(x * 5., y * 4.), at(x * 13., y * 12.));
                     line(at(x * 13., y * 12.), at(x * 8., y * 12.));
@@ -345,6 +386,20 @@ pub(super) fn draw_scaled(p: &Painter, rect: Rect, name: &str, color: Color32, s
             line(at(-6.0, 6.0), at(13.0, 6.0));
             line(at(-13.0, -6.0), at(6.0, -6.0));
             line(at(6.0, -6.0), at(6.0, 13.0));
+        }
+        "Properties" => {
+            // Three sliders, as on a settings panel.
+            let stroke = egui::Stroke::new(1.6, color);
+            for (y, knob) in [(0.25, 0.68), (0.5, 0.32), (0.75, 0.58)] {
+                let at = |x: f32| {
+                    egui::pos2(
+                        rect.left() + rect.width() * x,
+                        rect.top() + rect.height() * y,
+                    )
+                };
+                p.line_segment([at(0.14), at(0.86)], stroke);
+                p.circle_filled(at(knob), rect.height() * 0.09, color);
+            }
         }
         "Obfuscate" | "Blur" => {
             for x in -1..=1 {

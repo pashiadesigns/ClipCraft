@@ -49,6 +49,95 @@ pub fn translated_expanding(
     )
 }
 
+/// What a dragged point or object may land on, besides other objects.
+#[derive(Clone, Copy)]
+pub struct Targets<'a> {
+    pub all: &'a [Annotation],
+    pub exclude: &'a [u64],
+    pub canvas: [u32; 2],
+    pub grid: Option<u32>,
+}
+fn nearest_grid(value: f32, grid: u32) -> f32 {
+    (value / grid as f32).round() * grid as f32
+}
+/// Moves a resize handle or drawing point onto the closest edge, center or
+/// grid line within `tolerance`. Returns the point and the guides to show.
+pub fn point(p: [f32; 2], targets: Targets<'_>, tolerance: f32) -> ([f32; 2], [Option<f32>; 2]) {
+    let mut out = p;
+    let mut guides = [None; 2];
+    for axis in 0..2 {
+        let mut best: Option<f32> = None;
+        let mut consider = |target: f32| {
+            let closer = best.is_none_or(|b| (target - p[axis]).abs() < (b - p[axis]).abs());
+            if target.is_finite() && (target - p[axis]).abs() <= tolerance && closer {
+                best = Some(target);
+            }
+        };
+        consider(0.);
+        consider(targets.canvas[axis] as f32);
+        if let Some(grid) = targets.grid {
+            consider(nearest_grid(p[axis], grid));
+        }
+        for a in targets
+            .all
+            .iter()
+            .filter(|a| !targets.exclude.contains(&a.id))
+        {
+            for target in anchors(std::slice::from_ref(a), axis) {
+                consider(target);
+            }
+        }
+        if let Some(target) = best {
+            out[axis] = target;
+            guides[axis] = Some(target);
+        }
+    }
+    (out, guides)
+}
+/// After objects have had their chance, a moved selection also lands on the
+/// canvas edges and the grid. Axes already snapped to an object keep that.
+pub fn settled(
+    mut result: SnapResult,
+    canvas: [u32; 2],
+    grid: Option<u32>,
+    tolerance: Option<f32>,
+) -> Result<SnapResult> {
+    let Some(tolerance) = tolerance else {
+        return Ok(result);
+    };
+    if result.annotations.is_empty() {
+        return Ok(result);
+    }
+    let mut correction = [0.0; 2];
+    for axis in 0..2 {
+        if result.guides[axis].is_some() {
+            continue;
+        }
+        let sources = anchors(&result.annotations, axis);
+        let mut best: Option<(f32, f32)> = None;
+        for source in sources {
+            let mut targets = vec![0., canvas[axis] as f32];
+            if let Some(grid) = grid {
+                targets.push(nearest_grid(source, grid));
+            }
+            for target in targets {
+                let d = target - source;
+                if d.abs() <= tolerance && best.is_none_or(|(_, b)| d.abs() < b.abs()) {
+                    best = Some((target, d));
+                }
+            }
+        }
+        if let Some((target, d)) = best {
+            result.guides[axis] = Some(target);
+            correction[axis] = d;
+        }
+    }
+    if correction != [0.0; 2] {
+        result.annotations = crate::canvas_expansion::translated(&result.annotations, correction)?;
+    }
+    Ok(result)
+}
+
 fn translate_with(
     moving: &[Annotation],
     all: &[Annotation],
@@ -113,6 +202,57 @@ mod tests {
             [640, 400],
         )
         .unwrap()
+    }
+    #[test]
+    fn points_land_on_edges_objects_and_the_grid_only_when_close() {
+        let object = marker(2, [300.0, 330.0]);
+        let all = vec![object.clone()];
+        let targets = Targets {
+            all: &all,
+            exclude: &[],
+            canvas: [640, 400],
+            grid: None,
+        };
+        assert_eq!(point([3.0, 200.0], targets, 6.0).0, [0.0, 200.0]);
+        let (p, guides) = point([298.0, 397.0], targets, 6.0);
+        assert_eq!(p, [300.0, 400.0]);
+        assert_eq!(guides, [Some(300.0), Some(400.0)]);
+        assert_eq!(point([150.0, 150.0], targets, 6.0).0, [150.0, 150.0]);
+        let grid = Targets {
+            grid: Some(20),
+            ..targets
+        };
+        assert_eq!(point([143.0, 163.0], grid, 6.0).0, [140.0, 160.0]);
+        let ignored = Targets {
+            exclude: &[2],
+            ..targets
+        };
+        assert_eq!(point([298.0, 200.0], ignored, 6.0).0, [298.0, 200.0]);
+    }
+    #[test]
+    fn a_moved_object_settles_on_the_grid_and_the_canvas_edge() {
+        let moving = marker(1, [100.0, 80.0]);
+        let base = translated(
+            std::slice::from_ref(&moving),
+            &[],
+            [3.0, 0.0],
+            6.0,
+            [640, 400],
+        )
+        .unwrap();
+        let snapped = settled(base, [640, 400], Some(20), Some(6.0)).unwrap();
+        assert_eq!(snapped.annotations[0].start[0].rem_euclid(20.0), 0.0);
+        assert!(snapped.guides[0].is_some());
+        let base = translated(
+            std::slice::from_ref(&moving),
+            &[],
+            [3.0, 0.0],
+            6.0,
+            [640, 400],
+        )
+        .unwrap();
+        let free = settled(base, [640, 400], Some(20), None).unwrap();
+        assert_eq!(free.annotations[0].start, [83.0, 60.0]);
     }
     #[test]
     fn centers_edges_long_guides_and_thresholds_preserve_one_undo() {

@@ -44,8 +44,8 @@ impl Justification {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum StartupWindow {
-    Editor,
     #[default]
+    Editor,
     Clip,
 }
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -60,6 +60,9 @@ pub struct Preferences {
     pub keybinds: crate::keybinds::Keybinds,
     #[serde(default)]
     pub capture: crate::capture_options::Settings,
+    /// Capture Clip shows its settings window first; hotkeys and the tray never do.
+    #[serde(default = "snapping_default")]
+    pub ask_before_clip: bool,
     #[serde(default)]
     pub video: crate::video::Options,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -68,8 +71,6 @@ pub struct Preferences {
     pub folders: std::collections::BTreeMap<Folder, PathBuf>,
     #[serde(default)]
     pub thumbnail_details: bool,
-    #[serde(default)]
-    pub library_pinned: bool,
     pub version: u32,
     pub alignment: LayoutAction,
     pub distribution: LayoutAction,
@@ -88,6 +89,86 @@ pub struct Preferences {
     pub favorite_tools: Vec<crate::toolbar::ToolId>,
     #[serde(default)]
     pub drawing_styles: Vec<crate::object_styles::ObjectStyle>,
+    /// Saved export watermarks and the one used by default (FX-003).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub watermarks: Vec<crate::watermark::Watermark>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub default_watermark: Option<String>,
+    /// New Image and New Video remember their background (bk-proposal).
+    #[serde(default)]
+    pub blank: BlankDefaults,
+    #[serde(default)]
+    pub workspace: Workspace,
+}
+/// The key that turns snapping off for one drag.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum BypassKey {
+    #[default]
+    Ctrl,
+    Shift,
+    Alt,
+}
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CanvasBackground {
+    #[default]
+    Charcoal,
+    Graphite,
+    Black,
+    Light,
+}
+/// Preferences > Editor and the settings other parts of the app read.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Workspace {
+    pub snap_move: bool,
+    pub snap_resize: bool,
+    pub snap_draw: bool,
+    pub show_grid: bool,
+    pub grid_size: u32,
+    pub bypass: BypassKey,
+    pub background: CanvasBackground,
+    pub remember_view: bool,
+    /// None is fit to the window.
+    pub zoom: Option<f32>,
+    pub panel_width: Option<f32>,
+    pub show_tooltips: bool,
+    pub keep_versions: bool,
+}
+impl Default for Workspace {
+    fn default() -> Self {
+        Self {
+            snap_move: true,
+            snap_resize: true,
+            snap_draw: true,
+            show_grid: false,
+            grid_size: 20,
+            bypass: BypassKey::Ctrl,
+            background: CanvasBackground::Charcoal,
+            remember_view: true,
+            zoom: None,
+            panel_width: None,
+            show_tooltips: true,
+            keep_versions: true,
+        }
+    }
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct BlankDefaults {
+    pub transparent: bool,
+    pub image_color: [u8; 4],
+    pub video_color: [u8; 4],
+}
+impl Default for BlankDefaults {
+    fn default() -> Self {
+        Self {
+            transparent: false,
+            image_color: [255; 4],
+            video_color: [255; 4],
+        }
+    }
 }
 fn snapping_default() -> bool {
     true
@@ -99,14 +180,14 @@ impl Default for Preferences {
             audio_outputs: AudioOutputs::default(),
             version: 12,
             close_to_tray: true,
-            startup_window: StartupWindow::Clip,
+            startup_window: StartupWindow::Editor,
             keybinds: Default::default(),
             capture: Default::default(),
+            ask_before_clip: true,
             video: Default::default(),
             capture_profiles: Vec::new(),
             folders: Default::default(),
             thumbnail_details: false,
-            library_pinned: false,
             alignment: LayoutAction::HorizontalCenter,
             distribution: LayoutAction::HorizontalGaps,
             justification: Justification::CenterMiddle,
@@ -117,6 +198,10 @@ impl Default for Preferences {
             toolbar_order: crate::toolbar::default_order(),
             favorite_tools: crate::toolbar::default_favorites(),
             drawing_styles: vec![],
+            watermarks: vec![],
+            default_watermark: None,
+            blank: BlankDefaults::default(),
+            workspace: Workspace::default(),
         }
     }
 }
@@ -147,7 +232,6 @@ impl Preferences {
             Choice::ThumbnailDetails(value) => {
                 self.thumbnail_details = value;
             }
-            Choice::LibraryPinned(value) => self.library_pinned = value,
             Choice::Folder(kind, path) => {
                 validate_folder(&path)?;
                 self.folders.insert(kind, path);
@@ -157,6 +241,35 @@ impl Preferences {
             }
             Choice::StartupWindow(value) => {
                 self.startup_window = value;
+            }
+            Choice::AskBeforeClip(value) => self.ask_before_clip = value,
+            Choice::Blank(value) => self.blank = value,
+            Choice::Workspace(value) => {
+                if !(4..=512).contains(&value.grid_size) {
+                    return Err(Error::Invalid(
+                        "Grid size runs from 4 to 512 pixels.".into(),
+                    ));
+                }
+                self.workspace = value;
+            }
+            Choice::RestoreToolbar { order, favorites } => {
+                self.toolbar_order = order;
+                self.favorite_tools = favorites;
+            }
+            Choice::RestoreFolders(folders) => self.folders = folders,
+            Choice::Watermarks(list, default) => {
+                if list.len() > 32
+                    || default
+                        .as_ref()
+                        .is_some_and(|d| !list.iter().any(|w| &w.name == d))
+                {
+                    return Err(Error::Invalid("Keep up to 32 watermark presets.".into()));
+                }
+                for w in &list {
+                    w.validate()?;
+                }
+                self.watermarks = list;
+                self.default_watermark = default;
             }
             Choice::Keybinds(keys) => {
                 keys.validate()?;
@@ -304,9 +417,19 @@ pub enum Choice {
     AudioOutputs(AudioOutputs),
     Folder(Folder, PathBuf),
     ThumbnailDetails(bool),
-    LibraryPinned(bool),
     CloseToTray(bool),
     StartupWindow(StartupWindow),
+    AskBeforeClip(bool),
+    Blank(BlankDefaults),
+    Workspace(Workspace),
+    /// Cancel in Preferences puts these back exactly.
+    RestoreToolbar {
+        order: Vec<crate::toolbar::ToolId>,
+        favorites: Vec<crate::toolbar::ToolId>,
+    },
+    RestoreFolders(std::collections::BTreeMap<Folder, PathBuf>),
+    /// Watermark presets and the default preset's name.
+    Watermarks(Vec<crate::watermark::Watermark>, Option<String>),
     Keybinds(crate::keybinds::Keybinds),
     Capture(crate::capture_options::Settings),
     Video(crate::video::Options),
@@ -587,7 +710,7 @@ mod lifecycle_tests {
         let store = Store::open(root.path()).unwrap();
         let original = store.read().unwrap();
         assert!(original.close_to_tray);
-        assert_eq!(original.startup_window, StartupWindow::Clip);
+        assert_eq!(original.startup_window, StartupWindow::Editor);
         let mut legacy = serde_json::to_value(&original).unwrap();
         legacy.as_object_mut().unwrap().remove("close_to_tray");
         legacy.as_object_mut().unwrap().remove("startup_window");
@@ -641,12 +764,9 @@ mod folder_tests {
         }
         store.remember(Choice::CanvasSnapping(false)).unwrap();
         store.remember(Choice::ThumbnailDetails(true)).unwrap();
-        store.remember(Choice::LibraryPinned(true)).unwrap();
         let reopened = Store::open(dir.path()).unwrap().read().unwrap();
         assert_eq!(reopened.folders.len(), 3);
         assert!(reopened.thumbnail_details);
-        assert!(reopened.library_pinned);
-        assert!(!Preferences::default().library_pinned);
         assert!(!Preferences::default().thumbnail_details);
         assert!(!reopened.canvas_snapping);
         let before = std::fs::read(dir.path().join("quick-controls-v2.json")).unwrap();

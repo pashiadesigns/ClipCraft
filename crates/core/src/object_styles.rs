@@ -222,9 +222,70 @@ pub struct CalloutFormat {
     outline: [u8; 4],
     padding: f32,
 }
+/// The outline a preset gives its object: a polygon's shape, a callout's body,
+/// or a Blur or Pixelate region.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Outline {
+    Regular(u32),
+    Ready(crate::polygon::Ready),
+    Callout(crate::callout::CalloutShape),
+    Region(crate::obscure::Region),
+}
+impl Outline {
+    fn of(a: &Annotation) -> Option<Self> {
+        match a.kind {
+            Kind::Polygon => Some(
+                crate::polygon::Ready::of(&a.points)
+                    .map_or(Self::Regular(a.points.len() as u32), Self::Ready),
+            ),
+            Kind::Callout => a.callout.as_ref().map(|c| Self::Callout(c.shape)),
+            Kind::Blur | Kind::Pixelate => {
+                Some(Self::Region(crate::obscure::Region::of(&a.points)))
+            }
+            _ => None,
+        }
+    }
+    fn fits(self, kind: Kind) -> bool {
+        match self {
+            Self::Regular(n) => kind == Kind::Polygon && (3..=64).contains(&n),
+            Self::Ready(_) => kind == Kind::Polygon,
+            Self::Callout(_) => kind == Kind::Callout,
+            Self::Region(_) => matches!(kind, Kind::Blur | Kind::Pixelate),
+        }
+    }
+    /// Gives `a` this outline inside its current box.
+    fn apply(self, a: &mut Annotation) {
+        let (lo, hi) = a.body_bounds();
+        let outline = |points: Vec<[f32; 2]>, a: &mut Annotation| {
+            a.points = points;
+            a.start = lo;
+            a.end = hi;
+        };
+        match (self, a.kind) {
+            (Self::Regular(n), Kind::Polygon) => outline(crate::polygon::outline(lo, hi, n), a),
+            (Self::Ready(shape), Kind::Polygon) => outline(shape.outline(lo, hi), a),
+            (Self::Callout(shape), Kind::Callout) => {
+                if let Some(c) = a.callout.as_mut() {
+                    c.shape = shape;
+                }
+            }
+            (Self::Region(crate::obscure::Region::Rectangle), Kind::Blur | Kind::Pixelate) => {
+                outline(vec![], a)
+            }
+            (Self::Region(crate::obscure::Region::Ellipse), Kind::Blur | Kind::Pixelate) => {
+                outline(crate::obscure::ellipse_region(lo, hi), a)
+            }
+            // A freehand outline comes from the drag that draws it.
+            _ => {}
+        }
+    }
+}
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ObjectStyle {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub outline_shape: Option<Outline>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub focus: Option<crate::focus::Focus>,
     #[serde(default, skip_serializing_if = "crate::text::is_false")]
@@ -351,6 +412,7 @@ impl ObjectStyle {
                 outline: c.outline,
                 padding: c.padding,
             }),
+            outline_shape: Outline::of(a),
         };
         result.validate()?;
         Ok(result)
@@ -412,6 +474,11 @@ impl ObjectStyle {
         if let Some(text) = &self.text {
             text.validate()?;
         }
+        if self.outline_shape.is_some_and(|o| !o.fits(self.kind)) {
+            return Err(Error::Invalid(
+                "Template outline does not match its object type.".into(),
+            ));
+        }
         if let Some(callout) = &self.callout
             && (!callout.padding.is_finite() || !(0.0..=128.0).contains(&callout.padding))
         {
@@ -465,6 +532,9 @@ impl ObjectStyle {
             callout.outline = format.outline;
             callout.padding = format.padding;
         }
+        if let Some(outline) = self.outline_shape {
+            outline.apply(&mut result);
+        }
         Ok(result)
     }
     /// Every target must be compatible. No partial application or hidden skips.
@@ -481,6 +551,23 @@ impl ObjectStyle {
     pub fn matches(&self, objects: &[Annotation]) -> bool {
         !objects.is_empty() && objects.iter().all(|a| self.apply(a).is_ok_and(|b| b == *a))
     }
+}
+
+/// Other shapes: regular polygons, then the ready-made shapes (user review BR6).
+fn polygon_presets() -> Vec<ObjectStyle> {
+    let base = presets(Kind::Polygon).remove(0);
+    let regular = [("Pentagon", 5), ("Hexagon", 6), ("Octagon", 8)]
+        .map(|(name, sides)| (name, Outline::Regular(sides)));
+    let ready = crate::polygon::Ready::ALL.map(|r| (r.label(), Outline::Ready(r)));
+    regular
+        .into_iter()
+        .chain(ready)
+        .map(|(name, outline)| ObjectStyle {
+            name: name.into(),
+            outline_shape: Some(outline),
+            ..base.clone()
+        })
+        .collect()
 }
 
 pub fn is_shape(kind: Kind) -> bool {
@@ -502,8 +589,7 @@ pub fn groups(kind: Kind) -> Vec<PresetGroup> {
             ("shape_rounded", "Rounded rectangle", Kind::Rectangle, true),
             ("shape_ellipse", "Circle / ellipse", Kind::Ellipse, false),
             ("shape_other", "Other shapes", Kind::Polygon, false),
-            ("callout_box", "Callout", Kind::Callout, false),
-            ("callout_rounded", "Rounded callout", Kind::Callout, true),
+            ("callout", "Callout", Kind::Callout, false),
         ]
     } else {
         match kind {
@@ -536,11 +622,18 @@ pub fn groups(kind: Kind) -> Vec<PresetGroup> {
     definitions
         .into_iter()
         .map(|(id, label, kind, rounded)| {
-            let mut styles = presets(kind);
+            let mut styles = if id == "shape_other" {
+                polygon_presets()
+            } else if id == "callout" {
+                callout_presets()
+            } else {
+                presets(kind)
+            };
             if kind == Kind::Line {
                 let base = styles[0].clone();
                 styles.extend(crate::styles::connector_presets(kind).into_iter().map(|s| {
                     ObjectStyle {
+                        outline_shape: None,
                         name: s.name,
                         color: s.color,
                         width: s.width,
@@ -558,7 +651,7 @@ pub fn groups(kind: Kind) -> Vec<PresetGroup> {
                     style.text.as_mut().unwrap().font = TextFont::HackRegular;
                 }
             }
-            if is_shape(kind) {
+            if is_shape(kind) && id != "shape_other" {
                 let filled: Vec<_> = styles
                     .iter()
                     .cloned()
@@ -575,6 +668,31 @@ pub fn groups(kind: Kind) -> Vec<PresetGroup> {
         .collect()
 }
 
+/// One Callout group (BT, user review of BS14): three styles each for the box,
+/// rounded, oval and cloud callouts, in that order.
+fn callout_presets() -> Vec<ObjectStyle> {
+    use crate::callout::CalloutShape as S;
+    let base: Vec<ObjectStyle> = presets(Kind::Callout).into_iter().take(3).collect();
+    let mut out = Vec::new();
+    for (label, shape, rounded) in [
+        ("Callout", S::Box, false),
+        ("Rounded callout", S::Box, true),
+        ("Oval callout", S::Oval, false),
+        ("Cloud callout", S::Cloud, false),
+    ] {
+        for style in &base {
+            let mut style = style.clone();
+            style.name = format!("{label} · {}", style.name);
+            style.outline_shape = Some(Outline::Callout(shape));
+            if rounded {
+                style.corner_radius = 16.0;
+            }
+            out.push(style);
+        }
+    }
+    out
+}
+
 /// Original presets for currently implemented annotation types. Effects offer
 /// intensity choices instead of misleading color tiles. Redact stays opaque.
 pub fn presets(kind: Kind) -> Vec<ObjectStyle> {
@@ -584,9 +702,9 @@ pub fn presets(kind: Kind) -> Vec<ObjectStyle> {
         return vec![];
     }
     let colors = [
-        ("Coral", [240, 85, 55, 255]),
+        ("ClipCraft Blue", [24, 145, 193, 255]),
         ("Lime", [135, 196, 105, 255]),
-        ("Ocean", [38, 155, 194, 255]),
+        ("Coral", [240, 85, 55, 255]),
         ("Gold", [220, 190, 80, 255]),
         ("White", [255, 255, 255, 255]),
         ("Plum", [191, 140, 207, 255]),
@@ -613,7 +731,8 @@ pub fn presets(kind: Kind) -> Vec<ObjectStyle> {
         .enumerate()
         .take(if kind == Kind::Redact { 1 } else { 6 })
         .map(|(i, (name, mut color))| {
-            let name = if kind == Kind::Highlighter && i == 0 {
+            // Approved blue-defaults mockup: blue first; Yellow moves to third.
+            let name = if kind == Kind::Highlighter && i == 2 {
                 color = [255, 255, 0, 255];
                 "Yellow"
             } else {
@@ -627,11 +746,12 @@ pub fn presets(kind: Kind) -> Vec<ObjectStyle> {
             }
             let width = match kind {
                 Kind::Blur => [4, 2, 8, 12, 20, 32][i],
-                Kind::Pixelate => [8, 2, 4, 12, 20, 32][i],
+                Kind::Pixelate => [8, 12, 20, 2, 4, 32][i],
                 Kind::Eraser => [2, 4, 8, 16, 24, 32][i],
                 _ => 3,
             };
             ObjectStyle {
+                outline_shape: None,
                 focus: None,
                 highlighter_rect: false,
                 step_outline: None,
@@ -660,6 +780,19 @@ pub fn presets(kind: Kind) -> Vec<ObjectStyle> {
             }
         })
         .collect();
+    if effect {
+        // Three intensities, then the region shapes (user review BR8).
+        result.truncate(3);
+        for (name, region) in [
+            ("Ellipse", crate::obscure::Region::Ellipse),
+            ("Freehand", crate::obscure::Region::Freehand),
+        ] {
+            let mut shaped = result[0].clone();
+            shaped.name = name.into();
+            shaped.outline_shape = Some(Outline::Region(region));
+            result.push(shaped);
+        }
+    }
     if matches!(kind, Kind::Callout | Kind::Text | Kind::Rectangle) {
         for (name, accent, paper) in [
             ("Note", [24, 118, 156, 255], [232, 246, 251, 255]),
@@ -1129,5 +1262,105 @@ mod tests {
                 style.validate().unwrap();
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod outline_tests {
+    use super::*;
+    #[test]
+    fn presets_carry_shapes_callout_bodies_and_blur_regions() {
+        let other = groups(Kind::Polygon)
+            .into_iter()
+            .find(|g| g.id == "shape_other")
+            .unwrap();
+        assert_eq!(other.styles.len(), 13);
+        let star = other.styles.iter().find(|s| s.name == "Star").unwrap();
+        let mut polygon = crate::Annotation {
+            image: None,
+            step_outline: None,
+            line_style: None,
+            shadow: None,
+            focus: None,
+            highlighter_rect: false,
+            hard_edge: false,
+            group: None,
+            rotation_degrees: 0.,
+            mirror_x: false,
+            id: 1,
+            kind: Kind::Polygon,
+            start: [10., 10.],
+            end: [90., 70.],
+            color: [0, 0, 0, 255],
+            width: 3,
+            corner_radius: 0.,
+            fill: None,
+            points: crate::polygon::outline([10., 10.], [90., 70.], 5),
+            text: None,
+            callout: None,
+        };
+        let starred = star.apply(&polygon).unwrap();
+        assert_eq!(
+            crate::polygon::Ready::of(&starred.points),
+            Some(crate::polygon::Ready::Star)
+        );
+        assert_eq!(starred.body_bounds(), ([10., 10.], [90., 70.]));
+        assert!(star.matches(std::slice::from_ref(&starred)));
+        polygon.points = crate::polygon::outline([10., 10.], [90., 70.], 6);
+        assert_eq!(
+            ObjectStyle::from_annotation("x".into(), &polygon)
+                .unwrap()
+                .outline_shape,
+            Some(Outline::Regular(6))
+        );
+        let callouts: Vec<_> = groups(Kind::Callout).into_iter().map(|g| g.id).collect();
+        assert_eq!(
+            callouts.iter().filter(|g| g.starts_with("callout")).count(),
+            1,
+            "one Callout group"
+        );
+        let styles = &groups(Kind::Callout)
+            .into_iter()
+            .find(|g| g.id == "callout")
+            .unwrap()
+            .styles;
+        assert_eq!(styles.len(), 12, "three styles for each callout shape");
+        use crate::callout::CalloutShape as S;
+        let shapes: Vec<_> = styles
+            .iter()
+            .map(|s| (s.outline_shape, s.corner_radius > 0.))
+            .collect();
+        for (i, want) in [
+            (Some(Outline::Callout(S::Box)), false),
+            (Some(Outline::Callout(S::Box)), true),
+            (Some(Outline::Callout(S::Oval)), false),
+            (Some(Outline::Callout(S::Cloud)), false),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            assert!(shapes[i * 3..i * 3 + 3].iter().all(|s| *s == want), "{i}");
+        }
+        for kind in [Kind::Blur, Kind::Pixelate] {
+            let names: Vec<_> = presets(kind).into_iter().map(|s| s.name).collect();
+            assert_eq!(names.len(), 5, "{kind:?}");
+            assert_eq!(&names[3..], ["Ellipse", "Freehand"]);
+        }
+        assert_eq!(
+            presets(Kind::Pixelate)
+                .iter()
+                .map(|s| s.width)
+                .take(3)
+                .collect::<Vec<_>>(),
+            [8, 12, 20]
+        );
+        assert_eq!(
+            presets(Kind::Blur)
+                .iter()
+                .map(|s| s.width)
+                .take(3)
+                .collect::<Vec<_>>(),
+            [4, 2, 8]
+        );
     }
 }

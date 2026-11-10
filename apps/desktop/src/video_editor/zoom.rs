@@ -1,4 +1,5 @@
 use super::*;
+use crate::tips::Tip as _;
 use capture_core::video::{
     links::Layer,
     zoom::{Motion, Zoom},
@@ -37,13 +38,16 @@ impl Editor {
         } else {
             capture_core::video::editor::Animation::None
         };
-        if !matches!(
-            active,
-            capture_core::video::editor::Animation::Float
-                | capture_core::video::editor::Animation::Scale
-        ) {
+        if t.motion_path.is_none()
+            && !matches!(
+                active,
+                capture_core::video::editor::Animation::Float
+                    | capture_core::video::editor::Animation::Scale
+            )
+        {
             return ([0., 0.], 1.);
         }
+        let a = self.keyframe_annotation(a);
         let (lo, hi) = a.body_bounds();
         let (next, end) = animated.body_bounds();
         let axis = usize::from((hi[1] - lo[1]).abs() > (hi[0] - lo[0]).abs());
@@ -230,8 +234,13 @@ impl Editor {
                     if let Some(i) = existing {
                         p.zooms[i] = z;
                     } else {
+                        // BB6: a new zoom joins a zoom track it fits on.
                         p.zooms.push(z);
-                        p.layer_order.insert(0, Layer::Zoom(id));
+                        p.pack_zooms(&[id]);
+                        let track = p.zooms.last().unwrap().track();
+                        if !p.layer_order.contains(&Layer::Zoom(track)) {
+                            p.layer_order.insert(0, Layer::Zoom(track));
+                        }
                     }
                     self.commit_video(p);
                     if self
@@ -348,6 +357,41 @@ impl Editor {
             z.entrance_ms = z.entrance_ms.min(z.end - z.start);
             z.exit_ms = z.exit_ms.min(z.end - z.start - z.entrance_ms);
             crate::controls::toggle(ui, &mut z.return_to_full, "Animate return to full canvas");
+            // BA4: which cursor movement the zoom follows on its way to the next click.
+            let end = z.end;
+            let continues = before
+                .zooms
+                .iter()
+                .any(|n| n.pan_from.is_some() && n.start == end);
+            let mode = z
+                .follow
+                .map_or(capture_core::video::zoom::FollowMode::Off, |f| f.mode);
+            ui.add_enabled_ui(continues, |ui| {
+                ui.horizontal(|ui| {
+                    ui.label("Follow cursor");
+                    egui::ComboBox::from_id_salt("zoom-follow-cursor")
+                        .width(ui.available_width() - 8.)
+                        .selected_text(mode.label())
+                        .show_ui(ui, |ui| {
+                            for value in capture_core::video::zoom::FollowMode::ALL {
+                                if ui
+                                    .selectable_label(mode == value, value.label())
+                                    .tip(value.help())
+                                    .clicked()
+                                {
+                                    z.follow = Some(capture_core::video::zoom::Follow {
+                                        mode: value,
+                                        tip: z.follow.map_or([0., 0.], |f| f.tip),
+                                    });
+                                }
+                            }
+                        })
+                        .response
+                        .tip(mode.help());
+                });
+            })
+            .response
+            .tip_disabled("Available when this zoom pans straight on to the next click's zoom.");
             ui.small(if z.pinned {
                 "Pinned above new tracks. Drag this track lower to unpin."
             } else {
@@ -358,12 +402,44 @@ impl Editor {
         z.entrance_ms = z.entrance_ms.min(z.end - z.start);
         z.exit_ms = z.exit_ms.min(z.end - z.start - z.entrance_ms);
         if ui.button("Delete Zoom").clicked() {
-            p.remove_layer(Layer::Zoom(id));
+            // Deletes this zoom only; the zoom track stays while others use it.
+            p.zooms.retain(|z| z.id != id);
             self.video.zoom_selected = None;
         }
+        self.spread_zoom_edit(&mut p, &before, id);
         if p != before {
             self.commit_video(p);
         }
+    }
+    /// Gives the other selected zooms what an edit changed on zoom `id`.
+    pub(super) fn spread_zoom_edit(&self, p: &mut Project, before: &Project, id: u64) {
+        use capture_core::video::editing::Item;
+        let old = before.zooms.iter().find(|z| z.id == id);
+        let new = p.zooms.iter().find(|z| z.id == id).cloned();
+        let (Some(old), Some(new)) = (old, new) else {
+            return;
+        };
+        if *old == new {
+            return;
+        }
+        let others: Vec<u64> = self
+            .video
+            .selection
+            .iter()
+            .filter_map(|item| match item {
+                Item::Zoom(other) if *other != id => Some(*other),
+                _ => None,
+            })
+            .collect();
+        if others.is_empty() {
+            return;
+        }
+        for z in p.zooms.iter_mut().filter(|z| others.contains(&z.id)) {
+            z.copy_change(old, &new);
+        }
+        let mut moved = others;
+        moved.push(id);
+        p.pack_zooms(&moved);
     }
     pub(super) fn zoom_timeline(
         &mut self,
@@ -378,10 +454,19 @@ impl Editor {
             self.video.timing_preview = None;
         }
         for z in &p.zooms {
-            let row = p.layer_index(Layer::Zoom(z.id));
+            let row = p.layer_index(Layer::Zoom(z.track()));
+            if super::keyframes::row_hidden(row) {
+                continue;
+            }
             let r = Rect::from_min_max(
-                egui::pos2(left + z.start as f32 * scale, top + row as f32 * 39.),
-                egui::pos2(left + z.end as f32 * scale, top + row as f32 * 39. + 33.),
+                egui::pos2(
+                    left + z.start as f32 * scale,
+                    super::keyframes::row_y(top, row, self.video.keyframes.rows),
+                ),
+                egui::pos2(
+                    left + z.end as f32 * scale,
+                    super::keyframes::row_y(top, row, self.video.keyframes.rows) + 33.,
+                ),
             );
             let response = super::timeline::block(
                 ui,
@@ -444,9 +529,9 @@ impl Editor {
             }
             response.context_menu(|ui| {
                 if crate::controls::menu_action(ui, "Delete Zoom").clicked() {
-                    self.execute(Command::VideoDeleteTrack {
-                        layer: Layer::Zoom(z.id),
-                    });
+                    let mut next = p.clone();
+                    next.zooms.retain(|other| other.id != z.id);
+                    self.commit_video(next);
                     self.video.zoom_selected = None;
                     ui.close();
                 }
@@ -454,7 +539,15 @@ impl Editor {
             if response.drag_started_by(egui::PointerButton::Primary)
                 && let Some(pos) = ui.input(|i| i.pointer.press_origin())
             {
-                if handle(pos) == 0 {
+                let duplicate = ui.input(|i| {
+                    self.gesture_matches(crate::gesture_input::Gesture::DuplicateDrag, i.modifiers)
+                });
+                if duplicate {
+                    self.begin_timeline_duplicate(
+                        capture_core::video::editing::Item::Zoom(z.id),
+                        pos,
+                    );
+                } else if handle(pos) == 0 {
                     self.begin_timeline_move(capture_core::video::editing::Item::Zoom(z.id), pos);
                 } else {
                     self.tool = None;

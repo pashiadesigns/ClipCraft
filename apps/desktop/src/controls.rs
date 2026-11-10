@@ -1,6 +1,7 @@
 //! Shared editable controls. Keep slider interactions native to egui, including
 //! keyboard stepping, accessible values, typed input, and drag transactions.
 use crate::egui;
+use crate::tips::Tip as _;
 /// Focus only when a dialog opens; subsequent frames must preserve Tab/click navigation.
 pub(super) fn focus_once(response: &egui::Response, pending: &mut bool) {
     if std::mem::take(pending) {
@@ -386,6 +387,38 @@ pub(crate) fn menu_submenu(ui: &mut egui::Ui, label: &str, content: impl FnOnce(
     egui::containers::menu::SubMenu::new().show(ui, &response, content);
 }
 
+/// Dialog title, as in the approved capture dialogs (dialog audit, BJ):
+/// 20 px bold at the top left; the close button sits at the top right.
+pub(crate) fn dialog_title(ui: &mut egui::Ui, text: &str) {
+    ui.label(crate::panel_ui::title(text, 20.));
+    ui.add_space(6.);
+}
+/// Dialog section label: small uppercase muted text, with optional help in
+/// its tooltip (help never goes in paragraphs in the body).
+pub(crate) fn dialog_section(ui: &mut egui::Ui, text: &str, help: Option<&str>) {
+    ui.add_space(6.);
+    dialog_section_label(ui, text, help);
+}
+/// The section label alone, for a heading row that also holds a switch.
+pub(crate) fn dialog_section_label(ui: &mut egui::Ui, text: &str, help: Option<&str>) {
+    use crate::tips::Tip as _;
+    let label = ui.label(
+        egui::RichText::new(text.to_uppercase())
+            .size(11.)
+            .color(egui::Color32::from_rgb(142, 154, 157)),
+    );
+    if let Some(help) = help {
+        label.tip(help);
+    }
+}
+/// Seconds a dialog takes to change height, the same growing and shrinking.
+fn dialog_resize_time(ctx: &egui::Context) -> f32 {
+    #[cfg(test)]
+    if ctx.data(|d| d.get_temp::<bool>(egui::Id::unique("animate-dialogs"))) != Some(true) {
+        return 0.;
+    }
+    ctx.global_style().animation_time
+}
 /// Application dialogs share a close target and rounded, restrained chrome.
 /// Keeping the native ModalResponse preserves focus and input isolation.
 pub(crate) struct Modal(egui::Modal);
@@ -419,8 +452,57 @@ impl Modal {
         content: impl FnOnce(&mut egui::Ui) -> R,
     ) -> egui::ModalResponse<R> {
         self.0.show(ctx, |ui| {
-            let top = ui.next_widget_position().y;
-            let result = content(ui);
+            let origin = ui.next_widget_position();
+            let top = origin.y;
+            let id = ui.scope_id().with("dialog-height");
+            let pass = ui.ctx().cumulative_pass_nr();
+            let time = dialog_resize_time(ui.ctx());
+            // A dialog settles for its first passes and then animates. Reopened
+            // dialogs start at their own size instead of animating to it.
+            let continuing = ui
+                .ctx()
+                .data(|d| d.get_temp::<u64>(id.with("pass")))
+                .is_some_and(|last| pass.saturating_sub(last) <= 1);
+            let since = if continuing {
+                ui.ctx()
+                    .data(|d| d.get_temp::<u64>(id.with("since")))
+                    .unwrap_or(pass)
+            } else {
+                pass
+            };
+            let settled = pass.saturating_sub(since) >= 2 && time > 0.;
+            let height = settled
+                .then(|| ui.ctx().data(|d| d.get_temp::<f32>(id)))
+                .flatten()
+                .map(|natural| {
+                    ui.ctx()
+                        .animate_value_with_time(id.with("shown"), natural, time)
+                });
+            // A fixed height: the space below a centered dialog moves with the
+            // dialog, which would make its content wait for the animation.
+            let room = (ui.ctx().content_rect().height() - 64.).max(ui.available_height());
+            let area = egui::Rect::from_min_size(origin, egui::vec2(ui.available_width(), room));
+            let mut body = ui.new_child(egui::UiBuilder::new().max_rect(area).layout(*ui.layout()));
+            if let Some(height) = height {
+                // Content past the moving edge is hidden until the dialog reaches it.
+                let edge = origin.y + height;
+                let mut clip = body.clip_rect();
+                clip.max.y = clip.max.y.min(edge + 16.);
+                body.set_clip_rect(clip);
+            }
+            let result = content(&mut body);
+            let natural = body.min_rect().size();
+            drop(body);
+            ui.ctx().data_mut(|d| {
+                d.insert_temp(id, natural.y);
+                d.insert_temp(id.with("pass"), pass);
+                d.insert_temp(id.with("since"), since);
+            });
+            if !settled {
+                ui.ctx()
+                    .animate_value_with_time(id.with("shown"), natural.y, 0.);
+            }
+            ui.allocate_space(egui::vec2(natural.x, height.unwrap_or(natural.y)));
             let rect = egui::Rect::from_min_size(
                 egui::pos2(ui.min_rect().right() - 26., top),
                 egui::vec2(26., 26.),
@@ -431,7 +513,7 @@ impl Modal {
                     ui.scope_id().with("dialog-close"),
                     egui::Sense::click(),
                 )
-                .on_hover_text("Close");
+                .tip("Close");
             if response.hovered() {
                 ui.painter()
                     .rect_filled(rect, 5., egui::Color32::from_white_alpha(20));
@@ -459,6 +541,74 @@ impl Modal {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn a_dialog_changes_height_smoothly_both_ways() {
+        let ctx = egui::Context::default();
+        ctx.data_mut(|d| d.insert_temp(egui::Id::unique("animate-dialogs"), true));
+        let id = egui::Id::unique("resize-test");
+        let run = |tall: bool| {
+            let mut height = 0.;
+            let out = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        egui::vec2(800., 800.),
+                    )),
+                    predicted_dt: 0.016,
+                    ..Default::default()
+                },
+                |ui| {
+                    let m = Modal::new(id).show(ui.ctx(), |ui| {
+                        ui.set_width(200.);
+                        // Content that fills the room offered, as scrolling bodies do.
+                        let want = if tall { 400. } else { 100. };
+                        ui.allocate_space(egui::vec2(200., ui.available_height().min(want)));
+                    });
+                    height = m.response.rect.height();
+                },
+            );
+            crate::property_layout::tests::PaintedOutput(out);
+            height
+        };
+        let short = run(false);
+        run(false);
+        run(true);
+        run(true);
+        run(true);
+        run(true);
+        let growing = run(true);
+        assert!(growing > short + 1., "{growing} {short}");
+        let mut tall = growing;
+        for _ in 0..60 {
+            tall = run(true);
+        }
+        assert!(growing < tall - 1., "{growing} {tall}");
+        assert!((tall - short - 300.).abs() < 1., "{tall} {short}");
+        run(false);
+        run(false);
+        run(false);
+        run(false);
+        let shrinking = run(false);
+        assert!(
+            shrinking < tall - 1. && shrinking > short + 1.,
+            "{shrinking}"
+        );
+        let mut end = shrinking;
+        for _ in 0..60 {
+            end = run(false);
+        }
+        assert!((end - short).abs() < 1., "{end} {short}");
+        // Growing and shrinking take the same number of frames.
+        let frames = |tall_now: bool, goal: f32| {
+            (0..80)
+                .position(|_| (run(tall_now) - goal).abs() < 0.5)
+                .unwrap()
+        };
+        let grow = frames(true, tall);
+        let shrink = frames(false, end);
+        assert!(grow.abs_diff(shrink) <= 1, "{grow} {shrink}");
+        assert!(grow <= 14, "{grow} frames at 60 fps");
+    }
     #[test]
     fn enter_confirms_singleline_dialog_but_not_multiline_invalid_or_composition() {
         for (multiline, enabled, ime, expected) in [

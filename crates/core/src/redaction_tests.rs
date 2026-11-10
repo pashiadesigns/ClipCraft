@@ -23,6 +23,7 @@ fn fractional_reverse_redactions_cover_every_touched_pixel_in_flattened_png() {
                     focus: None,
 
                     highlighter_rect: false,
+                    hard_edge: false,
                     group: None,
                     rotation_degrees: 0.0,
                     mirror_x: false,

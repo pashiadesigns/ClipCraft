@@ -350,6 +350,7 @@ impl Guide {
                 focus: None,
 
                 highlighter_rect: false,
+                hard_edge: false,
                 group: None,
                 rotation_degrees: 0.,
                 mirror_x: false,
@@ -400,6 +401,7 @@ impl Guide {
             let circle = Annotation {
                 focus: None,
                 highlighter_rect: false,
+                hard_edge: false,
                 id: MAX_STEPS as u64 * 4 + index as u64 + 1,
                 kind: Kind::Ellipse,
                 start: [center[0] - r, center[1] - r],
