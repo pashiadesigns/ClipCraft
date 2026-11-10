@@ -57,6 +57,11 @@ fn fresh_profile_has_no_projects_or_personal_preferences() {
 }
 
 fn sample_screen() -> image::RgbaImage {
+    sample_variant("Your next great walkthrough", [22, 147, 183, 255])
+}
+
+/// The same synthetic workspace with another heading and accent color.
+fn sample_variant(heading: &str, accent: [u8; 4]) -> image::RgbaImage {
     let mut d = Document::canvas(960, 540, [241, 245, 249, 255]).unwrap();
     let mut add = |rect: [f32; 4], color: [u8; 4], text: &str, size: f32| {
         let mut a = capture_core::steps::marker(
@@ -93,12 +98,7 @@ fn sample_screen() -> image::RgbaImage {
         "FIELDNOTES  /  Team workspace",
         16.,
     );
-    add(
-        [28., 79., 700., 45.],
-        [30, 50, 67, 255],
-        "Your next great walkthrough",
-        27.,
-    );
+    add([28., 79., 700., 45.], [30, 50, 67, 255], heading, 27.);
     add(
         [30., 125., 790., 31.],
         [80, 101, 117, 255],
@@ -111,7 +111,7 @@ fn sample_screen() -> image::RgbaImage {
         (640., "28", "Helpful answers"),
     ] {
         add([x, 180., 285., 115.], [255; 4], "", 0.);
-        add([x + 18., 192., 210., 51.], [22, 147, 183, 255], n, 30.);
+        add([x + 18., 192., 210., 51.], accent, n, 30.);
         add([x + 18., 249., 230., 27.], [60, 79, 95, 255], label, 15.);
     }
     add([30., 320., 895., 185.], [255; 4], "", 0.);
@@ -142,23 +142,17 @@ fn sample_screen() -> image::RgbaImage {
             15.,
         );
     }
-    add([735., 418., 160., 45.], [24, 150, 189, 255], "", 0.);
+    add([735., 418., 160., 45.], accent, "", 0.);
     add([756., 423., 130., 33.], [255; 4], "Share guide", 15.);
     d.render().unwrap()
 }
 
-#[test]
-fn public_image_and_video_workflows_use_synthetic_content() {
-    let Ok(root) = std::env::var("CLIPCRAFT_PUBLIC_UI") else {
-        return;
-    };
-    for video in [false, true] {
-        let ctx = egui::Context::default();
-        crate::shell::configure(&ctx);
-        crate::text_layout::configure(&ctx);
-        let mut e = crate::canvas::tests::editor(&ctx);
-        let history = tempfile::tempdir().unwrap();
-        e.history = crate::history::HistoryPanel::isolated(history.path());
+/// The image guide or video editor used by every public screenshot.
+fn showcase(ctx: &egui::Context, video: bool) -> Editor {
+    {
+        crate::shell::configure(ctx);
+        crate::text_layout::configure(ctx);
+        let mut e = crate::canvas::tests::editor(ctx);
         let pixels = sample_screen();
         e.shell.backstage = None;
         e.shell.library = false;
@@ -267,51 +261,250 @@ fn public_image_and_video_workflows_use_synthetic_content() {
             );
         }
         e.needs_render = true;
-        let mut draw = || {
-            PaintedOutput(ctx.run_ui(
-                egui::RawInput {
-                    screen_rect: Some(egui::Rect::from_min_size(
-                        egui::Pos2::ZERO,
-                        egui::vec2(1440., 960.),
-                    )),
-                    focused: true,
-                    ..Default::default()
-                },
-                |ui| {
-                    e.show_shell(ui);
-                    if e.needs_render {
-                        e.refresh_canvas_display(&ctx);
-                    }
-                    egui::CentralPanel::default()
-                        .frame(
-                            egui::Frame::new()
-                                .fill(crate::shell::CANVAS)
-                                .inner_margin(12),
-                        )
-                        .show(ui, |ui| e.show_workspace(ui));
-                },
-            ))
-        };
-        let mut first = draw();
-        for _ in 0..4 {
-            let frame = draw();
+        e
+    }
+}
+
+/// Paints the whole window, then `overlay` (a dialog) on top, and saves the
+/// meshes for `scripts/render-egui-fixture.py`.
+fn paint_window(
+    ctx: &egui::Context,
+    e: &mut Editor,
+    root: &str,
+    name: &str,
+    overlay: fn(&egui::Context, &mut Editor),
+) {
+    let mut time = 0.;
+    let mut draw = |e: &mut Editor| {
+        time += 0.25;
+        PaintedOutput(ctx.run_ui(
+            egui::RawInput {
+                time: Some(time),
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    egui::vec2(1440., 960.),
+                )),
+                focused: true,
+                ..Default::default()
+            },
+            |ui| {
+                e.show_shell(ui);
+                if e.needs_render {
+                    e.refresh_canvas_display(ui.ctx());
+                }
+                egui::CentralPanel::default()
+                    .frame(
+                        egui::Frame::new()
+                            .fill(if e.shell.library {
+                                crate::shell::SURROUND
+                            } else {
+                                crate::shell::CANVAS
+                            })
+                            .inner_margin(if e.shell.library {
+                                egui::Margin {
+                                    left: 5,
+                                    right: 5,
+                                    top: 0,
+                                    bottom: 3,
+                                }
+                            } else {
+                                egui::Margin::same(12)
+                            }),
+                    )
+                    .show(ui, |ui| e.show_workspace(ui));
+                overlay(ui.ctx(), e);
+            },
+        ))
+    };
+    let mut first = draw(e);
+    if e.shell.library {
+        // Library thumbnails decode on worker threads; wait for every one.
+        for _ in 0..200 {
+            let frame = draw(e);
             first
                 .0
                 .textures_delta
                 .append(frame.0.textures_delta.clone());
+            if e.history.thumbnails_settled() {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(25));
         }
-        let last = draw();
-        dump_meshes(
-            &ctx,
-            &root,
-            if video {
-                "showcase-video"
-            } else {
-                "showcase-guide"
-            },
-            first,
-            last,
+        assert!(e.history.thumbnails_settled(), "Library thumbnails loaded");
+    }
+    for _ in 0..4 {
+        let frame = draw(e);
+        first
+            .0
+            .textures_delta
+            .append(frame.0.textures_delta.clone());
+    }
+    let last = draw(e);
+    dump_meshes(ctx, root, name, first, last);
+}
+
+#[test]
+fn public_image_and_video_workflows_use_synthetic_content() {
+    let Ok(root) = std::env::var("CLIPCRAFT_PUBLIC_UI") else {
+        return;
+    };
+    for video in [false, true] {
+        let ctx = egui::Context::default();
+        let history = tempfile::tempdir().unwrap();
+        let mut e = showcase(&ctx, video);
+        e.history = crate::history::HistoryPanel::isolated(history.path());
+        let name = if video {
+            "showcase-video"
+        } else {
+            "showcase-guide"
+        };
+        paint_window(&ctx, &mut e, &root, name, |_, _| {});
+        assert!(e.history.entries().is_empty());
+    }
+}
+
+/// The Library, Capture Clip and the Export video privacy review, each with
+/// generated demonstration content in an isolated Library.
+#[test]
+fn public_library_capture_and_privacy_use_synthetic_content() {
+    let Ok(root) = std::env::var("CLIPCRAFT_PUBLIC_UI") else {
+        return;
+    };
+    // Library: generated captures in folders, with tags, sources and a pin.
+    {
+        let ctx = egui::Context::default();
+        let history = tempfile::tempdir().unwrap();
+        let mut e = showcase(&ctx, false);
+        e.history = crate::history::HistoryPanel::isolated(history.path());
+        let store = e.history.store.as_mut().unwrap();
+        for folder in ["Onboarding", "Product tour", "Support answers"] {
+            store.create_folder(folder).unwrap();
+        }
+        /// Label, accent, folder, tags and website.
+        type Item = (
+            &'static str,
+            [u8; 4],
+            &'static str,
+            &'static [&'static str],
+            Option<&'static str>,
         );
+        let items: [Item; 9] = [
+            (
+                "Welcome checklist",
+                [22, 147, 183, 255],
+                "Onboarding",
+                &["Team"],
+                Some("fieldnotes.example"),
+            ),
+            (
+                "Weekly report walkthrough",
+                [46, 125, 90, 255],
+                "Product tour",
+                &["Reports"],
+                Some("fieldnotes.example"),
+            ),
+            (
+                "Invite a teammate",
+                [124, 82, 196, 255],
+                "Onboarding",
+                &["Team"],
+                None,
+            ),
+            (
+                "Billing settings",
+                [196, 112, 38, 255],
+                "Support answers",
+                &["Billing"],
+                Some("billing.example"),
+            ),
+            (
+                "Share a project",
+                [22, 147, 183, 255],
+                "Product tour",
+                &[],
+                None,
+            ),
+            (
+                "Notification options",
+                [178, 58, 88, 255],
+                "Support answers",
+                &["Settings"],
+                None,
+            ),
+            (
+                "Export a summary",
+                [46, 125, 90, 255],
+                "Product tour",
+                &["Reports"],
+                Some("fieldnotes.example"),
+            ),
+            (
+                "Connect a calendar",
+                [124, 82, 196, 255],
+                "Onboarding",
+                &["Settings"],
+                None,
+            ),
+            (
+                "Reset a password",
+                [196, 112, 38, 255],
+                "Support answers",
+                &["Settings"],
+                Some("help.example"),
+            ),
+        ];
+        let mut ids = vec![];
+        for (label, accent, folder, tags, site) in items {
+            let pixels = sample_variant(label, accent);
+            let d = capture_core::Document::from_image(pixels).unwrap();
+            let entry = store
+                .create(&d, label, capture_core::history::Origin::Capture)
+                .unwrap();
+            let tags: Vec<String> = tags.iter().map(|t| (*t).into()).collect();
+            let entry = store.edit_metadata(&entry, label, &tags).unwrap();
+            store
+                .move_to_folder(std::slice::from_ref(&entry.id), Some(folder))
+                .unwrap();
+            store
+                .set_source(&entry.id, Some("Fieldnotes".into()), site.map(Into::into))
+                .unwrap();
+            ids.push(entry.id);
+        }
+        store.set_pinned(&ids[0], true).unwrap();
+        e.history.refresh();
+        e.choose_tool(
+            crate::shell::TOOLS
+                .iter()
+                .position(|t| t.id == capture_core::toolbar::ToolId::Move)
+                .unwrap(),
+        );
+        e.status.clear();
+        e.shell.library = true;
+        paint_window(&ctx, &mut e, &root, "showcase-library", |_, _| {});
+    }
+    // Capture Clip opens its settings over the editor.
+    {
+        let ctx = egui::Context::default();
+        let history = tempfile::tempdir().unwrap();
+        let mut e = showcase(&ctx, false);
+        e.history = crate::history::HistoryPanel::isolated(history.path());
+        e.open_clip();
+        paint_window(&ctx, &mut e, &root, "showcase-capture", |c, e| {
+            e.capture_clip_dialog(c)
+        });
+        assert!(e.history.entries().is_empty());
+    }
+    // Export video lists the tracked redaction that still needs review.
+    {
+        let ctx = egui::Context::default();
+        let history = tempfile::tempdir().unwrap();
+        let mut e = showcase(&ctx, true);
+        e.history = crate::history::HistoryPanel::isolated(history.path());
+        super::dialog_gallery_tests::pending_redaction(&mut e);
+        e.export_video();
+        paint_window(&ctx, &mut e, &root, "showcase-privacy", |c, e| {
+            e.show_video_export(c)
+        });
         assert!(e.history.entries().is_empty());
     }
 }

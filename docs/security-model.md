@@ -61,10 +61,14 @@ tag.
 
 ## Video privacy
 
-Find Sensitive Info analyzes still images. Video redactions do not automatically
-follow text, names or people as they move or scroll. Set their position and timing
-manually and review every frame of the exported video. A missed frame can reveal
-the original information. Focus windows are visual emphasis, not a privacy feature.
+Find Sensitive Info analyzes still images and videos on this PC with Windows OCR.
+In a video, tracked redactions follow detected text as it moves or scrolls. When a
+track loses its text, it holds the last position for one second, then ends and is
+flagged **Needs review**; Export video lists every redaction that still needs
+review. Detection assists review and never guarantees full coverage: names, faces
+and text that OCR misreads are not found. Check every flagged range and the whole
+exported video. A missed frame can reveal the original information. Focus and
+Magnify are visual emphasis, not a privacy feature.
 
 The MSI and portable ZIP ship without a Library, recent projects, preferences or
 capture media. Both use the current user's profile. See [storage locations](installing.md).

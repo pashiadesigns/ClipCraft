@@ -149,7 +149,7 @@ pub(super) fn dialogs() -> Vec<(&'static str, bool, Open, Show)> {
 }
 
 /// One tracked redaction that still needs review, with a held range.
-fn pending_redaction(e: &mut Editor) {
+pub(super) fn pending_redaction(e: &mut Editor) {
     use capture_core::video::motion_path::{Node, Path, Purpose};
     let mut p = e.session.document.video.clone().unwrap();
     let node = |at: u64, confidence: f32| Node {
