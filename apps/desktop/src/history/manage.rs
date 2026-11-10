@@ -294,7 +294,7 @@ impl Editor {
                     } else {ui.label("Remove this tag from every Library item? Images and projects are kept.");}
                 },
                 Action::AddTags|Action::RemoveTags=>{ui.horizontal(|ui|{ui.label("Operation");ui.selectable_value(&mut d.action,Action::AddTags,"Add tags");ui.selectable_value(&mut d.action,Action::RemoveTags,"Remove tags");});ui.label(format!("{} selected captures",d.entries.len()));ui.label("Tags (comma separated)");let input=ui.text_edit_singleline(&mut d.tags);crate::controls::focus_once(&input,&mut d.focus_pending);},
-                Action::Delete=>{ui.label(format!("Delete {} selected capture(s) from Library?",d.entries.len()));ui.label("Stored projects are removed permanently. Exported files are kept. Deleting the open project clears its canvas.");ui.add_space(12.);crate::controls::toggle(ui,&mut d.cleanup,"Also delete unused ClipCraft media");ui.small(&d.cleanup_summary);ui.small("Imported originals, shared files and media needed by other projects or Undo are always kept. Leave this off to keep all separate media.");},
+                Action::Delete=>{ui.label(format!("Delete {} selected capture(s) from Library?",d.entries.len()));ui.label("Stored projects are removed permanently. Exported files are kept. Deleting the open project clears its canvas.");ui.add_space(12.);crate::controls::toggle(ui,&mut d.cleanup,"Also delete unused ClipDesigner media");ui.small(&d.cleanup_summary);ui.small("Imported originals, shared files and media needed by other projects or Undo are always kept. Leave this off to keep all separate media.");},
                 Action::Export|Action::Rename=>{
                     ui.label(format!("{} selected captures",d.entries.len()));
                     ui.label(if d.entries.len()>1 {"Base name"}else{"Name"});
@@ -303,8 +303,8 @@ impl Editor {
                     if d.action==Action::Export {
                         ui.horizontal(|ui| {
                             ui.label("Format");
-                            egui::ComboBox::from_id_salt("library-save-format").selected_text(if d.editable { "ClipCraft project" } else { d.format.label() }).show_ui(ui,|ui| {
-                                ui.selectable_value(&mut d.editable,true,"ClipCraft project");
+                            egui::ComboBox::from_id_salt("library-save-format").selected_text(if d.editable { "ClipDesigner project" } else { d.format.label() }).show_ui(ui,|ui| {
+                                ui.selectable_value(&mut d.editable,true,"ClipDesigner project");
                                 for format in [capture_core::export::Format::Png,capture_core::export::Format::Jpeg,capture_core::export::Format::Pdf] {
                                     if ui.selectable_label(!d.editable && d.format==format,format.label()).clicked(){d.editable=false;d.format=format;}
                                 }
@@ -466,7 +466,7 @@ impl Editor {
         let names = capture_core::history::unique_names(&safe_name(base), entries.len(), &[])
             .map_err(|e| e.to_string())?;
         let directory = (1..=10000)
-            .map(|n| folder.join(format!("ClipCraft export {n}")))
+            .map(|n| folder.join(format!("ClipDesigner export {n}")))
             .find_map(|p| match std::fs::create_dir(&p) {
                 Ok(()) => Some(Ok(p)),
                 Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => None,
@@ -603,13 +603,13 @@ mod tests {
             .unwrap();
         }
         assert_eq!(
-            std::fs::read_dir(root.path().join("ClipCraft export 1"))
+            std::fs::read_dir(root.path().join("ClipDesigner export 1"))
                 .unwrap()
                 .count(),
             2
         );
         assert_eq!(
-            std::fs::read_dir(root.path().join("ClipCraft export 2"))
+            std::fs::read_dir(root.path().join("ClipDesigner export 2"))
                 .unwrap()
                 .count(),
             2
@@ -617,7 +617,7 @@ mod tests {
         e.export_library_batch(&entries[..1], root.path(), None, "Guide")
             .unwrap();
         let exported =
-            capture_core::Document::load(&root.path().join("ClipCraft export 3/Guide 1.iclip"))
+            capture_core::Document::load(&root.path().join("ClipDesigner export 3/Guide 1.iclip"))
                 .unwrap();
         assert_eq!(
             exported.render().unwrap(),
@@ -631,7 +631,7 @@ mod tests {
                 .unwrap()
         );
         assert_eq!(
-            std::fs::read_dir(root.path().join("ClipCraft export 3"))
+            std::fs::read_dir(root.path().join("ClipDesigner export 3"))
                 .unwrap()
                 .count(),
             1
@@ -651,7 +651,7 @@ mod tests {
         };
         let first = frame(&mut e);
         let output = frame(&mut e);
-        if let Ok(dir) = std::env::var("CLIPCRAFT_HEADLESS_BETA_DIR") {
+        if let Ok(dir) = std::env::var("CLIPDESIGNER_HEADLESS_BETA_DIR") {
             dump_meshes(&ctx, &dir, "Storage", first, output);
         }
         d.action = Action::Delete;

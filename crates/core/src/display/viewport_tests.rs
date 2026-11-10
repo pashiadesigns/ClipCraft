@@ -108,7 +108,7 @@ fn blur_uses_same_obscured_pixels_at_low_and_high_zoom_without_source_leaking_th
                 flattened.render_viewport(viewport).unwrap(),
                 "effect must be exactly the obscured export at scale {scale} origin {origin:?}"
             );
-            if let Ok(path) = std::env::var("CLIPCRAFT_BLUR_FIXTURE_DIR")
+            if let Ok(path) = std::env::var("CLIPDESIGNER_BLUR_FIXTURE_DIR")
                 && origin == [0.0, 0.0]
             {
                 let directory = std::path::Path::new(&path);

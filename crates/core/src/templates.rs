@@ -901,7 +901,7 @@ pub fn build_template(
         text(
             0,
             [32., height - 44., t.width as f32 - 64., 28.],
-            t.footer.unwrap_or("Created with ClipCraft"),
+            t.footer.unwrap_or("Created with ClipDesigner"),
             13.,
             false,
         ),
@@ -1040,7 +1040,7 @@ mod tests {
                 legacy.version = 23;
                 assert!(legacy.validate().is_err());
                 if scale == Scale::Fill
-                    && let Ok(root) = std::env::var("CLIPCRAFT_TEMPLATE_FIXTURES")
+                    && let Ok(root) = std::env::var("CLIPDESIGNER_TEMPLATE_FIXTURES")
                 {
                     std::fs::create_dir_all(&root).unwrap();
                     d.save(

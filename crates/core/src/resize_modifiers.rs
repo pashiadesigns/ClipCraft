@@ -2,7 +2,7 @@
 //! (finish_resize/aspect_scale) and geom/src/lib.rs (constrain_angle), MIT.
 //! Copyright (c) 2026 ArtCraft Team and the DesignCraft contributors.
 //! Revision ea08e4c2ba290f092063c99d70c4bdd5afc45887.
-//! ClipCraft adds canvas bounds, annotation paths and atomic command integration.
+//! ClipDesigner adds canvas bounds, annotation paths and atomic command integration.
 use crate::{Annotation, Error, Kind, Result, selection::Handle};
 
 #[derive(Clone, Copy, Debug, Default)]

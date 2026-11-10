@@ -48,7 +48,7 @@ fn blank_sections_reflow_resize_roundtrip_and_undo_without_placeholder_objects()
     let path = dir.path().join("blank.capture.json");
     s.document.save(&path).unwrap();
     assert_eq!(bytes(&Document::load(&path).unwrap()), bytes(&s.document));
-    if let Ok(dir) = std::env::var("CLIPCRAFT_PREVIEW2_FIXTURE_DIR") {
+    if let Ok(dir) = std::env::var("CLIPDESIGNER_PREVIEW2_FIXTURE_DIR") {
         std::fs::create_dir_all(&dir).unwrap();
         s.document
             .save(&std::path::Path::new(&dir).join("blank-section.capture.json"))

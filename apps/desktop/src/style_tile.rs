@@ -573,7 +573,7 @@ mod tests {
         for kind in [Kind::Blur, Kind::Pixelate] {
             let circle = effect_sample_shaped(kind, 8, Region::Ellipse).unwrap();
             let squiggle = effect_sample_shaped(kind, 8, Region::Freehand).unwrap();
-            if let Ok(dir) = std::env::var("CLIPCRAFT_EFFECT_TILES_DIR") {
+            if let Ok(dir) = std::env::var("CLIPDESIGNER_EFFECT_TILES_DIR") {
                 circle.save(format!("{dir}/{kind:?}-ellipse.png")).unwrap();
                 squiggle
                     .save(format!("{dir}/{kind:?}-freehand.png"))
@@ -667,7 +667,7 @@ mod tests {
         };
         let first = frame();
         let last = frame();
-        if let Ok(root) = std::env::var("CLIPCRAFT_HEADLESS_EFFECT_DIR") {
+        if let Ok(root) = std::env::var("CLIPDESIGNER_HEADLESS_EFFECT_DIR") {
             crate::property_layout::tests::dump_meshes(&ctx, &root, "ObfuscateStyles", first, last);
         }
     }

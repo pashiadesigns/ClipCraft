@@ -169,7 +169,7 @@ fn text_outline_width_and_slider_preview_batch_and_inline_ink_without_extra_undo
     pane.session.document.promote_features();
     let first = frame(&paint, &mut pane, vec![]);
     let second = frame(&paint, &mut pane, vec![]);
-    if let Ok(dir) = std::env::var("CLIPCRAFT_TEXT_OUTLINE_UI_DIR") {
+    if let Ok(dir) = std::env::var("CLIPDESIGNER_TEXT_OUTLINE_UI_DIR") {
         dump_meshes(&paint, &dir, "text-outline", first, second);
     }
 }
@@ -182,7 +182,7 @@ fn dedicated_text_sidebar_buttons_batch_justify_fit_and_preserve_undo() {
     let original = e.session.document.clone();
     let first = frame(&ctx, &mut e, vec![]);
     let second = frame(&ctx, &mut e, vec![]);
-    if let Ok(root) = std::env::var("CLIPCRAFT_HEADLESS_TEXT_SIDEBAR_DIR") {
+    if let Ok(root) = std::env::var("CLIPDESIGNER_HEADLESS_TEXT_SIDEBAR_DIR") {
         dump_meshes(&ctx, &root, "TextProperties", first, second);
     }
     for label in [
@@ -281,7 +281,7 @@ fn dedicated_text_sidebar_size_drag_is_live_and_inline_changes_commit_once() {
     e.begin_text_edit();
     let first = frame(&ctx, &mut e, vec![]);
     let second = frame(&ctx, &mut e, vec![]);
-    if let Ok(root) = std::env::var("CLIPCRAFT_HEADLESS_TEXT_SIDEBAR_DIR") {
+    if let Ok(root) = std::env::var("CLIPDESIGNER_HEADLESS_TEXT_SIDEBAR_DIR") {
         dump_meshes(&ctx, &root, "InlineTextProperties", first, second);
     }
     for label in ["Bold", "Underline", "Increase font size"] {
@@ -340,7 +340,7 @@ fn object_text_entry_routes_to_text_properties_and_back_commits_one_edit() {
         assert_eq!(e.shell.property_tab, PropertyTab::Tool);
         let first = frame(&ctx, &mut e, vec![]);
         let second = frame(&ctx, &mut e, vec![]);
-        if let Ok(root) = std::env::var("CLIPCRAFT_HEADLESS_OBJECT_TEXT_DIR") {
+        if let Ok(root) = std::env::var("CLIPDESIGNER_HEADLESS_OBJECT_TEXT_DIR") {
             dump_meshes(
                 &ctx,
                 &root,

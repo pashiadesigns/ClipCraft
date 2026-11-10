@@ -96,7 +96,7 @@ fn rectangle_highlighter_is_editable_translucent_and_survives_all_transfers() {
     let painted = crate::object_styles::paint_format(&a, &original).unwrap();
     assert!(!painted.highlighter_rect);
     assert_eq!(painted.points, original.points);
-    if let Ok(root) = std::env::var("CLIPCRAFT_HIGHLIGHTER_DIR") {
+    if let Ok(root) = std::env::var("CLIPDESIGNER_HIGHLIGHTER_DIR") {
         let root = std::path::Path::new(&root);
         std::fs::create_dir_all(root).unwrap();
         let mut d = Document::canvas(360, 180, [255; 4]).unwrap();

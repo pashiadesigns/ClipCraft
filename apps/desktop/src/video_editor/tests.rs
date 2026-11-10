@@ -153,7 +153,7 @@ fn video_export_roundtrip_edits_audio_seek_and_portable_project() {
         loaded.video.as_ref().unwrap().objects,
         d.video.as_ref().unwrap().objects
     );
-    if let Some(folder) = std::env::var_os("CLIPCRAFT_VIDEO_EDITOR_EVIDENCE") {
+    if let Some(folder) = std::env::var_os("CLIPDESIGNER_VIDEO_EDITOR_EVIDENCE") {
         let folder = PathBuf::from(folder);
         std::fs::create_dir_all(&folder).unwrap();
         std::fs::copy(output, folder.join("edited-roundtrip.mp4")).unwrap();
@@ -664,7 +664,7 @@ fn production_video_workspace_renders_all_contexts() {
                         .bottom()
             );
         }
-        if let Some(folder) = std::env::var_os("CLIPCRAFT_VIDEO_EDITOR_EVIDENCE") {
+        if let Some(folder) = std::env::var_os("CLIPDESIGNER_VIDEO_EDITOR_EVIDENCE") {
             first.0.textures_delta.set.clear();
             for (id, deltas) in textures.into_inner() {
                 first
@@ -733,7 +733,7 @@ fn video_properties_tabs_fit_and_remember_selection_context() {
             .data(|d| d.get_temp::<egui::Rect>(egui::Id::unique("video-motion-preview")))
             .unwrap();
         assert!(preview.bottom() <= 620. && preview.height() >= 160. && preview.height() < 260.);
-        if let Some(folder) = std::env::var_os("CLIPCRAFT_VIDEO_EDITOR_EVIDENCE") {
+        if let Some(folder) = std::env::var_os("CLIPDESIGNER_VIDEO_EDITOR_EVIDENCE") {
             dump_meshes(
                 &ctx,
                 &folder.to_string_lossy(),

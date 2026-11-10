@@ -131,7 +131,7 @@ pub(super) fn record(
         return Err("Free at least 256 MB in the selected video folder before recording.".into());
     }
     let temp = tempfile::Builder::new()
-        .prefix(".clipcraft-recording-")
+        .prefix(".clipdesigner-recording-")
         .suffix(".mp4")
         .tempfile_in(parent)
         .map_err(|e| format!("Cannot create video in this folder: {e}"))?

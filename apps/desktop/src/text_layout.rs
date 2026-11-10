@@ -13,7 +13,11 @@ pub(super) fn family(style: &TextStyle) -> egui::FontFamily {
         };
     }
     egui::FontFamily::Name(
-        format!("ClipCraft {:?} {} {}", style.font, style.bold, style.italic).into(),
+        format!(
+            "ClipDesigner {:?} {} {}",
+            style.font, style.bold, style.italic
+        )
+        .into(),
     )
 }
 pub(super) fn available_family(ctx: &egui::Context, style: &TextStyle) -> egui::FontFamily {
@@ -34,7 +38,7 @@ pub(super) fn available_family(ctx: &egui::Context, style: &TextStyle) -> egui::
                 }],
             });
             ctx.add_font(egui::FontInsert {
-                name: "ClipCraft Emoji".into(),
+                name: "ClipDesigner Emoji".into(),
                 data: egui::FontData::from_static(TextFont::Emoji.bytes(false, false)),
                 families: vec![egui::InsertFontFamily {
                     family: family.clone(),
@@ -70,13 +74,13 @@ pub(super) fn configure(ctx: &egui::Context) {
         }
     }
     fonts.font_data.insert(
-        "ClipCraft Emoji".into(),
+        "ClipDesigner Emoji".into(),
         Arc::new(egui::FontData::from_static(
             TextFont::Emoji.bytes(false, false),
         )),
     );
     for family in fonts.families.values_mut() {
-        family.push("ClipCraft Emoji".into());
+        family.push("ClipDesigner Emoji".into());
     }
     ctx.set_fonts(fonts);
 }

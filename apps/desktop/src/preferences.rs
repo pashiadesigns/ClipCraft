@@ -383,7 +383,7 @@ fn general(ui: &mut egui::Ui, open: &mut Open) {
     crate::panel_ui::setting(
         ui,
         "Start with Windows",
-        "Open ClipCraft when you sign in.",
+        "Open ClipDesigner when you sign in.",
         &mut open.start_with_windows,
     );
     let d = &mut open.draft;

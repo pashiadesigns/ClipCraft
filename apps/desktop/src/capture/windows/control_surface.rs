@@ -174,7 +174,7 @@ mod tests {
                 CreateWindowExW(
                     WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
                     w!("STATIC"),
-                    w!("ClipCraft exclusion regression"),
+                    w!("ClipDesigner exclusion regression"),
                     WS_POPUP | WS_CLIPCHILDREN,
                     0,
                     0,
@@ -313,7 +313,7 @@ mod tests {
                 let region = Bitmap(mask(&image));
                 assert_ne!(unsafe { PtInRegion(region.0, center, 42) }, 0, "{name}");
                 assert_eq!(unsafe { PtInRegion(region.0, 0, 0) }, 0, "{name}");
-                if let Ok(folder) = std::env::var("CLIPCRAFT_COMPAT_EVIDENCE") {
+                if let Ok(folder) = std::env::var("CLIPDESIGNER_COMPAT_EVIDENCE") {
                     let folder = std::path::PathBuf::from(folder);
                     std::fs::create_dir_all(&folder).unwrap();
                     let mut compatible = image.clone();

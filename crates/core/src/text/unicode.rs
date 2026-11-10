@@ -224,7 +224,7 @@ mod tests {
         let copy: crate::Document =
             serde_json::from_slice(&serde_json::to_vec(&doc).unwrap()).unwrap();
         assert_eq!(copy.render().unwrap(), pixels);
-        if let Ok(root) = std::env::var("CLIPCRAFT_NEXT_FIXTURES") {
+        if let Ok(root) = std::env::var("CLIPDESIGNER_NEXT_FIXTURES") {
             std::fs::create_dir_all(&root).unwrap();
             doc.save(&std::path::Path::new(&root).join("emoji.capture.json"))
                 .unwrap();

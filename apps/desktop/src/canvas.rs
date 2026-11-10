@@ -2227,7 +2227,7 @@ pub(crate) mod tests {
         let new = e.new_annotation(Kind::Highlighter, [350., 250.], [450., 300.]);
         assert_eq!(new.color, rect.color);
         assert!(new.points.is_empty());
-        if let Ok(root) = std::env::var("CLIPCRAFT_HIGHLIGHTER_UI_DIR") {
+        if let Ok(root) = std::env::var("CLIPDESIGNER_HIGHLIGHTER_UI_DIR") {
             use crate::property_layout::tests::{PaintedOutput, dump_meshes};
             let ctx = egui::Context::default();
             crate::shell::configure(&ctx);

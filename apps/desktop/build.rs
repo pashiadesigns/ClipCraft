@@ -1,5 +1,5 @@
 fn main() {
-    for asset in ["clipcraft.res", "clipcraft.rc", "clipcraft.ico"] {
+    for asset in ["clipdesigner.res", "clipdesigner.rc", "clipdesigner.ico"] {
         println!("cargo:rerun-if-changed=assets/brand/{asset}");
     }
     // The checked-in, architecture-neutral resource is generated from the ICO
@@ -8,7 +8,7 @@ fn main() {
         && std::env::var("CARGO_CFG_TARGET_ENV").as_deref() == Ok("msvc")
     {
         let resource = std::path::Path::new(&std::env::var("CARGO_MANIFEST_DIR").unwrap())
-            .join("assets/brand/clipcraft.res");
+            .join("assets/brand/clipdesigner.res");
         println!("cargo:rustc-link-arg-bins={}", resource.display());
     }
 }

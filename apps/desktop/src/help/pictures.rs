@@ -1,4 +1,4 @@
-//! The Help pictures: real renders of ClipCraft with a made-up sample project,
+//! The Help pictures: real renders of ClipDesigner with a made-up sample project,
 //! produced during qualification by `scripts/render-help-pictures.py`.
 use std::collections::HashMap;
 

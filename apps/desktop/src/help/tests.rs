@@ -157,7 +157,7 @@ fn article_parts_stack_and_wrap_inside_the_window() {
 }
 #[test]
 fn help_pictures_can_be_saved_for_review() {
-    let Some(dir) = std::env::var_os("CLIPCRAFT_HELP_ART") else {
+    let Some(dir) = std::env::var_os("CLIPDESIGNER_HELP_ART") else {
         return;
     };
     for key in [

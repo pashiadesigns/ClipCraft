@@ -143,7 +143,7 @@ fn focus_insert_is_editable_and_properties_fit_image_and_video() {
                     );
                 }
             }
-            if let Some(folder) = std::env::var_os("CLIPCRAFT_VIDEO_EDITOR_EVIDENCE") {
+            if let Some(folder) = std::env::var_os("CLIPDESIGNER_VIDEO_EDITOR_EVIDENCE") {
                 dump_meshes(
                     &ctx,
                     &folder.to_string_lossy(),
@@ -273,7 +273,7 @@ fn framed_overlap_preparation_profile() {
     }
     let data = serde_json::json!({"frames":results,"native_playback_verified":false,"export_resolution_unchanged":true});
     println!("{data}");
-    if let Some(folder) = std::env::var_os("CLIPCRAFT_VIDEO_EDITOR_EVIDENCE") {
+    if let Some(folder) = std::env::var_os("CLIPDESIGNER_VIDEO_EDITOR_EVIDENCE") {
         std::fs::write(
             PathBuf::from(folder).join("framed-overlap-performance.json"),
             data.to_string(),

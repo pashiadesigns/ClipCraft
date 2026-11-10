@@ -1,5 +1,5 @@
 //! Preferences > Start with Windows: the per-user Run entry.
-const VALUE: &str = "ClipCraft";
+const VALUE: &str = "ClipDesigner";
 
 #[cfg(all(windows, not(test)))]
 mod platform {

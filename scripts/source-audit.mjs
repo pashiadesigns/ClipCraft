@@ -6,7 +6,7 @@ import {pathToFileURL} from 'node:url';
 export function auditFile(name, bytes) {
   const errors = [], path = name.replaceAll('\\','/');
   if (/(^|\/)(?:artifacts|target|downloads|node_modules|\.codex|\.openai|\.git)(\/|$)/i.test(path)
-      || /(^|\/)(?:\.env(?:\..*)?|STATUS\.md|AGENTS\.md|Launch ClipCraft Test\.cmd)$/i.test(path)
+      || /(^|\/)(?:\.env(?:\..*)?|STATUS\.md|AGENTS\.md|Launch ClipDesigner Test\.cmd)$/i.test(path)
       || /\.(?:exe|dll|zip|pfx|p12|key|pem|pdb)$/i.test(path)
       || /(^|\/)release-assets\//i.test(path)
       || /(^|\/)docs\/(?:manual-verification|.*-work\.|.*-plan\.)/i.test(path)
@@ -28,7 +28,7 @@ export function sourceFiles(root = process.cwd()) {
 export function audit(root = process.cwd()) {
   const files=sourceFiles(root);
   if (!files.length) throw new Error('No tracked source to audit');
-  for (const required of ['Cargo.toml','Cargo.lock','rust-toolchain.toml','LICENSE','apps/desktop/build.rs','apps/desktop/assets/brand/clipcraft.res','crates/core/src/lib.rs']) {
+  for (const required of ['Cargo.toml','Cargo.lock','rust-toolchain.toml','LICENSE','apps/desktop/build.rs','apps/desktop/assets/brand/clipdesigner.res','crates/core/src/lib.rs']) {
     if (!files.includes(required)) throw new Error(`Required public build input is missing: ${required}`);
   }
   const findings=[];

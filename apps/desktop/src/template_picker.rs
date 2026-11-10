@@ -571,7 +571,7 @@ mod tests {
         assert!(ctx.egui_wants_keyboard_input());
         let save = crate::color_widgets::tests::text_rect(&out.shapes, "Save").unwrap();
         first.0.textures_delta.append(out.0.textures_delta.clone());
-        if let Ok(dir) = std::env::var("CLIPCRAFT_HEADLESS_TEMPLATE_DIR") {
+        if let Ok(dir) = std::env::var("CLIPDESIGNER_HEADLESS_TEMPLATE_DIR") {
             dump_meshes(&ctx, &dir, "save-template", first, out);
         }
         for pressed in [true, false] {
@@ -761,7 +761,7 @@ mod tests {
             catalog.choices[templates::ALL.len()].label,
             "Team procedure"
         );
-        if let Ok(dir) = std::env::var("CLIPCRAFT_HEADLESS_TEMPLATE_DIR") {
+        if let Ok(dir) = std::env::var("CLIPDESIGNER_HEADLESS_TEMPLATE_DIR") {
             e.refresh_canvas_display(&ctx);
             let canvas = |e: &mut Editor| {
                 PaintedOutput(ctx.run_ui(

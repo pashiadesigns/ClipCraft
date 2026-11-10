@@ -1,6 +1,6 @@
 //! Help pictures: renders each scene from the real app with a made-up sample
 //! project and saves it for `scripts/render-help-pictures.py`. Set
-//! CLIPCRAFT_HELP_PICTURES_DIR to write them; without it the test checks that
+//! CLIPDESIGNER_HELP_PICTURES_DIR to write them; without it the test checks that
 //! the scenes draw and that every picture an article names exists.
 use super::dialog_gallery_tests::{Show, dialogs};
 use super::*;
@@ -1803,7 +1803,7 @@ fn step_numbers() -> std::collections::HashMap<String, usize> {
 }
 #[test]
 fn help_pictures_are_real_renders_of_every_article() {
-    let root = std::env::var_os("CLIPCRAFT_HELP_PICTURES_DIR");
+    let root = std::env::var_os("CLIPDESIGNER_HELP_PICTURES_DIR");
     let shots = shots();
     let keys: std::collections::HashSet<&str> = shots.iter().map(|s| s.key.as_str()).collect();
     let numbers = step_numbers();
@@ -1816,7 +1816,7 @@ fn help_pictures_are_real_renders_of_every_article() {
         "articles name pictures with no scene: {unknown:?}"
     );
     let mut missing = vec![];
-    let only = std::env::var("CLIPCRAFT_HELP_ONLY").ok();
+    let only = std::env::var("CLIPDESIGNER_HELP_ONLY").ok();
     for shot in &shots {
         if root.is_none() && shot.key.ends_with("-hero") {
             continue;

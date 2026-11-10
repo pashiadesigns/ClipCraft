@@ -34,11 +34,13 @@ impl Presets {
     pub(crate) fn new() -> Self {
         let root =
             crate::storage_locations::configured(capture_core::quick_preferences::Folder::Presets)
-                .or_else(|| std::env::var_os("CLIPCRAFT_STYLE_DIR").map(std::path::PathBuf::from))
+                .or_else(|| {
+                    std::env::var_os("CLIPDESIGNER_STYLE_DIR").map(std::path::PathBuf::from)
+                })
                 .or_else(|| {
                     std::env::var_os("LOCALAPPDATA").map(|p| {
                         std::path::PathBuf::from(p)
-                            .join("ClipCraft")
+                            .join("ClipDesigner")
                             .join("styles-v1")
                     })
                 });
@@ -359,7 +361,7 @@ impl Editor {
     }
     pub(crate) fn arrow_styles(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
-            ui.label("Theme: ClipCraft");
+            ui.label("Theme: ClipDesigner");
         });
         let families = [
             ("arrow", "Straight arrow", capture_core::styles::presets()),
@@ -724,7 +726,7 @@ mod header_tests {
             );
             let (_, output) = frame(&mut e, vec![]);
             let save = text_rect(&output.shapes, "Save Style").unwrap().center();
-            if let Ok(root) = std::env::var("CLIPCRAFT_STYLE_HEADER_DIR") {
+            if let Ok(root) = std::env::var("CLIPDESIGNER_STYLE_HEADER_DIR") {
                 let mut textures = PaintedOutput(first.0.clone());
                 textures.0.textures_delta.clear();
                 textures.0.textures_delta = deltas.borrow().clone();
@@ -761,7 +763,7 @@ mod header_tests {
             first.0.textures_delta.clear();
             first.0.textures_delta = deltas.borrow().clone();
             deltas.borrow_mut().clear();
-            if let Ok(root) = std::env::var("CLIPCRAFT_STYLE_HEADER_DIR") {
+            if let Ok(root) = std::env::var("CLIPDESIGNER_STYLE_HEADER_DIR") {
                 crate::property_layout::tests::dump_meshes(
                     &ctx,
                     &root,

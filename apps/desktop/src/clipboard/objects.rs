@@ -21,7 +21,9 @@ impl Transfer for SystemTransfer {
         }
         let data = arboard::Clipboard::new()
             .and_then(|mut c| c.get_image())
-            .map_err(|e| format!("Clipboard contains no usable image or ClipCraft objects: {e}"))?;
+            .map_err(|e| {
+                format!("Clipboard contains no usable image or ClipDesigner objects: {e}")
+            })?;
         let width = u32::try_from(data.width).map_err(|_| "Clipboard image too wide")?;
         let height = u32::try_from(data.height).map_err(|_| "Clipboard image too tall")?;
         let image = ImagePayload::from_rgba(width, height, data.bytes.into_owned())
@@ -93,7 +95,7 @@ pub fn selection(
 mod windows {
     use super::*;
     use clipboard_win::{Clipboard, formats, raw};
-    const FORMAT: &str = "ClipCraft.EditableObjects.v1";
+    const FORMAT: &str = "ClipDesigner.EditableObjects.v1";
     const LIMIT: usize = 160_000_000;
     fn format(name: &str) -> Result<u32, String> {
         clipboard_win::register_format(name)

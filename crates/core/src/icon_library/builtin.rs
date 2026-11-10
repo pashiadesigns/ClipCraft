@@ -164,7 +164,7 @@ mod tests {
         assert_eq!(doc.document.render().unwrap(), reopened.render().unwrap());
         reopened.version = 22;
         assert!(reopened.validate().is_err());
-        if let Ok(path) = std::env::var("CLIPCRAFT_FIVE_COLOR_FIXTURE") {
+        if let Ok(path) = std::env::var("CLIPDESIGNER_FIVE_COLOR_FIXTURE") {
             doc.document.save(std::path::Path::new(&path)).unwrap();
         }
     }
@@ -192,7 +192,7 @@ mod tests {
                 })
                 .unwrap();
         }
-        if let Ok(path) = std::env::var("CLIPCRAFT_ICON_FIXTURE") {
+        if let Ok(path) = std::env::var("CLIPDESIGNER_ICON_FIXTURE") {
             fixture.document.save(std::path::Path::new(&path)).unwrap();
         }
         assert_eq!(

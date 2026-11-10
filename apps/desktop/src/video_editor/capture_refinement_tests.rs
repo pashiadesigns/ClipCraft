@@ -90,7 +90,7 @@ fn remaining_properties_contexts_use_current_headers_and_fit_narrow_panes() {
             }
             let last = draw();
             assert!(!last.shapes.iter().any(|s| matches!(&s.shape, egui::Shape::Rect(r) if r.fill == egui::Color32::from_rgb(60,67,69))), "Old header in {scene}");
-            if let Some(folder) = std::env::var_os("CLIPCRAFT_VIDEO_EDITOR_EVIDENCE") {
+            if let Some(folder) = std::env::var_os("CLIPDESIGNER_VIDEO_EDITOR_EVIDENCE") {
                 dump_meshes(
                     &ctx,
                     &folder.to_string_lossy(),
@@ -212,7 +212,7 @@ fn refinement_production_layouts_fit_and_render() {
             }
         }
         let last = draw();
-        if let Some(folder) = std::env::var_os("CLIPCRAFT_VIDEO_EDITOR_EVIDENCE") {
+        if let Some(folder) = std::env::var_os("CLIPDESIGNER_VIDEO_EDITOR_EVIDENCE") {
             dump_meshes(
                 &ctx,
                 &folder.to_string_lossy(),

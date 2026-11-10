@@ -95,7 +95,7 @@ fn outlined_labels_match_export_viewport_reopen_and_leave_legacy_untouched() {
             assert_ne!(no_outline.render().unwrap(), exported);
         }
     }
-    if let Ok(root) = std::env::var("CLIPCRAFT_TEXT_OUTLINE_DIR") {
+    if let Ok(root) = std::env::var("CLIPDESIGNER_TEXT_OUTLINE_DIR") {
         let root = std::path::PathBuf::from(root);
         std::fs::create_dir_all(&root).unwrap();
         evidence

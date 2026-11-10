@@ -350,7 +350,7 @@ impl Editor {
                             ui.horizontal(|ui| {
                                 let size = egui::vec2(88., 58.);
                                 if icon_tile(ui, size, "Open editor", "Open editor", options.preview, false)
-                                    .tip("Open the recording in ClipCraft, on the Insert tab")
+                                    .tip("Open the recording in ClipDesigner, on the Insert tab")
                                     .clicked()
                                 {
                                     options.preview = !options.preview;
@@ -807,7 +807,7 @@ impl Editor {
                         .stroke(Stroke::new(1., Color32::from_rgb(74, 86, 89))),
                 )
                 .tip_title("Help")
-                .tip("Search ClipCraft Help. Shortcut: F1");
+                .tip("Search ClipDesigner Help. Shortcut: F1");
             if response.clicked() {
                 crate::help::request(ui.ctx(), None, "");
             }
@@ -885,7 +885,7 @@ impl Editor {
                             let size = egui::vec2(88., 58.);
                             if settings.is_scrolling() {
                                 if icon_tile(ui, size, "Auto-scroll", "Auto-scroll", settings.scroll_automatic, false)
-                                    .tip("ClipCraft scrolls downward until the end or an alignment problem. Turn off to scroll manually.")
+                                    .tip("ClipDesigner scrolls downward until the end or an alignment problem. Turn off to scroll manually.")
                                     .clicked()
                                 {
                                     settings.scroll_automatic = !settings.scroll_automatic;
@@ -917,7 +917,7 @@ impl Editor {
                         ui.horizontal(|ui| {
                             let size = egui::vec2(88., 58.);
                             if icon_tile(ui, size, "Open editor", "Open editor", settings.preview, false)
-                                .tip("Open the capture in ClipCraft. Every clip is saved as an editable Library project either way.")
+                                .tip("Open the capture in ClipDesigner. Every clip is saved as an editable Library project either way.")
                                 .clicked()
                             {
                                 settings.preview = !settings.preview;
@@ -1090,7 +1090,7 @@ mod tests {
             let first = frame();
             let _ = frame();
             let output = frame();
-            if let Some(root) = std::env::var_os("CLIPCRAFT_VIDEO_EVIDENCE_DIR") {
+            if let Some(root) = std::env::var_os("CLIPDESIGNER_VIDEO_EVIDENCE_DIR") {
                 dump_meshes(
                     &ctx,
                     &root.to_string_lossy(),

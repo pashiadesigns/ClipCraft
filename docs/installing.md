@@ -1,18 +1,35 @@
-# Installing ClipCraft
+# Installing ClipDesigner
 
 Download **1.0.0-beta.3** from the [release page](https://github.com/pashiadesigns/ClipCraft/releases/tag/v1.0.0-beta.3).
 Windows 10/11 x64 is supported. Both downloads are unsigned; Windows may show an
 unknown-publisher or reputation warning.
 
+## Upgrading from ClipCraft
+
+ClipDesigner was called ClipCraft through 1.0.0-beta.3; that release installs as
+ClipCraft under `%LOCALAPPDATA%\Programs\ClipCraft` and ships `ClipCraft.exe`.
+Releases after it use the ClipDesigner name:
+
+- The MSI is an upgrade of the ClipCraft MSI. Installing it removes the ClipCraft
+  installation, Start menu shortcut and file registrations and replaces them with
+  ClipDesigner ones.
+- On first start, ClipDesigner moves `%LOCALAPPDATA%\ClipCraft` to
+  `%LOCALAPPDATA%\ClipDesigner`, keeping your Library, recordings, preferences,
+  styles and presets. Exit ClipCraft first; anything still in use is moved on a
+  later start. Storage folders you chose inside the old folder follow the move.
+- Portable copies: run the new `register-project-files.ps1` to replace ClipCraft
+  file registrations. If Windows asks which app should open `.iclip` or `.vclip`
+  files, choose ClipDesigner.
+
 ## MSI installer
 
 Run `clipcraft-1.0.0-beta.3-windows-x64.msi`. It installs for the current user under
-`%LOCALAPPDATA%\Programs\ClipCraft` by default and creates one **ClipCraft** Start
+`%LOCALAPPDATA%\Programs\ClipDesigner` by default and creates one **ClipDesigner** Start
 menu shortcut and an Installed Apps entry. It registers `.iclip` and `.vclip` in
 Open With/Default Apps without modifying Windows' protected default-app choices.
 It does not register ordinary `.json` files, launch the app, or enable startup at login.
 
-Exit ClipCraft through its tray menu before installation, repair or removal.
+Exit ClipDesigner through its tray menu before installation, repair or removal.
 Remove any old preview/setup-EXE installation first; the new MSI uses Windows
 Installer and does not claim those older installer registrations. Uninstall old
 versions rather than deleting their installation folders. Old projects are not
@@ -25,7 +42,7 @@ deployments must run in the intended user's context because this is a per-user M
 
 ## Portable ZIP
 
-Extract the whole ZIP and run `ClipCraft.exe`. No installer or administrator access
+Extract the whole ZIP and run `ClipDesigner.exe`. No installer or administrator access
 is required. Optional `install-start-menu.ps1` adds a shortcut;
 `register-project-files.ps1` registers image/video projects for that copy.
 Portable means no installation is required; **data still uses the Windows user
@@ -33,8 +50,8 @@ profile**, not the extracted application folder.
 
 ## Default data locations
 
-Open `%LOCALAPPDATA%\ClipCraft` in Explorer. On a normal Windows profile this is
-`C:\Users\<you>\AppData\Local\ClipCraft`.
+Open `%LOCALAPPDATA%\ClipDesigner` in Explorer. On a normal Windows profile this is
+`C:\Users\<you>\AppData\Local\ClipDesigner`.
 
 | Content | Default location below that folder |
 | --- | --- |

@@ -246,7 +246,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(slots(&created), 1);
-        if let Ok(root) = std::env::var("CLIPCRAFT_TEMPLATE_FIXTURES") {
+        if let Ok(root) = std::env::var("CLIPDESIGNER_TEMPLATE_FIXTURES") {
             let root = Path::new(&root);
             std::fs::create_dir_all(root).unwrap();
             std::fs::write(

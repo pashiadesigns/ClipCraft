@@ -1,6 +1,6 @@
 //! Named palettes and Recent colors in every color picker (UX-010, approved
 //! bi-proposal 3). The chosen palette is shared by all pickers and kept
-//! between sessions; the built-in ClipCraft palette can't be edited.
+//! between sessions; the built-in ClipDesigner palette can't be edited.
 use super::*;
 use capture_core::palettes::{BUILT_IN_COLORS, Edit, Palettes, Store};
 
@@ -65,11 +65,11 @@ impl Shelf {
         }
         #[cfg(not(test))]
         {
-            let root = std::env::var_os("CLIPCRAFT_PREFERENCES_DIR")
+            let root = std::env::var_os("CLIPDESIGNER_PREFERENCES_DIR")
                 .map(std::path::PathBuf::from)
                 .or_else(|| {
                     std::env::var_os("LOCALAPPDATA")
-                        .map(|p| std::path::PathBuf::from(p).join("ClipCraft/preferences-v1"))
+                        .map(|p| std::path::PathBuf::from(p).join("ClipDesigner/preferences-v1"))
                 });
             let Some(root) = root else {
                 return Self {
@@ -428,7 +428,7 @@ pub(super) fn palette(ui: &mut egui::Ui, draft: &mut ColorDraft, opaque: bool) {
                                 .color(egui::Color32::from_rgb(228, 135, 127)),
                         ),
                     )
-                    .tip("Delete this palette. The ClipCraft palette is selected instead.")
+                    .tip("Delete this palette. The ClipDesigner palette is selected instead.")
                     .clicked()
                 {
                     action = Some(Edit::Delete);

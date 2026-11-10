@@ -1,6 +1,6 @@
 //! Named color palettes, recent colors and palette files (UX-010, approved
 //! bi-proposal 3). Kept beside preferences and isolated from document history.
-//! The built-in ClipCraft palette is fixed; the chosen palette is shared by
+//! The built-in ClipDesigner palette is fixed; the chosen palette is shared by
 //! every color picker and remembered between sessions.
 use crate::{Error, Result, atomic_write};
 use serde::{Deserialize, Serialize};
@@ -9,7 +9,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-pub const BUILT_IN: &str = "ClipCraft";
+pub const BUILT_IN: &str = "ClipDesigner";
 pub const BUILT_IN_COLORS: [(&str, [u8; 4]); 7] = [
     ("White", [255, 255, 255, 255]),
     ("Gray", [145, 150, 151, 255]),
@@ -73,7 +73,7 @@ impl Palettes {
             .find(|p| p.name == name)
             .ok_or_else(|| {
                 Error::Invalid(
-                    "The ClipCraft palette can't be changed. Make a new palette first.".into(),
+                    "The ClipDesigner palette can't be changed. Make a new palette first.".into(),
                 )
             })
     }
@@ -314,7 +314,7 @@ pub fn import(path: &Path) -> Result<Palette> {
     };
     if colors.is_empty() {
         return Err(Error::Invalid(
-            "That palette file has no colors ClipCraft can use.".into(),
+            "That palette file has no colors ClipDesigner can use.".into(),
         ));
     }
     let mut colors = colors;
@@ -578,12 +578,12 @@ mod tests {
             [[24, 145, 193, 255]],
             "replace never duplicates"
         );
-        assert!(a.edit(Edit::Rename("clipcraft".into())).is_err());
+        assert!(a.edit(Edit::Rename("clipdesigner".into())).is_err());
         let p = a.edit(Edit::Duplicate).unwrap();
         assert_eq!(p.selected, "Acme brand copy");
         let p = a.edit(Edit::Delete).unwrap();
         assert_eq!(p.selected, BUILT_IN);
-        assert_eq!(p.names(), ["ClipCraft", "Acme brand"]);
+        assert_eq!(p.names(), ["ClipDesigner", "Acme brand"]);
         for n in 0..10 {
             a.edit(Edit::Recent([n, 0, 0, 255])).unwrap();
         }

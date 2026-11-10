@@ -131,7 +131,7 @@ fn canvas_preserves_editable_styles_and_pointer_geometry_then_reverts_original_a
     assert_eq!(object.width, 2);
     let expanded = session.document.render().unwrap();
     let path = std::env::temp_dir().join(format!(
-        "clipcraft-canvas-{}.capture.json",
+        "clipdesigner-canvas-{}.capture.json",
         std::process::id()
     ));
     session.save(&path).unwrap();

@@ -430,7 +430,7 @@ if ui.button("Bypass this effect").clicked(){effect.enabled=false;commit=true;ui
                 BLUE,
             );
             egui::Popup::menu(&add).show(|ui| {
-                ui.label("ClipCraft audio effects");
+                ui.label("ClipDesigner audio effects");
                 for kind in Kind::ALL {
                     if super::super::ui::button(ui, kind.label(), kind.label(), 190., false)
                         .clicked()

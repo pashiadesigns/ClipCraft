@@ -1,5 +1,5 @@
 //! Selected-property transactions follow DesignCraft's held-preview/commit pattern.
-//! See docs/designcraft-reuse-audit.md. ClipCraft keeps the original document intact
+//! See docs/designcraft-reuse-audit.md. ClipDesigner keeps the original document intact
 //! until release, so Escape never needs to rewrite history or restore an image.
 use crate::{Annotation, Command, Document, Editor, egui};
 
@@ -583,7 +583,7 @@ mod tests {
             capture_core::MAX_PROJECT_VERSION
         );
         let path = std::env::temp_dir().join(format!(
-            "clipcraft-numeric-rotation-{}.json",
+            "clipdesigner-numeric-rotation-{}.json",
             std::process::id()
         ));
         e.session.document.save(&path).unwrap();

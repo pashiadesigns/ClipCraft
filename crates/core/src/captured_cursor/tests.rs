@@ -166,7 +166,7 @@ fn paginated_recorded_guide_with_cursors_exports_without_dangling_section_object
     let pdf = crate::export::encode_document(&d, &options).unwrap();
     assert!(pdf.starts_with(b"%PDF-"));
     assert_eq!(serde_json::to_vec(&d).unwrap(), before);
-    if let Some(root) = std::env::var_os("CLIPCRAFT_GUIDE_PDF_EVIDENCE") {
+    if let Some(root) = std::env::var_os("CLIPDESIGNER_GUIDE_PDF_EVIDENCE") {
         let root = std::path::PathBuf::from(root);
         std::fs::create_dir_all(&root).unwrap();
         std::fs::write(root.join("cursor-guide.pdf"), pdf).unwrap();

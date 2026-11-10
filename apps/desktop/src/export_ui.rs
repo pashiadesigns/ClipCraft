@@ -399,7 +399,7 @@ impl Editor {
                         crate::watermark_ui::heading(
                             ui,
                             "After export",
-                            "What ClipCraft does when the file is saved.",
+                            "What ClipDesigner does when the file is saved.",
                         );
                         d.after.controls(ui);
                         pages.is_ok()
@@ -649,7 +649,7 @@ mod tests {
             1
         );
         assert_eq!(serde_json::to_vec(&e.session.document).unwrap(), before);
-        if let Ok(dir) = std::env::var("CLIPCRAFT_HEADLESS_BETA_DIR") {
+        if let Ok(dir) = std::env::var("CLIPDESIGNER_HEADLESS_BETA_DIR") {
             dump_meshes(&ctx, &dir, "Export", first, PaintedOutput(output));
         }
     }

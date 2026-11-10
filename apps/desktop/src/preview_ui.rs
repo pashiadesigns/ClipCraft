@@ -191,7 +191,7 @@ mod tests {
                 assert!(rect.right() > 1250. && rect.top() > 100., "{rect:?}");
                 if properties
                     && recent
-                    && let Some(dir) = std::env::var_os("CLIPCRAFT_HEADLESS_PREVIEW_DIR")
+                    && let Some(dir) = std::env::var_os("CLIPDESIGNER_HEADLESS_PREVIEW_DIR")
                 {
                     let preview_ctx = egui::Context::default();
                     crate::shell::configure(&preview_ctx);

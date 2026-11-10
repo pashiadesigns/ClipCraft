@@ -119,7 +119,7 @@ fn direction_settings_live_slider_batch_inheritance_and_one_undo() {
             .all(|a| a.shadow.unwrap().distance > 5.)
     );
     let output = frame(&ctx, &mut e, button(to, false));
-    if let Ok(root) = std::env::var("CLIPCRAFT_SHADOW_UI_DIR") {
+    if let Ok(root) = std::env::var("CLIPDESIGNER_SHADOW_UI_DIR") {
         let updates: TextureUpdates = ctx.data(|d| {
             d.get_temp(egui::Id::unique("shadow-test-textures"))
                 .unwrap()
@@ -194,7 +194,7 @@ fn shadow_color_opens_nested_picker_and_commits_one_undo() {
     assert!(
         crate::color_widgets::tests::text_rect(&output.shapes, "Saturation / brightness").is_some()
     );
-    if let Ok(root) = std::env::var("CLIPCRAFT_SHADOW_UI_DIR") {
+    if let Ok(root) = std::env::var("CLIPDESIGNER_SHADOW_UI_DIR") {
         let updates: TextureUpdates = ctx.data(|d| {
             d.get_temp(egui::Id::unique("shadow-test-textures"))
                 .unwrap()

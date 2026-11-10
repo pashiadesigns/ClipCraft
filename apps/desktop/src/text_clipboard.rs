@@ -44,7 +44,7 @@ fn html_fragment(input: &str) -> &str {
 }
 #[cfg(windows)]
 fn read(base: &TextStyle) -> Result<Option<TextStyle>, String> {
-    if let Some(value) = read_format("ClipCraft.RichText.1")? {
+    if let Some(value) = read_format("ClipDesigner.RichText.1")? {
         let style: TextStyle =
             serde_json::from_str(&value).map_err(|e| format!("Cannot read formatted text: {e}"))?;
         style.validate().map_err(|e| e.to_string())?;
@@ -76,7 +76,7 @@ fn write(style: &TextStyle) -> Result<(), String> {
         let _open = Clipboard::new_attempts(5).map_err(|e| e.to_string())?;
         for (name, mut value) in [
             (
-                "ClipCraft.RichText.1",
+                "ClipDesigner.RichText.1",
                 serde_json::to_vec(style).map_err(|e| e.to_string())?,
             ),
             ("Rich Text Format", clipboard::rtf(style).into_bytes()),

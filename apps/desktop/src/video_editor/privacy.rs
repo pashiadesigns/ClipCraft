@@ -195,14 +195,14 @@ fn scan(doc: Document, start: u64, end: u64, options: Options, ctx: egui::Contex
 }
 /// Runs the real scan on a saved project and writes what it produced, so a
 /// change can be measured against actual footage. Set
-/// CLIPCRAFT_SCAN_PROJECT and CLIPCRAFT_SCAN_AUDIT_DIR to run it.
+/// CLIPDESIGNER_SCAN_PROJECT and CLIPDESIGNER_SCAN_AUDIT_DIR to run it.
 #[cfg(all(test, windows))]
 #[test]
 fn scan_saved_project_for_audit() {
     use std::io::Write as _;
     let (Ok(project), Ok(dir)) = (
-        std::env::var("CLIPCRAFT_SCAN_PROJECT"),
-        std::env::var("CLIPCRAFT_SCAN_AUDIT_DIR"),
+        std::env::var("CLIPDESIGNER_SCAN_PROJECT"),
+        std::env::var("CLIPDESIGNER_SCAN_AUDIT_DIR"),
     ) else {
         return;
     };

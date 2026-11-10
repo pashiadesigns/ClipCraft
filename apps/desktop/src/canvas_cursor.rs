@@ -684,7 +684,7 @@ mod tests {
             assert_eq!(step_cursor_label(&ctx, &mut e), "×");
             assert!(e.step_marker([540., 300.]).is_err());
         }
-        if let Ok(dir) = std::env::var("CLIPCRAFT_STEP_CURSOR_UI_DIR") {
+        if let Ok(dir) = std::env::var("CLIPDESIGNER_STEP_CURSOR_UI_DIR") {
             let ctx = egui::Context::default();
             let render = || {
                 crate::property_layout::tests::PaintedOutput(ctx.run_ui(
@@ -844,7 +844,7 @@ mod tests {
         };
         let first = render();
         let output = render();
-        if let Ok(root) = std::env::var("CLIPCRAFT_HEADLESS_CURSOR_DIR") {
+        if let Ok(root) = std::env::var("CLIPDESIGNER_HEADLESS_CURSOR_DIR") {
             crate::property_layout::tests::dump_meshes(
                 &paint_ctx,
                 &root,

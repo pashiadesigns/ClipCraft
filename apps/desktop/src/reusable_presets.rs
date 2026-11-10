@@ -96,11 +96,13 @@ impl State {
         #[cfg(not(test))]
         let root =
             crate::storage_locations::configured(capture_core::quick_preferences::Folder::Presets)
-                .or_else(|| std::env::var_os("CLIPCRAFT_STYLE_DIR").map(std::path::PathBuf::from))
+                .or_else(|| {
+                    std::env::var_os("CLIPDESIGNER_STYLE_DIR").map(std::path::PathBuf::from)
+                })
                 .or_else(|| {
                     std::env::var_os("LOCALAPPDATA").map(|p| {
                         std::path::PathBuf::from(p)
-                            .join("ClipCraft")
+                            .join("ClipDesigner")
                             .join("styles-v1")
                     })
                 });
@@ -251,8 +253,8 @@ if ui.button("Cancel").clicked(){self.delete=None;}});}
                 if !self.error.is_empty(){ui.colored_label(egui::Color32::LIGHT_RED,&self.error);}
                 ui.add_space(8.);crate::panel_ui::divider(ui);
                 ui.horizontal(|ui|{
-                    if ui.button("Import pack…").clicked()&&let Some(path)=rfd::FileDialog::new().add_filter("ClipCraft preset pack",&["ccpresets"]).pick_file(){self.result(|s|s.import(&path).map(|_|()));}
-                    if ui.button("Export pack…").clicked()&&let Some(path)=rfd::FileDialog::new().add_filter("ClipCraft preset pack",&["ccpresets"]).set_file_name("ClipCraft presets.ccpresets").save_file(){self.result(|s|s.export(&path));}
+                    if ui.button("Import pack…").clicked()&&let Some(path)=rfd::FileDialog::new().add_filter("ClipDesigner preset pack",&["ccpresets"]).pick_file(){self.result(|s|s.import(&path).map(|_|()));}
+                    if ui.button("Export pack…").clicked()&&let Some(path)=rfd::FileDialog::new().add_filter("ClipDesigner preset pack",&["ccpresets"]).set_file_name("ClipDesigner presets.ccpresets").save_file(){self.result(|s|s.export(&path));}
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center),|ui|{if ui.add(crate::controls::dialog_button("Done",true)).clicked(){close=true;}});
                 });
             }
@@ -405,7 +407,7 @@ mod tests {
         s.store.as_mut().unwrap().favorite(1, true).unwrap();
         let first = frame(&mut s, vec![]);
         let output = frame(&mut s, vec![]);
-        if let Ok(root) = std::env::var("CLIPCRAFT_PRESET_EVIDENCE") {
+        if let Ok(root) = std::env::var("CLIPDESIGNER_PRESET_EVIDENCE") {
             dump_meshes(&ctx, &root, "library", first, output);
         }
         let reopen = Store::open(s.test_root.as_ref().unwrap().path()).unwrap();

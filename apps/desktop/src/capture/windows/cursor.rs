@@ -263,7 +263,7 @@ mod tests {
                         .all(|(a, b)| a.abs_diff(b) <= 1)),
                     "{name} on {background}"
                 );
-                if let Some(path) = std::env::var_os("CLIPCRAFT_CURSOR_EVIDENCE_DIR") {
+                if let Some(path) = std::env::var_os("CLIPDESIGNER_CURSOR_EVIDENCE_DIR") {
                     let path = std::path::PathBuf::from(path);
                     std::fs::create_dir_all(&path).unwrap();
                     actual
@@ -273,7 +273,7 @@ mod tests {
             }
         }
         fixture.promote_features();
-        if let Some(path) = std::env::var_os("CLIPCRAFT_CURSOR_EVIDENCE_DIR") {
+        if let Some(path) = std::env::var_os("CLIPDESIGNER_CURSOR_EVIDENCE_DIR") {
             let path = std::path::PathBuf::from(path);
             fixture.save(&path.join("cursor.capture.json")).unwrap();
             fixture

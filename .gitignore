@@ -8,7 +8,7 @@
 /.codex/
 /AGENTS.md
 /STATUS.md
-/Launch ClipCraft Test.cmd
+/Launch ClipDesigner Test.cmd
 /docs/*
 !/docs/building.md
 !/docs/security-model.md
@@ -29,7 +29,7 @@
 *.key
 *.pem
 
-/Launch ClipCraft Startup Test.cmd
+/Launch ClipDesigner Startup Test.cmd
 !/docs/licensing.md
 !/docs/installing.md
 /CLAUDE.md

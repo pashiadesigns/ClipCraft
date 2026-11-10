@@ -99,8 +99,8 @@ impl QuickControls {
         self.prefs
             .folders
             .get(&kind)
+            .map(|p| crate::legacy_name::relocate(p))
             .filter(|p| p.is_dir())
-            .cloned()
     }
     pub(super) fn remember_folder(
         &mut self,
@@ -349,12 +349,12 @@ impl QuickControls {
         self.remember(Choice::CanvasSnapping(value));
     }
     pub fn new() -> Self {
-        let root = std::env::var_os("CLIPCRAFT_PREFERENCES_DIR")
+        let root = std::env::var_os("CLIPDESIGNER_PREFERENCES_DIR")
             .map(std::path::PathBuf::from)
             .or_else(|| {
                 std::env::var_os("LOCALAPPDATA").map(|p| {
                     std::path::PathBuf::from(p)
-                        .join("ClipCraft")
+                        .join("ClipDesigner")
                         .join("preferences-v1")
                 })
             });

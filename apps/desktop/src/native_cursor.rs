@@ -276,7 +276,7 @@ pub(crate) use platform::*;
 /// Real open and closed hands (approved `artifacts/br-proposal/bend-cursor.html`).
 /// Only rotation handles and the middle curve node of a line or arrow use them
 /// (BT, user review of BS7/BS8); everything else keeps its usual cursor.
-const HAND_REQUEST: &str = "clipcraft-hand-request";
+const HAND_REQUEST: &str = "clipdesigner-hand-request";
 /// The egui cursor while a hand shows. It must stay visible: `None` makes winit
 /// call `ShowCursor(FALSE)`, which hid the hand too (BT1). It is also the same
 /// for open and closed, because winit sets its own cursor whenever egui's
@@ -291,13 +291,13 @@ pub(crate) fn requested_hand(ctx: &egui::Context) -> Option<bool> {
     ctx.data(|d| d.get_temp::<bool>(egui::Id::unique(HAND_REQUEST)))
 }
 pub(crate) fn install_hands(ctx: &egui::Context) {
-    let installed = egui::Id::unique("clipcraft-hands-installed");
+    let installed = egui::Id::unique("clipdesigner-hands-installed");
     if ctx.data(|d| d.get_temp::<bool>(installed)).is_some() {
         return;
     }
     ctx.data_mut(|d| d.insert_temp(installed, true));
     ctx.on_end_pass(
-        "clipcraft-hands",
+        "clipdesigner-hands",
         std::sync::Arc::new(|ui| {
             let ctx = ui.ctx();
             let Some(closed) = requested_hand(ctx) else {

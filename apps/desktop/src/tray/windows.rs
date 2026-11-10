@@ -28,7 +28,7 @@ pub(super) fn activate(window: capture_core::quick_preferences::StartupWindow) -
         2
     };
     unsafe {
-        let hwnd = FindWindowW(wide("ClipCraft.NotificationArea").as_ptr(), null());
+        let hwnd = FindWindowW(wide("ClipDesigner.NotificationArea").as_ptr(), null());
         if !hwnd.is_null() {
             let mut pid = 0;
             GetWindowThreadProcessId(hwnd, &mut pid);
@@ -84,7 +84,7 @@ pub(super) fn forward(request: &crate::launch::Request) -> bool {
         return false;
     }
     unsafe {
-        let hwnd = FindWindowW(wide("ClipCraft.NotificationArea").as_ptr(), null());
+        let hwnd = FindWindowW(wide("ClipDesigner.NotificationArea").as_ptr(), null());
         if hwnd.is_null() {
             return false;
         }
@@ -138,7 +138,7 @@ impl State {
         for (slot, value) in data
             .szTip
             .iter_mut()
-            .zip(wide("ClipCraft · capture and editor"))
+            .zip(wide("ClipDesigner · capture and editor"))
         {
             *slot = value;
         }
@@ -294,12 +294,12 @@ unsafe fn show_menu(hwnd: HWND, position: WPARAM, state: &State) {
         (9, MenuBitmap::new(&capture_icon(false))),
     ];
     for (id, label) in [
-        (1, "Open ClipCraft Editor"),
+        (1, "Open ClipDesigner Editor"),
         (2, "Capture Clip settings…"),
         (3, "Capture Clip"),
         (5, "Capture Video"),
-        (11, "Open ClipCraft after capture"),
-        (4, "Exit ClipCraft"),
+        (11, "Open ClipDesigner after capture"),
+        (4, "Exit ClipDesigner"),
     ] {
         if id == 4 {
             unsafe {
@@ -570,10 +570,10 @@ pub(super) fn start(ctx: crate::egui::Context) -> Result<Tray, String> {
     let (ready_tx, ready) = mpsc::sync_channel(1);
     let (events_tx, events) = mpsc::channel();
     let thread = std::thread::Builder::new()
-        .name("clipcraft-tray".into())
+        .name("clipdesigner-tray".into())
         .spawn(move || unsafe {
             let instance = GetModuleHandleW(null());
-            let class = wide("ClipCraft.NotificationArea");
+            let class = wide("ClipDesigner.NotificationArea");
             let wc = WNDCLASSW {
                 lpfnWndProc: Some(procedure),
                 hInstance: instance,
@@ -609,7 +609,7 @@ pub(super) fn start(ctx: crate::egui::Context) -> Result<Tray, String> {
             let hwnd = CreateWindowExW(
                 WS_EX_TOOLWINDOW,
                 class.as_ptr(),
-                wide("ClipCraft Tray").as_ptr(),
+                wide("ClipDesigner Tray").as_ptr(),
                 WS_POPUP,
                 0,
                 0,
@@ -651,7 +651,8 @@ pub(super) fn start(ctx: crate::egui::Context) -> Result<Tray, String> {
                 );
             } else {
                 let _ = ready_tx.send(Err(
-                    "System tray is unavailable. ClipCraft will keep its editor accessible.".into(),
+                    "System tray is unavailable. ClipDesigner will keep its editor accessible."
+                        .into(),
                 ));
             }
             if !hwnd.is_null() {
@@ -738,7 +739,7 @@ mod tests {
     #[test]
     fn file_open_ipc_copies_unicode_and_rejects_malformed_payloads_in_hidden_window() {
         unsafe {
-            let class = wide(&format!("ClipCraft.IpcTest.{}", std::process::id()));
+            let class = wide(&format!("ClipDesigner.IpcTest.{}", std::process::id()));
             let instance = GetModuleHandleW(null());
             assert_ne!(
                 RegisterClassW(&WNDCLASSW {
@@ -772,7 +773,7 @@ mod tests {
             );
             assert!(!hwnd.is_null());
             assert_eq!(IsWindowVisible(hwnd), 0);
-            let expected = std::path::PathBuf::from("C:/ClipCraft test/日本語 📝.iclip");
+            let expected = std::path::PathBuf::from("C:/ClipDesigner test/日本語 📝.iclip");
             let mut payload: Vec<u16> = expected.to_string_lossy().encode_utf16().collect();
             let mut data = COPYDATASTRUCT {
                 dwData: OPEN_FILE,

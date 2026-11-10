@@ -75,7 +75,7 @@ pub(crate) fn screenshot(ctx: &egui::Context, e: &mut Editor, name: &str) {
         first.0.textures_delta.push(id, patch);
     }
     let output = frame(ctx, e, vec![]);
-    if let Ok(root) = std::env::var("CLIPCRAFT_RICH_UI_DIR") {
+    if let Ok(root) = std::env::var("CLIPDESIGNER_RICH_UI_DIR") {
         dump_meshes(ctx, &root, name, first, output);
     }
 }

@@ -608,7 +608,8 @@ impl History {
             .open(self.root.join("history.lock"))?;
         lock.try_lock().map_err(|_| {
             Error::Invalid(
-                "History is busy in another ClipCraft window. The open image is unchanged.".into(),
+                "History is busy in another ClipDesigner window. The open image is unchanged."
+                    .into(),
             )
         })?;
         // Another process may have recorded an item since this instance opened.

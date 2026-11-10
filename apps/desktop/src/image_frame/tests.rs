@@ -40,7 +40,7 @@ fn vector_icon_colors_are_visible_and_passive_without_image_crop_controls() {
     }
     assert!(crate::color_widgets::tests::text_rect(&output.shapes, "Crop image").is_none());
     assert_eq!(a, original);
-    if let Ok(dir) = std::env::var("CLIPCRAFT_HEADLESS_LIBRARY_DIR") {
+    if let Ok(dir) = std::env::var("CLIPDESIGNER_HEADLESS_LIBRARY_DIR") {
         dump_meshes(&ctx, &dir, "vector-icon-properties", first, output);
     }
 }
@@ -317,7 +317,7 @@ fn compact_image_properties_do_not_change_passive_values() {
     };
     let first = render();
     let second = render();
-    if let Ok(dir) = std::env::var("CLIPCRAFT_IMAGE_FRAME_UI_DIR") {
+    if let Ok(dir) = std::env::var("CLIPDESIGNER_IMAGE_FRAME_UI_DIR") {
         dump_meshes(&ctx, &dir, "image", first, second);
     }
     assert_eq!(a, original);

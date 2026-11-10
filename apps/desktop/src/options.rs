@@ -68,7 +68,7 @@ pub(super) fn status(keys: &Keybinds) -> String {
         "Capture keybinds are disabled.".into()
     } else {
         format!(
-            "{} capture keybind(s) active while ClipCraft is running.",
+            "{} capture keybind(s) active while ClipDesigner is running.",
             keys.bindings.len()
         )
     }
@@ -223,7 +223,7 @@ impl Editor {
             ["Capture", "Tools", "Functions"][self.options.category],
             ["Capture", "Tools", "Functions"][self.options.category],
         );
-        ui.label(egui::RichText::new(match self.options.category {0=>"Uses the cursor, start delay, clipboard and preview settings saved for each mode.",1=>"Choose an Insert tool while editing. Text fields retain their normal typing shortcuts.",_=>"Editing and view commands apply inside ClipCraft. Mouse gestures are below."}).size(12.).color(crate::panel_ui::MUTED));
+        ui.label(egui::RichText::new(match self.options.category {0=>"Uses the cursor, start delay, clipboard and preview settings saved for each mode.",1=>"Choose an Insert tool while editing. Text fields retain their normal typing shortcuts.",_=>"Editing and view commands apply inside ClipDesigner. Mouse gestures are below."}).size(12.).color(crate::panel_ui::MUTED));
         ui.add_space(8.);
         let actions: Vec<ShortcutAction> = match self.options.category {
             0 => Action::ALL

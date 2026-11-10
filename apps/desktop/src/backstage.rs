@@ -133,7 +133,7 @@ impl Editor {
                             let (r, _) = ui
                                 .allocate_exact_size(egui::vec2(32.0, 32.0), egui::Sense::hover());
                             crate::brand::paint(ui, r);
-                            ui.label(RichText::new("ClipCraft").size(26.0).strong());
+                            ui.label(RichText::new("ClipDesigner").size(26.0).strong());
                         });
                         ui.add_space(22.0);
                         match page {
@@ -150,7 +150,7 @@ impl Editor {
                                 {
                                     self.request_action(FileAction::Open, &ctx);
                                 }
-                                ui.label("Open an image or an editable ClipCraft project.");
+                                ui.label("Open an image or an editable ClipDesigner project.");
                                 ui.add_space(30.0);
                                 self.backstage_recent(ui);
                             }
@@ -717,7 +717,7 @@ mod tests {
         assert!(crate::color_widgets::tests::text_rect(&out.shapes, "Tutorial").is_none());
         assert!(crate::color_widgets::tests::text_rect(&out.shapes, &e.status).is_none());
         first.0.textures_delta.append(out.0.textures_delta.clone());
-        if let Ok(dir) = std::env::var("CLIPCRAFT_HEADLESS_FILE_DIR") {
+        if let Ok(dir) = std::env::var("CLIPDESIGNER_HEADLESS_FILE_DIR") {
             dump_meshes(&ctx, &dir, "file-new", first, out);
         }
         let out = frame(&ctx, &mut e, 1280., vec![]);
@@ -807,7 +807,7 @@ mod tests {
         assert!(row.iter().all(|p| p.y == row[0].y));
         assert!(row.windows(2).all(|p| (p[1].x - p[0].x - 88.).abs() < 0.1));
         let show = text_rect(&output, "Show more");
-        if let Ok(dir) = std::env::var("CLIPCRAFT_HEADLESS_FILE_DIR") {
+        if let Ok(dir) = std::env::var("CLIPDESIGNER_HEADLESS_FILE_DIR") {
             dump_meshes(&ctx, &dir, "recent-ten", first, output);
         }
         click(&ctx, &mut e, show);
@@ -964,12 +964,12 @@ mod tests {
                 let before = e.session.document.clone();
                 let first = frame(&ctx, &mut e, width, vec![]);
                 let output = frame(&ctx, &mut e, width, vec![]);
-                assert!(text_rect(&output, "ClipCraft").max.x < width);
+                assert!(text_rect(&output, "ClipDesigner").max.x < width);
                 assert_eq!(
                     serde_json::to_value(&before).unwrap(),
                     serde_json::to_value(&e.session.document).unwrap()
                 );
-                if let Ok(root) = std::env::var("CLIPCRAFT_HEADLESS_FILE_DIR") {
+                if let Ok(root) = std::env::var("CLIPDESIGNER_HEADLESS_FILE_DIR") {
                     dump_meshes(&ctx, &root, &format!("{page:?}-{width}"), first, output);
                 }
             }

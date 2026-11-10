@@ -1,6 +1,6 @@
 //! Dialog audit gallery (BJ): opens every dialog on its own, headless, and
 //! saves its painted meshes so `scripts/render-egui-fixture.py` can turn them
-//! into screenshots. Set CLIPCRAFT_DIALOG_AUDIT_DIR to write them; without it
+//! into screenshots. Set CLIPDESIGNER_DIALOG_AUDIT_DIR to write them; without it
 //! the test only checks that every dialog opens and draws.
 use super::*;
 use crate::property_layout::tests::{PaintedOutput, dump_meshes};
@@ -194,7 +194,7 @@ fn frame(ctx: &egui::Context, e: &mut Editor, show: Show, time: f64) -> PaintedO
 
 #[test]
 fn every_dialog_opens_and_draws_for_the_audit() {
-    let root = std::env::var_os("CLIPCRAFT_DIALOG_AUDIT_DIR");
+    let root = std::env::var_os("CLIPDESIGNER_DIALOG_AUDIT_DIR");
     let mut failed = vec![];
     for (name, video, open, show) in dialogs() {
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {

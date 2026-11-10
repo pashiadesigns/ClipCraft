@@ -20,11 +20,11 @@ use windows_sys::Win32::{
 };
 
 unsafe fn apply(hwnd: HWND) -> windows::core::Result<()> {
-    let (resource, app_id) = (101u16, "PashiaDesigns.ClipCraft");
+    let (resource, app_id) = (101u16, "PashiaDesigns.ClipDesigner");
     let dpi = unsafe { GetDpiForWindow(hwnd) }.max(96);
     let marker = ((dpi as usize) << 16) | usize::from(resource);
     let branded =
-        unsafe { GetPropW(hwnd, w!("ClipCraft.WindowBrand").as_ptr()) } as usize == marker;
+        unsafe { GetPropW(hwnd, w!("ClipDesigner.WindowBrand").as_ptr()) } as usize == marker;
     let module = unsafe { GetModuleHandleW(null()) };
     for (slot, metric) in [(ICON_SMALL, SM_CXSMICON), (ICON_BIG, SM_CXICON)] {
         let size = unsafe { GetSystemMetricsForDpi(metric, dpi) }.max(16);
@@ -57,7 +57,7 @@ unsafe fn apply(hwnd: HWND) -> windows::core::Result<()> {
     let store: IPropertyStore = unsafe { SHGetPropertyStoreForWindow(Window(hwnd))? };
     let executable = std::env::current_exe().map_err(|_| windows::core::Error::from_thread())?;
     let executable = executable.to_string_lossy();
-    let (argument, name) = ("", "ClipCraft");
+    let (argument, name) = ("", "ClipDesigner");
     unsafe {
         // Set the group icon and relaunch information BEFORE the AppID: setting
         // the ID asks Explorer to refresh. Without this resource, a fresh group
@@ -79,7 +79,11 @@ unsafe fn apply(hwnd: HWND) -> windows::core::Result<()> {
         store.Commit()?;
     }
     unsafe {
-        SetPropW(hwnd, w!("ClipCraft.WindowBrand").as_ptr(), marker as HANDLE);
+        SetPropW(
+            hwnd,
+            w!("ClipDesigner.WindowBrand").as_ptr(),
+            marker as HANDLE,
+        );
     }
     Ok(())
 }

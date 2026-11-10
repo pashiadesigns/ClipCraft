@@ -115,7 +115,7 @@ fn group_header_expands_selects_hides_locks_and_undoes_as_a_unit() {
     assert!(!e.session.document.object_visible(ids[0]));
     assert!(e.session.document.object_visible(ids[1]));
     e.execute(Command::Undo);
-    if let Ok(root) = std::env::var("CLIPCRAFT_HEADLESS_INTERACTIONS_DIR") {
+    if let Ok(root) = std::env::var("CLIPDESIGNER_HEADLESS_INTERACTIONS_DIR") {
         let last = frame(&ctx, &mut e, vec![]);
         dump_meshes(&ctx, &root, "group-objects", first, last);
     }
@@ -251,7 +251,7 @@ fn descriptive_labels_and_centered_delete_hover_render_without_document_changes(
         .iter()
         .find(|a| a.kind == Kind::Text)
         .unwrap();
-    assert!(label(text).starts_with("Text: \"ClipCraft"));
+    assert!(label(text).starts_with("Text: \"ClipDesigner"));
     assert!(label(text).ends_with("…\""));
     let mut shape = e
         .session
@@ -286,7 +286,7 @@ fn descriptive_labels_and_centered_delete_hover_render_without_document_changes(
         Color32::from_rgb(178, 48, 57)
     );
     assert_eq!(serde_json::to_vec(&e.session.document).unwrap(), original);
-    if let Ok(root) = std::env::var("CLIPCRAFT_HEADLESS_OBJECTS_DIR") {
+    if let Ok(root) = std::env::var("CLIPDESIGNER_HEADLESS_OBJECTS_DIR") {
         dump_meshes(&ctx, &root, "ObjectsPane", first, last);
     }
     let select_type = ctx.data(|d| {
@@ -358,7 +358,7 @@ fn guide_pages_start_collapsed_expand_sections_and_drag_reorders_without_groupin
     let id = e.session.document.guide.as_ref().unwrap().sections[0].objects[0];
     let object_row = row(&ctx, id);
     assert!(object_row.0.left() > r.left());
-    if let Ok(dir) = std::env::var("CLIPCRAFT_FRAME_PAGES_UI") {
+    if let Ok(dir) = std::env::var("CLIPDESIGNER_FRAME_PAGES_UI") {
         let paint_ctx = egui::Context::default();
         crate::shell::configure(&paint_ctx);
         let mut preview = editor(&paint_ctx);

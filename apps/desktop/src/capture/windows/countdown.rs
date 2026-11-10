@@ -104,7 +104,7 @@ pub(super) fn wait(owner: HWND, seconds: u32) -> Result<bool, String> {
                     hInstance: GetModuleHandleW(null()),
                     hCursor: LoadCursorW(null_mut(), IDC_ARROW),
                     hbrBackground: null_mut(),
-                    lpszClassName: w!("ClipCraftCaptureCountdown"),
+                    lpszClassName: w!("ClipDesignerCaptureCountdown"),
                     ..Default::default()
                 };
                 let atom = RegisterClassW(&class);
@@ -126,8 +126,8 @@ pub(super) fn wait(owner: HWND, seconds: u32) -> Result<bool, String> {
         });
         let hwnd = CreateWindowExW(
             WS_EX_TOPMOST,
-            w!("ClipCraftCaptureCountdown"),
-            w!("ClipCraft delayed capture"),
+            w!("ClipDesignerCaptureCountdown"),
+            w!("ClipDesigner delayed capture"),
             WS_POPUP,
             owner_rect.left + 20,
             owner_rect.top + 30,
@@ -218,7 +218,7 @@ fn paint(dc: HDC, seconds: u32, hover: bool) {
             SelectObject(dc, old);
         };
         label(
-            "ClipCraft Capture",
+            "ClipDesigner Capture",
             -17,
             RECT {
                 left: 12,
@@ -305,7 +305,7 @@ mod tests {
             .unwrap();
             assert_eq!(image.get_pixel(0, 0).0, [29, 33, 35, 255]);
             assert_ne!(image.get_pixel(180, 40).0, [255; 4]);
-            if let Some(dir) = std::env::var_os("CLIPCRAFT_CURSOR_EVIDENCE_DIR") {
+            if let Some(dir) = std::env::var_os("CLIPDESIGNER_CURSOR_EVIDENCE_DIR") {
                 let path = std::path::PathBuf::from(dir);
                 std::fs::create_dir_all(&path).unwrap();
                 image.save(path.join("countdown.png")).unwrap();

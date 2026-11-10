@@ -621,7 +621,7 @@ impl Editor {
                         ui,
                         egui::Rect::from_center_size(mark.center(), egui::vec2(20., 20.)),
                     );
-                    response.tip("ClipCraft");
+                    response.tip("ClipDesigner");
                     let r = icon(
                         ui,
                         "Save As",
@@ -1068,7 +1068,7 @@ impl Editor {
                 ui,
                 "Save As",
                 "Save As project",
-                "Save an editable ClipCraft project",
+                "Save an editable ClipDesigner project",
                 true,
                 false,
                 126.0,

@@ -207,7 +207,7 @@ mod tests {
         let button = crate::color_widgets::tests::text_rect(&out.shapes, "Recover copy").unwrap();
         assert!(button.bottom() < 530.);
         first.0.textures_delta.append(out.0.textures_delta.clone());
-        if let Ok(dir) = std::env::var("CLIPCRAFT_HEADLESS_RECOVERY_DIR") {
+        if let Ok(dir) = std::env::var("CLIPDESIGNER_HEADLESS_RECOVERY_DIR") {
             dump_meshes(&ctx, &dir, "recovery-dialog", first, out);
         }
         for pressed in [true, false] {
@@ -264,7 +264,7 @@ mod tests {
             crate::color_widgets::tests::text_rect(&out.shapes, "Library storage & recovery")
                 .is_some()
         );
-        if let Ok(dir) = std::env::var("CLIPCRAFT_HEADLESS_RECOVERY_DIR") {
+        if let Ok(dir) = std::env::var("CLIPDESIGNER_HEADLESS_RECOVERY_DIR") {
             dump_meshes(&ctx, &dir, "general-storage", first, out);
         }
     }

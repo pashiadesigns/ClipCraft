@@ -1,4 +1,4 @@
-//! ClipCraft branding. Window and in-app marks share the user-supplied vector source.
+//! ClipDesigner branding. Window and in-app marks share the user-supplied vector source.
 use crate::egui;
 use std::sync::{Arc, LazyLock};
 #[cfg(windows)]
@@ -6,10 +6,10 @@ mod windows;
 #[cfg(windows)]
 pub(super) use windows::sync_window_icons;
 
-const PNG: &[u8] = include_bytes!("../assets/brand/clipcraft-256.png");
+const PNG: &[u8] = include_bytes!("../assets/brand/clipdesigner-256.png");
 static PIXELS: LazyLock<image::RgbaImage> = LazyLock::new(|| {
     image::load_from_memory(PNG)
-        .expect("validated embedded ClipCraft logo")
+        .expect("validated embedded ClipDesigner logo")
         .into_rgba8()
 });
 
@@ -25,13 +25,13 @@ pub(super) fn icon() -> Arc<egui::IconData> {
 }
 
 pub(super) fn paint(ui: &egui::Ui, rect: egui::Rect) {
-    let key = egui::Id::unique("clipcraft-brand-texture");
+    let key = egui::Id::unique("clipdesigner-brand-texture");
     let texture = ui
         .ctx()
         .data(|d| d.get_temp::<egui::TextureHandle>(key))
         .unwrap_or_else(|| {
             let texture = ui.ctx().load_texture(
-                "ClipCraft logo",
+                "ClipDesigner logo",
                 egui::ColorImage::from_rgba_unmultiplied(
                     [PIXELS.width() as usize, PIXELS.height() as usize],
                     PIXELS.as_raw(),
@@ -70,7 +70,7 @@ mod tests {
         // Preserve the supplied square cyan background, without a rounded mask.
         assert_eq!(&icon.rgba[..4], &[0, 170, 226, 255]);
         assert!(icon.rgba.as_chunks::<4>().0.contains(&[0, 170, 226, 255]));
-        let ico = include_bytes!("../assets/brand/clipcraft.ico");
+        let ico = include_bytes!("../assets/brand/clipdesigner.ico");
         assert_eq!(&ico[..4], &[0, 0, 1, 0]);
         let count = u16::from_le_bytes(ico[4..6].try_into().unwrap()) as usize;
         assert_eq!(count, 9);

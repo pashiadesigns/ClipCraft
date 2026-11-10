@@ -1,4 +1,4 @@
-# Building ClipCraft
+# Building ClipDesigner
 
 The supported desktop target is Windows x64 (`x86_64-pc-windows-msvc`). Install
 Git, Rust through rustup, Visual Studio Build Tools with Desktop development with
@@ -47,7 +47,7 @@ headless mesh-image inspection uses Python, Pillow and NumPy with
 The release source excludes the separate website and internal review tracker.
 The application build requires neither. Screenshots use synthetic test content.
 
-Portable builds include `install-start-menu.ps1` for one ClipCraft shortcut.
+Portable builds include `install-start-menu.ps1` for one ClipDesigner shortcut.
 Run `scripts/build-msi.ps1 -Package <clean-payload-folder> -Output <new.msi>
 -Version 1.0.0-beta.3` to build an unsigned per-user MSI with the pinned WiX toolset.
 The script downloads and verifies its build tool; it never installs the application.

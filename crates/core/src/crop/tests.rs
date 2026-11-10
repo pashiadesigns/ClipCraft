@@ -214,7 +214,7 @@ fn cropped_page_retains_neighbors_native_layers_and_output_clips() {
             })
             .unwrap()
     );
-    let path = std::env::var("CLIPCRAFT_CROP_FIXTURE").ok();
+    let path = std::env::var("CLIPDESIGNER_CROP_FIXTURE").ok();
     if let Some(path) = path {
         s.document.save(std::path::Path::new(&path)).unwrap();
     }

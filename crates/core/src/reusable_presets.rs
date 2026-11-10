@@ -442,7 +442,7 @@ mod tests {
     use super::*;
     fn root() -> PathBuf {
         let p = std::env::temp_dir().join(format!(
-            "clipcraft-preset-{}-{}",
+            "clipdesigner-preset-{}-{}",
             std::process::id(),
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)

@@ -347,7 +347,7 @@ pub(super) fn build(
     let footer = b.add(light(text(
         0,
         [32., height - 44., w - 64., 28.],
-        t.footer.unwrap_or("Created with ClipCraft"),
+        t.footer.unwrap_or("Created with ClipDesigner"),
         13.,
         false,
     )));

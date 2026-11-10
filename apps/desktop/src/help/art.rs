@@ -1,4 +1,4 @@
-//! Help pictures drawn by ClipCraft's own renderer, so they always match
+//! Help pictures drawn by ClipDesigner's own renderer, so they always match
 //! what the tools produce. Each sample starts from the same small synthetic
 //! app screen and adds the tool's real object.
 use crate::{Annotation, Kind};

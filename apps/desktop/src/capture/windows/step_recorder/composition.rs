@@ -665,7 +665,7 @@ mod tests {
                         )
                     );
                     assert_eq!(pixels.get_pixel(0, 0)[3], 0);
-                    if let Some(root) = std::env::var_os("CLIPCRAFT_VIDEO_EVIDENCE_DIR") {
+                    if let Some(root) = std::env::var_os("CLIPDESIGNER_VIDEO_EVIDENCE_DIR") {
                         pixels
                             .save(
                                 std::path::PathBuf::from(root)
@@ -696,7 +696,7 @@ mod tests {
             elapsed.sort_by(f64::total_cmp);
             reports.push(serde_json::json!({"dpi":dpi,"median_ms":elapsed[15],"p95_ms":elapsed[28],"static_surface_reused":true}));
         }
-        if let Ok(root) = std::env::var("CLIPCRAFT_CURSOR_EVIDENCE_DIR") {
+        if let Ok(root) = std::env::var("CLIPDESIGNER_CURSOR_EVIDENCE_DIR") {
             std::fs::write(
                 std::path::Path::new(&root).join("recorder-frame-profile.json"),
                 serde_json::to_vec_pretty(&reports).unwrap(),
@@ -720,7 +720,7 @@ mod tests {
                     ((368 * dpi as u32 + 48) / 96, (114 * dpi as u32 + 48) / 96)
                 );
                 assert_eq!(image.get_pixel(0, 0)[3], 0);
-                if let Some(dir) = std::env::var_os("CLIPCRAFT_CURSOR_EVIDENCE_DIR") {
+                if let Some(dir) = std::env::var_os("CLIPDESIGNER_CURSOR_EVIDENCE_DIR") {
                     image
                         .save(
                             std::path::PathBuf::from(dir)

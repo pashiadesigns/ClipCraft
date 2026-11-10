@@ -69,7 +69,7 @@ fn rich_text_render_save_resize_and_undo_share_geometry() {
     );
     s.execute(Command::Undo).unwrap();
     assert_eq!(s.document.render().unwrap(), before);
-    if let Ok(root) = std::env::var("CLIPCRAFT_RICH_FIXTURE_DIR") {
+    if let Ok(root) = std::env::var("CLIPDESIGNER_RICH_FIXTURE_DIR") {
         let path = std::path::Path::new(&root);
         std::fs::create_dir_all(path).unwrap();
         d.save(&path.join("rich-text.capture.json")).unwrap();

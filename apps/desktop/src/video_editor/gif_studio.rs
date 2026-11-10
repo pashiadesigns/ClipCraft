@@ -77,7 +77,7 @@ fn export(
                 let mut files = vec![];
                 for (index, r) in ranges.iter().enumerate() {
                     let mut temp = tempfile::Builder::new()
-                        .prefix(".clipcraft-gif-")
+                        .prefix(".clipdesigner-gif-")
                         .suffix(".gif")
                         .tempfile_in(&folder)
                         .map_err(|e| e.to_string())?;
@@ -122,10 +122,10 @@ fn export(
                         .collect();
                     // Prefix avoids reserved Windows device names; never replace existing files.
                     let mut n = 1;
-                    let mut path = folder.join(format!("ClipCraft-{stem}.gif"));
+                    let mut path = folder.join(format!("ClipDesigner-{stem}.gif"));
                     while path.exists() {
                         n += 1;
-                        path = folder.join(format!("ClipCraft-{stem}-{n}.gif"));
+                        path = folder.join(format!("ClipDesigner-{stem}-{n}.gif"));
                     }
                     temp.persist_noclobber(&path).map_err(|e| e.to_string())?;
                     files.push(path);
@@ -553,10 +553,10 @@ mod layout_tests {
         assert_eq!(s.ranges().len(), 1);
         assert_eq!(s.ranges()[0].start, 2000);
     }
-    /// Renders the populated studio for visual review (set CLIPCRAFT_GIF_EVIDENCE).
+    /// Renders the populated studio for visual review (set CLIPDESIGNER_GIF_EVIDENCE).
     #[test]
     fn populated_studio_evidence() {
-        let Some(folder) = std::env::var_os("CLIPCRAFT_GIF_EVIDENCE") else {
+        let Some(folder) = std::env::var_os("CLIPDESIGNER_GIF_EVIDENCE") else {
             return;
         };
         for size in [[1280., 900.], [880., 680.]] {
@@ -721,7 +721,7 @@ mod tests {
                         );
                     }
                 }
-                if let Some(folder) = std::env::var_os("CLIPCRAFT_GIF_EVIDENCE") {
+                if let Some(folder) = std::env::var_os("CLIPDESIGNER_GIF_EVIDENCE") {
                     dump_meshes(
                         &ctx,
                         &folder.to_string_lossy(),
@@ -840,7 +840,7 @@ mod tests {
                 first.0.textures_delta.append(out.0.textures_delta.clone());
             }
             let last = draw();
-            if let Some(folder) = std::env::var_os("CLIPCRAFT_GIF_EVIDENCE") {
+            if let Some(folder) = std::env::var_os("CLIPDESIGNER_GIF_EVIDENCE") {
                 dump_meshes(
                     &ctx,
                     &folder.to_string_lossy(),
@@ -1000,7 +1000,7 @@ mod tests {
                 assert_eq!(&bytes[..6], b"GIF89a");
                 assert_eq!(u16::from_le_bytes([bytes[6], bytes[7]]), 160);
                 if run == 0
-                    && let Some(evidence) = std::env::var_os("CLIPCRAFT_GIF_EVIDENCE")
+                    && let Some(evidence) = std::env::var_os("CLIPDESIGNER_GIF_EVIDENCE")
                 {
                     let folder = PathBuf::from(evidence);
                     std::fs::create_dir_all(&folder).unwrap();

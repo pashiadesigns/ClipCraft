@@ -296,7 +296,7 @@ fn keybind_categories_keep_navigation_fixed_and_restore_their_scroll_positions()
     assert_eq!(text(&output, "Functions"), nav);
     assert_eq!(text(&output, "Save shortcuts"), footer);
     assert!(rect.top() > nav.bottom() && rect.bottom() < footer.top());
-    if let Ok(root) = std::env::var("CLIPCRAFT_HEADLESS_KEYBINDS_DIR") {
+    if let Ok(root) = std::env::var("CLIPDESIGNER_HEADLESS_KEYBINDS_DIR") {
         dump_meshes(&ctx, &root, "Functions-scrolled", first, output);
     }
     e.options.category = 0;

@@ -145,7 +145,7 @@ fn text_image_step_and_fractional_preview_keep_shared_geometry_and_cached_shadow
             list.render_viewport(v).unwrap()
         );
     }
-    if let Ok(root) = std::env::var("CLIPCRAFT_SHADOW_DIR") {
+    if let Ok(root) = std::env::var("CLIPDESIGNER_SHADOW_DIR") {
         let root = std::path::PathBuf::from(root);
         std::fs::create_dir_all(&root).unwrap();
         d.save(&root.join("shadows.capture.json")).unwrap();

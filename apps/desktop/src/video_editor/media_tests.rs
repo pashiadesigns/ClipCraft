@@ -90,7 +90,7 @@ fn imported_media_crossfades_match_pixels_audio_export_and_portable_sources() {
             .unwrap(),
         mixed
     );
-    if let Some(folder) = std::env::var_os("CLIPCRAFT_VIDEO_EDITOR_EVIDENCE") {
+    if let Some(folder) = std::env::var_os("CLIPDESIGNER_VIDEO_EDITOR_EVIDENCE") {
         let folder = PathBuf::from(folder);
         std::fs::create_dir_all(&folder).unwrap();
         mixed.save(folder.join("crossfade-midpoint.png")).unwrap();

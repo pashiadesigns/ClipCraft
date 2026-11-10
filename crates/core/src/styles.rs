@@ -61,13 +61,13 @@ impl ArrowStyle {
 }
 pub fn presets() -> Vec<ArrowStyle> {
     let mut result: Vec<_> = [
-        ("ClipCraft Blue", [24, 145, 193, 255], 3),
+        ("ClipDesigner Blue", [24, 145, 193, 255], 3),
         ("Lime", [135, 196, 105, 255], 3),
         ("Coral", [240, 85, 55, 255], 3),
         ("Gold", [220, 190, 80, 255], 3),
         ("White", [255, 255, 255, 255], 3),
         ("Plum", [191, 140, 207, 255], 3),
-        ("Bold ClipCraft Blue", [24, 145, 193, 255], 6),
+        ("Bold ClipDesigner Blue", [24, 145, 193, 255], 6),
         ("Bold Coral", [240, 85, 55, 255], 6),
     ]
     .into_iter()
@@ -222,7 +222,7 @@ impl Store {
             .write(true)
             .open(self.root.join("styles.lock"))?;
         lock.try_lock().map_err(|_| {
-            Error::Invalid("Styles are busy in another ClipCraft window. Try again.".into())
+            Error::Invalid("Styles are busy in another ClipDesigner window. Try again.".into())
         })?;
         let mut next = load(&self.root)?;
         edit(&mut next)?;
@@ -372,10 +372,10 @@ mod tests {
         assert_eq!(first.entries().len(), 2);
         let mut changed = presets[0].clone();
         changed.color[3] = 0;
-        changed.name = "CLIPCRAFT BLUE".into();
+        changed.name = "CLIPDESIGNER BLUE".into();
         first.save(changed.clone()).unwrap();
         assert_eq!(Store::open(dir.path()).unwrap().entries()[0], changed);
-        stale.remove("clipcraft blue").unwrap();
+        stale.remove("clipdesigner blue").unwrap();
         assert_eq!(stale.entries(), &presets[1..2]);
         assert_eq!(
             fs::read_to_string(dir.path().join("unrelated.txt")).unwrap(),

@@ -12,6 +12,6 @@ test('recognized secrets are rejected without printing their values',()=>{
   assert.deepEqual(auditFile('config.txt',Buffer.from(url)),['credential pattern']);
 });
 test('synthetic fixtures and redistributable input assets are allowed',()=>{
-  for(const path of ['apps/desktop/src/main.rs','crates/core/tests/fixtures/demo.capture.json','apps/desktop/assets/brand/clipcraft.res','licenses/designcraft/LICENSE-MIT'])
+  for(const path of ['apps/desktop/src/main.rs','crates/core/tests/fixtures/demo.capture.json','apps/desktop/assets/brand/clipdesigner.res','licenses/designcraft/LICENSE-MIT'])
     assert.deepEqual(auditFile(path,Buffer.from('original synthetic content')),[]);
 });

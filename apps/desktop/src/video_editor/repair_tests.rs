@@ -73,7 +73,7 @@ pub(super) fn render_modified(
             e.show_still_frame(ui.ctx());
         },
     ));
-    if std::env::var_os("CLIPCRAFT_VIDEO_EDITOR_EVIDENCE").is_some() {
+    if std::env::var_os("CLIPDESIGNER_VIDEO_EDITOR_EVIDENCE").is_some() {
         let accumulated = ctx.data_mut(|d| {
             let values = d
                 .get_temp_mut_or_default::<Vec<(egui::TextureId, Vec<egui::epaint::ImageDelta>)>>(
@@ -153,7 +153,7 @@ fn zoom_draw_redraw_properties_and_canvas_mapping_are_editable() {
         e.video.zoom_selected = Some(id);
         let first = render(&ctx, &mut e, vec![]);
         let final_frame = render(&ctx, &mut e, vec![]);
-        if let Some(folder) = std::env::var_os("CLIPCRAFT_VIDEO_EDITOR_EVIDENCE") {
+        if let Some(folder) = std::env::var_os("CLIPDESIGNER_VIDEO_EDITOR_EVIDENCE") {
             dump_meshes(
                 &ctx,
                 &folder.to_string_lossy(),

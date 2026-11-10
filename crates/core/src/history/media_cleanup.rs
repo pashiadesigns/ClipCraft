@@ -1,4 +1,4 @@
-//! Opt-in cleanup only for files explicitly created and marked by ClipCraft.
+//! Opt-in cleanup only for files explicitly created and marked by ClipDesigner.
 use super::*;
 use std::collections::BTreeSet;
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
@@ -25,7 +25,7 @@ fn identity(path: &Path) -> Result<OwnedFile> {
 }
 fn marker(path: &Path) -> PathBuf {
     let mut p = path.as_os_str().to_os_string();
-    p.push(".clipcraft-owned");
+    p.push(".clipdesigner-owned");
     PathBuf::from(p)
 }
 /// Called only after successfully creating a recording, take or still, never on import.

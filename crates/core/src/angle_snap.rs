@@ -1,6 +1,6 @@
 //! Shift-constrained drawing. Angle/radius approach adapted from DesignCraft
 //! geom::constrain_angle (ea08e4c2ba290f092063c99d70c4bdd5afc45887), MIT.
-//! See licenses/designcraft. ClipCraft adds exact cardinal axes and ray clipping.
+//! See licenses/designcraft. ClipDesigner adds exact cardinal axes and ray clipping.
 pub fn endpoint(start: [f32; 2], pointer: [f32; 2], canvas: [u32; 2], shift: bool) -> [f32; 2] {
     if !shift {
         return [

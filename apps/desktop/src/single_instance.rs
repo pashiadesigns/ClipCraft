@@ -12,7 +12,7 @@ impl Drop for Owner {
 }
 #[cfg(windows)]
 pub(super) fn enter(request: &crate::launch::Request) -> Result<Option<Owner>, String> {
-    enter_named("Local\\ClipCraft.Editor.Instance", || {
+    enter_named("Local\\ClipDesigner.Editor.Instance", || {
         crate::tray::forward(request)
     })
 }
@@ -22,7 +22,7 @@ fn enter_named(name: &str, forward: impl Fn() -> bool) -> Result<Option<Owner>, 
     let name: Vec<u16> = name.encode_utf16().chain(Some(0)).collect();
     let handle = unsafe { CreateMutexW(std::ptr::null(), 1, name.as_ptr()) };
     if handle.is_null() {
-        return Err("Could not reserve the ClipCraft application instance.".into());
+        return Err("Could not reserve the ClipDesigner application instance.".into());
     }
     let owner = Owner(handle);
     if unsafe { GetLastError() } != ERROR_ALREADY_EXISTS {
@@ -40,7 +40,7 @@ fn enter_named(name: &str, forward: impl Fn() -> bool) -> Result<Option<Owner>, 
             return Ok(None);
         }
         if std::time::Instant::now() >= deadline {
-            return Err("ClipCraft is already running but is not responding. Return to its window and try opening the file again.".into());
+            return Err("ClipDesigner is already running but is not responding. Return to its window and try opening the file again.".into());
         }
         std::thread::sleep(std::time::Duration::from_millis(50));
     }
@@ -51,7 +51,7 @@ mod tests {
     #[test]
     fn simultaneous_startups_forward_then_new_owner_can_start_after_exit() {
         let name = format!(
-            "Local\\ClipCraft.Test.{}.{}",
+            "Local\\ClipDesigner.Test.{}.{}",
             std::process::id(),
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)

@@ -1,7 +1,7 @@
 //! Region-only precision feedback. Samples the retained capture, never the overlay.
 use super::*;
 
-const BLUE: u32 = 0x00e2aa00; // COLORREF: ClipCraft #00aae2
+const BLUE: u32 = 0x00e2aa00; // COLORREF: ClipDesigner #00aae2
 const SAMPLES: i32 = 21;
 
 struct Layout {

@@ -153,7 +153,7 @@ fn production_picker_paints_full_guides_and_lens_before_and_during_drag_without_
                 "vertical {name}"
             );
         }
-        if let Some(dir) = std::env::var_os("CLIPCRAFT_REGION_PREVIEW_DIR") {
+        if let Some(dir) = std::env::var_os("CLIPDESIGNER_REGION_PREVIEW_DIR") {
             let dir = std::path::PathBuf::from(dir);
             std::fs::create_dir_all(&dir).unwrap();
             image.save(dir.join(format!("{name}.png"))).unwrap();

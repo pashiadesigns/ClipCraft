@@ -123,7 +123,7 @@ fn confirm_context(owner: HWND, restarting: bool, steps: bool) -> Result<bool, S
                     lpfnWndProc: Some(procedure),
                     hInstance: GetModuleHandleW(null()),
                     hCursor: LoadCursorW(null_mut(), IDC_ARROW),
-                    lpszClassName: w!("ClipCraftRestartSteps"),
+                    lpszClassName: w!("ClipDesignerRestartSteps"),
                     ..Default::default()
                 };
                 let atom = RegisterClassW(&class);
@@ -163,7 +163,7 @@ fn confirm_context(owner: HWND, restarting: bool, steps: bool) -> Result<bool, S
         });
         let hwnd = CreateWindowExW(
             WS_EX_TOPMOST | WS_EX_TOOLWINDOW,
-            w!("ClipCraftRestartSteps"),
+            w!("ClipDesignerRestartSteps"),
             w!("Confirm capture action"),
             WS_POPUP | WS_CLIPCHILDREN,
             x,
@@ -543,7 +543,7 @@ mod tests {
                 .unwrap();
                 assert_eq!(image.get_pixel(120, 105).0, [25, 154, 195, 255]);
                 assert_eq!(image.get_pixel(210, 105).0, [62, 67, 71, 255]);
-                if let Some(dir) = std::env::var_os("CLIPCRAFT_CURSOR_EVIDENCE_DIR") {
+                if let Some(dir) = std::env::var_os("CLIPDESIGNER_CURSOR_EVIDENCE_DIR") {
                     image
                         .save(std::path::PathBuf::from(dir).join(if restart {
                             "restart-confirmation.png"

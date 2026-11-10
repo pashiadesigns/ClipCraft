@@ -102,7 +102,7 @@ fn show_excluding(
                     hIcon: crate::brand::native_icon(),
                     lpfnWndProc: Some(procedure),
                     hInstance: GetModuleHandleW(null()),
-                    lpszClassName: w!("ClipCraftStepsIntro"),
+                    lpszClassName: w!("ClipDesignerStepsIntro"),
                     ..Default::default()
                 };
                 let atom = RegisterClassW(&class);
@@ -116,7 +116,7 @@ fn show_excluding(
             .map_err(Clone::clone)?;
         let hwnd = CreateWindowExW(
             WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_NOACTIVATE | WS_EX_TOPMOST | WS_EX_TOOLWINDOW,
-            w!("ClipCraftStepsIntro"),
+            w!("ClipDesignerStepsIntro"),
             w!("Begin recording steps"),
             WS_POPUP | WS_DISABLED,
             area.origin[0],

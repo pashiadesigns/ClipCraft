@@ -97,7 +97,7 @@ fn framed_guide_preserves_full_sources_metadata_captions_sections_and_output() {
         .unwrap();
     session.execute(crate::Command::Undo).unwrap();
     assert_eq!(serde_json::to_vec(&session.document).unwrap(), before);
-    if let Ok(root) = std::env::var("CLIPCRAFT_CONTEXT_GUIDE_DIR") {
+    if let Ok(root) = std::env::var("CLIPDESIGNER_CONTEXT_GUIDE_DIR") {
         std::fs::create_dir_all(&root).unwrap();
         doc.save(&Path::new(&root).join("guide-context.capture.json"))
             .unwrap();

@@ -318,7 +318,7 @@ mod tests {
             serde_json::to_vec(&editor.session.document).unwrap(),
             original
         );
-        if let Ok(root) = std::env::var("CLIPCRAFT_HEADLESS_RASTER_DIR") {
+        if let Ok(root) = std::env::var("CLIPDESIGNER_HEADLESS_RASTER_DIR") {
             let root = std::path::Path::new(&root);
             std::fs::create_dir_all(root).unwrap();
             png.save(root.join("export-native.png")).unwrap();

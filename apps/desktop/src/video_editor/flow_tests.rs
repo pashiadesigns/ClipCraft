@@ -277,7 +277,7 @@ fn still_dialog_and_muted_track_production_layout_block_canvas_input() {
     }
     let first = render(&ctx, &mut e, vec![]);
     let out = render(&ctx, &mut e, vec![]);
-    if let Some(root) = std::env::var_os("CLIPCRAFT_VIDEO_EDITOR_EVIDENCE") {
+    if let Some(root) = std::env::var_os("CLIPDESIGNER_VIDEO_EDITOR_EVIDENCE") {
         crate::property_layout::tests::dump_meshes(
             &ctx,
             &root.to_string_lossy(),
@@ -292,7 +292,7 @@ fn still_dialog_and_muted_track_production_layout_block_canvas_input() {
     }
     let first = render(&ctx, &mut e, vec![]);
     let out = render(&ctx, &mut e, vec![]);
-    if let Some(root) = std::env::var_os("CLIPCRAFT_VIDEO_EDITOR_EVIDENCE") {
+    if let Some(root) = std::env::var_os("CLIPDESIGNER_VIDEO_EDITOR_EVIDENCE") {
         crate::property_layout::tests::dump_meshes(
             &ctx,
             &root.to_string_lossy(),

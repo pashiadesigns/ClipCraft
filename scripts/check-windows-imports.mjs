@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 
 const file = process.argv[2];
-if (!file) throw new Error('Usage: node scripts/check-windows-imports.mjs <ClipCraft.exe> [--require-self-contained]');
+if (!file) throw new Error('Usage: node scripts/check-windows-imports.mjs <ClipDesigner.exe> [--require-self-contained]');
 const requireSelfContained = process.argv.includes('--require-self-contained');
 for (const arg of process.argv.slice(3)) {
   if (arg !== '--require-self-contained') throw new Error(`Unknown option: ${arg}`);

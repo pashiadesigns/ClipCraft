@@ -993,7 +993,7 @@ mod tests {
                 );
                 if iteration == 0
                     && kind == Kind::Polygon
-                    && let Ok(dir) = std::env::var("CLIPCRAFT_FRAME_PAGES_UI")
+                    && let Ok(dir) = std::env::var("CLIPDESIGNER_FRAME_PAGES_UI")
                 {
                     let last = paint(&mut scene, &d, 1.);
                     dump_meshes(&ctx, &dir, "frame-ink", first, last);
@@ -1336,7 +1336,7 @@ mod tests {
             );
         }
         doc.annotations = baseline;
-        if let Ok(root) = std::env::var("CLIPCRAFT_HEADLESS_INTERACTIONS_DIR") {
+        if let Ok(root) = std::env::var("CLIPDESIGNER_HEADLESS_INTERACTIONS_DIR") {
             scene = Scene::default();
             let uploaded = paint(&mut scene, &doc, 1.);
             first

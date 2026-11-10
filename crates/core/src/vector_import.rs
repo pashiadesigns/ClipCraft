@@ -6,9 +6,9 @@
 //! embedded in the file itself are drawn.
 //!
 //! EPS is PostScript, which no Rust library can draw. When Ghostscript is
-//! installed, ClipCraft asks it to draw the file at high resolution; it is
+//! installed, ClipDesigner asks it to draw the file at high resolution; it is
 //! not bundled (its AGPL license doesn't fit Apache-2.0). Without it,
-//! ClipCraft uses the preview image stored inside the EPS, and says so.
+//! ClipDesigner uses the preview image stored inside the EPS, and says so.
 use crate::{Error, Result};
 use image::RgbaImage;
 use resvg::{tiny_skia, usvg};
@@ -18,7 +18,7 @@ use std::{
 };
 
 const MAX_SVG_BYTES: usize = 8 * 1024 * 1024;
-/// Longest side ClipCraft draws an SVG at, for memory.
+/// Longest side ClipDesigner draws an SVG at, for memory.
 pub const MAX_SIDE: u32 = 4096;
 
 fn fonts() -> Arc<usvg::fontdb::Database> {
@@ -94,7 +94,7 @@ pub fn render_svg(text: &str, size: [u32; 2], tint: Option<[u8; 4]>) -> Result<R
 
 /// Converts an SVG into an editable vector icon (BI11): its shapes become
 /// icon paths in the 128-pixel icon box and its colors become up to five
-/// editable color slots, like ClipCraft's own icons. SVGs that need more than
+/// editable color slots, like ClipDesigner's own icons. SVGs that need more than
 /// that (pictures, more than five colors, very many shapes) return an error
 /// and stay drawings, which can still be recolored as a whole.
 pub fn svg_vector_icon(text: &str) -> Result<crate::icon_library::vector::VectorIcon> {
@@ -471,7 +471,7 @@ mod tests {
         assert!(parse(&"x".repeat(MAX_SVG_BYTES + 1)).is_err());
     }
     /// BI11: an SVG becomes a vector icon with its own color slots, which
-    /// edit like ClipCraft's icons; SVGs it can't express stay drawings.
+    /// edit like ClipDesigner's icons; SVGs it can't express stay drawings.
     #[test]
     fn svg_becomes_an_editable_vector_icon_when_it_fits() {
         let two = r##"<svg xmlns="http://www.w3.org/2000/svg" width="200" height="100" viewBox="0 0 200 100">
