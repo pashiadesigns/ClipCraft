@@ -462,23 +462,45 @@ fn effect_sample_shaped(
         line_style: None,
         shadow: None,
     });
+    use capture_core::obscure::Region;
+    // Shaped regions sit over crisp bars so the blurred shape itself shows:
+    // a circle for Ellipse and a squiggle for Freehand (BT, user review BS16).
+    if region != Region::Rectangle {
+        document.annotations[0].text = None;
+        document.annotations[0].kind = Kind::Rectangle;
+        document.annotations[0].fill = Some([255, 255, 255, 255]);
+        document.annotations[0].color = [255, 255, 255, 255];
+        for i in 0..16 {
+            let mut bar = document.annotations[0].clone();
+            bar.id = 10 + i;
+            let x = 2. + i as f32 * 8.;
+            bar.start = [x, 0.];
+            bar.end = [x + 4., 56.];
+            bar.fill = Some([0, 0, 0, 255]);
+            bar.color = [0, 0, 0, 255];
+            document.annotations.push(bar);
+        }
+    }
     let mut effect = document.annotations[0].clone();
     effect.id = 2;
     effect.kind = kind;
     effect.width = width;
     effect.text = None;
+    effect.fill = None;
+    effect.start = [0., 0.];
+    effect.end = [128., 56.];
     effect.points = match region {
-        capture_core::obscure::Region::Rectangle => vec![],
-        capture_core::obscure::Region::Ellipse => {
-            capture_core::obscure::ellipse_region([16., 4.], [112., 52.])
+        Region::Rectangle => vec![],
+        Region::Ellipse => capture_core::obscure::ellipse_region([40., 4.], [88., 52.]),
+        Region::Freehand => {
+            // A wavy band: the top edge left to right, the bottom edge back.
+            let wave = |x: f32| 28. + 13. * (x / 128. * std::f32::consts::TAU * 1.5).sin();
+            let xs: Vec<f32> = (0..=24).map(|i| 10. + i as f32 * 4.5).collect();
+            xs.iter()
+                .map(|x| [*x, wave(*x) - 8.])
+                .chain(xs.iter().rev().map(|x| [*x, wave(*x) + 8.]))
+                .collect()
         }
-        capture_core::obscure::Region::Freehand => (0..40)
-            .map(|i| {
-                let t = std::f32::consts::TAU * i as f32 / 40.;
-                let wobble = 1. + 0.18 * (t * 3.).sin();
-                [64. + t.cos() * 46. * wobble, 28. + t.sin() * 22. * wobble]
-            })
-            .collect(),
     };
     document.annotations.push(effect);
     document.render()
@@ -544,6 +566,44 @@ pub(super) fn save_tile(ui: &mut egui::Ui) -> egui::Response {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn shaped_effect_tiles_show_a_blurred_circle_and_squiggle_over_crisp_bars() {
+        use capture_core::obscure::Region;
+        let crisp = |p: &image::Rgba<u8>| p[0] == 0 || p[0] == 255;
+        for kind in [Kind::Blur, Kind::Pixelate] {
+            let circle = effect_sample_shaped(kind, 8, Region::Ellipse).unwrap();
+            let squiggle = effect_sample_shaped(kind, 8, Region::Freehand).unwrap();
+            if let Ok(dir) = std::env::var("CLIPCRAFT_EFFECT_TILES_DIR") {
+                circle.save(format!("{dir}/{kind:?}-ellipse.png")).unwrap();
+                squiggle
+                    .save(format!("{dir}/{kind:?}-freehand.png"))
+                    .unwrap();
+            }
+            // Inside the circle the bars soften; outside it they stay sharp.
+            assert!(!crisp(circle.get_pixel(64, 28)), "{kind:?} circle centre");
+            assert!(
+                crisp(circle.get_pixel(8, 28)),
+                "{kind:?} left of the circle"
+            );
+            assert!(
+                crisp(circle.get_pixel(120, 28)),
+                "{kind:?} right of the circle"
+            );
+            // The squiggle dips at x=64 (y 7..23) and rises near x=24.
+            assert!(
+                !crisp(squiggle.get_pixel(64, 15)),
+                "{kind:?} on the squiggle"
+            );
+            assert!(
+                crisp(squiggle.get_pixel(64, 48)),
+                "{kind:?} below the squiggle"
+            );
+            assert!(
+                crisp(squiggle.get_pixel(64, 2)),
+                "{kind:?} above the squiggle"
+            );
+        }
+    }
     #[test]
     fn callout_previews_render_valid_callouts_and_reuse_textures() {
         let ctx = egui::Context::default();

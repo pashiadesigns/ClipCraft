@@ -6,11 +6,24 @@ use capture_core::selection::Handle;
 pub(super) struct Feedback {
     pub icon: egui::CursorIcon,
     pub tool: Option<&'static str>,
+    /// Open (false) or closed (true) hand: rotation handles and the middle
+    /// curve node only.
+    pub hand: Option<bool>,
 }
 
 impl Feedback {
     fn interaction(icon: egui::CursorIcon) -> Self {
-        Self { icon, tool: None }
+        Self {
+            icon,
+            tool: None,
+            hand: None,
+        }
+    }
+    fn hand(closed: bool) -> Self {
+        Self {
+            hand: Some(closed),
+            ..Self::interaction(egui::CursorIcon::Default)
+        }
     }
     fn tool(name: &'static str) -> Self {
         Self {
@@ -20,12 +33,15 @@ impl Feedback {
                 egui::CursorIcon::Crosshair
             },
             tool: Some(name),
+            hand: None,
         }
     }
 }
 
 fn handle_feedback(handle: Handle) -> Feedback {
-    if handle.is_radius() {
+    if handle == Handle::Bend {
+        Feedback::hand(false)
+    } else if handle.is_radius() {
         Feedback::tool("Round corners")
     } else {
         Feedback::interaction(handle_cursor(handle))
@@ -135,13 +151,17 @@ impl Editor {
             return Feedback::interaction(Cursor::Copy);
         }
         if self.rotation_drag.is_some() {
-            return Feedback::interaction(Cursor::Grabbing);
+            return Feedback::hand(true);
         }
         if !space && let Some(cursor) = self.group_transform_cursor(pos, transform) {
-            return Feedback::interaction(cursor);
+            return match cursor {
+                Cursor::Grab => Feedback::hand(false),
+                Cursor::Grabbing if self.group_rotating() => Feedback::hand(true),
+                cursor => Feedback::interaction(cursor),
+            };
         }
         if self.rotation_hit(pos, transform) {
-            return Feedback::interaction(Cursor::Grab);
+            return Feedback::hand(false);
         }
         if self.group_drag.as_ref().is_some_and(|d| d.duplicate) {
             return Feedback::interaction(Cursor::Copy);
@@ -151,10 +171,10 @@ impl Editor {
         }
         if let Some(drag) = &self.edit_drag {
             // The middle curve handle closes the hand while it bends the line.
-            return drag
-                .handle
-                .filter(|h| *h != Handle::Bend)
-                .map_or(Feedback::interaction(Cursor::Grabbing), handle_feedback);
+            return match drag.handle {
+                Some(Handle::Bend) => Feedback::hand(true),
+                handle => handle.map_or(Feedback::interaction(Cursor::Grabbing), handle_feedback),
+            };
         }
         if space && self.crop.is_none() && self.drag_start.is_none() {
             return Feedback::interaction(Cursor::Grab);
@@ -177,6 +197,7 @@ impl Editor {
             return Feedback {
                 icon: cut.cursor(),
                 tool: (cut.cursor() != Cursor::Default).then_some("Cut Out"),
+                hand: None,
             };
         }
         let near_handle = self
@@ -273,6 +294,9 @@ impl Editor {
             feedback = Feedback::interaction(egui::CursorIcon::Default);
         }
         ui.ctx().set_cursor_icon(feedback.icon);
+        if let Some(closed) = feedback.hand {
+            crate::native_cursor::request_hand(ui.ctx(), closed);
+        }
         if let Some(name) = feedback.tool.filter(|_| transform.viewport.contains(pos)) {
             // The OS cursor moves independently of app frames. Paint the hotspot
             // and badge together and suppress that separate cursor only here.

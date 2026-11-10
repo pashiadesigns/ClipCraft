@@ -755,6 +755,55 @@ fn a_free_corner_previews_while_held_and_commits_once() {
 }
 
 #[test]
+fn a_free_corner_follows_the_pointer_for_the_whole_drag_with_the_move_tool() {
+    let ctx = egui::Context::default();
+    crate::shell::configure(&ctx);
+    crate::text_layout::configure(&ctx);
+    let mut e = crate::canvas::tests::editor(&ctx);
+    e.session = crate::Session::new(crate::Document::blank(1920, 1080).unwrap()).unwrap();
+    let pixels = image::RgbaImage::from_pixel(1600, 900, image::Rgba([40, 90, 60, 255]));
+    let bitmap = capture_core::bitmap::Bitmap::transient(std::sync::Arc::new(pixels)).unwrap();
+    let mut a = std::sync::Arc::new(bitmap).annotation(90);
+    a.kind = crate::Kind::Image;
+    a.start = [100., 100.];
+    a.end = [1700., 1000.];
+    e.session.document.annotations.push(a);
+    e.tool = Some(crate::Kind::Image);
+    e.select_only(Some(90));
+    crate::perspective_ui::show_free_corners(&ctx, 90);
+    for _ in 0..4 {
+        render(&ctx, &mut e, vec![]);
+    }
+    let corner = |ctx: &egui::Context| -> egui::Rect {
+        ctx.data(|d| d.get_temp(egui::Id::unique(("perspective-corner-rect", 0usize))))
+            .expect("corner")
+    };
+    let at = corner(&ctx).center();
+    render(&ctx, &mut e, vec![egui::Event::PointerMoved(at)]);
+    render(&ctx, &mut e, press(at, true));
+    let mut last = at;
+    for i in 1..12 {
+        let previous = last;
+        last = at + egui::vec2(i as f32 * 8., i as f32 * 5.);
+        render(&ctx, &mut e, vec![egui::Event::PointerMoved(last)]);
+        // The handle drawn this frame shows where the previous frame put it.
+        let shown = corner(&ctx).center();
+        assert!(
+            shown.distance(previous) < 2.,
+            "frame {i}: the corner is at {shown:?}, the pointer was at {previous:?}"
+        );
+    }
+    render(&ctx, &mut e, press(last, false));
+    e.settle_property_preview(&ctx);
+    let quad = e.session.document.annotations[0]
+        .image
+        .as_ref()
+        .unwrap()
+        .perspective()
+        .expect("saved");
+    assert!(quad[0][0] > 0.03 && quad[0][1] > 0.03, "{quad:?}");
+}
+#[test]
 fn installed_font_search_accepts_click_and_typing_without_dismissing_popup() {
     let ctx = egui::Context::default();
     crate::shell::configure(&ctx);

@@ -1,12 +1,12 @@
 # Installing ClipCraft
 
-Download **1.0.0-beta.2** from the [release page](https://github.com/pashiadesigns/ClipCraft/releases/tag/v1.0.0-beta.2).
+Download **1.0.0-beta.3** from the [release page](https://github.com/pashiadesigns/ClipCraft/releases/tag/v1.0.0-beta.3).
 Windows 10/11 x64 is supported. Both downloads are unsigned; Windows may show an
 unknown-publisher or reputation warning.
 
 ## MSI installer
 
-Run `clipcraft-1.0.0-beta.2-windows-x64.msi`. It installs for the current user under
+Run `clipcraft-1.0.0-beta.3-windows-x64.msi`. It installs for the current user under
 `%LOCALAPPDATA%\Programs\ClipCraft` by default and creates one **ClipCraft** Start
 menu shortcut and an Installed Apps entry. It registers `.iclip` and `.vclip` in
 Open With/Default Apps without modifying Windows' protected default-app choices.

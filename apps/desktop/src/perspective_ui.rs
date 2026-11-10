@@ -57,6 +57,17 @@ pub(crate) fn show_free_corners(ctx: &egui::Context, id: u64) {
         d.insert_temp(adjusting_id(), id);
     });
 }
+fn corner_rects_id() -> egui::Id {
+    egui::Id::unique("perspective-corner-rects")
+}
+/// The pointer is over a Free corner handle, so the canvas leaves the press to
+/// the handle instead of starting a move of the image (BS23).
+pub(crate) fn corner_hovered(ctx: &egui::Context, pos: Option<egui::Pos2>) -> bool {
+    pos.is_some_and(|p| {
+        ctx.data(|d| d.get_temp::<Vec<egui::Rect>>(corner_rects_id()))
+            .is_some_and(|rects| rects.iter().any(|r| r.contains(p)))
+    })
+}
 /// The image object whose Free corner handles are showing.
 pub(crate) fn free_mode(ctx: &egui::Context, id: u64) -> bool {
     ctx.data(|d| d.get_temp::<u64>(free_id()) == Some(id))
@@ -290,6 +301,8 @@ impl Editor {
         });
         // While a corner moves the canvas uses a GPU preview of the warp; the
         // engine's full-quality warp returns on release (BJ5).
+        ui.ctx()
+            .data_mut(|d| d.remove::<Vec<egui::Rect>>(corner_rects_id()));
         let dragging = self.perspective_handles(ui, transform);
         if dragging != self.shell.perspective_drag {
             self.shell.perspective_drag = dragging;
@@ -330,8 +343,14 @@ impl Editor {
         }
         let mut next = quad;
         let mut dragging = false;
+        let rects: Vec<egui::Rect> = corners
+            .iter()
+            .map(|at| egui::Rect::from_center_size(*at, egui::vec2(16., 16.)))
+            .collect();
+        ui.ctx()
+            .data_mut(|d| d.insert_temp(corner_rects_id(), rects.clone()));
         for (i, at) in corners.into_iter().enumerate() {
-            let rect = egui::Rect::from_center_size(at, egui::vec2(16., 16.));
+            let rect = rects[i];
             let response = ui
                 .interact(
                     rect,

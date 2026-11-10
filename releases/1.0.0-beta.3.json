@@ -1,0 +1,25 @@
+{
+  "version": "1.0.0-beta.3",
+  "date": "2026-11-10",
+  "channel": "beta",
+  "title": "ClipCraft 1.0 beta 3",
+  "summary": "A fix release for beta 2: visible hand cursors only where they help, one Callout preset group, clearer shaped blur presets and smooth Free perspective corners.",
+  "changes": {
+    "Fixes": [
+      "Open and closed hand cursors appear only on rotation handles and the middle curve node of a line or arrow, and stay visible while you drag; moving and panning keep their usual cursors.",
+      "Free perspective corners follow the pointer for the whole drag."
+    ],
+    "Presets": [
+      "One Callout preset group with three styles each for box, rounded, oval and cloud.",
+      "Ellipse and Freehand blur and pixelate presets show a blurred circle and squiggle."
+    ]
+  },
+  "limitations": [
+    "Unsigned Windows 10/11 x64 beta. Old development project formats are unsupported; back up work before updating.",
+    "Automatic detection and tracking of sensitive information does not guarantee complete coverage. Review every flagged range and the whole video before sharing. Focus and Magnify are emphasis, not privacy tools; blur and pixelation may leave information inferable.",
+    "Framed crossfades involving rotation, transparency or different frames can preview less smoothly than they export.",
+    "Scrolling capture is Region-only. By website fills in only when the window title names the site.",
+    "Silent startup on some older Windows 11 laptops is still being investigated.",
+    "PDF text is outlined, not searchable. No automatic updater."
+  ]
+}

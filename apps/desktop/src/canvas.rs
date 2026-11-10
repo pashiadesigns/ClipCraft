@@ -178,7 +178,11 @@ impl Editor {
                 .transform(image_viewport, dimensions, ui.ctx().pixels_per_point());
         transform.viewport = viewport;
         interactive &= !self.image_frame_buttons_hovered(ui, transform)
-            && !self.guide_controls_hovered(ui, self.guide_transform(transform));
+            && !self.guide_controls_hovered(ui, self.guide_transform(transform))
+            && !crate::perspective_ui::corner_hovered(
+                ui.ctx(),
+                ui.input(|i| i.pointer.interact_pos().or(i.pointer.hover_pos())),
+            );
         let response = ui.interact(
             viewport,
             ui.scope_id().with("canvas"),

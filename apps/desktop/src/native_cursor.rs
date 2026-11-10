@@ -241,7 +241,10 @@ mod platform {
                     made
                 }
             };
-            if ACTIVE.swap(cursor, Ordering::Relaxed) != cursor {
+            ACTIVE.store(cursor, Ordering::Relaxed);
+            // Also restores the tool cursor after winit set its own when the
+            // egui cursor changed on the previous frame.
+            if unsafe { GetCursor() } as isize != cursor {
                 unsafe { SetCursor(cursor as HCURSOR) };
             }
             REQUESTED.store(true, Ordering::Relaxed);
@@ -271,8 +274,22 @@ mod platform {
 pub(crate) use platform::*;
 
 /// Real open and closed hands (approved `artifacts/br-proposal/bend-cursor.html`).
-/// Windows draws every hand egui asks for as the four-arrow move cursor, so a
-/// frame that ends asking for one shows ClipCraft's own instead.
+/// Only rotation handles and the middle curve node of a line or arrow use them
+/// (BT, user review of BS7/BS8); everything else keeps its usual cursor.
+const HAND_REQUEST: &str = "clipcraft-hand-request";
+/// The egui cursor while a hand shows. It must stay visible: `None` makes winit
+/// call `ShowCursor(FALSE)`, which hid the hand too (BT1). It is also the same
+/// for open and closed, because winit sets its own cursor whenever egui's
+/// changes and Windows sends no `WM_SETCURSOR` while a button is held.
+pub(crate) const HAND_HOST: egui::CursorIcon = egui::CursorIcon::Default;
+/// Asks for the open (`closed == false`) or closed hand for this frame.
+pub(crate) fn request_hand(ctx: &egui::Context, closed: bool) {
+    ctx.data_mut(|d| d.insert_temp(egui::Id::unique(HAND_REQUEST), closed));
+}
+/// The hand asked for this frame, if any (read by the end of the frame).
+pub(crate) fn requested_hand(ctx: &egui::Context) -> Option<bool> {
+    ctx.data(|d| d.get_temp::<bool>(egui::Id::unique(HAND_REQUEST)))
+}
 pub(crate) fn install_hands(ctx: &egui::Context) {
     let installed = egui::Id::unique("clipcraft-hands-installed");
     if ctx.data(|d| d.get_temp::<bool>(installed)).is_some() {
@@ -282,44 +299,52 @@ pub(crate) fn install_hands(ctx: &egui::Context) {
     ctx.on_end_pass(
         "clipcraft-hands",
         std::sync::Arc::new(|ui| {
-            let closed = match ui.ctx().output(|o| o.cursor_icon) {
-                egui::CursorIcon::Grab => false,
-                egui::CursorIcon::Grabbing => true,
-                _ => return,
+            let ctx = ui.ctx();
+            let Some(closed) = requested_hand(ctx) else {
+                return;
             };
-            show(if closed { "hand-closed" } else { "hand-open" }, || {
-                Some(rasterize(32, |p, pos| paint_hand(p, pos, closed)))
+            ctx.data_mut(|d| d.remove::<bool>(egui::Id::unique(HAND_REQUEST)));
+            let shown = show(if closed { "hand-closed" } else { "hand-open" }, || {
+                Some(hand_image(closed))
             });
+            if shown {
+                ctx.output_mut(|o| o.cursor_icon = HAND_HOST);
+            }
         }),
     );
 }
-/// A hand drawn around `pos`, its hotspot on the palm.
-pub(crate) fn paint_hand(p: &egui::Painter, pos: egui::Pos2, closed: bool) {
-    let at = |x: f32, y: f32| pos + egui::vec2(x, y);
-    let pieces: Vec<egui::Rect> = if closed {
-        vec![
-            egui::Rect::from_min_max(at(-6., -3.), at(7., 9.)),
-            egui::Rect::from_min_max(at(-6., -6.), at(-2., 0.)),
-            egui::Rect::from_min_max(at(-2., -7.), at(2., 0.)),
-            egui::Rect::from_min_max(at(2., -7.), at(6., 0.)),
-            egui::Rect::from_min_max(at(5., -5.), at(9., 2.)),
-        ]
-    } else {
-        vec![
-            egui::Rect::from_min_max(at(-6., -1.), at(7., 9.)),
-            egui::Rect::from_min_max(at(-6., -10.), at(-3., 1.)),
-            egui::Rect::from_min_max(at(-2.5, -12.), at(0.5, 1.)),
-            egui::Rect::from_min_max(at(1., -11.), at(4., 1.)),
-            egui::Rect::from_min_max(at(4.5, -8.), at(7.5, 1.)),
-            egui::Rect::from_min_max(at(-10., -1.), at(-5., 3.)),
-        ]
+/// The mockup's 30-unit hand and fist paths (`#hand`, `#fist`).
+const OPEN_HAND: &str = "M11 22c-2-2-4-5-5-7-1-1 0-3 2-2l2 2V6c0-1.2 2-1.2 2 0v6V5c0-1.2 2-1.2 2 0v7-6c0-1.2 2-1.2 2 0v7-5c0-1.2 2-1.2 2 0v8c0 3-1 5-3 7z";
+const CLOSED_HAND: &str = "M10 22c-2-2-3-4-3-6 0-1.5 1-2 2-1.5V11c0-1.2 2-1.2 2 0v1-1.5c0-1.2 2-1.2 2 0V12v-1c0-1.2 2-1.2 2 0v1.5-.5c0-1.2 2-1.2 2 0V17c0 2-1 4-3 5z";
+/// The hand as a 32-pixel cursor, drawn from the mockup's SVG path at 1.25x:
+/// white with a dark outline, the hotspot on the palm.
+pub(crate) fn hand_image(closed: bool) -> Image {
+    use vello_cpu::{
+        Pixmap, RenderContext,
+        color::{AlphaColor, Srgb},
+        kurbo::{Affine, BezPath, Join, Stroke},
     };
-    let ink = egui::Color32::from_gray(20);
-    for r in &pieces {
-        p.rect_filled(r.expand(1.2), 2.5, ink);
-    }
-    for r in &pieces {
-        p.rect_filled(*r, 1.8, egui::Color32::WHITE);
+    const SIDE: u16 = 32;
+    let path = BezPath::from_svg(if closed { CLOSED_HAND } else { OPEN_HAND }).expect("hand path");
+    let mut context = RenderContext::new(SIDE, SIDE);
+    // Mockup palm (13, 16) lands on the hotspot (16, 16).
+    context.set_transform(Affine::translate((-0.25, -4.0)) * Affine::scale(1.25));
+    context.set_paint(AlphaColor::<Srgb>::from_rgba8(255, 255, 255, 255));
+    context.fill_path(&path);
+    context.set_paint(AlphaColor::<Srgb>::from_rgba8(17, 17, 17, 255));
+    context.set_stroke(Stroke::new(1.1).with_join(Join::Round));
+    context.stroke_path(&path);
+    let mut pixels = Pixmap::new(SIDE, SIDE);
+    context.flush();
+    context.render(&mut pixels, &mut vello_cpu::Resources::new());
+    Image {
+        size: [32, 32],
+        hotspot: [16, 16],
+        pixels: pixels
+            .data()
+            .iter()
+            .flat_map(|p| [p.r, p.g, p.b, p.a])
+            .collect(),
     }
 }
 
@@ -338,16 +363,40 @@ pub(crate) fn apply(_lparam: isize) -> bool {
 mod tests {
     use super::*;
     #[test]
-    fn hands_are_white_with_a_dark_outline_and_differ_open_and_closed() {
-        let open = rasterize(32, |p, pos| paint_hand(p, pos, false));
-        let closed = rasterize(32, |p, pos| paint_hand(p, pos, true));
+    fn hands_follow_the_mockup_paths_white_with_a_dark_outline() {
+        let open = hand_image(false);
+        let closed = hand_image(true);
         let at = |i: &Image, x: usize, y: usize| {
             i.pixels[(y * 32 + x) * 4..(y * 32 + x) * 4 + 4].to_vec()
         };
-        assert_eq!(at(&open, 16, 20), vec![255; 4], "the palm is white");
-        assert_eq!(at(&open, 15, 6)[3], 255, "an open hand has long fingers");
-        assert_eq!(at(&closed, 15, 6)[3], 0, "a closed hand doesn't");
+        // The palm (mockup 13,17 -> 16,18) is white on both.
+        assert_eq!(at(&open, 16, 16), vec![255; 4], "open palm is white");
+        assert_eq!(at(&closed, 16, 16), vec![255; 4], "closed palm is white");
+        // Mockup (13, 8) is inside a raised finger only on the open hand.
+        assert!(at(&open, 16, 6)[3] > 200, "an open hand has long fingers");
+        assert_eq!(at(&closed, 16, 6)[3], 0, "a closed hand doesn't");
         assert_eq!(at(&open, 1, 1)[3], 0);
+        let outline = (0..32 * 32).filter(|n| {
+            let p = &open.pixels[n * 4..n * 4 + 4];
+            p[3] > 200 && p[0] < 60
+        });
+        assert!(outline.count() > 20, "a dark outline surrounds the hand");
+    }
+    #[test]
+    fn the_cursor_under_a_hand_stays_visible() {
+        // CursorIcon::None hides every cursor on Windows, the hand included.
+        assert_ne!(HAND_HOST, egui::CursorIcon::None);
+    }
+    #[test]
+    fn only_a_request_shows_a_hand() {
+        let ctx = egui::Context::default();
+        let mut out = ctx.run_ui(Default::default(), |ui| {
+            ui.ctx().set_cursor_icon(egui::CursorIcon::Grab);
+            assert_eq!(requested_hand(ui.ctx()), None, "moving keeps its cursor");
+            request_hand(ui.ctx(), true);
+            assert_eq!(requested_hand(ui.ctx()), Some(true));
+        });
+        out.textures_delta.clear();
     }
     #[test]
     fn cursor_images_hold_the_mark_with_its_hotspot_at_the_center() {

@@ -675,7 +675,7 @@ dependencies = [
 
 [[package]]
 name = "capture-cli"
-version = "1.0.0-beta.2"
+version = "1.0.0-beta.3"
 dependencies = [
  "capture-core",
  "clap",
@@ -685,7 +685,7 @@ dependencies = [
 
 [[package]]
 name = "capture-core"
-version = "1.0.0-beta.2"
+version = "1.0.0-beta.3"
 dependencies = [
  "ab_glyph",
  "base64 0.22.1",
@@ -708,7 +708,7 @@ dependencies = [
 
 [[package]]
 name = "capture-desktop"
-version = "1.0.0-beta.2"
+version = "1.0.0-beta.3"
 dependencies = [
  "arboard",
  "capture-core",

@@ -37,6 +37,12 @@ impl Editor {
             })
             .map(|(i, _)| i)
     }
+    /// A selection-rotation drag is in progress.
+    pub(super) fn group_rotating(&self) -> bool {
+        self.group_drag
+            .as_ref()
+            .is_some_and(|d| matches!(d.transform, Some(TransformDrag::Rotate(_))))
+    }
     pub(super) fn group_transform_cursor(
         &self,
         pos: egui::Pos2,

@@ -445,6 +445,11 @@ impl Editor {
                 .data_mut(|d| d.insert_temp(egui::Id::unique(("choose-frame-image", id)), rect));
         }
         if gesturing {
+            // A Free corner drag is itself a held preview: keep its handles
+            // for the whole drag (BS23), but nothing else while gesturing.
+            if self.shell.perspective_drag {
+                self.show_perspective_handles(ui, transform);
+            }
             return;
         }
         if let Some(rect) = self.image_pan_handle(transform) {

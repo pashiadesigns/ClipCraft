@@ -429,10 +429,8 @@ impl Editor {
             ui.ctx().set_cursor_icon(if d.crop {
                 egui::CursorIcon::Grabbing
             } else {
-                d.handle.map_or(
-                    egui::CursorIcon::Grabbing,
-                    crate::canvas_cursor::handle_cursor,
-                )
+                d.handle
+                    .map_or(egui::CursorIcon::Move, crate::canvas_cursor::handle_cursor)
             });
             if d.duplicate {
                 ui.ctx().set_cursor_icon(egui::CursorIcon::Copy);

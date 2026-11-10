@@ -589,10 +589,7 @@ pub fn groups(kind: Kind) -> Vec<PresetGroup> {
             ("shape_rounded", "Rounded rectangle", Kind::Rectangle, true),
             ("shape_ellipse", "Circle / ellipse", Kind::Ellipse, false),
             ("shape_other", "Other shapes", Kind::Polygon, false),
-            ("callout_box", "Callout", Kind::Callout, false),
-            ("callout_rounded", "Rounded callout", Kind::Callout, true),
-            ("callout_oval", "Oval callout", Kind::Callout, false),
-            ("callout_cloud", "Cloud callout", Kind::Callout, false),
+            ("callout", "Callout", Kind::Callout, false),
         ]
     } else {
         match kind {
@@ -627,6 +624,8 @@ pub fn groups(kind: Kind) -> Vec<PresetGroup> {
         .map(|(id, label, kind, rounded)| {
             let mut styles = if id == "shape_other" {
                 polygon_presets()
+            } else if id == "callout" {
+                callout_presets()
             } else {
                 presets(kind)
             };
@@ -651,15 +650,6 @@ pub fn groups(kind: Kind) -> Vec<PresetGroup> {
                 if id == "text_mono" {
                     style.text.as_mut().unwrap().font = TextFont::HackRegular;
                 }
-                use crate::callout::CalloutShape as S;
-                match id {
-                    "callout_box" | "callout_rounded" => {
-                        style.outline_shape = Some(Outline::Callout(S::Box))
-                    }
-                    "callout_oval" => style.outline_shape = Some(Outline::Callout(S::Oval)),
-                    "callout_cloud" => style.outline_shape = Some(Outline::Callout(S::Cloud)),
-                    _ => {}
-                }
             }
             if is_shape(kind) && id != "shape_other" {
                 let filled: Vec<_> = styles
@@ -676,6 +666,31 @@ pub fn groups(kind: Kind) -> Vec<PresetGroup> {
             PresetGroup { id, label, styles }
         })
         .collect()
+}
+
+/// One Callout group (BT, user review of BS14): three styles each for the box,
+/// rounded, oval and cloud callouts, in that order.
+fn callout_presets() -> Vec<ObjectStyle> {
+    use crate::callout::CalloutShape as S;
+    let base: Vec<ObjectStyle> = presets(Kind::Callout).into_iter().take(3).collect();
+    let mut out = Vec::new();
+    for (label, shape, rounded) in [
+        ("Callout", S::Box, false),
+        ("Rounded callout", S::Box, true),
+        ("Oval callout", S::Oval, false),
+        ("Cloud callout", S::Cloud, false),
+    ] {
+        for style in &base {
+            let mut style = style.clone();
+            style.name = format!("{label} · {}", style.name);
+            style.outline_shape = Some(Outline::Callout(shape));
+            if rounded {
+                style.corner_radius = 16.0;
+            }
+            out.push(style);
+        }
+    }
+    out
 }
 
 /// Original presets for currently implemented annotation types. Effects offer
@@ -1299,7 +1314,33 @@ mod outline_tests {
             Some(Outline::Regular(6))
         );
         let callouts: Vec<_> = groups(Kind::Callout).into_iter().map(|g| g.id).collect();
-        assert!(callouts.contains(&"callout_oval") && callouts.contains(&"callout_cloud"));
+        assert_eq!(
+            callouts.iter().filter(|g| g.starts_with("callout")).count(),
+            1,
+            "one Callout group"
+        );
+        let styles = &groups(Kind::Callout)
+            .into_iter()
+            .find(|g| g.id == "callout")
+            .unwrap()
+            .styles;
+        assert_eq!(styles.len(), 12, "three styles for each callout shape");
+        use crate::callout::CalloutShape as S;
+        let shapes: Vec<_> = styles
+            .iter()
+            .map(|s| (s.outline_shape, s.corner_radius > 0.))
+            .collect();
+        for (i, want) in [
+            (Some(Outline::Callout(S::Box)), false),
+            (Some(Outline::Callout(S::Box)), true),
+            (Some(Outline::Callout(S::Oval)), false),
+            (Some(Outline::Callout(S::Cloud)), false),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            assert!(shapes[i * 3..i * 3 + 3].iter().all(|s| *s == want), "{i}");
+        }
         for kind in [Kind::Blur, Kind::Pixelate] {
             let names: Vec<_> = presets(kind).into_iter().map(|s| s.name).collect();
             assert_eq!(names.len(), 5, "{kind:?}");

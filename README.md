@@ -6,13 +6,21 @@ ClipCraft brings image capture, instructional guides and video editing into one
 local Windows workspace. Capture your screen, point out what matters, add narration,
 and share a polished image, PDF or video. No ClipCraft account is required.
 
-**[Download 1.0.0-beta.2](https://github.com/pashiadesigns/ClipCraft/releases/tag/v1.0.0-beta.2)**
+**[Download 1.0.0-beta.3](https://github.com/pashiadesigns/ClipCraft/releases/tag/v1.0.0-beta.3)**
 · [Install & storage locations](docs/installing.md) · [Build from source](docs/building.md)
 · [Known limitations](#beta-notes)
 
 Windows 10/11, x64. Choose the **MSI installer** or extract the **portable ZIP**.
 This beta is unsigned. The source is available under Apache-2.0 with retained
 third-party notices. Older development project formats are not supported.
+
+## New in beta 3
+
+A fix release for beta 2: open and closed hand cursors appear only on rotation
+handles and the middle curve node of a line or arrow, and stay visible while you
+drag; one Callout preset group with box, rounded, oval and cloud styles; clearer
+Ellipse and Freehand blur and pixelate presets; and Free perspective corners that
+follow the pointer for the whole drag.
 
 ## New in beta 2
 
