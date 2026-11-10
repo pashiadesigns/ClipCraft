@@ -35,7 +35,7 @@
     "Automatic detection and tracking of sensitive information does not guarantee complete coverage. Review every flagged range and the whole video before sharing. Focus and Magnify are emphasis, not privacy tools; blur and pixelation may leave information inferable.",
     "Framed crossfades involving rotation, transparency or different frames can preview less smoothly than they export.",
     "Scrolling capture is Region-only. By website fills in only when the window title names the site.",
-    "Silent startup on some older Windows 11 laptops is still being investigated; Check ClipCraft.cmd in the portable ZIP creates a local report.",
+    "Silent startup on some older Windows 11 laptops is still being investigated.",
     "PDF text is outlined, not searchable. No automatic updater."
   ]
 }
