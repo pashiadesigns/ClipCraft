@@ -2,9 +2,10 @@
 
 **Capture a moment. Explain a workflow. Make it editable.**
 
-ClipCraft brings image capture, instructional guides and video editing into one
+ClipCraft brings screen capture, step-by-step guides and video editing into one
 local Windows workspace. Capture your screen, point out what matters, add narration,
-and share a polished image, PDF or video. No ClipCraft account is required.
+and share a polished image, PDF, GIF or video. Everything stays on your PC, and no
+ClipCraft account is required.
 
 **[Download 1.0.0-beta.3](https://github.com/pashiadesigns/ClipCraft/releases/tag/v1.0.0-beta.3)**
 · [Install & storage locations](docs/installing.md) · [Build from source](docs/building.md)
@@ -14,107 +15,131 @@ Windows 10/11, x64. Choose the **MSI installer** or extract the **portable ZIP**
 This beta is unsigned. The source is available under Apache-2.0 with retained
 third-party notices. Older development project formats are not supported.
 
-## New in beta 3
+## What's new
 
-A fix release for beta 2: open and closed hand cursors appear only on rotation
-handles and the middle curve node of a line or arrow, and stay visible while you
-drag; one Callout preset group with box, rounded, oval and cloud styles; clearer
-Ellipse and Freehand blur and pixelate presets; and Free perspective corners that
-follow the pointer for the whole drag.
+**Beta 3** fixes beta 2: hand cursors appear only on rotation handles and the
+middle curve node, and stay visible while you drag; one Callout preset group with
+box, rounded, oval and cloud styles; clearer Ellipse and Freehand blur presets;
+and Free perspective corners that follow the pointer for the whole drag.
 
-## New in beta 2
-
-- **Tracked video redaction:** redactions follow moving and scrolling text, and
-  Export video lists every moment that needs your review.
-- **Built-in Help:** illustrated, searchable articles; press F1 over any control.
-- **Video:** recorded cursor with smoothing and click marks, zooms that follow the
-  cursor, webcam picture-in-picture, keyframes and GIF Studio.
-- **Images:** ready-made shapes, oval and cloud callouts, shaped blur, filters,
-  borders and edges, perspective, crop ratios, palettes and watermarks.
-- **Workspace:** Preferences (Ctrl+Comma), snapping with an optional grid, a simpler
-  ribbon where Formatting holds every layout and canvas tool, and a clearer Library
-  with folders and filter chips.
+**Beta 2** was a large update: tracked video redaction with review, built-in
+illustrated Help, keyframes, GIF Studio, webcam picture-in-picture, filters and
+borders, Preferences, a clearer Library and a simpler ribbon. See the
+[release notes](https://github.com/pashiadesigns/ClipCraft/releases) for details.
 
 ## Images that explain
 
-![Editable image guide with Focus controls](docs/images/image-workflow.png)
+![Image guide with three steps and the Focus window properties](docs/images/image-workflow.png)
 
-Capture a region, window or fullscreen; stitch a scrolling region manually or
-automatically; or record actions as an editable **Step by Step** guide. Captures
-are saved to your local Library even when you send the result only to the clipboard.
+- **Annotate:** lines and arrows, rich text, ready-made shapes, box, rounded, oval
+  and cloud callouts, Icons, numbered Steps and Penlighter. Every drawing tool
+  starts from a preset, and you can save your own.
+- **Direct attention:** **Focus** keeps an area clear while blurring or darkening
+  everything beneath it. **Magnify** adds a magnified callout of any detail.
+  Labels and arrows stay sharp above both.
+- **Refine pictures:** crop with fixed ratios, Cut Out with shaped edges, a soft or
+  hard-edged Eraser, perspective, filters, color, borders and edges. Originals
+  stay editable; nothing is flattened until you export.
+- **Lay out:** alignment, distribution, layers, groups, snapping to objects and an
+  optional grid, color palettes, and reusable **Blocks** of objects.
+- **Build guides:** templates, sections, multipage layouts, Page Setup with physical
+  page sizes, margins, headers and footers, numbering, bleed and crop marks.
 
-- **Annotate:** Lines and arrows, rich text, shapes and callouts, Icons, numbered
-  Steps, Penlighter, and editable image frames.
-- **Direct attention:** Focus windows keep an area clear while blurring or
-  darkening the content beneath them. Combine effects, choose a frame shape and
-  keep labels and arrows above the effect.
-- **Build guides:** reusable templates, sections, multipage layouts, Page Setup,
-  physical page sizes, margins, headers/footers, numbering, bleed and crop marks.
-- **Refine:** layers, groups, alignment, snapping, crop, Cut Out, Eraser, rotation,
-  flips, text styles, lists and presets. Original content stays editable.
-- **Review privacy:** local OCR and sensitive-information suggestions for still
-  images; opaque redaction, blur and pixelation with optional redaction labels.
+Export PNG, JPEG or PDF, print from Windows, add a watermark, or save an editable
+`.iclip` project. SVG and EPS files import as editable pictures.
 
-Export PNG, JPEG or PDF; print from Windows; save an editable `.iclip` project.
+## Capture the way you work
+
+![Capture Clip settings open over the editor](docs/images/capture-workflow.png)
+
+**Capture Clip** and **Capture Video** sit at the right end of the tab row. Capture
+a region, a window or the full screen; stitch a scrolling region; or record your
+clicks as an editable **Step by Step** guide. Choose a start delay and whether to
+open the editor or copy to the clipboard, or capture directly from a hotkey or the
+system tray. Every capture is saved to your local Library.
 
 ## Video with context
 
-![Video timeline with annotations, narration and motion properties](docs/images/video-workflow.png)
+![Video editor with tracks, narration and motion properties](docs/images/video-workflow.png)
 
-Record your screen or a selected window with microphone and system audio, then
-continue in the editor. Add recordings to an existing project, import media, or
-record narration with an optional webcam.
+Record your screen or a window with microphone and system audio, then keep editing
+in the same workspace.
 
-- Arrange video, images, audio, voiceover and annotations on separate tracks.
-- Trim, split, duplicate, link and move clips together; adjust fades, volume and
-  timing, and generate a held still frame from a video.
-- Add animated text, shapes, arrows, Icons and Steps. Use entrance/exit presets,
-  path drawing, typewriter text and compatible animation combinations.
-- Add editable **Zoom** and **Focus** objects: their position in the track stack
-  determines which underlying content they affect.
-- Crop, pan and zoom inside video frames; change frame shapes, strokes and shadows.
+- **Recorded cursor:** adjustable smoothing and click marks, and zooms that can
+  follow the cursor.
+- **Webcam picture-in-picture** that starts with the first screen frame and skips
+  pauses.
+- **Tracks** for video, pictures, audio, narration and annotations. Trim, split,
+  link and move clips together, edit several clips at once, and Alt+drag to copy.
+- **Animate** text, shapes, arrows, Icons and Steps with entrance and exit presets,
+  or with keyframes for position, size and color (Smooth, Linear or Hold).
+- **Zoom** and **Focus** objects affect only the tracks beneath them. **Jump to
+  Object** finds any object on the timeline.
+- **New video from pictures,** with each picture fading into the next.
+- **GIF Studio** cuts short loops from any part of the timeline.
 
-Export MP4 or save an editable `.vclip` with its accompanying media folder.
+Export MP4 with a quality preset and a size estimate, or save an editable `.vclip`
+with its media folder.
 
-## Narration and audio, in the same workflow
+## Privacy review before you share
 
-![Effects Workstation with EQ, live spectrum and an editable vocal chain](docs/images/effects-workstation.png)
+![Export video listing a tracked redaction that needs review](docs/images/privacy-review.png)
 
-Record and review takes, choose input/output devices, monitor through headphones,
-and switch stereo/mono. The Effects Workstation provides an ordered, editable
-chain of **parametric EQ, compression, clarity, de-essing, leveling and limiting**.
-Apply effects to a clip or a whole track, adjust them during playback, and compare
-original and processed sound. Local **Analyze Voice** suggests settings that you
-can audition and refine; the original recording is preserved.
+**Find Sensitive Info** reads images and videos on your PC and suggests what to
+hide. In a video, redactions follow text as it moves or scrolls; uncertain
+moments are flagged, and **Export video** lists every redaction that still needs
+your review, with Show and Previous/Next to step through them. Exported redactions
+remove the covered content; your project keeps the originals.
+[How detection works and what it can miss.](docs/security-model.md)
 
-## Built around your workflow
+## Narration and audio
 
-![Image and video capture controls](docs/images/capture-workflow.png)
+![Effects Workstation with a parametric EQ and an editable vocal chain](docs/images/effects-workstation.png)
 
-The Library includes search, folders, tags and application/website/date filters. Save
-templates and presets, customize shortcuts, capture from the tray, and switch
-between image and video projects without leaving ClipCraft.
+Record and review takes, choose input and output devices, and monitor through
+headphones. The Effects Workstation provides an ordered, editable chain of
+**parametric EQ, compression, clarity, de-essing, leveling and limiting** for a
+clip or a whole track. Adjust it during playback and compare the original and
+processed sound. **Analyze Voice** suggests settings that you can audition and
+refine; the original recording is preserved.
 
-Screenshots above are rendered from the application with original synthetic
-demonstration content. Release packages contain no personal projects, recordings,
-saved settings or prepopulated Recent items.
+## A Library that keeps up
+
+![Library with folders, sources, tags and a pinned capture](docs/images/library.png)
+
+Search every capture, sort them into folders, tag them, pin favorites, and filter by
+type, app, website or date. Recent captures stay one click away in the editor.
+
+## Help is built in
+
+![ClipCraft Help with illustrated, searchable articles](docs/images/help.png)
+
+Illustrated, searchable articles cover every tool. Press **F1** over any control to
+open its article. **Preferences** (Ctrl+Comma) holds Start with Windows, editor,
+capture and Library settings, shortcuts and the toolbar.
+
+Screenshots above are rendered from the application with synthetic demonstration
+content. Release packages contain no personal projects, recordings, saved settings
+or prepopulated Recent items.
 
 ## Beta notes
 
-- **Framed crossfades:** the missing-preview/transparent-canvas defect is repaired.
-  Transitions involving rotated, transparent, differently framed or fit-mode
-  video can still play less smoothly. Export uses the full-resolution compositor.
-- **Video privacy:** tracked redactions follow moving and scrolling text and flag
-  uncertain moments, but detection never guarantees full coverage. Review every
-  flagged range and the whole video before sharing. Focus and Magnify are visual
-  emphasis, not redaction tools. Blur/pixelation can leave information inferable.
-- **Share exports for redaction:** editable projects and their media retain
+- **Video privacy:** detection assists review and never guarantees full coverage.
+  Review every flagged range and the whole video before sharing. Focus and Magnify
+  are visual emphasis, not redaction tools. Blur and pixelation can leave
+  information inferable.
+- **Share exports, not projects:** editable projects and their media keep the
   original content. Do not share them as sanitized documents. See
   [the security and data model](docs/security-model.md).
+- **Framed crossfades** involving rotation, transparency or different frames can
+  preview less smoothly than they export. Export uses the full-resolution
+  compositor.
 - Scrolling capture is limited to a selected region. Exclude fixed headers and
-  footers from that region.
+  footers from that region. By website fills in only when the window title names
+  the site.
 - Complex effects and high-resolution webcam previews may be slower on some
   systems. Capture devices, drivers and Windows audio routing can affect results.
+- Silent startup on some older Windows 11 laptops is still being investigated.
 - PDF text is exported as vector outlines, not searchable text. Installed fonts
   are referenced by editable projects; missing fonts use a fallback.
 - This beta does not support old development projects or automatic updates.

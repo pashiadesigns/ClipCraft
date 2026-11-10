@@ -109,6 +109,15 @@ impl HistoryPanel {
             .find(|e| e.id == id)
             .cloned()
     }
+    /// Every Library thumbnail has been decoded and uploaded (public screenshots).
+    #[cfg(test)]
+    pub(crate) fn thumbnails_settled(&self) -> bool {
+        self.thumbnail_jobs.is_empty()
+            && self
+                .entries()
+                .iter()
+                .all(|e| self.textures.get(&e.id).is_some_and(Option::is_some))
+    }
     pub(crate) fn entries(&self) -> Vec<Entry> {
         self.store
             .as_ref()
