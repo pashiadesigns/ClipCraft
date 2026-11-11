@@ -1771,6 +1771,39 @@ mod tests {
         .unwrap();
         let joined = pdf_import::open(std::fs::read(&path).unwrap(), "").unwrap();
         assert_eq!(joined.page_count(), 30);
+        // Find Sensitive Info offers This part / All 2 parts; with All
+        // parts, moving on opens part 2, which is then scanned.
+        e.open_privacy_review();
+        let input = || egui::RawInput {
+            screen_rect: Some(egui::Rect::from_min_size(
+                egui::Pos2::ZERO,
+                egui::vec2(1200., 900.),
+            )),
+            ..Default::default()
+        };
+        ctx.run_ui(input(), |ui| e.show_privacy_review(ui.ctx()))
+            .textures_delta
+            .clear();
+        let painted = crate::property_layout::tests::PaintedOutput(
+            ctx.run_ui(input(), |ui| e.show_privacy_review(ui.ctx())),
+        );
+        for label in ["This part", "All 2 parts"] {
+            assert!(
+                crate::color_widgets::tests::text_rect(&painted.shapes, label).is_some(),
+                "{label}"
+            );
+        }
+        e.privacy_review_all_parts_for_test();
+        assert!(e.review_next_part_for_test(&ctx));
+        // The switch waits for any Library save in flight, as in the app.
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
+        while e.session.document.part.as_ref().map(|p| p.index) != Some(2) {
+            assert!(std::time::Instant::now() < deadline, "the next part opened");
+            e.autosave_tick(&ctx, true);
+            e.finish_autosave_action(&ctx);
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+        assert!(!e.review_next_part_for_test(&ctx), "part 2 is the last");
     }
     #[test]
     fn inserting_pdf_pages_from_the_dialog_adds_them_after_the_current_page() {

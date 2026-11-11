@@ -35,6 +35,11 @@ pub(super) struct State {
     cover: crate::sensitive_ui::Cover,
     /// What the review picture currently shows.
     shown: Option<(Vec<bool>, crate::sensitive_ui::Cover)>,
+    /// A linked part: scan every part, reviewed part by part (approved
+    /// beta 6 tab 7).
+    all_parts: bool,
+    /// The part being opened next, scanned once it has loaded.
+    waiting_for: Option<u32>,
 }
 fn fingerprint(document: &capture_core::Document) -> Result<u64, String> {
     let bytes = serde_json::to_vec(document).map_err(|e| e.to_string())?;
@@ -71,6 +76,13 @@ impl Editor {
         self.privacy_review.options = options;
         self.privacy_review.phrases = phrases;
         self.privacy_review.cover = cover;
+        // A PDF that came in as linked parts is reviewed part by part.
+        self.privacy_review.all_parts = self
+            .session
+            .document
+            .part
+            .as_ref()
+            .is_some_and(|p| p.total > 1);
         self.scan_sensitive(ctx);
     }
     fn scan_sensitive(&mut self, ctx: &egui::Context) {
@@ -117,10 +129,60 @@ impl Editor {
             ctx.request_repaint();
         });
     }
+    /// All parts: opens the part after this one; its scan starts once it
+    /// has loaded. False when this is the last part.
+    fn review_next_part(&mut self, ctx: &egui::Context) -> bool {
+        let Some(part) = self.session.document.part.clone() else {
+            return false;
+        };
+        if part.index >= part.total {
+            return false;
+        }
+        let next = self
+            .part_siblings(&part)
+            .into_iter()
+            .find(|e| e.part.as_ref().is_some_and(|p| p.index == part.index + 1));
+        let Some(next) = next else {
+            self.privacy_review.error = format!(
+                "Part {} of {} isn't in the Library, so the review stops here.",
+                part.index + 1,
+                part.total
+            );
+            return false;
+        };
+        let state = &mut self.privacy_review;
+        state.result = None;
+        state.checked.clear();
+        state.texture = None;
+        state.shown = None;
+        state.waiting_for = Some(part.index + 1);
+        self.open_history(&next.id, ctx);
+        true
+    }
+    #[cfg(test)]
+    pub(crate) fn privacy_review_all_parts_for_test(&mut self) {
+        self.privacy_review.all_parts = true;
+    }
+    #[cfg(test)]
+    pub(crate) fn review_next_part_for_test(&mut self, ctx: &egui::Context) -> bool {
+        self.review_next_part(ctx)
+    }
     pub(super) fn show_privacy_review(&mut self, ctx: &egui::Context) {
         if !self.privacy_review.open {
             return;
         }
+        if let Some(index) = self.privacy_review.waiting_for
+            && self.session.document.part.as_ref().map(|p| p.index) == Some(index)
+        {
+            self.privacy_review.waiting_for = None;
+            self.scan_sensitive(ctx);
+        }
+        let part = self
+            .session
+            .document
+            .part
+            .clone()
+            .filter(|p| p.total > 1 && !self.is_video());
         if let Some(result) =
             self.privacy_review
                 .pending
@@ -148,10 +210,12 @@ impl Editor {
         self.privacy_review.options.custom = self.quick_controls.sensitive_types();
         let mut types_changed = false;
         let state = &mut self.privacy_review;
-        let busy = state.pending.is_some();
+        let busy = state.pending.is_some() || state.waiting_for.is_some();
         let mut scan = false;
         let mut apply = false;
         let mut close = false;
+        let mut skip = false;
+        let more_parts = state.all_parts && part.as_ref().is_some_and(|p| p.index < p.total);
         if let Some(result) = &state.result
             && state
                 .shown
@@ -179,7 +243,13 @@ impl Editor {
         let modal =
             crate::controls::Modal::new(egui::Id::unique("sensitive-review")).show(ctx, |ui| {
                 ui.set_width(820_f32.min((ctx.content_rect().width() - 48.).max(340.)));
-                crate::controls::dialog_title(ui, "Find Sensitive Info");
+                match &part {
+                    Some(p) if state.all_parts => crate::controls::dialog_title(
+                        ui,
+                        &format!("Find Sensitive Info · part {} of {}", p.index, p.total),
+                    ),
+                    _ => crate::controls::dialog_title(ui, "Find Sensitive Info"),
+                }
                 if video {
                     ui.label(VIDEO_LIMITATION);
                     close = ui
@@ -193,6 +263,18 @@ impl Editor {
                     types_changed |= changed;
                     crate::controls::focus_once(&field, &mut state.focus);
                 });
+                if let Some(p) = &part {
+                    use crate::tips::Tip as _;
+                    let all = format!("All {} parts", p.total);
+                    ui.add_enabled_ui(!busy, |ui| {
+                        crate::watermark_ui::row(ui, "Scan", |ui| {
+                            ui.selectable_value(&mut state.all_parts, false, "This part")
+                                .tip("This part · Scan only the part that is open.");
+                            ui.selectable_value(&mut state.all_parts, true, all.as_str())
+                                .tip("All parts · Scan every part of this PDF. Each part's findings are reviewed in turn: apply or skip them, and the next part opens.");
+                        });
+                    });
+                }
                 ui.add_space(4.);
                 let row = egui::vec2(ui.available_width(), 28.);
                 ui.allocate_ui_with_layout(
@@ -212,7 +294,17 @@ impl Editor {
                             .clicked();
                         if busy {
                             ui.spinner();
-                            ui.label("Scanning visible text…");
+                            ui.label(if state.waiting_for.is_some() {
+                                "Opening the next part…"
+                            } else {
+                                "Scanning visible text…"
+                            });
+                        } else if more_parts && state.result.is_some() {
+                            use crate::tips::Tip as _;
+                            skip = ui
+                                .button("Skip to next part")
+                                .tip("Skip to next part · Leave this part as it is and scan the next one.")
+                                .clicked();
                         }
                     },
                 );
@@ -305,6 +397,13 @@ impl Editor {
         }
         if apply {
             close = self.apply_sensitive_findings();
+        }
+        // All parts: after this part's findings are applied or skipped, the
+        // next part opens and is scanned with the same choices.
+        if (skip || (apply && close)) && more_parts && self.review_next_part(ctx) {
+            close = false;
+        } else if apply && close && self.privacy_review.all_parts && part.is_some() {
+            self.status = "Reviewed every part.".into();
         }
         if close || crate::text_edit::cancel_on_escape(&modal) {
             // Options carry over; the cover goes back to Redact.

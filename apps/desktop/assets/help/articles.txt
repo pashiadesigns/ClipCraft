@@ -377,7 +377,7 @@ When you export to PDF, SVG drawings stay shapes. Only the parts under a redacti
 id: new-from-pdf
 section: Images
 where: File › New › From PDF
-controls: From PDF, New from PDF, Change file…, Editable pages, Pictures, Scan after import, Include all parts, Previous part, Next part, PDF pages…, Insert PDF pages, Searchable text
+controls: From PDF, New from PDF, Change file…, Editable pages, Pictures, Scan after import, Include all parts, Previous part, Next part, PDF pages…, Insert PDF pages, Searchable text, This part, All parts, Skip to next part
 keywords: pdf, document, pages, import, open pdf, redact pdf, guide, acrobat
 ---
 New from PDF turns the pages of a PDF into a guide, one PDF page per guide page, sized to the PDF. Every image tool works on them as usual: Steps, Focus, Magnify, Obfuscate, Blocks and the rest.
@@ -392,7 +392,7 @@ Turn on Scan after import to look for sensitive information as soon as the guide
 
 A password-protected PDF asks for its password. ClipDesigner doesn't keep the password, and the guide is not protected. A damaged file, or one that isn't a PDF, imports nothing.
 
-One guide holds about 24 Letter pages. A longer PDF comes in as linked parts, such as "Vendor packet · part 1 of 10", grouped in the Library; Part 1 of 10 in the footer moves between them. When you export a part, Include all parts in one file puts every part back together: one PDF, or numbered pictures for PNG and JPEG.
+One guide holds about 24 Letter pages. A longer PDF comes in as linked parts, such as "Vendor packet · part 1 of 10", grouped in the Library; Part 1 of 10 in the footer moves between them. When you export a part, Include all parts in one file puts every part back together: one PDF, PowerPoint or Word file, or numbered pictures for PNG and JPEG. Find Sensitive Info can scan This part or All parts; with All parts, each part's findings are reviewed in turn, and applying or skipping them opens the next part.
 
 When you export to PDF, editable pages stay shapes. Where a redaction, blur or pixelation touches a page, only what is under it becomes a picture, and the covered words are removed from the file, not hidden. The project keeps the original pages, so share exports, not projects.
 
