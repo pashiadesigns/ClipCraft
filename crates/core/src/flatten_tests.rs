@@ -104,7 +104,7 @@ fn flattened_resize_is_one_history_step_with_exact_composite_resampling() {
     assert!(session.document.annotations.is_empty());
     assert_eq!(
         session.document.render().unwrap(),
-        crate::resize::resample(pixels.clone(), 320, 200)
+        crate::resize::resample_with(pixels.clone(), 320, 200, Default::default())
     );
     assert_eq!(session.document.source_png, original.source_png);
     assert_eq!(session.document.source_size, Some([640, 400]));
@@ -154,7 +154,7 @@ fn flattened_resize_small_sizes_and_canvas_baseline_do_not_apply_object_style_li
         .unwrap();
     assert_eq!(
         session.document.render().unwrap(),
-        crate::resize::resample(pixels.clone(), 1, 1)
+        crate::resize::resample_with(pixels.clone(), 1, 1, Default::default())
     );
     assert_eq!(session.document.source_size, Some([640, 400]));
     session.execute(Command::Undo).unwrap();

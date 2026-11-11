@@ -67,6 +67,14 @@ pub struct RasterImage {
 }
 impl RasterImage {
     pub(crate) fn render(&self, width: u32, height: u32) -> Result<RgbaImage> {
+        self.render_with(width, height, crate::resize::Resampling::Automatic)
+    }
+    pub(crate) fn render_with(
+        &self,
+        width: u32,
+        height: u32,
+        mode: crate::resize::Resampling,
+    ) -> Result<RgbaImage> {
         let bytes = STANDARD.decode(&self.png)?;
         let reader = image::ImageReader::with_format(Cursor::new(&bytes), ImageFormat::Png);
         if reader.into_dimensions()? != (self.width, self.height) {
@@ -78,7 +86,7 @@ impl RasterImage {
         if (width, height) == (self.width, self.height) {
             Ok(image)
         } else {
-            Ok(crate::resize::resample(image, width, height))
+            Ok(crate::resize::resample_with(image, width, height, mode))
         }
     }
     pub(crate) fn from_image(image: &RgbaImage) -> Result<Self> {

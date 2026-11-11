@@ -73,7 +73,157 @@ pub fn transform_objects(
         .collect()
 }
 
+/// Rotates objects about `center` by `degrees` (clockwise on screen), then
+/// moves them by `offset`. Objects stay editable; their own geometry is kept.
+pub(crate) fn rotate_objects(
+    objects: &[crate::Annotation],
+    center: [f32; 2],
+    degrees: f32,
+    offset: [f32; 2],
+) -> Result<Vec<crate::Annotation>> {
+    let rotation = crate::rotation::Rotation::new(center, degrees)?;
+    let map = |p: [f32; 2]| {
+        let q = rotation.point(p);
+        [q[0] + offset[0], q[1] + offset[1]]
+    };
+    objects
+        .iter()
+        .map(|a| {
+            if !a.can_rotate() {
+                let mut b = a.clone();
+                b.start = map(a.start);
+                b.end = map(a.end);
+                b.points = a.points.iter().copied().map(map).collect();
+                if let Some(style) = &mut b.callout {
+                    style.pointer = map(style.pointer);
+                }
+                return Ok(b);
+            }
+            let old = a.rotation().center;
+            let new = map(old);
+            let b = crate::canvas_expansion::translated(
+                std::slice::from_ref(a),
+                [new[0] - old[0], new[1] - old[1]],
+            )?
+            .remove(0);
+            b.with_rotation(a.rotation_degrees + degrees)
+        })
+        .collect()
+}
+
+/// The picture rotated about its center, sampled smoothly. `grow` makes the
+/// canvas big enough for every corner; new corners get `corners`.
+pub(crate) fn rotate_pixels(
+    source: &image::RgbaImage,
+    degrees: f32,
+    grow: bool,
+    corners: [u8; 4],
+) -> image::RgbaImage {
+    let (w, h) = (f64::from(source.width()), f64::from(source.height()));
+    let (sin, cos) = f64::from(degrees).to_radians().sin_cos();
+    let (nw, nh) = if grow {
+        (
+            (w * cos.abs() + h * sin.abs()).round().max(1.),
+            (w * sin.abs() + h * cos.abs()).round().max(1.),
+        )
+    } else {
+        (w, h)
+    };
+    let premultiplied = |p: &image::Rgba<u8>| {
+        let a = f64::from(p[3]) / 255.;
+        [
+            f64::from(p[0]) * a,
+            f64::from(p[1]) * a,
+            f64::from(p[2]) * a,
+            a,
+        ]
+    };
+    let at = |x: i64, y: i64| -> [f64; 4] {
+        if x < 0 || y < 0 || x >= i64::from(source.width()) || y >= i64::from(source.height()) {
+            [0.; 4]
+        } else {
+            premultiplied(source.get_pixel(x as u32, y as u32))
+        }
+    };
+    let back = premultiplied(&image::Rgba(corners));
+    image::RgbaImage::from_fn(nw as u32, nh as u32, |x, y| {
+        // Back from the output pixel's center to the source, turning the other way.
+        let dx = f64::from(x) + 0.5 - nw / 2.;
+        let dy = f64::from(y) + 0.5 - nh / 2.;
+        let sx = dx * cos + dy * sin + w / 2. - 0.5;
+        let sy = -dx * sin + dy * cos + h / 2. - 0.5;
+        let (x0, y0) = (sx.floor(), sy.floor());
+        let (fx, fy) = (sx - x0, sy - y0);
+        let (x0, y0) = (x0 as i64, y0 as i64);
+        let mut c = [0.; 4];
+        for (px, py, weight) in [
+            (x0, y0, (1. - fx) * (1. - fy)),
+            (x0 + 1, y0, fx * (1. - fy)),
+            (x0, y0 + 1, (1. - fx) * fy),
+            (x0 + 1, y0 + 1, fx * fy),
+        ] {
+            let p = at(px, py);
+            for i in 0..4 {
+                c[i] += p[i] * weight;
+            }
+        }
+        // The picture over the corner color.
+        let a = c[3] + back[3] * (1. - c[3]);
+        if a <= 0. {
+            return image::Rgba([0; 4]);
+        }
+        let mut out = [0u8; 4];
+        for i in 0..3 {
+            // Color channels are already 0-255 (premultiplied); alpha is 0-1.
+            out[i] = ((c[i] + back[i] * (1. - c[3])) / a).round().clamp(0., 255.) as u8;
+        }
+        out[3] = (a * 255.).round().clamp(0., 255.) as u8;
+        image::Rgba(out)
+    })
+}
+
 impl Document {
+    /// Rotate Image by any angle (EDIT-038). Returns false when nothing changes.
+    pub(crate) fn rotate_image(
+        &mut self,
+        degrees: f32,
+        grow: bool,
+        corners: Option<[u8; 4]>,
+    ) -> Result<bool> {
+        if !degrees.is_finite() || degrees.abs() > 360. {
+            return Err(crate::Error::Invalid(
+                "Choose an angle from -360 to 360 degrees.".into(),
+            ));
+        }
+        if degrees.rem_euclid(360.) == 0. {
+            return Ok(false);
+        }
+        if self.guide.as_ref().is_some_and(|g| g.pages.is_some()) {
+            return Err(crate::Error::Invalid(
+                "Rotate Image works on single images. On guide pages, rotate the objects instead."
+                    .into(),
+            ));
+        }
+        // Every fallible step happens before the document changes.
+        let base = self.base_image()?;
+        let pixels = rotate_pixels(&base, degrees, grow, corners.unwrap_or([0; 4]));
+        crate::validate_dimensions(pixels.width(), pixels.height())?;
+        let center = [self.width as f32 / 2., self.height as f32 / 2.];
+        let offset = [
+            pixels.width() as f32 / 2. - center[0],
+            pixels.height() as f32 / 2. - center[1],
+        ];
+        let annotations = rotate_objects(&self.annotations, center, degrees, offset)?;
+        let raster = std::sync::Arc::new(RasterImage::from_image(&pixels)?);
+        self.source_size = Some(self.source_size.unwrap_or([self.width, self.height]));
+        self.width = pixels.width();
+        self.height = pixels.height();
+        self.raster = Some(raster);
+        self.annotations = annotations;
+        self.auto_canvas_base = None;
+        self.version = crate::MAX_PROJECT_VERSION;
+        Ok(true)
+    }
     pub(crate) fn transform_image(&mut self, transform: ImageTransform) -> Result<bool> {
         let source = self.render()?;
         let image = match transform {
@@ -104,6 +254,129 @@ mod tests {
     use super::*;
     use crate::{Command, Placement, Session};
     use image::{Rgba, RgbaImage};
+
+    fn photo(w: u32, h: u32) -> Document {
+        let pixels = RgbaImage::from_fn(w, h, |x, y| Rgba([(x * 3) as u8, (y * 5) as u8, 90, 255]));
+        Document::from_image(pixels).unwrap()
+    }
+    #[test]
+    fn rotate_by_any_angle_keeps_objects_editable_and_is_one_undo() {
+        let mut doc = photo(200, 100);
+        let mut shape = crate::templates::text(1, [10., 10., 40., 30.], "", 12., false);
+        shape.kind = crate::Kind::Rectangle;
+        shape.fill = Some([20, 130, 200, 255]);
+        doc.annotations.push(shape.clone());
+        let before = serde_json::to_vec(&doc).unwrap();
+        let mut session = Session::new(doc).unwrap();
+        // A quarter turn with Grow to fit matches the exact 90-degree turn.
+        session
+            .execute(Command::RotateImage {
+                degrees: 90.,
+                grow: true,
+                corners: None,
+            })
+            .unwrap();
+        let d = &session.document;
+        assert_eq!([d.width, d.height], [100, 200]);
+        let exact = image::imageops::rotate90(&photo(200, 100).base_image().unwrap());
+        let base = d.base_image().unwrap();
+        let off = base
+            .pixels()
+            .zip(exact.pixels())
+            .filter(|(a, b)| (0..4).any(|i| (i16::from(a[i]) - i16::from(b[i])).abs() > 2))
+            .count();
+        assert!(
+            off < 300,
+            "{off} pixels differ from an exact quarter turn: {:?} vs {:?}, {:?} vs {:?}",
+            base.get_pixel(0, 0),
+            exact.get_pixel(0, 0),
+            base.get_pixel(50, 120),
+            exact.get_pixel(50, 120)
+        );
+        // The object turned with the picture and is still a rectangle object.
+        let a = &d.annotations[0];
+        assert_eq!(a.kind, crate::Kind::Rectangle);
+        assert!((a.rotation_degrees - 90.).abs() < 0.01);
+        let c = a.rotation().center;
+        // A clockwise quarter turn of a 200 x 100 picture sends (x, y) to (100 - y, x).
+        let o = shape.rotation().center;
+        assert!(
+            (c[0] - (100. - o[1])).abs() < 0.6 && (c[1] - o[0]).abs() < 0.6,
+            "{o:?} -> {c:?}"
+        );
+        session.execute(Command::Undo).unwrap();
+        assert_eq!(serde_json::to_vec(&session.document).unwrap(), before);
+    }
+    #[test]
+    fn rotate_keep_size_crops_corners_and_grow_fits_them() {
+        let mut keep = photo(200, 100);
+        assert!(keep.rotate_image(30., false, None).unwrap());
+        assert_eq!([keep.width, keep.height], [200, 100]);
+        let k = keep.base_image().unwrap();
+        assert_eq!(k.get_pixel(0, 0)[3], 0, "new corners are transparent");
+        let mut grow = photo(200, 100);
+        assert!(
+            grow.rotate_image(30., true, Some([255, 255, 255, 255]))
+                .unwrap()
+        );
+        assert_eq!([grow.width, grow.height], [223, 187]);
+        assert_eq!(
+            grow.base_image().unwrap().get_pixel(0, 0).0,
+            [255, 255, 255, 255]
+        );
+        let mut same = photo(20, 20);
+        assert!(!same.rotate_image(360., true, None).unwrap());
+        assert!(same.rotate_image(f32::NAN, true, None).is_err());
+        assert!(same.rotate_image(400., true, None).is_err());
+    }
+    #[test]
+    fn resampling_choice_is_saved_and_changes_only_resized_pictures() {
+        let doc = photo(64, 48);
+        let mut session = Session::new(doc).unwrap();
+        session
+            .execute(Command::ResizeImageResampled {
+                width: 128,
+                height: 96,
+                resampling: crate::resize::Resampling::Nearest,
+            })
+            .unwrap();
+        let d = &session.document;
+        assert_eq!(
+            d.canvas_behavior.resampling,
+            crate::resize::Resampling::Nearest
+        );
+        let nearest = d.base_image().unwrap();
+        // Nearest copies source pixels exactly: each 2 x 2 block is one color.
+        assert_eq!(nearest.get_pixel(10, 10), nearest.get_pixel(11, 11));
+        let json = serde_json::to_string(d).unwrap();
+        assert!(json.contains("\"resampling\":\"nearest\""));
+        let mut automatic = Session::new(photo(64, 48)).unwrap();
+        automatic
+            .execute(Command::ResizeImage {
+                width: 128,
+                height: 96,
+            })
+            .unwrap();
+        assert!(
+            !serde_json::to_string(&automatic.document)
+                .unwrap()
+                .contains("resampling")
+        );
+        assert_ne!(automatic.document.base_image().unwrap(), nearest);
+        // Changing only the method at the same size is still one undoable step.
+        session
+            .execute(Command::ResizeImageResampled {
+                width: 128,
+                height: 96,
+                resampling: crate::resize::Resampling::Sharp,
+            })
+            .unwrap();
+        session.execute(Command::Undo).unwrap();
+        assert_eq!(
+            session.document.canvas_behavior.resampling,
+            crate::resize::Resampling::Nearest
+        );
+    }
     #[test]
     fn selected_transforms_keep_sources_vectors_text_and_exact_undo() {
         use std::sync::Arc;

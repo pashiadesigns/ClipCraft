@@ -19,6 +19,12 @@ pub struct CanvasBehavior {
     /// Filters, border and edge for the whole picture.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub finish: Option<crate::picture_finish::Finish>,
+    /// How the picture is resampled after Resize Image (EDIT-028).
+    #[serde(
+        default,
+        skip_serializing_if = "crate::resize::Resampling::is_automatic"
+    )]
+    pub resampling: crate::resize::Resampling,
 }
 impl Default for CanvasBehavior {
     fn default() -> Self {
@@ -29,6 +35,7 @@ impl Default for CanvasBehavior {
             page_owners: BTreeMap::new(),
             perspective: None,
             finish: None,
+            resampling: Default::default(),
         }
     }
 }

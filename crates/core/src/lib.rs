@@ -624,8 +624,9 @@ impl Document {
 
     pub fn base_image(&self) -> Result<RgbaImage> {
         self.validate()?;
+        let mode = self.canvas_behavior.resampling;
         if let Some(raster) = &self.raster {
-            return raster.render(self.width, self.height);
+            return raster.render_with(self.width, self.height, mode);
         }
         if self.source_png.is_empty() {
             return Ok(RgbaImage::from_pixel(
@@ -647,7 +648,12 @@ impl Document {
         if dimensions == (self.width, self.height) {
             Ok(original)
         } else {
-            Ok(resize::resample(original, self.width, self.height))
+            Ok(resize::resample_with(
+                original,
+                self.width,
+                self.height,
+                mode,
+            ))
         }
     }
 
@@ -1050,6 +1056,20 @@ pub enum Command {
         width: u32,
         height: u32,
     },
+    /// Resize Image with a chosen resampling method (EDIT-028).
+    ResizeImageResampled {
+        width: u32,
+        height: u32,
+        resampling: resize::Resampling,
+    },
+    /// Rotate the whole picture by any angle (EDIT-038); objects rotate with
+    /// it and stay editable. `grow` enlarges the canvas so nothing is cut off;
+    /// `corners` fills the new corners (None is transparent).
+    RotateImage {
+        degrees: f32,
+        grow: bool,
+        corners: Option<[u8; 4]>,
+    },
     /// Flatten at the current size and resize in one reversible operation.
     ResizeImageFlattened {
         width: u32,
@@ -1292,6 +1312,8 @@ impl Session {
                     | Command::SetFinish { .. }
                     | Command::CropImage { .. }
                     | Command::ResizeImage { .. }
+                    | Command::ResizeImageResampled { .. }
+                    | Command::RotateImage { .. }
                     | Command::ResizeImageFlattened { .. }
                     | Command::ResizeCanvas { .. }
             )
@@ -1560,29 +1582,35 @@ impl Session {
                         }
                         self.document.resize_canvas(width, height, placement)?;
                     }
+                    Command::RotateImage {
+                        degrees,
+                        grow,
+                        corners,
+                    } => {
+                        if !self.document.rotate_image(degrees, grow, corners)? {
+                            return Ok(());
+                        }
+                    }
+                    Command::ResizeImageResampled {
+                        width,
+                        height,
+                        resampling,
+                    } => {
+                        let same_size =
+                            (width, height) == (self.document.width, self.document.height);
+                        if same_size && self.document.canvas_behavior.resampling == resampling {
+                            return Ok(());
+                        }
+                        self.document.canvas_behavior.resampling = resampling;
+                        if !same_size {
+                            self.document.resize_image_to(width, height)?;
+                        }
+                    }
                     Command::ResizeImage { width, height } => {
                         if (width, height) == (self.document.width, self.document.height) {
                             return Ok(());
                         }
-                        let annotations = self.document.resized_annotations(width, height)?;
-                        if let Some(guide) = &mut self.document.guide {
-                            let scale = height as f32 / self.document.height as f32;
-                            guide.top *= scale;
-                            for section in &mut guide.sections {
-                                section.height *= scale;
-                            }
-                        }
-                        let original_size = self
-                            .document
-                            .source_size
-                            .unwrap_or([self.document.width, self.document.height]);
-                        self.document.source_size = ([width, height] != original_size
-                            || self.document.raster.is_some())
-                        .then_some(original_size);
-                        self.document.width = width;
-                        self.document.height = height;
-                        self.document.annotations = annotations;
-                        self.document.auto_canvas_base = None;
+                        self.document.resize_image_to(width, height)?;
                     }
                     Command::ResizeImageFlattened { width, height } => {
                         validate_dimensions(width, height)?;

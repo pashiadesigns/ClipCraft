@@ -2,6 +2,26 @@ use crate::{Annotation, Document, Error, Result, validate_dimensions};
 use image::{Rgba, RgbaImage};
 
 impl Document {
+    /// Resize Image: objects scale with the picture and stay editable; the
+    /// picture itself is resampled when drawn.
+    pub(crate) fn resize_image_to(&mut self, width: u32, height: u32) -> Result<()> {
+        let annotations = self.resized_annotations(width, height)?;
+        if let Some(guide) = &mut self.guide {
+            let scale = height as f32 / self.height as f32;
+            guide.top *= scale;
+            for section in &mut guide.sections {
+                section.height *= scale;
+            }
+        }
+        let original_size = self.source_size.unwrap_or([self.width, self.height]);
+        self.source_size =
+            ([width, height] != original_size || self.raster.is_some()).then_some(original_size);
+        self.width = width;
+        self.height = height;
+        self.annotations = annotations;
+        self.auto_canvas_base = None;
+        Ok(())
+    }
     pub fn can_revert(&self) -> bool {
         self.source_size.is_some() || self.raster.is_some() || !self.annotations.is_empty()
     }
@@ -69,21 +89,58 @@ impl Document {
     }
 }
 
-/// Alpha-aware triangle resampling. Hidden RGB must not bleed into visible
-/// pixels; the unchanged PNG remains the baseline for later resizes and Revert.
-pub(crate) fn resample(source: RgbaImage, width: u32, height: u32) -> RgbaImage {
+/// How a resized picture is resampled (EDIT-028, approved beta 6 tab 4).
+/// Automatic is the long-standing method, so existing projects draw exactly
+/// as before.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Resampling {
+    #[default]
+    Automatic,
+    /// Soft, for photos.
+    Smooth,
+    /// Crisp, for screenshots and text.
+    Sharp,
+    /// Hard pixel edges, for pixel art.
+    Nearest,
+}
+impl Resampling {
+    pub const ALL: [Self; 4] = [Self::Automatic, Self::Smooth, Self::Sharp, Self::Nearest];
+    pub fn is_automatic(&self) -> bool {
+        *self == Self::Automatic
+    }
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Automatic => "Automatic",
+            Self::Smooth => "Smooth (photos)",
+            Self::Sharp => "Sharp (screenshots and text)",
+            Self::Nearest => "Nearest pixel (pixel art)",
+        }
+    }
+}
+
+/// Alpha-aware resampling with the chosen method. Hidden RGB must not bleed
+/// into visible pixels; the unchanged PNG remains the baseline for later
+/// resizes and Revert.
+pub(crate) fn resample_with(
+    source: RgbaImage,
+    width: u32,
+    height: u32,
+    mode: Resampling,
+) -> RgbaImage {
+    let filter = match mode {
+        Resampling::Automatic => image::imageops::FilterType::Triangle,
+        Resampling::Smooth => image::imageops::FilterType::Gaussian,
+        Resampling::Sharp => image::imageops::FilterType::Lanczos3,
+        Resampling::Nearest => image::imageops::FilterType::Nearest,
+    };
     let mut linear = image::DynamicImage::ImageRgba8(source).into_rgba32f();
     for pixel in linear.pixels_mut() {
         for channel in 0..3 {
             pixel.0[channel] *= pixel.0[3];
         }
     }
-    let resized = image::imageops::resize(
-        &linear,
-        width,
-        height,
-        image::imageops::FilterType::Triangle,
-    );
+    let resized = image::imageops::resize(&linear, width, height, filter);
     drop(linear);
     RgbaImage::from_fn(width, height, |x, y| {
         let pixel = resized.get_pixel(x, y).0;
