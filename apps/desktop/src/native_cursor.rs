@@ -289,13 +289,21 @@ const HAND_REQUEST: &str = "clipdesigner-hand-request";
 /// for open and closed, because winit sets its own cursor whenever egui's
 /// changes and Windows sends no `WM_SETCURSOR` while a button is held.
 pub(crate) const HAND_HOST: egui::CursorIcon = egui::CursorIcon::Default;
-/// Asks for the open (`closed == false`) or closed hand for this frame.
-pub(crate) fn request_hand(ctx: &egui::Context, closed: bool) {
-    ctx.data_mut(|d| d.insert_temp(egui::Id::unique(HAND_REQUEST), closed));
+/// What a grip cursor offers (approved option D, `artifacts/beta5-proposal`):
+/// a curved double arrow on rotation handles and a pointing finger on the
+/// middle node of a line or arrow.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Grip {
+    Rotate,
+    Bend,
 }
-/// The hand asked for this frame, if any (read by the end of the frame).
-pub(crate) fn requested_hand(ctx: &egui::Context) -> Option<bool> {
-    ctx.data(|d| d.get_temp::<bool>(egui::Id::unique(HAND_REQUEST)))
+/// Asks for a grip cursor for this frame; `held` while its handle is dragged.
+pub(crate) fn request_grip(ctx: &egui::Context, grip: Grip, held: bool) {
+    ctx.data_mut(|d| d.insert_temp(egui::Id::unique(HAND_REQUEST), (grip, held)));
+}
+/// The grip asked for this frame, if any (read by the end of the frame).
+pub(crate) fn requested_grip(ctx: &egui::Context) -> Option<(Grip, bool)> {
+    ctx.data(|d| d.get_temp::<(Grip, bool)>(egui::Id::unique(HAND_REQUEST)))
 }
 pub(crate) fn install_hands(ctx: &egui::Context) {
     let installed = egui::Id::unique("clipdesigner-hands-installed");
@@ -307,46 +315,78 @@ pub(crate) fn install_hands(ctx: &egui::Context) {
         "clipdesigner-hands",
         std::sync::Arc::new(|ui| {
             let ctx = ui.ctx();
-            let Some(closed) = requested_hand(ctx) else {
+            let Some((grip, held)) = requested_grip(ctx) else {
                 return;
             };
-            ctx.data_mut(|d| d.remove::<bool>(egui::Id::unique(HAND_REQUEST)));
-            let shown = show(if closed { "hand-closed" } else { "hand-open" }, || {
-                Some(hand_image(closed))
-            });
+            ctx.data_mut(|d| d.remove::<(Grip, bool)>(egui::Id::unique(HAND_REQUEST)));
+            let key = match (grip, held) {
+                (Grip::Rotate, false) => "grip-rotate",
+                (Grip::Rotate, true) => "grip-rotate-held",
+                (Grip::Bend, false) => "grip-bend",
+                (Grip::Bend, true) => "grip-bend-held",
+            };
+            let shown = show(key, || Some(grip_image(grip, held)));
             if shown {
                 ctx.output_mut(|o| o.cursor_icon = HAND_HOST);
             }
         }),
     );
 }
-/// The mockup's 30-unit hand and fist paths (`#hand`, `#fist`).
-const OPEN_HAND: &str = "M11 22c-2-2-4-5-5-7-1-1 0-3 2-2l2 2V6c0-1.2 2-1.2 2 0v6V5c0-1.2 2-1.2 2 0v7-6c0-1.2 2-1.2 2 0v7-5c0-1.2 2-1.2 2 0v8c0 3-1 5-3 7z";
-const CLOSED_HAND: &str = "M10 22c-2-2-3-4-3-6 0-1.5 1-2 2-1.5V11c0-1.2 2-1.2 2 0v1-1.5c0-1.2 2-1.2 2 0V12v-1c0-1.2 2-1.2 2 0v1.5-.5c0-1.2 2-1.2 2 0V17c0 2-1 4-3 5z";
-/// The hand as a 32-pixel cursor, drawn from the mockup's SVG path at 1.25x:
-/// white with a dark outline, the hotspot on the palm.
-pub(crate) fn hand_image(closed: bool) -> Image {
+/// The mockup's 24-unit glyphs (option D): two arcs of a curved double arrow,
+/// and a hand with the index finger pointing up.
+const ROTATE: [&str; 2] = [
+    "M4.6 11.2a7.6 7.6 0 0 1 13.6-3.4l1.4-1.5.6 5.6-5.5-.7 1.5-1.4a5 5 0 0 0-9 1.9z",
+    "M19.4 12.8a7.6 7.6 0 0 1-13.6 3.4l-1.4 1.5-.6-5.6 5.5.7-1.5 1.4a5 5 0 0 0 9-1.9z",
+];
+const FINGER: &str = "M9.5 21.5c-1.8-1.6-3.6-4.2-4.5-6-.6-1.2.6-2.4 1.8-1.7l1.7 1.3V4.2c0-1.4 2.4-1.4 2.4 0V11v-1.6c0-1.3 2.3-1.3 2.3 0V11v-1c0-1.3 2.3-1.3 2.3 0v1.5-.6c0-1.3 2.2-1.3 2.2 0V16c0 2.6-1 4.3-2.5 5.5z";
+/// A grip as a 32-pixel cursor, drawn from the mockup's paths at 4/3 scale.
+/// Hover is white with a dark outline; held is ClipDesigner blue with a white
+/// outline. The rotate arrow's hotspot is its center; the finger's is its tip.
+pub(crate) fn grip_image(grip: Grip, held: bool) -> Image {
     use vello_cpu::{
         Pixmap, RenderContext,
         color::{AlphaColor, Srgb},
-        kurbo::{Affine, BezPath, Join, Stroke},
+        kurbo::{Affine, BezPath, Cap, Join, Stroke},
     };
     const SIDE: u16 = 32;
-    let path = BezPath::from_svg(if closed { CLOSED_HAND } else { OPEN_HAND }).expect("hand path");
+    let paths: Vec<BezPath> = match grip {
+        Grip::Rotate => ROTATE
+            .iter()
+            .map(|d| BezPath::from_svg(d).expect("rotate path"))
+            .collect(),
+        Grip::Bend => vec![BezPath::from_svg(FINGER).expect("finger path")],
+    };
+    let (body, edge) = if held {
+        ([24, 145, 193], [255, 255, 255])
+    } else {
+        ([255, 255, 255], [17, 17, 17])
+    };
     let mut context = RenderContext::new(SIDE, SIDE);
-    // Mockup palm (13, 16) lands on the hotspot (16, 16).
-    context.set_transform(Affine::translate((-0.25, -4.0)) * Affine::scale(1.25));
-    context.set_paint(AlphaColor::<Srgb>::from_rgba8(255, 255, 255, 255));
-    context.fill_path(&path);
-    context.set_paint(AlphaColor::<Srgb>::from_rgba8(17, 17, 17, 255));
-    context.set_stroke(Stroke::new(1.1).with_join(Join::Round));
-    context.stroke_path(&path);
+    context.set_transform(Affine::scale(4.0 / 3.0));
+    for path in &paths {
+        context.set_paint(AlphaColor::<Srgb>::from_rgba8(
+            body[0], body[1], body[2], 255,
+        ));
+        context.fill_path(path);
+        context.set_paint(AlphaColor::<Srgb>::from_rgba8(
+            edge[0], edge[1], edge[2], 255,
+        ));
+        context.set_stroke(
+            Stroke::new(1.1)
+                .with_join(Join::Round)
+                .with_caps(Cap::Round),
+        );
+        context.stroke_path(path);
+    }
     let mut pixels = Pixmap::new(SIDE, SIDE);
     context.flush();
     context.render(&mut pixels, &mut vello_cpu::Resources::new());
     Image {
         size: [32, 32],
-        hotspot: [16, 16],
+        hotspot: match grip {
+            Grip::Rotate => [16, 16],
+            Grip::Bend => [14, 4],
+        },
         pixels: pixels
             .data()
             .iter()
@@ -372,24 +412,74 @@ pub(crate) fn apply(_lparam: isize) -> bool {
 mod tests {
     use super::*;
     #[test]
-    fn hands_follow_the_mockup_paths_white_with_a_dark_outline() {
-        let open = hand_image(false);
-        let closed = hand_image(true);
-        let at = |i: &Image, x: usize, y: usize| {
+    fn grips_follow_option_d_white_on_hover_and_blue_while_held() {
+        let px = |i: &Image, x: usize, y: usize| {
             i.pixels[(y * 32 + x) * 4..(y * 32 + x) * 4 + 4].to_vec()
         };
-        // The palm (mockup 13,17 -> 16,18) is white on both.
-        assert_eq!(at(&open, 16, 16), vec![255; 4], "open palm is white");
-        assert_eq!(at(&closed, 16, 16), vec![255; 4], "closed palm is white");
-        // Mockup (13, 8) is inside a raised finger only on the open hand.
-        assert!(at(&open, 16, 6)[3] > 200, "an open hand has long fingers");
-        assert_eq!(at(&closed, 16, 6)[3], 0, "a closed hand doesn't");
-        assert_eq!(at(&open, 1, 1)[3], 0);
-        let outline = (0..32 * 32).filter(|n| {
-            let p = &open.pixels[n * 4..n * 4 + 4];
-            p[3] > 200 && p[0] < 60
-        });
-        assert!(outline.count() > 20, "a dark outline surrounds the hand");
+        let count = |i: &Image, f: &dyn Fn(&[u8]) -> bool| {
+            (0..32 * 32)
+                .filter(|n| f(&i.pixels[n * 4..n * 4 + 4]))
+                .count()
+        };
+        for grip in [Grip::Rotate, Grip::Bend] {
+            let hover = grip_image(grip, false);
+            let held = grip_image(grip, true);
+            let white = count(&hover, &|p| p == [255, 255, 255, 255]);
+            let dark = count(&hover, &|p| p[3] > 200 && p[0] < 60);
+            assert!(
+                white > 40 && dark > 20,
+                "{grip:?}: white body with a dark outline"
+            );
+            let blue = count(&held, &|p| p[3] > 200 && p[2] > 150 && p[0] < 60);
+            assert!(blue > 40, "{grip:?}: held is filled blue");
+            assert_eq!(px(&hover, 0, 31)[3], 0, "{grip:?}: corners stay clear");
+        }
+        // The rotate arrow keeps its middle clear, so the handle shows through;
+        // the finger's hotspot sits on its tip.
+        assert_eq!(px(&grip_image(Grip::Rotate, false), 16, 16)[3], 0);
+        let finger = grip_image(Grip::Bend, false);
+        assert_eq!(finger.hotspot, [14, 4]);
+        assert!(
+            px(&finger, 14, 6)[3] > 200,
+            "the fingertip is under the hotspot"
+        );
+    }
+    /// Writes the four grip cursors, enlarged 4x on light and dark, for review:
+    /// `CLIPDESIGNER_GRIP_DIR=<dir> cargo test -p capture-desktop dump_grip_cursors -- --ignored`
+    #[test]
+    #[ignore = "review aid"]
+    fn dump_grip_cursors() {
+        let dir = std::path::PathBuf::from(std::env::var_os("CLIPDESIGNER_GRIP_DIR").unwrap());
+        let mut sheet = image::RgbaImage::new(4 * 128, 2 * 128);
+        for (row, bg) in [[238u8, 241, 243], [18, 24, 26]].into_iter().enumerate() {
+            for (col, (grip, held)) in [
+                (Grip::Rotate, false),
+                (Grip::Rotate, true),
+                (Grip::Bend, false),
+                (Grip::Bend, true),
+            ]
+            .into_iter()
+            .enumerate()
+            {
+                let g = grip_image(grip, held);
+                for y in 0..128u32 {
+                    for x in 0..128u32 {
+                        let i = (((y / 4) * 32 + x / 4) * 4) as usize;
+                        let a = u32::from(g.pixels[i + 3]);
+                        let mix = |c: usize| {
+                            ((u32::from(g.pixels[i + c]) * a + u32::from(bg[c]) * (255 - a)) / 255)
+                                as u8
+                        };
+                        sheet.put_pixel(
+                            col as u32 * 128 + x,
+                            row as u32 * 128 + y,
+                            image::Rgba([mix(0), mix(1), mix(2), 255]),
+                        );
+                    }
+                }
+            }
+        }
+        sheet.save(dir.join("grip-cursors.png")).unwrap();
     }
     #[test]
     fn the_cursor_under_a_hand_stays_visible() {
@@ -401,9 +491,9 @@ mod tests {
         let ctx = egui::Context::default();
         let mut out = ctx.run_ui(Default::default(), |ui| {
             ui.ctx().set_cursor_icon(egui::CursorIcon::Grab);
-            assert_eq!(requested_hand(ui.ctx()), None, "moving keeps its cursor");
-            request_hand(ui.ctx(), true);
-            assert_eq!(requested_hand(ui.ctx()), Some(true));
+            assert_eq!(requested_grip(ui.ctx()), None, "moving keeps its cursor");
+            request_grip(ui.ctx(), Grip::Rotate, true);
+            assert_eq!(requested_grip(ui.ctx()), Some((Grip::Rotate, true)));
         });
         out.textures_delta.clear();
     }
