@@ -72,6 +72,9 @@ impl Editor {
                 }
                 ui.scope_builder(egui::UiBuilder::new().max_rect(status), |ui| {
                     ui.set_clip_rect(status.intersect(ui.clip_rect()));
+                    if self.session.document.part.is_some() && !self.shell.library {
+                        self.part_bar(ui);
+                    }
                     self.footer_confirmation(ui);
                 });
                 // Hide UI lives in the footer's reserved right-hand space.
@@ -242,4 +245,56 @@ fn icon_caption_button(ui: &mut egui::Ui, icon: &str, label: &str) -> egui::Resp
         );
     }
     response
+}
+
+impl Editor {
+    /// "Part 3 of 10 · ‹ Previous · Next ›" for a linked part (approved beta 6
+    /// tab 7); the other parts open from the Library.
+    fn part_bar(&mut self, ui: &mut egui::Ui) {
+        use crate::tips::Tip as _;
+        let Some(part) = self.session.document.part.clone() else {
+            return;
+        };
+        let siblings = self.part_siblings(&part);
+        let find = |index: u32| {
+            siblings
+                .iter()
+                .find(|e| e.part.as_ref().is_some_and(|p| p.index == index))
+                .map(|e| e.id.clone())
+        };
+        let previous = (part.index > 1).then(|| find(part.index - 1)).flatten();
+        let next = (part.index < part.total)
+            .then(|| find(part.index + 1))
+            .flatten();
+        let mut open = None;
+        ui.horizontal_centered(|ui| {
+            if ui
+                .add_enabled(previous.is_some(), egui::Button::new("‹").small())
+                .tip("Previous part · Open the part before this one.")
+                .clicked()
+            {
+                open = previous.clone();
+            }
+            ui.label(
+                egui::RichText::new(format!("Part {} of {}", part.index, part.total))
+                    .size(12.)
+                    .color(egui::Color32::from_rgb(200, 214, 219)),
+            )
+            .tip(format!(
+                "{} · Linked parts of one PDF. Export can put every part into one file.",
+                part.label()
+            ));
+            if ui
+                .add_enabled(next.is_some(), egui::Button::new("›").small())
+                .tip("Next part · Open the part after this one.")
+                .clicked()
+            {
+                open = next.clone();
+            }
+        });
+        if let Some(id) = open {
+            let ctx = ui.ctx().clone();
+            self.open_history(&id, &ctx);
+        }
+    }
 }

@@ -470,6 +470,24 @@ impl Editor {
                     egui::Color32::WHITE,
                 );
             }
+            // A linked part shows where it sits in its set (approved beta 6 tab 7).
+            if let Some(part) = &entry.part {
+                let text = painter.layout_no_wrap(
+                    format!("{}/{}", part.index, part.total),
+                    egui::FontId::proportional(10.5),
+                    egui::Color32::WHITE,
+                );
+                let badge_rect = egui::Rect::from_min_size(
+                    rect.left_top() + egui::vec2(6.0, 6.0),
+                    egui::vec2(text.size().x + 10.0, 15.0),
+                );
+                painter.rect_filled(badge_rect, 4, crate::shell::ACCENT);
+                painter.galley(
+                    badge_rect.center() - text.size() / 2.0,
+                    text,
+                    egui::Color32::WHITE,
+                );
+            }
             if action.is_none()
                 && if self.shell.library {
                     self.history.library.selected.contains(&entry.id)

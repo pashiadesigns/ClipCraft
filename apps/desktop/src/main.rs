@@ -257,6 +257,8 @@ enum FileAction {
         label: String,
         note: Option<String>,
         scan: Option<(capture_core::privacy::Options, String, sensitive_ui::Cover)>,
+        /// Further linked parts, saved straight to the Library.
+        more: Vec<(Document, String)>,
     },
     Template {
         session: Session,
@@ -935,7 +937,18 @@ impl Editor {
                 label,
                 note,
                 scan,
+                more,
             } => {
+                // The other parts go straight into the Library, in order.
+                if let Some(store) = &mut self.history.store {
+                    for (document, label) in &more {
+                        if let Err(e) =
+                            store.create(document, label, capture_core::history::Origin::Canvas)
+                        {
+                            self.status = format!("A part couldn't be saved to the Library: {e}");
+                        }
+                    }
+                }
                 self.switch_session(session, None, None);
                 self.reset_document_tools();
                 self.view = canvas_view::CanvasView::default();

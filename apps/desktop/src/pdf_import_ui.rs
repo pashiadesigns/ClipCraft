@@ -32,9 +32,10 @@ enum Stage {
     },
     Failed(String),
 }
-/// The built guide, the pages that came in as pictures, and their resolution.
+/// The built guides (one, or linked parts), the pages that came in as
+/// pictures, and their resolution.
 type Imported = (
-    Box<capture_core::Document>,
+    Vec<(capture_core::Document, Vec<usize>)>,
     Vec<(usize, PictureReason)>,
     u32,
 );
@@ -253,17 +254,21 @@ impl PdfImport {
             .filter(|i| self.selected[*i])
             .collect()
     }
-    /// How many of the chosen pages fit in one guide.
-    fn fits(&self) -> usize {
-        let Some(file) = &self.file else { return 0 };
+    /// The chosen pages split into linked parts that each fit one guide
+    /// (approved beta 6 tab 7); one run when they all fit.
+    fn parts(&self) -> Vec<std::ops::Range<usize>> {
+        let Some(file) = &self.file else {
+            return vec![];
+        };
         let sizes: Vec<_> = self.chosen().iter().map(|i| file.page_pixels(*i)).collect();
-        pdf_import::pages_that_fit(&sizes)
+        pdf_import::plan_parts(&sizes)
     }
-    /// Picture resolutions that fit the document's picture budget.
+    /// Picture resolutions that fit one part's picture budget.
     fn dpi_fits(&self, dpi: u32) -> bool {
         let Some(file) = &self.file else { return false };
-        let pixels: f64 = self
-            .chosen()
+        let chosen = self.chosen();
+        let first = self.parts().first().cloned().unwrap_or(0..0);
+        let pixels: f64 = chosen[first]
             .iter()
             .map(|i| {
                 let [w, h] = file.page_points(*i);
@@ -296,63 +301,98 @@ impl PdfImport {
             }
         };
         let total = pages.len();
+        let title = std::path::Path::new(&self.name())
+            .file_stem()
+            .map_or_else(|| "PDF".to_owned(), |s| s.to_string_lossy().into_owned());
         let (tx, rx) = mpsc::channel();
         let repaint = ctx.clone();
         std::thread::spawn(move || {
-            let result = (|| {
-                let mut prepared = vec![];
-                for i in &pages {
-                    prepared.push(file.prepare(*i, how).map_err(|e| e.to_string())?);
-                    let _ = tx.send(Progress::Page);
-                    repaint.request_repaint();
-                }
-                // Pictures share the document's picture budget with the drawings;
-                // lower their resolution until everything fits.
-                let mut dpi = match how {
-                    ImportAs::Pictures { dpi } => dpi,
-                    ImportAs::Editable { fallback_dpi } => fallback_dpi,
-                };
-                loop {
-                    let used: u64 = prepared
-                        .iter()
-                        .map(|p| {
-                            let [w, h] = p.bitmap.size();
-                            u64::from(w) * u64::from(h)
-                        })
-                        .sum();
-                    if used <= capture_core::MAX_PIXELS || dpi <= 48 {
-                        break;
+            let sizes: Vec<_> = pages.iter().map(|i| file.page_pixels(*i)).collect();
+            let runs = pdf_import::plan_parts(&sizes);
+            let set = pdf_import::new_set_id();
+            let total_parts = runs.len() as u32;
+            let mut parts = vec![];
+            let mut all_notes = vec![];
+            let mut lowest = u32::MAX;
+            let mut result: Result<(), String> = Ok(());
+            for (k, run) in runs.into_iter().enumerate() {
+                let pages: Vec<usize> = pages[run].to_vec();
+                let built = (|| {
+                    let mut prepared = vec![];
+                    for i in &pages {
+                        prepared.push(file.prepare(*i, how).map_err(|e| e.to_string())?);
+                        let _ = tx.send(Progress::Page);
+                        repaint.request_repaint();
                     }
-                    dpi = (dpi as f64
-                        * (capture_core::MAX_PIXELS as f64 / used as f64).sqrt()
-                        * 0.97)
-                        .floor()
-                        .max(48.) as u32;
-                    for page in &mut prepared {
-                        if page.picture.is_some() {
-                            let again = match how {
-                                ImportAs::Pictures { .. } => ImportAs::Pictures { dpi },
-                                ImportAs::Editable { .. } => {
-                                    ImportAs::Editable { fallback_dpi: dpi }
+                    // Pictures share the document's picture budget with the drawings;
+                    // lower their resolution until everything fits.
+                    let mut dpi = match how {
+                        ImportAs::Pictures { dpi } => dpi,
+                        ImportAs::Editable { fallback_dpi } => fallback_dpi,
+                    };
+                    loop {
+                        let used: u64 = prepared
+                            .iter()
+                            .map(|p| {
+                                let [w, h] = p.bitmap.size();
+                                u64::from(w) * u64::from(h)
+                            })
+                            .sum();
+                        if used <= capture_core::MAX_PIXELS || dpi <= 48 {
+                            break;
+                        }
+                        dpi = (dpi as f64
+                            * (capture_core::MAX_PIXELS as f64 / used as f64).sqrt()
+                            * 0.97)
+                            .floor()
+                            .max(48.) as u32;
+                        for page in &mut prepared {
+                            if page.picture.is_some() {
+                                let again = match how {
+                                    ImportAs::Pictures { .. } => ImportAs::Pictures { dpi },
+                                    ImportAs::Editable { .. } => {
+                                        ImportAs::Editable { fallback_dpi: dpi }
+                                    }
+                                };
+                                let reason = page.picture;
+                                let mut redone =
+                                    file.prepare(page.index, again).map_err(|e| e.to_string())?;
+                                if redone.picture.is_none() {
+                                    redone.picture = reason;
                                 }
-                            };
-                            let reason = page.picture;
-                            let mut redone =
-                                file.prepare(page.index, again).map_err(|e| e.to_string())?;
-                            if redone.picture.is_none() {
-                                redone.picture = reason;
+                                *page = redone;
                             }
-                            *page = redone;
                         }
                     }
+                    let notes: Vec<_> = prepared
+                        .iter()
+                        .filter_map(|p| p.picture.map(|r| (p.index, r)))
+                        .collect();
+                    let mut document =
+                        pdf_import::build_guide(prepared).map_err(|e| e.to_string())?;
+                    if total_parts > 1 {
+                        document.part = Some(pdf_import::PartOf {
+                            set: set.clone(),
+                            index: k as u32 + 1,
+                            total: total_parts,
+                            title: title.clone(),
+                        });
+                    }
+                    Ok::<_, String>((document, notes, dpi))
+                })();
+                match built {
+                    Ok((document, notes, dpi)) => {
+                        parts.push((document, pages));
+                        all_notes.extend(notes);
+                        lowest = lowest.min(dpi);
+                    }
+                    Err(e) => {
+                        result = Err(e);
+                        break;
+                    }
                 }
-                let notes: Vec<_> = prepared
-                    .iter()
-                    .filter_map(|p| p.picture.map(|r| (p.index, r)))
-                    .collect();
-                let document = pdf_import::build_guide(prepared).map_err(|e| e.to_string())?;
-                Ok((Box::new(document), notes, dpi))
-            })();
+            }
+            let result = result.map(|()| (parts, all_notes, lowest.min(300)));
             let _ = tx.send(Progress::Done(result));
             repaint.request_repaint();
         });
@@ -491,9 +531,9 @@ impl Editor {
         }
         if let Some(result) = done {
             match result {
-                Ok((document, notes, dpi)) => {
+                Ok((parts, notes, dpi)) => {
                     let draft = self.pdf_import.take().unwrap();
-                    self.finish_pdf_import(draft, *document, &notes, dpi, ctx);
+                    self.finish_pdf_import(draft, parts, &notes, dpi, ctx);
                 }
                 Err(e) => {
                     if let Some(d) = &mut self.pdf_import {
@@ -620,26 +660,55 @@ impl Editor {
     fn finish_pdf_import(
         &mut self,
         draft: PdfImport,
-        document: capture_core::Document,
+        parts: Vec<(capture_core::Document, Vec<usize>)>,
         notes: &[(usize, PictureReason)],
         dpi: u32,
         ctx: &egui::Context,
     ) {
-        let session = match capture_core::Session::unsaved(document) {
+        // "Vendor packet.pdf · pages 1–3, 6", or for a part
+        // "Vendor packet · part 2 of 10 · pages 25–48".
+        let label = |document: &capture_core::Document, pages: &[usize]| {
+            let mut selected = vec![false; draft.selected.len()];
+            for p in pages {
+                selected[*p] = true;
+            }
+            let range = describe(&selected).replace('-', "–");
+            let pages_word = if pages.len() == 1 { "page" } else { "pages" };
+            match &document.part {
+                Some(part) => format!("{} · {pages_word} {range}", part.label()),
+                None => format!("{} · {pages_word} {range}", draft.name()),
+            }
+        };
+        let mut parts = parts.into_iter();
+        let Some((first, first_pages)) = parts.next() else {
+            return;
+        };
+        let first_label = label(&first, &first_pages);
+        let more: Vec<_> = parts
+            .map(|(d, p)| {
+                let l = label(&d, &p);
+                (d, l)
+            })
+            .collect();
+        let session = match capture_core::Session::unsaved(first) {
             Ok(s) => s,
             Err(e) => {
                 self.status = e.to_string();
                 return;
             }
         };
-        let chosen = draft.chosen();
-        let label = format!(
-            "{} · {} {}",
-            draft.name(),
-            if chosen.len() == 1 { "page" } else { "pages" },
-            describe(&draft.selected).replace('-', "–")
-        );
-        let note = picture_note(notes, dpi);
+        let mut note = picture_note(notes, dpi);
+        if !more.is_empty() {
+            let parts_note = format!(
+                "Made {} linked parts; the others are in the Library. Export can put every part into one file.",
+                more.len() + 1
+            );
+            note = Some(match note {
+                Some(n) => format!("{parts_note} {n}"),
+                None => parts_note,
+            });
+        }
+        let label = first_label;
         let scan = draft
             .scan
             .then(|| (draft.options.clone(), draft.phrases.clone(), draft.cover));
@@ -649,6 +718,7 @@ impl Editor {
                 label,
                 note,
                 scan,
+                more,
             },
             ctx,
         );
@@ -962,13 +1032,16 @@ fn ready(ui: &mut egui::Ui, draft: &mut PdfImport) -> (bool, bool) {
     // Footer: what will happen, and the buttons.
     crate::panel_ui::divider(ui);
     let chosen = draft.chosen().len();
-    let fits = draft.fits();
+    let parts = draft.parts().len();
     let (summary, ok) = if chosen == 0 {
         ("Choose at least one page.".to_owned(), false)
-    } else if fits < chosen {
+    } else if parts > 1 {
         (
-            format!("A guide holds up to {fits} of these pages. Choose a range to import fewer."),
-            false,
+            format!(
+                "These {chosen} pages come in as {parts} linked parts of up to {} pages, grouped in the Library. Export can put every part back into one file.",
+                draft.parts().iter().map(|r| r.len()).max().unwrap_or(0)
+            ),
+            true,
         )
     } else {
         (
@@ -989,10 +1062,14 @@ fn ready(ui: &mut egui::Ui, draft: &mut PdfImport) -> (bool, bool) {
     } else {
         egui::Color32::from_rgb(255, 170, 160)
     }));
-    let action = format!(
-        "Create guide with {chosen} {}",
-        if chosen == 1 { "page" } else { "pages" }
-    );
+    let action = if parts > 1 {
+        format!("Create {parts} linked parts")
+    } else {
+        format!(
+            "Create guide with {chosen} {}",
+            if chosen == 1 { "page" } else { "pages" }
+        )
+    };
     let (create, cancel) = crate::controls::dialog_actions(ui, &action, "Cancel", ok, false);
     close |= cancel;
     if create && ok {
@@ -1154,6 +1231,58 @@ mod tests {
                 .any(|w| w.text.contains("dana.reyes@example.com"))
         );
         d.validate().unwrap();
+    }
+    #[test]
+    fn a_long_import_makes_linked_parts_that_export_as_one_pdf() {
+        let ctx = egui::Context::default();
+        crate::shell::configure(&ctx);
+        let mut e = crate::canvas::tests::editor(&ctx);
+        let root = tempfile::tempdir().unwrap();
+        e.history = crate::history::HistoryPanel::isolated(root.path());
+        let long = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../crates/core/tests/fixtures/pdf/long-100-pages.pdf");
+        let mut draft = PdfImport::ready_now(long, &ctx);
+        draft.selected = parse_range("1-30", 100).unwrap();
+        // 30 Letter pages don't fit one guide: two linked parts.
+        assert_eq!(draft.parts().len(), 2);
+        draft.import(&ctx);
+        e.pdf_import = Some(draft);
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(300);
+        while e.pdf_import.is_some() {
+            assert!(std::time::Instant::now() < deadline, "import finished");
+            let mut output = ctx.run_ui(Default::default(), |ui| e.show_pdf_import(ui.ctx()));
+            output.textures_delta.clear();
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+        let part = e
+            .session
+            .document
+            .part
+            .clone()
+            .expect("the first part is open");
+        assert_eq!((part.index, part.total), (1, 2));
+        assert!(e.status.contains("2 linked parts"), "{}", e.status);
+        let siblings = e.part_siblings(&part);
+        assert_eq!(siblings.len(), 1, "the second part is in the Library");
+        assert!(
+            siblings[0].label.contains("part 2 of 2"),
+            "{}",
+            siblings[0].label
+        );
+        // Export every part into one PDF.
+        let out = tempfile::tempdir().unwrap();
+        let path = out.path().join("joined.pdf");
+        e.export_all_parts(
+            &e.session.document.clone(),
+            &capture_core::export::Options {
+                format: capture_core::export::Format::Pdf,
+                ..Default::default()
+            },
+            &path,
+        )
+        .unwrap();
+        let joined = pdf_import::open(std::fs::read(&path).unwrap(), "").unwrap();
+        assert_eq!(joined.page_count(), 30);
     }
     #[test]
     fn the_note_names_scans_and_effects_once() {

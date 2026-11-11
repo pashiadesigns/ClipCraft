@@ -90,9 +90,103 @@ pub(super) struct Dialog {
     after: AfterExport,
     page: usize,
     error: String,
+    /// For a linked part: export every part of its set into one file
+    /// (approved beta 6 tab 7). On by default.
+    all_parts: bool,
 }
 
 impl Editor {
+    /// The Library items of a part's set, in part order.
+    pub(crate) fn part_siblings(
+        &self,
+        part: &capture_core::pdf_import::PartOf,
+    ) -> Vec<capture_core::history::Entry> {
+        let mut list: Vec<_> = self
+            .history
+            .entries()
+            .into_iter()
+            .filter(|e| e.part.as_ref().is_some_and(|p| p.set == part.set))
+            .collect();
+        list.sort_by_key(|e| e.part.as_ref().map_or(0, |p| p.index));
+        list.dedup_by_key(|e| e.part.as_ref().map_or(0, |p| p.index));
+        list
+    }
+    /// Exports every part of `current`'s set, in order (approved beta 6 tab
+    /// 7): this part as edited, the others loaded from the Library one at a
+    /// time. PDF becomes one file; PNG and JPEG become numbered pictures, one
+    /// per page, next to `path`.
+    pub(crate) fn export_all_parts(
+        &self,
+        current: &capture_core::Document,
+        options: &Options,
+        path: &std::path::Path,
+    ) -> Result<(), String> {
+        let part = current
+            .part
+            .clone()
+            .ok_or("This guide isn't a linked part.")?;
+        let siblings = self.part_siblings(&part);
+        let store = self
+            .history
+            .store
+            .as_ref()
+            .ok_or("The Library isn't available.")?;
+        let mut ids = vec![];
+        for index in 1..=part.total {
+            if index == part.index {
+                ids.push(None);
+            } else {
+                let entry = siblings
+                    .iter()
+                    .find(|e| e.part.as_ref().is_some_and(|p| p.index == index))
+                    .ok_or_else(|| {
+                        format!(
+                            "Part {index} of {} isn't in the Library, so the parts can't be joined.",
+                            part.total
+                        )
+                    })?;
+                ids.push(Some(entry.id.clone()));
+            }
+        }
+        let load = |id: &Option<String>| match id {
+            None => Ok(current.clone()),
+            Some(id) => store.load(id),
+        };
+        if options.format == Format::Pdf {
+            let bytes = capture_core::export::encode_parts_pdf(ids.iter().map(load), options)
+                .map_err(|e| e.to_string())?;
+            return capture_core::export::write(path, &bytes).map_err(|e| e.to_string());
+        }
+        let stem = path
+            .file_stem()
+            .map_or_else(|| "export".to_owned(), |s| s.to_string_lossy().into_owned());
+        let folder = path.parent().unwrap_or(std::path::Path::new("."));
+        let mut number = 0;
+        for id in &ids {
+            let document = load(id).map_err(|e| e.to_string())?;
+            let document =
+                capture_core::redaction_labels::decorate(document, options.redaction_labels)
+                    .map_err(|e| e.to_string())?;
+            let mut pixels = document.render().map_err(|e| e.to_string())?;
+            capture_core::watermark::apply(&mut pixels, options.watermark.as_ref())
+                .map_err(|e| e.to_string())?;
+            let pages = document.guide.as_ref().map_or(1, |g| g.page_count());
+            for page in 0..pages {
+                let rect = document.page_rect(page);
+                number += 1;
+                let [x, y, w, h] = rect.map(|v| v.max(0.) as u32);
+                let w = w.min(pixels.width().saturating_sub(x)).max(1);
+                let h = h.min(pixels.height().saturating_sub(y)).max(1);
+                let crop = image::imageops::crop_imm(&pixels, x, y, w, h).to_image();
+                let bytes =
+                    capture_core::export::encode(&crop, options).map_err(|e| e.to_string())?;
+                let file =
+                    folder.join(format!("{stem}-{number:03}.{}", options.format.extension()));
+                capture_core::export::write(&file, &bytes).map_err(|e| e.to_string())?;
+            }
+        }
+        Ok(())
+    }
     pub(super) fn begin_export(&mut self, print: bool) {
         if !self.commit_text() {
             return;
@@ -138,6 +232,7 @@ impl Editor {
                     after: self.export_preferences.after,
                     page: 0,
                     error: String::new(),
+                    all_parts: true,
                 })
             }
             Err(e) => self.status = e.to_string(),
@@ -183,6 +278,17 @@ impl Editor {
                                 ui.selectable_value(&mut d.options.format, format, format.label());
                             }
                         });
+                        if let Some(part) = d.document.part.clone()
+                            && !d.print
+                        {
+                            crate::controls::dialog_section(ui, &part.label(), None);
+                            crate::controls::toggle(
+                                ui,
+                                &mut d.all_parts,
+                                &format!("Include all {} parts in one file", part.total),
+                            )
+                            .tip("Include all parts · Every part of this PDF, in order, in one file. Parts are drawn one at a time, so long documents export without running out of memory. PNG and JPEG become numbered pictures, one per page.");
+                        }
                         if d.options.format == Format::Jpeg {
                             crate::property_layout::slider(
                                 ui,
@@ -461,8 +567,14 @@ impl Editor {
                     self.export_dialog = Some(d);
                     return;
                 }
-                let result = capture_core::export::encode_document(&d.document, &d.options)
-                    .and_then(|bytes| capture_core::export::write(&path, &bytes));
+                let joined = d.all_parts && d.document.part.is_some();
+                let result = if joined {
+                    self.export_all_parts(&d.document, &d.options, &path)
+                        .map_err(capture_core::Error::Invalid)
+                } else {
+                    capture_core::export::encode_document(&d.document, &d.options)
+                        .and_then(|bytes| capture_core::export::write(&path, &bytes))
+                };
                 match result {
                     Ok(()) => {
                         self.remember_dialog_folder(
