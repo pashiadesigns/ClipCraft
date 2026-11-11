@@ -32,9 +32,15 @@ enum Stage {
     },
     Failed(String),
 }
+/// The built guide, the pages that came in as pictures, and their resolution.
+type Imported = (
+    Box<capture_core::Document>,
+    Vec<(usize, PictureReason)>,
+    u32,
+);
 enum Progress {
     Page,
-    Done(Result<(capture_core::Document, Vec<(usize, PictureReason)>, u32), String>),
+    Done(Result<Imported, String>),
 }
 /// A picture the worker drew: (page, is the large preview, pixels).
 type Drawn = (usize, bool, image::RgbaImage);
@@ -345,7 +351,7 @@ impl PdfImport {
                     .filter_map(|p| p.picture.map(|r| (p.index, r)))
                     .collect();
                 let document = pdf_import::build_guide(prepared).map_err(|e| e.to_string())?;
-                Ok((document, notes, dpi))
+                Ok((Box::new(document), notes, dpi))
             })();
             let _ = tx.send(Progress::Done(result));
             repaint.request_repaint();
@@ -487,7 +493,7 @@ impl Editor {
             match result {
                 Ok((document, notes, dpi)) => {
                     let draft = self.pdf_import.take().unwrap();
-                    self.finish_pdf_import(draft, document, &notes, dpi, ctx);
+                    self.finish_pdf_import(draft, *document, &notes, dpi, ctx);
                 }
                 Err(e) => {
                     if let Some(d) = &mut self.pdf_import {
@@ -900,7 +906,7 @@ fn ready(ui: &mut egui::Ui, draft: &mut PdfImport) -> (bool, bool) {
                         .strong()
                         .append_detail(detail),
                 ))
-                .tip(&format!("{title} · {detail}"));
+                .tip(format!("{title} · {detail}"));
             if response.clicked() {
                 draft.pictures = pictures;
             }

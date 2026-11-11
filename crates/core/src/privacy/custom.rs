@@ -256,7 +256,7 @@ impl Set {
             Set::Digit => DIGITS[pick % 10] as char,
             Set::Letter | Set::Word | Set::Visible => LETTERS[pick % 10] as char,
             Set::Alnum => {
-                if pick % 3 == 0 {
+                if pick.is_multiple_of(3) {
                     LETTERS[pick % 10] as char
                 } else {
                     DIGITS[pick % 10] as char
@@ -627,7 +627,11 @@ mod tests {
         assert_eq!(e.len(), 3);
         let t = CustomType::new("Employee ID", "[WE]#####");
         for value in e {
-            assert_eq!(found(&t, &value), [value.clone()], "examples match");
+            assert_eq!(
+                found(&t, &value),
+                std::slice::from_ref(&value),
+                "examples match"
+            );
         }
         for r in ready_made() {
             r.validate().unwrap_or_else(|e| panic!("{}: {e}", r.name));

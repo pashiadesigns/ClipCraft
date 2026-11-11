@@ -351,7 +351,7 @@ impl Writer<'_> {
                 [usvg::Node::Group(g)]
                     if g.clip_path().is_none() && g.mask().is_none() && g.filters().is_empty() =>
                 {
-                    transform = transform * affine(g.transform());
+                    transform *= affine(g.transform());
                     group = g;
                 }
                 _ => return None,
