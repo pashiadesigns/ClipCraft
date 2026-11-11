@@ -54,8 +54,10 @@ fn parse(text: &str) -> Result<usvg::Tree> {
     parse_unchecked(text)
 }
 fn parse_unchecked(text: &str) -> Result<usvg::Tree> {
-    usvg::Tree::from_str(text, &options())
-        .map_err(|e| Error::Invalid(format!("This SVG can't be read: {e}")))
+    crate::guarded("This SVG can't be read.", || {
+        usvg::Tree::from_str(text, &options())
+            .map_err(|e| Error::Invalid(format!("This SVG can't be read: {e}")))
+    })
 }
 /// Parses a PDF page drawing (see [`MAX_PDF_PAGE_SVG_BYTES`]).
 pub(crate) fn parse_pdf_page(text: &str) -> Result<usvg::Tree> {
@@ -108,7 +110,11 @@ pub(crate) fn draw_tree(
         w as f32 / s.width().max(1e-3),
         h as f32 / s.height().max(1e-3),
     );
-    resvg::render(tree, transform, &mut pixmap.as_mut());
+    // A drawing the renderer can't handle fails like a bad file (ENG-009).
+    crate::guarded("This drawing can't be drawn.", || {
+        resvg::render(tree, transform, &mut pixmap.as_mut());
+        Ok(())
+    })?;
     let mut out = RgbaImage::new(w, h);
     for (p, c) in out.pixels_mut().zip(pixmap.pixels()) {
         let c = c.demultiply();

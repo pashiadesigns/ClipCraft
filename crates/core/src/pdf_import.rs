@@ -211,6 +211,17 @@ fn check_streams(pdf: &Pdf) -> std::result::Result<(), OpenError> {
 
 /// Opens a PDF from its bytes. `password` is used only to open it; it is not kept.
 pub fn open(bytes: Vec<u8>, password: &str) -> std::result::Result<PdfFile, OpenError> {
+    // A panic inside the engine on a hostile file is a damaged file (ENG-009).
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        open_unguarded(bytes, password)
+    }))
+    .unwrap_or_else(|_| {
+        Err(OpenError::Damaged(
+            "The file is damaged or isn't a PDF. Nothing was imported.".into(),
+        ))
+    })
+}
+fn open_unguarded(bytes: Vec<u8>, password: &str) -> std::result::Result<PdfFile, OpenError> {
     if bytes.len() > MAX_FILE_BYTES {
         return Err(OpenError::TooLarge(
             "PDF files must be under 256 MB.".into(),
@@ -269,6 +280,21 @@ impl PdfFile {
     }
     /// Draws a page at `scale` pixels per point, on white.
     pub fn render(&self, index: usize, scale: f64) -> RgbaImage {
+        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            self.render_unguarded(index, scale)
+        }))
+        .unwrap_or_else(|_| {
+            // A page the engine can't draw shows as a blank page.
+            let [w, h] = self.page_points(index);
+            let scale = scale.clamp(0.01, 4.);
+            RgbaImage::from_pixel(
+                ((w * scale) as u32).clamp(1, 8192),
+                ((h * scale) as u32).clamp(1, 8192),
+                image::Rgba([255; 4]),
+            )
+        })
+    }
+    fn render_unguarded(&self, index: usize, scale: f64) -> RgbaImage {
         use hayro::vello_cpu::color::palette::css::WHITE;
         let page = &self.pdf.pages()[index];
         let [w, h] = self.page_points(index);
@@ -316,7 +342,10 @@ impl PdfFile {
             self.settings.clone(),
         );
         let mut probe = Probe::default();
-        interpret_page(page, &mut ctx, &mut probe);
+        // A page the engine can't read yields what was read before the problem.
+        let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            interpret_page(page, &mut ctx, &mut probe)
+        }));
         probe
     }
     /// The page's words as a text layer.
@@ -326,6 +355,11 @@ impl PdfFile {
     }
     /// Converts one page as asked.
     pub fn prepare(&self, index: usize, how: ImportAs) -> Result<PreparedPage> {
+        crate::guarded("This PDF page can't be read.", || {
+            self.prepare_unguarded(index, how)
+        })
+    }
+    fn prepare_unguarded(&self, index: usize, how: ImportAs) -> Result<PreparedPage> {
         let points = self.page_points(index);
         let size = guide_pixels(points);
         let picture = |dpi: u32, text: Option<TextLayer>, reason| -> Result<PreparedPage> {

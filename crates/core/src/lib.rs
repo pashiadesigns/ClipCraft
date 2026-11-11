@@ -215,6 +215,14 @@ pub struct Document {
     pub annotations: Vec<Annotation>,
 }
 
+/// Runs third-party parsing or drawing of untrusted input so that a panic
+/// inside it becomes an ordinary error instead of ending the program
+/// (ENG-009 hostile-file testing found such panics in resvg).
+pub(crate) fn guarded<T>(message: &str, job: impl FnOnce() -> Result<T>) -> Result<T> {
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(job))
+        .unwrap_or_else(|_| Err(Error::Invalid(message.to_owned())))
+}
+
 pub fn validate_dimensions(width: u32, height: u32) -> Result<()> {
     if width == 0
         || height == 0
