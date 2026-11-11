@@ -294,6 +294,14 @@ fn editable_pages_export_as_shapes_and_redactions_remove_only_what_they_cover() 
     let bytes = crate::export::encode_document(&document, &options).unwrap();
     assert!(!bytes.windows(15).any(|s| s == b"/Subtype /Image"));
     let exported = open(bytes, "").unwrap();
+    // The page's words are searchable in the export.
+    let words = exported.text_layer(0).words;
+    assert!(
+        words
+            .iter()
+            .any(|w| w.text.contains("dana.reyes@example.com")),
+        "{words:?}"
+    );
     let shown = exported.render(0, 1.);
     let expected = document.render().unwrap();
     let mut flat = expected.clone();
@@ -373,7 +381,12 @@ fn editable_pages_export_as_shapes_and_redactions_remove_only_what_they_cover() 
     }
     // The other words are still shapes (curves), not one flattened page.
     assert!(all.iter().any(|s| s.windows(2).any(|w| w == b" c")));
-    let shown = open(bytes, "").unwrap().render(0, 1.);
+    let reopened = open(bytes, "").unwrap();
+    // Redacted words never reach the searchable text; the rest still do.
+    let words = reopened.text_layer(0).words;
+    assert!(!words.iter().any(|w| w.text.contains("dana")), "{words:?}");
+    assert!(words.iter().any(|w| w.text == "Phone"), "{words:?}");
+    let shown = reopened.render(0, 1.);
     let shown = image::imageops::resize(
         &shown,
         flat.width(),

@@ -262,6 +262,10 @@ pub struct Options {
     pub page: PageSettings,
     /// Laid over the output on export, copy and print (FX-003).
     pub watermark: Option<crate::watermark::Watermark>,
+    /// PDF export keeps PDF pages' words selectable and searchable in an
+    /// invisible text layer; covered words are never written (approved beta
+    /// 6 tab 6).
+    pub searchable_text: bool,
 }
 impl Default for Options {
     fn default() -> Self {
@@ -272,6 +276,7 @@ impl Default for Options {
             background: [255; 3],
             page: PageSettings::default(),
             watermark: None,
+            searchable_text: true,
         }
     }
 }

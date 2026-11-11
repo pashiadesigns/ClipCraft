@@ -9,6 +9,7 @@ use std::fmt::Write as _;
 mod drawing;
 #[cfg(test)]
 mod tests;
+mod text_layer;
 use vello_cpu::{
     kurbo::{Affine, BezPath, Cap, Join, PathEl, Point, Rect, Stroke},
     peniko::Compose,
@@ -19,6 +20,7 @@ struct Pdf {
     objects: Vec<Vec<u8>>,
     resources: Vec<(String, usize)>,
     states: Vec<(String, usize)>,
+    fonts: Vec<(String, usize)>,
 }
 impl Pdf {
     fn add(&mut self, bytes: Vec<u8>) -> usize {
@@ -39,8 +41,20 @@ impl Pdf {
         Ok(self.add(value))
     }
     fn resources(&self) -> String {
+        let fonts = if self.fonts.is_empty() {
+            String::new()
+        } else {
+            format!(
+                " /Font << {} >>",
+                self.fonts
+                    .iter()
+                    .map(|(n, id)| format!("/{n} {id} 0 R"))
+                    .collect::<Vec<_>>()
+                    .join(" ")
+            )
+        };
         format!(
-            "<< /XObject << {} >> /ExtGState << {} >> >>",
+            "<< /XObject << {} >> /ExtGState << {} >>{fonts} >>",
             self.resources
                 .iter()
                 .map(|(n, id)| format!("/{n} {id} 0 R"))
@@ -370,6 +384,8 @@ fn add_document(
             _ => None,
         })
         .collect();
+    // Everything a redaction, blur or pixelation covers, for the text layer.
+    let covers = future.clone();
     let mut content = String::new();
     let mut base = list.base;
     erase(&mut base, [0, 0], &future);
@@ -484,6 +500,9 @@ fn add_document(
                 }
             }
         }
+    }
+    if options.searchable_text {
+        text_layer::write(&mut pdf, &mut content, document, &covers)?;
     }
     let drawing = pdf.form(&content, bounds, false)?;
     let mut kids = std::mem::take(kids_slot);

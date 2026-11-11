@@ -278,6 +278,14 @@ impl Editor {
                                 ui.selectable_value(&mut d.options.format, format, format.label());
                             }
                         });
+                        if d.options.format == Format::Pdf && !d.print {
+                            crate::controls::toggle(
+                                ui,
+                                &mut d.options.searchable_text,
+                                "Searchable text",
+                            )
+                            .tip("Searchable text · Keeps the words of PDF pages selectable and searchable. Words under a redaction, blur or pixelation are always removed.");
+                        }
                         if let Some(part) = d.document.part.clone()
                             && !d.print
                         {
