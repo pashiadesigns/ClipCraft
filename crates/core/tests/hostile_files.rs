@@ -140,7 +140,7 @@ fn mutated_pdfs_fail_cleanly_or_import() {
         fixture("enc_rc4.pdf"),
         fixture("enc_aes256.pdf"),
     ];
-    let mut rng = Lcg(0x5eed_0f_9df);
+    let mut rng = Lcg(0x5eed_09df);
     let mut failures = vec![];
     let mut opened = 0;
     for round in 0..72 {
@@ -238,7 +238,7 @@ fn mutated_svgs_fail_cleanly_or_import() {
 <rect x="5" y="5" width="190" height="110" rx="12" fill="url(#g)"/>
 <g clip-path="url(#c)" filter="url(#f)"><path d="M10 100 C 40 10, 90 10, 120 100 S 180 60, 190 20" stroke="#222" stroke-width="6" fill="none"/></g>
 <use href="#c"/><text x="20" y="30" font-size="14">Sample</text></svg>"##;
-    let mut rng = Lcg(0x5eed_5a9);
+    let mut rng = Lcg(0x5eed_05a9);
     let mut failures = vec![];
     for round in 0..150 {
         let bytes = mutate(svg, &mut rng);
@@ -294,7 +294,7 @@ fn mutated_images_fail_cleanly_or_open() {
         seeds.push((format, bytes.into_inner()));
     }
     let dir = tempfile::tempdir().unwrap();
-    let mut rng = Lcg(0x5eed_1a6);
+    let mut rng = Lcg(0x5eed_01a6);
     let mut failures = vec![];
     for round in 0..160 {
         let (format, seed) = &seeds[round % seeds.len()];
