@@ -20,6 +20,10 @@ pub struct Organize {
     /// Taken out of Recent. The item stays in the Library.
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub closed: bool,
+    /// The project in a shared folder this item was opened from, for the
+    /// Library's Team and lock badges (approved beta 6 tab 3).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub shared: Option<String>,
 }
 impl Organize {
     pub fn is_empty(&self) -> bool {
@@ -149,6 +153,13 @@ impl History {
             o.app = app.clone();
             o.site = site.clone();
         })
+    }
+    /// Records the shared-folder project an item was opened from.
+    pub fn set_shared(&mut self, id: &str, path: Option<&Path>) -> Result<()> {
+        let shared = path
+            .map(|p| p.to_string_lossy().into_owned())
+            .filter(|p| p.len() <= 1024 && !p.contains('\0'));
+        self.edit_entries(&[id.to_owned()], |o| o.shared = shared.clone())
     }
 }
 

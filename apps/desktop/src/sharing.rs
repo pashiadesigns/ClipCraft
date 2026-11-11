@@ -52,6 +52,11 @@ pub(crate) struct Sharing {
     job: Option<Job>,
     team_checked: Option<Instant>,
     locks_refreshed: Option<Instant>,
+    /// Library cards' shared projects that someone else has open, by path,
+    /// with who; read with the team folder check.
+    card_locks: std::collections::HashMap<String, String>,
+    /// A shared project just opened, to note on its Library item.
+    pending_shared: Option<PathBuf>,
 }
 impl Drop for Sharing {
     /// Closing ClipDesigner closes every project, so its locks go too.
@@ -180,7 +185,11 @@ impl Editor {
     pub(crate) fn lock_opened_project(&mut self, path: &Path) {
         let team = self.quick_controls.team();
         let shared = team.lock_shared && shared_location(path, team.folder.as_deref());
-        if !shared || self.sharing.held.iter().any(|(p, _)| p == path) {
+        if !shared {
+            return;
+        }
+        self.sharing.pending_shared = Some(path.to_owned());
+        if self.sharing.held.iter().any(|(p, _)| p == path) {
             return;
         }
         self.sharing.read_only.retain(|(p, _)| p != path);
@@ -286,8 +295,40 @@ impl Editor {
         {
             self.sharing.team_checked = Some(Instant::now());
             self.sync_team_kits(ctx);
+            self.refresh_card_locks();
+        }
+        if self.sharing.pending_shared.is_some()
+            && let Some(id) = self.history.active.clone()
+            && let Some(path) = self.sharing.pending_shared.take()
+            && let Some(store) = self.history.store.as_mut()
+            && store.entries().iter().any(|e| {
+                e.id == id && e.organize.shared.as_deref() != Some(&*path.to_string_lossy())
+            })
+        {
+            let _ = store.set_shared(&id, Some(&path));
+            self.refresh_card_locks();
         }
         self.poll_sharing_job(ctx);
+    }
+    /// Who else has a Library card's shared project open, if anyone.
+    pub(crate) fn shared_holder(&self, shared: &str) -> Option<String> {
+        self.sharing.card_locks.get(shared).cloned()
+    }
+    fn refresh_card_locks(&mut self) {
+        let me = self.my_lock();
+        let now = now_ms();
+        self.sharing.card_locks = self
+            .history
+            .entries()
+            .into_iter()
+            .filter_map(|e| e.organize.shared)
+            .filter_map(|shared| {
+                let lock = capture_core::lock::read(Path::new(&shared), now)?;
+                let theirs =
+                    !(lock.computer.eq_ignore_ascii_case(&me.computer) && lock.name == me.name);
+                theirs.then_some((shared, lock.name))
+            })
+            .collect();
     }
     /// Adds each kit in the team folder that is new or changed since it was
     /// last added, replacing items with the same names.
@@ -1046,7 +1087,7 @@ pub(crate) fn team_section(ui: &mut egui::Ui, team: &mut capture_core::quick_pre
     });
 }
 
-fn paint_lock(painter: &egui::Painter, r: egui::Rect, color: egui::Color32) {
+pub(crate) fn paint_lock(painter: &egui::Painter, r: egui::Rect, color: egui::Color32) {
     let body = egui::Rect::from_min_max(
         egui::pos2(r.left() + 1., r.center().y - 1.),
         egui::pos2(r.right() - 1., r.bottom()),

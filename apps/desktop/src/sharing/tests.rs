@@ -143,6 +143,19 @@ fn a_shared_project_someone_else_has_opens_read_only() {
     assert_eq!(e.locked_by_other().map(|l| l.name.as_str()), Some("Sam"));
     assert!(!e.save(false));
     assert!(e.status.contains("Sam is editing"), "{}", e.status);
+    // Its Library card notes the shared project and shows who has it.
+    e.sharing_tick(&ctx);
+    if let Some(id) = e.history.active.clone() {
+        let entry = e.history.entry(&id).unwrap();
+        assert_eq!(
+            entry.organize.shared.as_deref(),
+            Some(&*project.to_string_lossy())
+        );
+        assert_eq!(
+            e.shared_holder(&project.to_string_lossy()).as_deref(),
+            Some("Sam")
+        );
+    }
     // The lock on disk is still Sam's.
     assert_eq!(
         capture_core::lock::read(&project, now_ms()),
