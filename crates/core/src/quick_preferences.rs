@@ -102,6 +102,54 @@ pub struct Preferences {
     /// Find Sensitive Info custom types (approved beta 5 tab 3).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub sensitive_types: Vec<crate::privacy::custom::CustomType>,
+    /// Preferences › Team (approved beta 6 tab 3).
+    #[serde(default)]
+    pub team: Team,
+}
+/// Preferences › Team: a shared folder of kits, and locks for projects
+/// opened from shared folders.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Team {
+    /// Kits here load automatically and update when the folder does.
+    pub folder: Option<PathBuf>,
+    /// Kits in the folder that are turned off, by file name.
+    pub off: Vec<String>,
+    /// Each kit file added, with the modified time it was added at, so a
+    /// kit is added again only when it changes.
+    pub added: std::collections::BTreeMap<String, u64>,
+    pub lock_shared: bool,
+    /// Shown to others on a lock; empty uses the Windows user name.
+    pub display_name: String,
+}
+impl Default for Team {
+    fn default() -> Self {
+        Self {
+            folder: None,
+            off: vec![],
+            added: Default::default(),
+            lock_shared: true,
+            display_name: String::new(),
+        }
+    }
+}
+impl Team {
+    pub fn validate(&self) -> Result<()> {
+        if self.display_name.chars().count() > 60
+            || self.display_name.chars().any(char::is_control)
+            || self.off.len() > 256
+            || self.added.len() > 256
+            || self
+                .folder
+                .as_ref()
+                .is_some_and(|f| f.as_os_str().len() > 1024 || !f.is_absolute())
+        {
+            return Err(Error::Invalid(
+                "Team settings need a name of up to 60 characters and a full folder path.".into(),
+            ));
+        }
+        Ok(())
+    }
 }
 /// The key that turns snapping off for one drag.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -206,6 +254,7 @@ impl Default for Preferences {
             blank: BlankDefaults::default(),
             workspace: Workspace::default(),
             sensitive_types: Vec::new(),
+            team: Team::default(),
         }
     }
 }
@@ -264,6 +313,10 @@ impl Preferences {
             Choice::SensitiveTypes(list) => {
                 crate::privacy::custom::validate_all(&list)?;
                 self.sensitive_types = list;
+            }
+            Choice::Team(team) => {
+                team.validate()?;
+                self.team = team;
             }
             Choice::Watermarks(list, default) => {
                 if list.len() > 32
@@ -439,6 +492,7 @@ pub enum Choice {
     /// Watermark presets and the default preset's name.
     Watermarks(Vec<crate::watermark::Watermark>, Option<String>),
     SensitiveTypes(Vec<crate::privacy::custom::CustomType>),
+    Team(Team),
     Keybinds(crate::keybinds::Keybinds),
     Capture(crate::capture_options::Settings),
     Video(crate::video::Options),

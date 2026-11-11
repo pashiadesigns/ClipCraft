@@ -75,6 +75,7 @@ mod project_sessions;
 mod rich_text;
 mod rotate_image;
 mod sensitive_ui;
+mod sharing;
 mod single_instance;
 mod spelling;
 mod startup;
@@ -203,6 +204,7 @@ struct Editor {
     icon_library: icon_library::Panel,
     image_transform: Option<capture_core::ImageTransform>,
     rotate_image: Option<rotate_image::RotateImage>,
+    sharing: sharing::Sharing,
     crop: Option<crop::Crop>,
     cut_out: Option<cut_out::CutOut>,
 
@@ -404,6 +406,7 @@ impl Editor {
             icon_library: Default::default(),
             image_transform: None,
             rotate_image: None,
+            sharing: Default::default(),
             crop: None,
 
             cut_out: None,
@@ -577,10 +580,14 @@ impl Editor {
             .set_directory(self.dialog_directory())
             .add_filter(
                 "Images, videos, PDFs and ClipDesigner projects",
-                &["iclip", "vclip", "mp4", "png", "jpg", "jpeg", "pdf"],
+                &[
+                    "iclip", "vclip", "mp4", "png", "jpg", "jpeg", "pdf", "cdpack", "cdkit",
+                ],
             )
             .add_filter("PDF documents", &["pdf"])
             .add_filter("Image clips", &["iclip"])
+            .add_filter("Packed projects", &[capture_core::pack::EXTENSION])
+            .add_filter("Kits", &[capture_core::kit::EXTENSION])
             .add_filter("JSON project source", &["json"])
             .pick_file()
         {
@@ -588,6 +595,17 @@ impl Editor {
         }
     }
     fn open_path(&mut self, path: PathBuf) {
+        let extension = path
+            .extension()
+            .map(|e| e.to_string_lossy().to_ascii_lowercase());
+        if extension.as_deref() == Some(capture_core::kit::EXTENSION) {
+            self.open_kit(&path);
+            return;
+        }
+        if extension.as_deref() == Some(capture_core::pack::EXTENSION) {
+            self.open_pack(path);
+            return;
+        }
         if pdf_import_ui::is_pdf_path(&path) {
             self.pdf_import = Some(pdf_import_ui::PdfImport::new(path));
             return;
@@ -607,6 +625,9 @@ impl Editor {
             }) {
                 Ok(session) => {
                     self.switch_session(session, None, Some(&path));
+                    if is_project {
+                        self.lock_opened_project(&path);
+                    }
                     self.reset_document_tools();
                     self.remember_dialog_folder(
                         capture_core::quick_preferences::Folder::Open,
@@ -651,6 +672,10 @@ impl Editor {
         if !self.commit_text() {
             return false;
         }
+        if !save_as && self.refuse_locked_save() {
+            return false;
+        }
+        let mut pack = None;
         let path = self
             .path
             .clone()
@@ -678,12 +703,27 @@ impl Editor {
                             })
                             .unwrap_or_else(|| "capture.iclip".into()),
                     )
-                    .add_filter("ClipDesigner image clip", &["iclip"]);
-                dialog
-                    .save_file()
-                    .map(|p| capture_core::project_file::image_path(&p))
+                    .add_filter("ClipDesigner image clip", &["iclip"])
+                    .add_filter(
+                        "Pack project (one file with all media)",
+                        &[capture_core::pack::EXTENSION],
+                    );
+                let chosen = dialog.save_file()?;
+                if sharing::is_pack(&chosen) {
+                    pack = Some(chosen);
+                    return None;
+                }
+                Some(capture_core::project_file::image_path(&chosen))
             });
+        if let Some(out) = pack {
+            self.pack_project(out);
+            return false;
+        }
         if let Some(path) = path {
+            if self.locked_by_other().is_some() && self.path.as_ref() == Some(&path) {
+                self.refuse_locked_save();
+                return false;
+            }
             match self.session.save(&path) {
                 Ok(()) => {
                     self.status = format!("Saved {}", path.display());
@@ -884,7 +924,13 @@ impl Editor {
 
     fn perform_action(&mut self, action: FileAction, ctx: &egui::Context) {
         match action {
-            FileAction::VideoLoaded { session, path } => self.accept_video(session, path),
+            FileAction::VideoLoaded { session, path } => {
+                let project = capture_core::project_file::is_video_project(&path);
+                self.accept_video(session, path.clone());
+                if project {
+                    self.lock_opened_project(&path);
+                }
+            }
             FileAction::New => {
                 self.new_image = Some(new_image::NewImage::remembered(
                     self.quick_controls.blank_defaults(),
@@ -1172,6 +1218,7 @@ impl eframe::App for Editor {
         self.prepare_property_input(&ctx);
         self.process_keybind_input(&ctx);
         self.preferences_shortcut(&ctx);
+        self.sharing_tick(&ctx);
         if self.capture_result.is_some() {
             ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
             ctx.request_repaint_after(std::time::Duration::from_millis(100));
@@ -1188,6 +1235,9 @@ impl eframe::App for Editor {
             self.refresh_canvas_display(&ctx);
         }
         if !file_workspace_visible {
+            if !self.shell.library {
+                self.show_lock_banner(ui);
+            }
             egui::CentralPanel::default()
                 .frame(
                     egui::Frame::new()
@@ -1230,6 +1280,7 @@ impl eframe::App for Editor {
         self.show_page_setup(&ctx);
         self.show_image_transform(&ctx);
         self.show_rotate_image(&ctx);
+        self.show_sharing(&ctx);
         self.editor_keybind_input(&ctx);
 
         self.shared_format_shortcuts(&ctx);

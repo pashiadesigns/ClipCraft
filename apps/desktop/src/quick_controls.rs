@@ -101,6 +101,19 @@ impl QuickControls {
         }
         self.warning.clone().map_or(Ok(()), Err)
     }
+    /// Preferences › Team (approved beta 6 tab 3).
+    pub(crate) fn team(&self) -> capture_core::quick_preferences::Team {
+        self.prefs.team.clone()
+    }
+    pub(crate) fn set_team(
+        &mut self,
+        team: capture_core::quick_preferences::Team,
+    ) -> Result<(), String> {
+        if self.prefs.team != team {
+            self.remember(Choice::Team(team));
+        }
+        self.warning.clone().map_or(Ok(()), Err)
+    }
     pub(super) fn thumbnail_details(&self) -> bool {
         self.prefs.thumbnail_details
     }
@@ -337,6 +350,7 @@ impl QuickControls {
             Choice::CanvasSnapping(d.canvas_snapping),
             Choice::Video(video),
             Choice::Workspace(d.workspace),
+            Choice::Team(d.team.clone()),
         ] {
             self.remember(choice);
         }

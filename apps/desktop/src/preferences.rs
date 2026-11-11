@@ -19,15 +19,17 @@ pub(crate) enum Section {
     Library,
     Shortcuts,
     Toolbar,
+    Team,
 }
 impl Section {
-    const ALL: [Self; 6] = [
+    const ALL: [Self; 7] = [
         Self::General,
         Self::Editor,
         Self::Capture,
         Self::Library,
         Self::Shortcuts,
         Self::Toolbar,
+        Self::Team,
     ];
     fn label(self) -> &'static str {
         match self {
@@ -37,6 +39,7 @@ impl Section {
             Self::Library => "Library",
             Self::Shortcuts => "Shortcuts",
             Self::Toolbar => "Toolbar",
+            Self::Team => "Team",
         }
     }
 }
@@ -179,6 +182,7 @@ impl Editor {
                     self.preferences_library(ui, &mut open.draft.workspace.keep_versions)
                 }
                 Section::Toolbar => self.toolbar_section(ui),
+                Section::Team => crate::sharing::team_section(ui, &mut open.draft.team),
                 Section::Shortcuts => {}
             });
     }
@@ -275,6 +279,7 @@ impl Editor {
             }
             Section::Library => d.workspace.keep_versions = true,
             Section::Toolbar => self.apply_toolbar_choice(Choice::ResetToolbar),
+            Section::Team => d.team = defaults.team.clone(),
             Section::Shortcuts => {}
         }
     }
@@ -284,6 +289,8 @@ impl Editor {
             self.status = e;
         }
         self.save_library_capacity(ctx);
+        // A new team folder or a kit turned back on is added straight away.
+        self.sync_team_kits(ctx);
         if self.options.draft.is_some() {
             self.apply_shortcut_draft(ctx);
         }

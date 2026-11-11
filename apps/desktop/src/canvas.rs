@@ -1201,6 +1201,7 @@ pub(crate) mod tests {
             icon_library: Default::default(),
             image_transform: None,
             rotate_image: None,
+            sharing: Default::default(),
             crop: None,
 
             cut_out: None,

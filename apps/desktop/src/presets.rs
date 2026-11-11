@@ -31,6 +31,10 @@ impl Default for Presets {
     }
 }
 impl Presets {
+    /// Saved arrow styles, for kits.
+    pub(crate) fn arrow_store(&mut self) -> Option<&mut Store> {
+        self.store.as_mut()
+    }
     pub(crate) fn new() -> Self {
         let root =
             crate::storage_locations::configured(capture_core::quick_preferences::Folder::Presets)

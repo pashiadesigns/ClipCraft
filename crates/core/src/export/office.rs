@@ -9,7 +9,6 @@
 use crate::{Annotation, Document, Error, Kind, Result};
 use image::RgbaImage;
 use std::fmt::Write as _;
-use std::io::Write as _;
 
 /// PowerPoint slide size.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
@@ -73,79 +72,17 @@ impl Default for DocumentOptions {
 
 // ---------------------------------------------------------------- zip
 
-/// A small ZIP writer (deflate), enough for Office packages.
-struct Zip {
-    out: Vec<u8>,
-    central: Vec<u8>,
-    count: u16,
-}
+/// Office packages are ZIP files built in memory.
+struct Zip(crate::zip::Writer<Vec<u8>>);
 impl Zip {
     fn new() -> Self {
-        Self {
-            out: vec![],
-            central: vec![],
-            count: 0,
-        }
+        Self(crate::zip::Writer::new(Vec::new()))
     }
     fn add(&mut self, name: &str, data: &[u8]) -> Result<()> {
-        let mut crc = flate2::Crc::new();
-        crc.update(data);
-        let crc = crc.sum();
-        let mut enc =
-            flate2::write::DeflateEncoder::new(Vec::new(), flate2::Compression::default());
-        enc.write_all(data)?;
-        let packed = enc.finish()?;
-        let offset = self.out.len() as u32;
-        let name_bytes = name.as_bytes();
-        let header = |sig: u32, central: bool| {
-            let mut h = vec![];
-            h.extend(sig.to_le_bytes());
-            if central {
-                h.extend(20u16.to_le_bytes()); // made by
-            }
-            h.extend(20u16.to_le_bytes()); // needed
-            h.extend(0u16.to_le_bytes()); // flags
-            h.extend(8u16.to_le_bytes()); // deflate
-            h.extend(0u16.to_le_bytes()); // time
-            h.extend(0x21u16.to_le_bytes()); // date 1980-01-01
-            h.extend(crc.to_le_bytes());
-            h.extend((packed.len() as u32).to_le_bytes());
-            h.extend((data.len() as u32).to_le_bytes());
-            h.extend((name_bytes.len() as u16).to_le_bytes());
-            h.extend(0u16.to_le_bytes()); // extra
-            if central {
-                h.extend(0u16.to_le_bytes()); // comment
-                h.extend(0u16.to_le_bytes()); // disk
-                h.extend(0u16.to_le_bytes()); // internal attributes
-                h.extend(0u32.to_le_bytes()); // external attributes
-                h.extend(offset.to_le_bytes());
-            }
-            h.extend(name_bytes);
-            h
-        };
-        self.out.extend(header(0x0403_4b50, false));
-        self.out.extend(&packed);
-        self.central.extend(header(0x0201_4b50, true));
-        self.count += 1;
-        if self.out.len() > u32::MAX as usize / 2 {
-            return Err(Error::Invalid(
-                "This export is too large for one file.".into(),
-            ));
-        }
-        Ok(())
+        self.0.bytes(name, data)
     }
-    fn finish(mut self) -> Vec<u8> {
-        let start = self.out.len() as u32;
-        let size = self.central.len() as u32;
-        self.out.extend(self.central);
-        self.out.extend(0x0605_4b50u32.to_le_bytes());
-        self.out.extend([0; 4]);
-        self.out.extend(self.count.to_le_bytes());
-        self.out.extend(self.count.to_le_bytes());
-        self.out.extend(size.to_le_bytes());
-        self.out.extend(start.to_le_bytes());
-        self.out.extend(0u16.to_le_bytes());
-        self.out
+    fn finish(self) -> Result<Vec<u8>> {
+        self.0.finish()
     }
 }
 
@@ -697,7 +634,7 @@ fn package(
             )?;
         }
     }
-    Ok(zip.finish())
+    zip.finish()
 }
 
 // ---------------------------------------------------------------- Word
@@ -819,7 +756,7 @@ pub fn docx(
         "word/styles.xml",
         b"<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><w:styles xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\"><w:style w:type=\"paragraph\" w:default=\"1\" w:styleId=\"Normal\"><w:name w:val=\"Normal\"/><w:pPr><w:spacing w:after=\"160\"/></w:pPr><w:rPr><w:sz w:val=\"22\"/></w:rPr></w:style><w:style w:type=\"paragraph\" w:styleId=\"Title\"><w:name w:val=\"Title\"/><w:basedOn w:val=\"Normal\"/><w:next w:val=\"Normal\"/><w:pPr><w:spacing w:after=\"240\"/></w:pPr><w:rPr><w:sz w:val=\"56\"/></w:rPr></w:style><w:style w:type=\"paragraph\" w:styleId=\"Heading1\"><w:name w:val=\"heading 1\"/><w:basedOn w:val=\"Normal\"/><w:next w:val=\"Normal\"/><w:pPr><w:keepNext/><w:spacing w:before=\"360\" w:after=\"120\"/><w:outlineLvl w:val=\"0\"/></w:pPr><w:rPr><w:b/><w:sz w:val=\"32\"/></w:rPr></w:style></w:styles>",
     )?;
-    Ok(zip.finish())
+    zip.finish()
 }
 
 #[cfg(test)]

@@ -57,6 +57,12 @@ impl State {
     pub(crate) fn pending_save(&self) -> Option<&Payload> {
         self.edit.as_ref().map(|(_, _, p)| p)
     }
+    /// Saved Blocks and other presets, for kits.
+    pub(crate) fn store_mut(&mut self) -> Option<&mut Store> {
+        self.init();
+        self.group_thumbs.clear();
+        self.store.as_mut()
+    }
     pub(crate) fn take_group(&mut self) -> Option<capture_core::group_presets::Composition> {
         self.placed_group.take()
     }

@@ -315,3 +315,97 @@ fn mutated_images_fail_cleanly_or_open() {
     }
     assert!(failures.is_empty(), "{failures:#?}");
 }
+
+/// Kits and packs come from other people: mutated ones, and packs that try
+/// to write outside their folder or unpack to something huge, must fail
+/// cleanly and leave nothing behind.
+#[test]
+fn mutated_kits_and_packs_fail_cleanly() {
+    use capture_core::kit::Kit;
+    let mut kit = Kit::new("Team styles", "ClipDesigner test");
+    kit.sensitive_types = vec![capture_core::privacy::custom::CustomType::new(
+        "Employee ID",
+        "EMP-#####",
+    )];
+    kit.presets = capture_core::object_styles::presets(capture_core::Kind::Rectangle)
+        .into_iter()
+        .take(3)
+        .collect();
+    let kit_bytes = kit.encode().unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let pack_path = dir.path().join("seed.cdpack");
+    capture_core::pack::pack(
+        &capture_core::Document::blank(64, 48).unwrap(),
+        "Seed",
+        &pack_path,
+        &|| false,
+        &mut |_| {},
+    )
+    .unwrap();
+    let pack_bytes = std::fs::read(&pack_path).unwrap();
+    let mut rng = Lcg(0x5eed_0c17);
+    let mut failures = vec![];
+    for round in 0..120 {
+        let kit_case = mutate(&kit_bytes, &mut rng);
+        if let Some(f) = bounded(
+            &format!("kit round {round}"),
+            Duration::from_secs(20),
+            move || {
+                let _ = Kit::decode(&kit_case);
+            },
+        ) {
+            failures.push(f);
+        }
+        let path = dir.path().join(format!("case{round}.cdpack"));
+        std::fs::write(&path, mutate(&pack_bytes, &mut rng)).unwrap();
+        let into = dir.path().join(format!("out{round}"));
+        if let Some(f) = bounded(
+            &format!("pack round {round}"),
+            Duration::from_secs(20),
+            move || {
+                if capture_core::pack::unpack(&path, &into, &|| false).is_err() {
+                    assert!(!into.exists(), "a failed unpack left {}", into.display());
+                }
+            },
+        ) {
+            failures.push(f);
+        }
+    }
+    assert!(failures.is_empty(), "{failures:#?}");
+    // Hand-made hostile packs.
+    let manifest = br#"{"format":"clipdesigner-pack","version":1,"project":"A.vclip"}"#.as_slice();
+    let project = serde_json::to_vec(&capture_core::Document::blank(8, 8).unwrap()).unwrap();
+    for (name, entries) in [
+        (
+            "escape",
+            vec![
+                ("pack.json", manifest),
+                ("A.vclip", &project[..]),
+                ("A.vclip-media/../../x.cmd", b"x".as_slice()),
+            ],
+        ),
+        (
+            "nested",
+            vec![
+                ("pack.json", manifest),
+                ("A.vclip", &project[..]),
+                ("A.vclip-media/deep/x.mp4", b"x".as_slice()),
+            ],
+        ),
+        ("no project", vec![("pack.json", manifest)]),
+    ] {
+        match capture_core::zip::to_vec(&entries) {
+            Err(_) => {}
+            Ok(bytes) => {
+                let path = dir.path().join(format!("{name}.cdpack"));
+                std::fs::write(&path, bytes).unwrap();
+                let into = dir.path().join(format!("{name}-out"));
+                assert!(
+                    capture_core::pack::unpack(&path, &into, &|| false).is_err(),
+                    "{name}"
+                );
+                assert!(!into.exists(), "{name}");
+            }
+        }
+    }
+}

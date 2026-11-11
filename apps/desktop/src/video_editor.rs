@@ -936,6 +936,10 @@ impl Editor {
             return false;
         }
         self.video.pause();
+        if !save_as && self.refuse_locked_save() {
+            return false;
+        }
+        let mut pack = None;
         let path = self
             .path
             .clone()
@@ -953,13 +957,29 @@ impl Editor {
                             .map_or_else(|| "Video clip.vclip".into(), |n| format!("{n}.vclip")),
                     )
                     .add_filter("ClipDesigner video clip", &["vclip"])
+                    .add_filter(
+                        "Pack project (one file with all media)",
+                        &[capture_core::pack::EXTENSION],
+                    )
                     .save_file()
-                    .map(|mut p| {
+                    .and_then(|mut p| {
+                        if crate::sharing::is_pack(&p) {
+                            pack = Some(p);
+                            return None;
+                        }
                         p.set_extension("vclip");
-                        p
+                        Some(p)
                     })
             });
+        if let Some(out) = pack {
+            self.pack_project(out);
+            return false;
+        }
         if let Some(path) = path {
+            if self.locked_by_other().is_some() && self.path.as_ref() == Some(&path) {
+                self.refuse_locked_save();
+                return false;
+            }
             match self.session.save(&path) {
                 Ok(()) => {
                     self.remember_dialog_folder(

@@ -83,6 +83,10 @@ fn bitmap(path: &std::path::Path) -> Result<Arc<Bitmap>, String> {
     .map(Arc::new)
     .map_err(|e| e.to_string())
 }
+/// Template lists are built again next time, after a kit added templates.
+pub(crate) fn forget_catalog(ctx: &egui::Context) {
+    ctx.data_mut(|d| d.remove::<Catalog>(egui::Id::unique("template-catalog")));
+}
 impl Editor {
     fn template_catalog(&self, ctx: &egui::Context) -> Catalog {
         let key = egui::Id::unique("template-catalog");

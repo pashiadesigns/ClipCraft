@@ -7,6 +7,7 @@ mod preview;
 mod shelf;
 pub(super) use preview::Preview;
 pub(crate) use shelf::{create_palette, take_image_request};
+pub(crate) use shelf::{palette_store, reload as reload_palettes};
 
 #[derive(Clone, Default)]
 struct ColorDraft {

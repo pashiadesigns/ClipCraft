@@ -66,11 +66,14 @@ pub mod cut_out;
 mod flatten_pages;
 #[cfg(test)]
 mod flatten_tests;
+pub mod kit;
 pub mod layout_selection;
 pub mod line_style;
+pub mod lock;
 pub mod multi_selection;
 pub mod object_state;
 pub mod object_styles;
+pub mod pack;
 pub mod palettes;
 pub mod pdf_import;
 pub mod polygon;
@@ -102,6 +105,7 @@ pub mod tilt;
 pub mod toolbar;
 pub mod vector_import;
 pub mod watermark;
+pub mod zip;
 const MAX_FILE_BYTES: u64 = 160_000_000;
 
 #[derive(Debug, thiserror::Error)]

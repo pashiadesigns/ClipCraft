@@ -152,6 +152,15 @@ impl Editor {
                                     self.request_action(FileAction::Open, &ctx);
                                 }
                                 ui.label("Open an image or an editable ClipDesigner project.");
+                                ui.add_space(16.0);
+                                if ui
+                                    .add_sized([220.0, 36.0], egui::Button::new("Add a kit…"))
+                                    .tip("Add a kit · Add styles and building blocks someone shared as a .cdkit file. You choose what to add.")
+                                    .clicked()
+                                {
+                                    self.choose_kit_to_add();
+                                }
+                                ui.label("Add presets, Blocks and palettes from a kit file.");
                                 ui.add_space(30.0);
                                 self.backstage_recent(ui);
                             }
@@ -182,6 +191,15 @@ impl Editor {
                                 ui.label(
                                     "Keep the original image, annotations and formatting editable.",
                                 );
+                                ui.add_space(16.0);
+                                if ui
+                                    .add_sized([220.0, 38.0], egui::Button::new("Share a kit…"))
+                                    .tip("Share a kit · Save your presets, Blocks, palettes and other building blocks in one .cdkit file to send.")
+                                    .clicked()
+                                {
+                                    self.open_share_kit();
+                                }
+                                ui.label("Your styles and building blocks in one file to send.");
                                 ui.add_space(16.0);
                                 if ui
                                     .add_sized(

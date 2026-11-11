@@ -587,6 +587,25 @@ step: Open Export and choose PowerPoint or Word. | title: Choose the format
 step: Choose the slide size and what each slide shows, or the page size and layout. | title: Set the options
 step: Click Save and choose where. | title: Save
 
+# Share with your team
+id: sharing
+section: Export
+where: File › Export › Share a kit, File › Open › Add a kit, Preferences › Team
+controls: Share a kit…, Add a kit…, Kit name, Save kit…, Same names, Keep both, Replace mine, Team, Browse…, Clear, Lock projects I open from shared folders, Show my name as, Open a copy, Pack project
+keywords: kit, cdkit, team, share presets, styles, collaborate, lock, shared drive, google drive, onedrive, sharepoint, pack, cdpack, send project
+---
+A kit is one .cdkit file with your presets, Blocks, color palettes, custom sensitive types, and if you like your watermarks and templates. Send it any way you like. Whoever opens it sees what it adds and chooses; nothing changes until they click Add. When a name is already used, Keep both adds a numbered copy and Replace mine replaces it.
+
+Preferences › Team can point at a shared folder of kits, such as a Google Drive, network, Teams or SharePoint folder. Kits there are added automatically, and again whenever someone updates one. ClipDesigner never changes the folder; to change a team kit, share a new one.
+
+A project opened from a shared folder gets a small lock file, so others see who has it and since when, and it opens read-only for them. Open a copy makes your own copy in the Library. The lock clears when you close ClipDesigner, or after 12 hours if a PC went offline.
+
+To hand a project to someone, choose Pack project in Save As: the project and all its media go in one .cdpack file. Opening it unpacks a normal project into a new folder beside it.
+
+step: On the File › Export page, click Share a kit…, choose what to include and save it. | title: Share a kit
+step: Open the .cdkit, or use File › Open › Add a kit…, then choose what to add. | title: Add a kit
+step: For a team, set the team kit folder in Preferences › Team. | title: Team folder
+
 # Watermark
 id: watermark
 section: Export
