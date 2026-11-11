@@ -79,7 +79,7 @@ $source=@"
 <RegistrySearch Id="ActualWindowsBuild" Root="HKLM" Key="SOFTWARE\Microsoft\Windows NT\CurrentVersion" Name="CurrentBuildNumber" Type="raw" Win64="yes" />
 </Property>
 <Condition Message="ClipDesigner requires 64-bit Windows 10 or newer.">Installed OR (VersionNT64 AND CLIPDESIGNER_WINDOWS_BUILD &gt;= 10240)</Condition>
-<Property Id="ARPPRODUCTICON" Value="AppIcon" /><Property Id="ARPURLINFOABOUT" Value="https://github.com/pashiadesigns/ClipCraft" />
+<Property Id="ARPPRODUCTICON" Value="AppIcon" /><Property Id="ARPURLINFOABOUT" Value="https://github.com/pashiadesigns/ClipDesigner" />
 <Property Id="MSIRESTARTMANAGERCONTROL" Value="Disable" /><Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER" />
 <Icon Id="AppIcon" SourceFile="$(Xml (Join-Path $payload 'ClipDesigner.exe'))" />
 <Directory Id="TARGETDIR" Name="SourceDir"><Directory Id="LocalAppDataFolder"><Directory Id="ProgramsFolder" Name="Programs"><Directory Id="INSTALLFOLDER" Name="ClipDesigner">

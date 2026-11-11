@@ -7,7 +7,7 @@ local Windows workspace. Capture your screen, point out what matters, add narrat
 and share a polished image, PDF, GIF or video. Everything stays on your PC, and no
 ClipDesigner account is required.
 
-**[Download 1.0.0-beta.3](https://github.com/pashiadesigns/ClipCraft/releases/tag/v1.0.0-beta.3)**
+**[Download 1.0.0-beta.3](https://github.com/pashiadesigns/ClipDesigner/releases/tag/v1.0.0-beta.3)**
 · [Install & storage locations](docs/installing.md) · [Build from source](docs/building.md)
 · [Known limitations](#beta-notes)
 
@@ -43,7 +43,7 @@ and Free perspective corners that follow the pointer for the whole drag.
 **Beta 2** was a large update: tracked video redaction with review, built-in
 illustrated Help, keyframes, GIF Studio, webcam picture-in-picture, filters and
 borders, Preferences, a clearer Library and a simpler ribbon. See the
-[release notes](https://github.com/pashiadesigns/ClipCraft/releases) for details.
+[release notes](https://github.com/pashiadesigns/ClipDesigner/releases) for details.
 
 ## Images that explain
 
@@ -170,5 +170,5 @@ ClipDesigner is written in Rust. See [building](docs/building.md),
 [release verification](docs/github-releases.md), [licensing](docs/licensing.md),
 [contributing](CONTRIBUTING.md) and [security reporting](SECURITY.md).
 
-Report a bug through [GitHub Issues](https://github.com/pashiadesigns/ClipCraft/issues)
+Report a bug through [GitHub Issues](https://github.com/pashiadesigns/ClipDesigner/issues)
 with the version, reproduction steps and a non-sensitive example when possible.

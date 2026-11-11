@@ -1,6 +1,6 @@
 # Installing ClipDesigner
 
-Download **1.0.0-beta.3** from the [release page](https://github.com/pashiadesigns/ClipCraft/releases/tag/v1.0.0-beta.3).
+Download **1.0.0-beta.3** from the [release page](https://github.com/pashiadesigns/ClipDesigner/releases/tag/v1.0.0-beta.3).
 Windows 10/11 x64 is supported. Both downloads are unsigned; Windows may show an
 unknown-publisher or reputation warning.
 
