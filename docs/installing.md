@@ -1,6 +1,6 @@
 # Installing ClipDesigner
 
-Download **1.0.0-beta.3** from the [release page](https://github.com/pashiadesigns/ClipDesigner/releases/tag/v1.0.0-beta.3).
+Download **1.0.0-beta.4** from the [release page](https://github.com/pashiadesigns/ClipDesigner/releases/tag/v1.0.0-beta.4).
 Windows 10/11 x64 is supported. Both downloads are unsigned; Windows may show an
 unknown-publisher or reputation warning.
 
@@ -8,7 +8,7 @@ unknown-publisher or reputation warning.
 
 ClipDesigner was called ClipCraft through 1.0.0-beta.3; that release installs as
 ClipCraft under `%LOCALAPPDATA%\Programs\ClipCraft` and ships `ClipCraft.exe`.
-Releases after it use the ClipDesigner name:
+From 1.0.0-beta.4, releases use the ClipDesigner name:
 
 - The MSI is an upgrade of the ClipCraft MSI. Installing it removes the ClipCraft
   installation, Start menu shortcut and file registrations and replaces them with
@@ -23,7 +23,7 @@ Releases after it use the ClipDesigner name:
 
 ## MSI installer
 
-Run `clipcraft-1.0.0-beta.3-windows-x64.msi`. It installs for the current user under
+Run `clipdesigner-1.0.0-beta.4-windows-x64.msi`. It installs for the current user under
 `%LOCALAPPDATA%\Programs\ClipDesigner` by default and creates one **ClipDesigner** Start
 menu shortcut and an Installed Apps entry. It registers `.iclip` and `.vclip` in
 Open With/Default Apps without modifying Windows' protected default-app choices.

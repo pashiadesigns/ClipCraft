@@ -1,6 +1,6 @@
 # Release verification
 
-The 1.0.0-beta.3 release provides an unsigned Windows x64 **MSI installer**, a
+The 1.0.0-beta.4 release provides an unsigned Windows x64 **MSI installer**, a
 **portable ZIP**, and a source archive for the exact release commit. It replaces
 the previous development downloads; old project formats are not supported.
 
@@ -8,12 +8,13 @@ the previous development downloads; old project formats are not supported.
 identifies every portable payload file except itself. `SOURCE-SHA256SUMS.txt`
 identifies committed Git blobs; compare with the source archive, since a checkout
 may convert line endings. `build-info.json` records the exact commit, compiler,
-target, lockfile hash and local build origin. This release is built locally and
-does not claim a GitHub-hosted build attestation or an Authenticode signature.
+target, lockfile hash and build origin. This release is built by GitHub Actions
+on a GitHub-hosted Windows runner from the exact release commit. It does not
+claim a build attestation or an Authenticode signature.
 
 ```powershell
-Get-FileHash ./clipcraft-1.0.0-beta.3-windows-x64.msi -Algorithm SHA256
-Get-FileHash ./clipcraft-1.0.0-beta.3-windows-x64.zip -Algorithm SHA256
+Get-FileHash ./clipdesigner-1.0.0-beta.4-windows-x64.msi -Algorithm SHA256
+Get-FileHash ./clipdesigner-1.0.0-beta.4-windows-x64.zip -Algorithm SHA256
 ```
 
 The SPDX inventory covers the resolved Windows build/test dependency graph and

@@ -7,7 +7,7 @@ local Windows workspace. Capture your screen, point out what matters, add narrat
 and share a polished image, PDF, GIF or video. Everything stays on your PC, and no
 ClipDesigner account is required.
 
-**[Download 1.0.0-beta.3](https://github.com/pashiadesigns/ClipDesigner/releases/tag/v1.0.0-beta.3)**
+**[Download 1.0.0-beta.4](https://github.com/pashiadesigns/ClipDesigner/releases/tag/v1.0.0-beta.4)**
 · [Install & storage locations](docs/installing.md) · [Build from source](docs/building.md)
 · [Known limitations](#beta-notes)
 
@@ -16,8 +16,8 @@ This beta is unsigned. The source is available under Apache-2.0 with retained
 third-party notices. Older development project formats are not supported.
 
 > **New name, same app.** ClipDesigner was called ClipCraft through 1.0.0-beta.3,
-> and that release still installs and appears as ClipCraft. The next release
-> installs as ClipDesigner, replaces the ClipCraft installation and moves your
+> and that release still installs and appears as ClipCraft. From 1.0.0-beta.4,
+> it installs as ClipDesigner, replaces the ClipCraft installation and moves your
 > Library, settings and presets from `%LOCALAPPDATA%\ClipCraft` to
 > `%LOCALAPPDATA%\ClipDesigner` the first time it starts.
 

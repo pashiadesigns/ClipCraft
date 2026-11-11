@@ -1,0 +1,27 @@
+{
+  "version": "1.0.0-beta.4",
+  "date": "2026-11-11",
+  "channel": "beta",
+  "title": "ClipDesigner 1.0 beta 4",
+  "summary": "ClipCraft is now ClipDesigner. Same app, new name: this release installs as ClipDesigner, replaces ClipCraft beta 3 and brings your Library and settings with it.",
+  "changes": {
+    "New name": [
+      "The app, installer, Start menu entry, window titles and file types are now called ClipDesigner. The program is ClipDesigner.exe.",
+      "The MSI upgrades ClipCraft beta 3 in place: it removes the ClipCraft installation, shortcut and file registrations and installs ClipDesigner under %LOCALAPPDATA%\\Programs\\ClipDesigner."
+    ],
+    "Your data": [
+      "On first start, your Library, recordings, preferences, styles and presets move from %LOCALAPPDATA%\\ClipCraft to %LOCALAPPDATA%\\ClipDesigner. Nothing already in the new folder is overwritten.",
+      "Exit ClipCraft before installing. Anything still in use is moved the next time ClipDesigner starts.",
+      "Portable copies: run the included register-project-files.ps1 to replace ClipCraft file registrations for .iclip and .vclip."
+    ]
+  },
+  "limitations": [
+    "Unsigned Windows 10/11 x64 beta. Old development project formats are unsupported; back up work before updating.",
+    "Automatic detection and tracking of sensitive information does not guarantee complete coverage. Review every flagged range and the whole video before sharing. Focus and Magnify are emphasis, not privacy tools; blur and pixelation may leave information inferable.",
+    "Framed crossfades involving rotation, transparency or different frames can preview less smoothly than they export.",
+    "Scrolling capture is Region-only. By website fills in only when the window title names the site.",
+    "Silent startup on some older Windows 11 laptops is still being investigated.",
+    "PDF text is outlined, not searchable. No automatic updater.",
+    "If Windows asks which app should open .iclip or .vclip files after the upgrade, choose ClipDesigner."
+  ]
+}

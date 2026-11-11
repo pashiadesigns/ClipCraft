@@ -1,0 +1,54 @@
+name: Release package
+# Builds the MSI and portable ZIP for the version in Cargo.toml with the same
+# script used for published releases, test-installs the MSI on the runner and
+# keeps the files as a workflow artifact. Nothing is published: a maintainer
+# downloads the artifact, tests it and attaches the approved files to a release.
+on:
+  pull_request:
+    paths:
+      - 'releases/**'
+      - 'Cargo.toml'
+      - '.github/workflows/package.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: package-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  package:
+    runs-on: windows-2025
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          # Package the exact branch commit, not the temporary PR merge commit,
+          # so build-info.json names a commit that can be tagged for release.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '24'
+      - run: cargo fetch --locked
+      - name: Build, check and package
+        shell: pwsh
+        run: |
+          $manifest = Get-Content -Raw -LiteralPath Cargo.toml
+          if ($manifest -notmatch '(?m)^version\s*=\s*"(\d+\.\d+\.\d+-[a-z0-9.]+)"') { throw 'Workspace version not found.' }
+          $version = $Matches[1]
+          "RELEASE_VERSION=$version" >> $env:GITHUB_ENV
+          ./scripts/package-github.ps1 -Version $version
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: clipdesigner-${{ env.RELEASE_VERSION }}-windows-x64
+          path: artifacts/github/releases/${{ env.RELEASE_VERSION }}/public/
+          if-no-files-found: error
+          retention-days: 30
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        if: failure()
+        with:
+          name: package-logs
+          path: |
+            artifacts/**/*.log
+            artifacts/**/*.json
+          if-no-files-found: ignore
