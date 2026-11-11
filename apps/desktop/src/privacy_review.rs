@@ -130,6 +130,9 @@ impl Editor {
             }
         }
         let video = self.is_video();
+        // Saved custom types are the one source of truth (beta 5 tab 3).
+        self.privacy_review.options.custom = self.quick_controls.sensitive_types();
+        let mut types_changed = false;
         let state = &mut self.privacy_review;
         let busy = state.pending.is_some();
         let mut scan = false;
@@ -171,8 +174,9 @@ impl Editor {
                     return;
                 }
                 ui.add_enabled_ui(!busy, |ui| {
-                    let field =
+                    let (field, changed) =
                         crate::sensitive_ui::look_for(ui, &mut state.options, &mut state.phrases);
+                    types_changed |= changed;
                     crate::controls::focus_once(&field, &mut state.focus);
                 });
                 ui.add_space(4.);
@@ -234,7 +238,17 @@ impl Editor {
                                         ui.add(
                                             egui::Label::new(format!(
                                                 "{} · {sample}",
-                                                f.category.label()
+                                                match f.category {
+                                                    capture_core::privacy::Category::Custom(n) =>
+                                                        state
+                                                            .options
+                                                            .custom
+                                                            .get(n as usize)
+                                                            .map_or("Custom type", |t| t
+                                                                .name
+                                                                .as_str()),
+                                                    other => other.label(),
+                                                }
                                             ))
                                             .truncate(),
                                         );
@@ -265,6 +279,13 @@ impl Editor {
                     false,
                 );
             });
+        if types_changed
+            && let Err(e) = self
+                .quick_controls
+                .set_sensitive_types(self.privacy_review.options.custom.clone())
+        {
+            self.privacy_review.error = e;
+        }
         if scan {
             self.scan_sensitive(ctx);
         }

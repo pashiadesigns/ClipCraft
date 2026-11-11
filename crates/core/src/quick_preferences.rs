@@ -99,6 +99,9 @@ pub struct Preferences {
     pub blank: BlankDefaults,
     #[serde(default)]
     pub workspace: Workspace,
+    /// Find Sensitive Info custom types (approved beta 5 tab 3).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub sensitive_types: Vec<crate::privacy::custom::CustomType>,
 }
 /// The key that turns snapping off for one drag.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -202,6 +205,7 @@ impl Default for Preferences {
             default_watermark: None,
             blank: BlankDefaults::default(),
             workspace: Workspace::default(),
+            sensitive_types: Vec::new(),
         }
     }
 }
@@ -257,6 +261,10 @@ impl Preferences {
                 self.favorite_tools = favorites;
             }
             Choice::RestoreFolders(folders) => self.folders = folders,
+            Choice::SensitiveTypes(list) => {
+                crate::privacy::custom::validate_all(&list)?;
+                self.sensitive_types = list;
+            }
             Choice::Watermarks(list, default) => {
                 if list.len() > 32
                     || default
@@ -430,6 +438,7 @@ pub enum Choice {
     RestoreFolders(std::collections::BTreeMap<Folder, PathBuf>),
     /// Watermark presets and the default preset's name.
     Watermarks(Vec<crate::watermark::Watermark>, Option<String>),
+    SensitiveTypes(Vec<crate::privacy::custom::CustomType>),
     Keybinds(crate::keybinds::Keybinds),
     Capture(crate::capture_options::Settings),
     Video(crate::video::Options),

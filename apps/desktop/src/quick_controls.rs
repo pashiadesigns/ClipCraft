@@ -86,6 +86,21 @@ impl QuickControls {
         Ok(())
     }
 
+    /// Find Sensitive Info custom types saved in Preferences (beta 5 tab 3).
+    pub(crate) fn sensitive_types(&self) -> Vec<capture_core::privacy::custom::CustomType> {
+        self.prefs.sensitive_types.clone()
+    }
+    /// Saves the custom types; an invalid list is refused with the reason.
+    pub(crate) fn set_sensitive_types(
+        &mut self,
+        list: Vec<capture_core::privacy::custom::CustomType>,
+    ) -> Result<(), String> {
+        capture_core::privacy::custom::validate_all(&list).map_err(|e| e.to_string())?;
+        if self.prefs.sensitive_types != list {
+            self.remember(Choice::SensitiveTypes(list));
+        }
+        self.warning.clone().map_or(Ok(()), Err)
+    }
     pub(super) fn thumbnail_details(&self) -> bool {
         self.prefs.thumbnail_details
     }
