@@ -1106,7 +1106,11 @@ mod tool_switch_tests {
         let t = crate::canvas::tests::frame(&ctx, &mut e, vec![]);
         for at in [[150.0, 150.0], [300.0, 150.0]] {
             let p = t.screen_point(at);
-            crate::canvas::tests::frame(&ctx, &mut e, vec![Event::PointerMoved(p), button(p, true)]);
+            crate::canvas::tests::frame(
+                &ctx,
+                &mut e,
+                vec![Event::PointerMoved(p), button(p, true)],
+            );
             crate::canvas::tests::frame(&ctx, &mut e, vec![button(p, false)]);
         }
         let icons = e.session.document.annotations.len();
@@ -1130,14 +1134,33 @@ mod tool_switch_tests {
                 Event::ModifiersChanged(Modifiers::NONE),
             ],
         );
-        crate::canvas::tests::frame(&ctx, &mut e, vec![Event::PointerMoved(over), button(over, true)]);
+        crate::canvas::tests::frame(
+            &ctx,
+            &mut e,
+            vec![Event::PointerMoved(over), button(over, true)],
+        );
         crate::canvas::tests::frame(&ctx, &mut e, vec![button(over, false)]);
-        crate::canvas::tests::frame(&ctx, &mut e, vec![Event::PointerMoved(over), button(over, true)]);
-        crate::canvas::tests::frame(&ctx, &mut e, vec![Event::PointerMoved(over + egui::vec2(20.0, 10.0))]);
-        crate::canvas::tests::frame(&ctx, &mut e, vec![button(over + egui::vec2(20.0, 10.0), false)]);
+        crate::canvas::tests::frame(
+            &ctx,
+            &mut e,
+            vec![Event::PointerMoved(over), button(over, true)],
+        );
+        crate::canvas::tests::frame(
+            &ctx,
+            &mut e,
+            vec![Event::PointerMoved(over + egui::vec2(20.0, 10.0))],
+        );
+        crate::canvas::tests::frame(
+            &ctx,
+            &mut e,
+            vec![button(over + egui::vec2(20.0, 10.0), false)],
+        );
         let icons = e.session.document.annotations.len();
         e.choose_tool(index(ToolId::Focus));
-        assert!(!e.shell.annotations_hidden && !e.shell.raster_preview, "canvas left in a preview mode");
+        assert!(
+            !e.shell.annotations_hidden && !e.shell.raster_preview,
+            "canvas left in a preview mode"
+        );
         let a = t.screen_point([80.0, 220.0]);
         let b = t.screen_point([400.0, 340.0]);
         crate::canvas::tests::frame(&ctx, &mut e, vec![Event::PointerMoved(a), button(a, true)]);
@@ -1145,7 +1168,12 @@ mod tool_switch_tests {
         crate::canvas::tests::frame(&ctx, &mut e, vec![Event::PointerMoved(b)]);
         crate::canvas::tests::frame(&ctx, &mut e, vec![button(b, false)]);
         let after = &e.session.document.annotations;
-        assert_eq!(after.len(), icons + 1, "Focus window not created; status: {}", e.status);
+        assert_eq!(
+            after.len(),
+            icons + 1,
+            "Focus window not created; status: {}",
+            e.status
+        );
         assert!(after.last().unwrap().focus.is_some());
     }
 }
