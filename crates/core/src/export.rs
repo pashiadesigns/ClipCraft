@@ -1,6 +1,7 @@
 //! Shared flattened output and page geometry. Export never edits the document.
 use crate::{Document, Error, Result};
 use image::{RgbImage, RgbaImage};
+pub mod office;
 mod vector_pdf;
 use std::{
     io::{Cursor, Write},

@@ -735,6 +735,7 @@ dependencies = [
  "image",
  "imageproc",
  "resvg",
+ "roxmltree 0.21.2",
  "serde",
  "serde_json",
  "tempfile",

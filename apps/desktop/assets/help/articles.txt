@@ -568,6 +568,25 @@ step: Open Export and choose the format. | title: Choose the format | icon: Save
 step: Set quality, paper or watermark if you need them. | title: Set the options | pic: export-2
 step: Click Save and choose where. | title: Save
 
+# PowerPoint and Word
+id: office-export
+section: Export
+where: Export › PowerPoint or Word
+controls: PowerPoint, Word, Slide size, Each slide, Objects, Editable shapes, Pictures only, Put step text in the speaker notes, Page size, Layout, Start with a title and contents, On a PowerPoint slide
+keywords: pptx, docx, slides, deck, presentation, office, document, word processor, speaker notes
+---
+PowerPoint makes one slide for each guide page, or for each step section. Rectangles, ellipses, lines, arrows, Steps and text become real PowerPoint shapes and text boxes, so you can move and retype them there. Anything PowerPoint can't draw the same way, such as Focus, Magnify, blur or a picture, stays in the slide's picture. Pictures only puts each page in as one picture, so the deck looks exactly like ClipDesigner.
+
+Word makes a step-by-step document: each step's picture with its text, in Word's own Title and Heading styles, so a company template restyles it. Start with a title and contents adds the guide's name and a table of contents; in Word, right-click the contents and choose Update Field to fill it in.
+
+Redactions are always flattened, with what they cover removed, and a shape under a redaction goes into the picture with it. For a PDF split into parts, Include all parts puts every part in one file.
+
+For a video, turn on On a PowerPoint slide in Export video: the MP4 goes on a slide with its first frame as the poster.
+
+step: Open Export and choose PowerPoint or Word. | title: Choose the format
+step: Choose the slide size and what each slide shows, or the page size and layout. | title: Set the options
+step: Click Save and choose where. | title: Save
+
 # Watermark
 id: watermark
 section: Export

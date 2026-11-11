@@ -1,5 +1,6 @@
 use crate::tips::Tip as _;
 use crate::{Editor, egui};
+use capture_core::export::office::{DocumentOptions, Each, Paper, SlideOptions, SlideSize};
 use capture_core::export::{Format, Options};
 #[cfg(windows)]
 mod windows;
@@ -10,6 +11,35 @@ pub(super) struct Preferences {
     pub library_format: Option<Format>,
     /// The default watermark preset was applied this session.
     pub watermark_ready: bool,
+    pub office: OfficeChoice,
+}
+/// PowerPoint and Word output (approved beta 6 tab 2), remembered for the
+/// session like the image options.
+#[derive(Clone, Default)]
+pub(crate) struct OfficeChoice {
+    /// `None` exports the image format in `Options.format`.
+    pub kind: Option<Office>,
+    pub slides: SlideOptions,
+    pub word: DocumentOptions,
+}
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) enum Office {
+    PowerPoint,
+    Word,
+}
+impl Office {
+    pub(crate) fn label(self) -> &'static str {
+        match self {
+            Office::PowerPoint => "PowerPoint",
+            Office::Word => "Word",
+        }
+    }
+    pub(crate) fn extension(self) -> &'static str {
+        match self {
+            Office::PowerPoint => "pptx",
+            Office::Word => "docx",
+        }
+    }
 }
 #[derive(Clone, Copy, Default)]
 pub(super) struct AfterExport {
@@ -93,9 +123,74 @@ pub(super) struct Dialog {
     /// For a linked part: export every part of its set into one file
     /// (approved beta 6 tab 7). On by default.
     all_parts: bool,
+    office: OfficeChoice,
+    /// The preview was drawn for an Office format (no watermark).
+    texture_office: bool,
 }
 
 impl Editor {
+    /// Writes a PowerPoint or Word file from this guide, or from every part
+    /// of its set when `all` is on. Redaction labels are drawn as chosen;
+    /// redactions are always flattened.
+    pub(crate) fn export_office(
+        &self,
+        current: &capture_core::Document,
+        options: &Options,
+        office: &OfficeChoice,
+        kind: Office,
+        all: bool,
+        path: &std::path::Path,
+    ) -> Result<(), String> {
+        let labels = options.redaction_labels;
+        let decorate = move |d: capture_core::Result<capture_core::Document>| {
+            d.and_then(|d| capture_core::redaction_labels::decorate(d, labels))
+        };
+        let mut ids: Vec<Option<String>> = vec![None];
+        if all && let Some(part) = current.part.clone() {
+            let siblings = self.part_siblings(&part);
+            ids = (1..=part.total)
+                .map(|index| {
+                    if index == part.index {
+                        return Ok(None);
+                    }
+                    siblings
+                        .iter()
+                        .find(|e| e.part.as_ref().is_some_and(|p| p.index == index))
+                        .map(|e| Some(e.id.clone()))
+                        .ok_or_else(|| {
+                            format!(
+                                "Part {index} of {} isn't in the Library, so the parts can't be joined.",
+                                part.total
+                            )
+                        })
+                })
+                .collect::<Result<_, _>>()?;
+        }
+        let store = self.history.store.as_ref();
+        let documents = ids.iter().map(|id| {
+            decorate(match id {
+                None => Ok(current.clone()),
+                Some(id) => store
+                    .ok_or_else(|| {
+                        capture_core::Error::Invalid("The Library isn't available.".into())
+                    })
+                    .and_then(|s| s.load(id)),
+            })
+        });
+        let bytes = match kind {
+            Office::PowerPoint => capture_core::export::office::pptx(documents, &office.slides),
+            Office::Word => {
+                let mut word = office.word.clone();
+                word.title = current
+                    .part
+                    .as_ref()
+                    .map_or_else(|| word.title.clone(), |p| p.title.clone());
+                capture_core::export::office::docx(documents, &word)
+            }
+        }
+        .map_err(|e| e.to_string())?;
+        capture_core::export::write(path, &bytes).map_err(|e| e.to_string())
+    }
     /// The Library items of a part's set, in part order.
     pub(crate) fn part_siblings(
         &self,
@@ -233,6 +328,15 @@ impl Editor {
                     page: 0,
                     error: String::new(),
                     all_parts: true,
+                    office: OfficeChoice {
+                        kind: if print {
+                            None
+                        } else {
+                            self.export_preferences.office.kind
+                        },
+                        ..self.export_preferences.office.clone()
+                    },
+                    texture_office: false,
                 })
             }
             Err(e) => self.status = e.to_string(),
@@ -275,10 +379,97 @@ impl Editor {
                         crate::controls::dialog_section(ui, "Output", None);
                         row(ui, "Format", |ui| {
                             for format in [Format::Png, Format::Jpeg, Format::Pdf] {
-                                ui.selectable_value(&mut d.options.format, format, format.label());
+                                let on = d.office.kind.is_none() && d.options.format == format;
+                                if ui.selectable_label(on, format.label()).clicked() {
+                                    d.options.format = format;
+                                    d.office.kind = None;
+                                }
+                            }
+                            if !d.print {
+                                for (office, tip) in [
+                                    (Office::PowerPoint, "PowerPoint · One slide per guide page or step section. Shapes, lines, arrows, Steps and text stay editable in PowerPoint."),
+                                    (Office::Word, "Word · A step-by-step document: each step's picture and its text, in Word's built-in styles."),
+                                ] {
+                                    if ui
+                                        .selectable_label(d.office.kind == Some(office), office.label())
+                                        .tip(tip)
+                                        .clicked()
+                                    {
+                                        d.office.kind = Some(office);
+                                    }
+                                }
                             }
                         });
-                        if d.options.format == Format::Pdf && !d.print {
+                        const FLATTENED: &str = "Redactions are always flattened in the export, with what they cover removed, as in PDF export.";
+                        match d.office.kind {
+                            Some(Office::PowerPoint) => {
+                                crate::controls::dialog_section(ui, "Slides", Some(FLATTENED));
+                                let s = &mut d.office.slides;
+                                crate::property_layout::choice(
+                                    ui,
+                                    "Slide size",
+                                    &mut s.size,
+                                    &[
+                                        (SlideSize::Widescreen, "Widescreen 16:9"),
+                                        (SlideSize::Standard, "Standard 4:3"),
+                                        (SlideSize::MatchPage, "Match the page"),
+                                    ],
+                                    "Slide size · Widescreen and Standard fit each page on the slide; Match the page uses the first page's shape.",
+                                );
+                                crate::property_layout::choice(
+                                    ui,
+                                    "Each slide",
+                                    &mut s.each,
+                                    &[
+                                        (Each::Page, "One guide page"),
+                                        (Each::Section, "One step section"),
+                                    ],
+                                    "Each slide · One slide for each page, or for each step section of a guide.",
+                                );
+                                row(ui, "Objects", |ui| {
+                                    ui.selectable_value(&mut s.editable, true, "Editable shapes")
+                                        .tip("Editable shapes · Shapes, lines, arrows, Steps and text become PowerPoint shapes and text boxes. Effects PowerPoint can't draw the same way stay in the picture.");
+                                    ui.selectable_value(&mut s.editable, false, "Pictures only")
+                                        .tip("Pictures only · Each page is one picture, so the deck looks exactly like ClipDesigner.");
+                                });
+                                crate::controls::toggle(
+                                    ui,
+                                    &mut s.notes,
+                                    "Put step text in the speaker notes",
+                                )
+                                .tip("Speaker notes · Each slide's text, top to bottom, in its speaker notes.");
+                            }
+                            Some(Office::Word) => {
+                                crate::controls::dialog_section(ui, "Document", Some(FLATTENED));
+                                let w = &mut d.office.word;
+                                crate::property_layout::choice(
+                                    ui,
+                                    "Page size",
+                                    &mut w.paper,
+                                    &[(Paper::Letter, "Letter"), (Paper::A4, "A4")],
+                                    "Page size · The Word document's paper.",
+                                );
+                                crate::property_layout::choice(
+                                    ui,
+                                    "Layout",
+                                    &mut w.beside,
+                                    &[
+                                        (false, "Picture, then step text"),
+                                        (true, "Step text beside picture"),
+                                    ],
+                                    "Layout · Where each step's text goes.",
+                                );
+                                crate::controls::toggle(
+                                    ui,
+                                    &mut w.contents,
+                                    "Start with a title and contents",
+                                )
+                                .tip("Title and contents · The guide's name and a table of contents built from the step headings.");
+                            }
+                            None => {}
+                        }
+                        let office = d.office.kind.is_some();
+                        if d.options.format == Format::Pdf && !d.print && !office {
                             crate::controls::toggle(
                                 ui,
                                 &mut d.options.searchable_text,
@@ -295,16 +486,16 @@ impl Editor {
                                 &mut d.all_parts,
                                 &format!("Include all {} parts in one file", part.total),
                             )
-                            .tip("Include all parts · Every part of this PDF, in order, in one file. Parts are drawn one at a time, so long documents export without running out of memory. PNG and JPEG become numbered pictures, one per page.");
+                            .tip("Include all parts · Every part of this PDF, in order, in one file (PDF, PowerPoint or Word). Parts are drawn one at a time, so long documents export without running out of memory. PNG and JPEG become numbered pictures, one per page.");
                         }
-                        if d.options.format == Format::Jpeg {
+                        if d.options.format == Format::Jpeg && !office {
                             crate::property_layout::slider(
                                 ui,
                                 "Quality",
                                 egui::Slider::new(&mut d.options.quality, 1..=100),
                             );
                         }
-                        if d.options.format != Format::Png {
+                        if d.options.format != Format::Png && !office {
                             row(ui, "Background", |ui| {
                                 crate::color_widgets::rgb_preview(
                                     ui,
@@ -313,7 +504,7 @@ impl Editor {
                                 );
                             });
                         }
-                        let paged = d.print || d.options.format == Format::Pdf;
+                        let paged = d.print || (d.options.format == Format::Pdf && !office);
                         if paged
                             && d.document
                                 .guide
@@ -353,7 +544,8 @@ impl Editor {
                             });
                         }
                         let presets = self.quick_controls.watermarks();
-                        match crate::watermark_ui::section(
+                        // Office files carry editable objects, not a stamped picture.
+                        if !office { match crate::watermark_ui::section(
                             ui,
                             &mut d.options.watermark,
                             &presets.0,
@@ -365,7 +557,7 @@ impl Editor {
                                 self.quick_controls.remember_watermarks(list, default);
                                 d.texture = None;
                             }
-                        }
+                        } }
                         if crate::controls::toggle(
                             ui,
                             &mut d.options.redaction_labels,
@@ -387,7 +579,11 @@ impl Editor {
                                 Err(e) => d.error = e.to_string(),
                             }
                         }
-                        let watermark = d.options.watermark.clone();
+                        if d.texture_office != office {
+                            d.texture_office = office;
+                            d.texture = None;
+                        }
+                        let watermark = d.options.watermark.clone().filter(|_| !office);
                         let texture = d.texture.get_or_insert_with(|| {
                             let mut thumb = image::imageops::thumbnail(&d.pixels, 1000, 1000);
                             // The watermark scales with the output, so the preview matches.
@@ -521,6 +717,7 @@ impl Editor {
                     .inner;
                 ui.add_space(4.);
                 ui.separator();
+                let note = office_note(&d);
                 let footer =
                     egui::vec2(ui.available_width(), crate::controls::DIALOG_ACTION_HEIGHT);
                 ui.allocate_ui_with_layout(
@@ -532,7 +729,7 @@ impl Editor {
                             .clicked();
                         print = ui
                             .add_enabled(
-                                pages_ok,
+                                pages_ok && d.office.kind.is_none(),
                                 crate::controls::dialog_button("Print…", d.print).fill(
                                     if d.print {
                                         crate::shell::ACCENT
@@ -546,12 +743,55 @@ impl Editor {
                         save = ui
                             .add(crate::controls::dialog_button("Save", !d.print))
                             .clicked();
+                        if let Some(note) = note {
+                            ui.with_layout(
+                                egui::Layout::left_to_right(egui::Align::Center),
+                                |ui| ui.weak(note),
+                            );
+                        }
                     },
                 );
             });
         self.export_preferences.options = d.options.clone();
         self.export_preferences.after = d.after;
+        if !d.print {
+            self.export_preferences.office = d.office.clone();
+        }
         if cancel || crate::text_edit::cancel_on_escape(&modal) {
+            return;
+        }
+        if save && let Some(kind) = d.office.kind {
+            self.suspend_global_capture();
+            if let Some(mut path) = rfd::FileDialog::new()
+                .set_directory(self.dialog_folder(capture_core::quick_preferences::Folder::Export))
+                .set_file_name(format!("guide.{}", kind.extension()))
+                .add_filter(kind.label(), &[kind.extension()])
+                .save_file()
+            {
+                if !path
+                    .extension()
+                    .is_some_and(|e| e.eq_ignore_ascii_case(kind.extension()))
+                {
+                    path.set_extension(kind.extension());
+                }
+                let all = d.all_parts && d.document.part.is_some();
+                match self.export_office(&d.document, &d.options, &d.office, kind, all, &path) {
+                    Ok(()) => {
+                        self.remember_dialog_folder(
+                            capture_core::quick_preferences::Folder::Export,
+                            &path,
+                        );
+                        self.status = format!("Exported {}", path.display());
+                        if let Err(error) = d.after.open(&path, true) {
+                            self.status =
+                                format!("Exported {}, but could not open: {error}", path.display());
+                        }
+                        return;
+                    }
+                    Err(e) => d.error = e,
+                }
+            }
+            self.export_dialog = Some(d);
             return;
         }
         if save {
@@ -638,9 +878,106 @@ impl Editor {
     }
 }
 
+/// The footer's count for PowerPoint and Word, as in the mockup
+/// ("3 slides · 2 editable", "3 steps · Letter").
+fn office_note(d: &Dialog) -> Option<String> {
+    use capture_core::export::office::summary;
+    let plural = |n: usize, one: &str| format!("{n} {one}{}", if n == 1 { "" } else { "s" });
+    let mut note = match d.office.kind? {
+        Office::PowerPoint => {
+            let s = &d.office.slides;
+            let (slides, editable) = summary(&d.document, s.each, s.editable);
+            if s.editable {
+                format!("{} · {editable} editable", plural(slides, "slide"))
+            } else {
+                format!("{} · pictures only", plural(slides, "slide"))
+            }
+        }
+        Office::Word => {
+            let (steps, _) = summary(&d.document, Each::Section, false);
+            let paper = match d.office.word.paper {
+                Paper::Letter => "Letter",
+                Paper::A4 => "A4",
+            };
+            format!("{} · {paper}", plural(steps, "step"))
+        }
+    };
+    if d.all_parts
+        && let Some(part) = &d.document.part
+    {
+        note = format!("{note} in this part · all {} parts", part.total);
+    }
+    Some(note)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn powerpoint_and_word_follow_the_mockup_and_write_files() {
+        use crate::color_widgets::tests::text_rect;
+        use crate::property_layout::tests::PaintedOutput;
+        let ctx = egui::Context::default();
+        crate::shell::configure(&ctx);
+        let mut e = crate::canvas::tests::editor(&ctx);
+        e.begin_export(false);
+        let frame = |e: &mut Editor| {
+            PaintedOutput(ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        egui::vec2(900., 850.),
+                    )),
+                    ..Default::default()
+                },
+                |ui| e.show_export(ui.ctx(), None),
+            ))
+        };
+        frame(&mut e);
+        let out = frame(&mut e);
+        for label in ["PNG", "JPEG", "PDF", "PowerPoint", "Word"] {
+            assert!(text_rect(&out.shapes, label).is_some(), "{label}");
+        }
+        e.export_dialog.as_mut().unwrap().office.kind = Some(Office::PowerPoint);
+        frame(&mut e);
+        let out = frame(&mut e);
+        for label in [
+            "SLIDES",
+            "Slide size",
+            "Each slide",
+            "Objects",
+            "Editable shapes",
+            "Pictures only",
+            "Put step text in the speaker notes",
+        ] {
+            assert!(text_rect(&out.shapes, label).is_some(), "{label}");
+        }
+        assert!(text_rect(&out.shapes, "Quality").is_none());
+        let note = office_note(e.export_dialog.as_ref().unwrap()).unwrap();
+        assert!(note.starts_with("1 slide · "), "{note}");
+        e.export_dialog.as_mut().unwrap().office.kind = Some(Office::Word);
+        frame(&mut e);
+        let out = frame(&mut e);
+        for label in [
+            "DOCUMENT",
+            "Page size",
+            "Layout",
+            "Start with a title and contents",
+        ] {
+            assert!(text_rect(&out.shapes, label).is_some(), "{label}");
+        }
+        assert_eq!(e.export_preferences.office.kind, Some(Office::Word));
+        let dir = tempfile::tempdir().unwrap();
+        let d = e.export_dialog.take().unwrap();
+        for kind in [Office::PowerPoint, Office::Word] {
+            let path = dir.path().join(format!("guide.{}", kind.extension()));
+            e.export_office(&d.document, &d.options, &d.office, kind, true, &path)
+                .unwrap();
+            let bytes = std::fs::read(&path).unwrap();
+            assert_eq!(&bytes[..2], b"PK", "{kind:?}");
+        }
+    }
 
     #[test]
     fn export_session_memory_stable_format_position_and_post_save_targets() {
