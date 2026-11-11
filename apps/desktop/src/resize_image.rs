@@ -151,11 +151,11 @@ impl ResizeImage {
     }
     fn set_units(&mut self, units: Units, dimensions: [u32; 2]) {
         self.units = units;
-        for i in 0..2 {
+        for (i, pixels) in dimensions.into_iter().enumerate() {
             let text = match self.scale(i) {
-                Ok(_) if units == Units::Pixels => dimensions[i].to_string(),
+                Ok(_) if units == Units::Pixels => pixels.to_string(),
                 Ok(scale) => trimmed(
-                    dimensions[i] as f64 / scale,
+                    pixels as f64 / scale,
                     if units == Units::Percent { 6 } else { 3 },
                 ),
                 Err(_) => continue,
