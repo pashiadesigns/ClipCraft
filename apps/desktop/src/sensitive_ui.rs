@@ -96,15 +96,156 @@ fn look_for_builtin(
             }
         });
     let changed = custom(ui, options);
-    crate::controls::dialog_section(ui, "Exact names or phrases", None);
-    let field = ui.add(
-        crate::unicode_input::TextEdit::multiline(phrases)
-            .hint_text("One per line")
-            .desired_rows(2)
-            .desired_width(f32::INFINITY)
-            .char_limit(10000),
+    crate::controls::dialog_section(
+        ui,
+        "Exact names or phrases",
+        Some(
+            "Type a name or phrase and press Enter. Commas and semicolons separate several at once. Matching ignores letter case.",
+        ),
     );
+    let field = phrase_chips(ui, phrases);
     (field, changed)
+}
+
+/// Adds typed text as chips: split at commas and semicolons, spaces inside a
+/// phrase collapsed, duplicates (ignoring case) skipped. `phrases` keeps one
+/// phrase per line, which every scan reads.
+pub(crate) fn add_phrases(phrases: &mut String, typed: &str) {
+    let mut list: Vec<String> = phrases.lines().map(str::to_owned).collect();
+    for part in typed.split([',', ';', '\n']) {
+        let phrase = part.split_whitespace().collect::<Vec<_>>().join(" ");
+        if phrase.is_empty()
+            || phrase.len() > 512
+            || list.len() >= 100
+            || list
+                .iter()
+                .any(|p| p.to_lowercase() == phrase.to_lowercase())
+        {
+            continue;
+        }
+        list.push(phrase);
+    }
+    *phrases = list.join("\n");
+}
+
+/// Exact names or phrases as chips (approved beta 6 tab 1): Enter turns the
+/// typed text into a blue chip with an x; Backspace in the empty field
+/// removes the last chip; clicking a chip puts it back in the field to edit.
+fn phrase_chips(ui: &mut egui::Ui, phrases: &mut String) -> egui::Response {
+    let id = ui.scope_id().with("phrase-chips");
+    let mut typed = ui
+        .ctx()
+        .data(|d| d.get_temp::<String>(id))
+        .unwrap_or_default();
+    let mut remove = None;
+    let mut edit = None;
+    let list: Vec<String> = phrases.lines().map(str::to_owned).collect();
+    let frame = egui::Frame::new()
+        .fill(egui::Color32::from_rgb(69, 78, 82))
+        .stroke(egui::Stroke::new(1., egui::Color32::from_rgb(86, 99, 106)))
+        .corner_radius(4)
+        .inner_margin(5);
+    let mut field_response = None;
+    frame.show(ui, |ui| {
+        ui.set_width(ui.available_width());
+        ui.horizontal_wrapped(|ui| {
+            ui.spacing_mut().item_spacing = egui::vec2(5., 5.);
+            for (i, phrase) in list.iter().enumerate() {
+                let text = egui::RichText::new(phrase)
+                    .size(12.5)
+                    .color(egui::Color32::WHITE);
+                let galley = egui::WidgetText::from(text).into_galley(
+                    ui,
+                    Some(egui::TextWrapMode::Truncate),
+                    260.,
+                    egui::TextStyle::Body,
+                );
+                let size = egui::vec2(galley.size().x + 32., 22.);
+                let (rect, response) = ui.allocate_exact_size(size, egui::Sense::click());
+                let p = ui.painter();
+                p.rect_filled(rect, 11., crate::shell::ACCENT);
+                p.galley(
+                    egui::pos2(rect.left() + 10., rect.center().y - galley.size().y / 2.),
+                    galley,
+                    egui::Color32::WHITE,
+                );
+                let x = egui::Rect::from_center_size(
+                    egui::pos2(rect.right() - 11., rect.center().y),
+                    egui::vec2(16., 16.),
+                );
+                let x_response = ui
+                    .interact(x, id.with(("remove", i)), egui::Sense::click())
+                    .tip(format!("Remove {phrase}"));
+                if x_response.hovered() {
+                    p.circle_filled(x.center(), 8., egui::Color32::from_white_alpha(50));
+                }
+                p.text(
+                    x.center(),
+                    egui::Align2::CENTER_CENTER,
+                    "✕",
+                    egui::FontId::proportional(10.),
+                    egui::Color32::from_rgb(223, 243, 250),
+                );
+                response.widget_info(|| {
+                    egui::WidgetInfo::labeled(egui::Role::Button, true, phrase.as_str())
+                });
+                if x_response.clicked() {
+                    remove = Some(i);
+                } else if response.clicked() {
+                    edit = Some(i);
+                }
+            }
+            let field = ui.add(
+                crate::unicode_input::TextEdit::singleline(&mut typed)
+                    .hint_text("Type a name or phrase, then Enter")
+                    .frame(egui::Frame::NONE)
+                    .desired_width(ui.available_width().max(160.))
+                    .char_limit(512),
+            );
+            let enter = field.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+            if enter || typed.contains([',', ';']) {
+                let (done, rest) = match typed.rfind([',', ';']) {
+                    Some(at) if !enter => (typed[..at].to_owned(), typed[at + 1..].to_owned()),
+                    _ => (std::mem::take(&mut typed), String::new()),
+                };
+                add_phrases(phrases, &done);
+                typed = rest;
+                if enter {
+                    field.request_focus();
+                }
+            } else if field.has_focus()
+                && typed.is_empty()
+                && !list.is_empty()
+                && ui.input(|i| i.key_pressed(egui::Key::Backspace))
+            {
+                remove = Some(list.len() - 1);
+            }
+            field_response = Some(field);
+        });
+    });
+    if let Some(i) = remove.or(edit) {
+        let mut list = list;
+        let taken = list.remove(i);
+        *phrases = list.join("\n");
+        if edit.is_some() {
+            typed = taken;
+            if let Some(f) = &field_response {
+                f.request_focus();
+            }
+        }
+    }
+    let count = phrases.lines().count();
+    ui.label(
+        egui::RichText::new(match count {
+            0 => "No phrases yet".to_owned(),
+            1 => "1 phrase · matched in any letter case".to_owned(),
+            n => format!("{n} phrases · matched in any letter case"),
+        })
+        .size(11.5)
+        .color(egui::Color32::from_rgb(142, 154, 157)),
+    );
+    ui.ctx().data_mut(|d| d.insert_temp(id, typed));
+    field_response.unwrap()
 }
 
 /// Custom types in Look for (approved beta 5 tab 3): a toggle per saved type,
@@ -725,6 +866,72 @@ pub(crate) fn preview(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn phrases_split_at_commas_collapse_spaces_and_skip_duplicates() {
+        let mut phrases = String::new();
+        add_phrases(&mut phrases, "Jane Doe, W74828; Acme   Corp");
+        assert_eq!(phrases, "Jane Doe\nW74828\nAcme Corp");
+        add_phrases(&mut phrases, "jane doe, ,  ;Project Nightjar");
+        assert_eq!(phrases, "Jane Doe\nW74828\nAcme Corp\nProject Nightjar");
+        let mut many = String::new();
+        add_phrases(
+            &mut many,
+            &(0..150)
+                .map(|i| format!("p{i}"))
+                .collect::<Vec<_>>()
+                .join(","),
+        );
+        assert_eq!(
+            many.lines().count(),
+            100,
+            "the scan's limit of 100 phrases holds"
+        );
+    }
+    #[test]
+    fn typing_a_comma_list_makes_chips_and_backspace_removes_the_last() {
+        let ctx = egui::Context::default();
+        let mut phrases = String::new();
+        let frame = |events: Vec<egui::Event>, phrases: &mut String| {
+            let mut out = ctx.run_ui(
+                egui::RawInput {
+                    events,
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        egui::vec2(500., 300.),
+                    )),
+                    ..Default::default()
+                },
+                |ui| {
+                    let r = phrase_chips(ui, phrases);
+                    r.request_focus();
+                },
+            );
+            out.textures_delta.clear();
+        };
+        frame(vec![], &mut phrases);
+        frame(
+            vec![egui::Event::Text("Jane Doe, W74828;".into())],
+            &mut phrases,
+        );
+        frame(vec![], &mut phrases);
+        assert_eq!(phrases, "Jane Doe\nW74828");
+        let key = |key, pressed| egui::Event::Key {
+            key,
+            physical_key: None,
+            pressed,
+            repeat: false,
+            modifiers: egui::Modifiers::NONE,
+        };
+        frame(
+            vec![
+                key(egui::Key::Backspace, true),
+                key(egui::Key::Backspace, false),
+            ],
+            &mut phrases,
+        );
+        frame(vec![], &mut phrases);
+        assert_eq!(phrases, "Jane Doe");
+    }
     #[test]
     fn blocks_and_shorthand_round_trip_and_the_builder_saves_a_type() {
         let blocks = from_pattern("[WE]#####").unwrap();

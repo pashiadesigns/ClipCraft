@@ -360,6 +360,10 @@ impl Editor {
 
 /// The dialog with sample findings, for the dialog audit.
 #[cfg(test)]
+pub(crate) fn seed_phrases(e: &mut Editor, text: &str) {
+    crate::sensitive_ui::add_phrases(&mut e.privacy_review.phrases, text);
+}
+#[cfg(test)]
 pub(crate) fn seed_results(e: &mut Editor) {
     let pixels = e.session.document.render().unwrap();
     let words = vec![

@@ -173,6 +173,18 @@ pub(super) fn dialogs() -> Vec<(&'static str, bool, Open, Show)> {
             |c, e| e.show_privacy_review(c),
         ),
         (
+            "find-sensitive-image-phrases",
+            false,
+            |_, e| {
+                e.open_privacy_review();
+                crate::privacy_review::seed_phrases(
+                    e,
+                    "Jane Doe, W74828; Project Nightjar, Acme Corporation",
+                );
+            },
+            |c, e| e.show_privacy_review(c),
+        ),
+        (
             "find-sensitive-image",
             false,
             |_, e| e.open_privacy_review(),
