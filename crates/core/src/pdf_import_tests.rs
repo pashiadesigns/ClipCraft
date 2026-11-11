@@ -518,6 +518,67 @@ fn large_imports_split_into_parts_that_export_as_one_pdf() {
 }
 
 #[test]
+fn inserting_pdf_pages_moves_later_pages_and_is_one_undo() {
+    let file = open(
+        include_bytes!("../tests/fixtures/pdf/sample-8-pages.pdf").to_vec(),
+        "",
+    )
+    .unwrap();
+    let page = |i| file.prepare(i, ImportAs::Pictures { dpi: 48 }).unwrap();
+    // A two-page guide: page 1 is A4, page 2 Letter.
+    let mut guide = build_guide(vec![page(0), page(1)]).unwrap();
+    let mut note =
+        crate::steps::marker(50, [900., 100.], 40, [0, 0, 0, 255], (1, false), [100, 100]).unwrap();
+    note.kind = crate::Kind::Rectangle;
+    note.text = None;
+    note.start = [900., 100.];
+    note.end = [1000., 160.];
+    guide.annotations.push(note);
+    assert_eq!(guide.object_page(guide.annotations.last().unwrap()), 1);
+    let before = serde_json::to_vec(&guide).unwrap();
+    let mut session = crate::Session::new(guide).unwrap();
+    // Insert the sample's page 4 (Letter) before page 2, matching its PDF size.
+    let inserted = page(3);
+    let width = guide_pixels(inserted.points)[0];
+    session
+        .execute(crate::Command::InsertPdfPages {
+            pages: vec![(Arc::new(inserted.bitmap), inserted.points)],
+            at: 1,
+            fit: false,
+        })
+        .unwrap();
+    let d = &session.document;
+    assert_eq!(d.guide.as_ref().unwrap().page_count(), 3);
+    let moved = d.annotations.iter().find(|a| a.id == 50).unwrap();
+    let gap = crate::guide_sections::PAGE_GAP as f32;
+    assert!(
+        (moved.start[0] - (900. + width as f32 + gap)).abs() < 0.5,
+        "{:?}",
+        moved.start
+    );
+    assert_eq!(d.object_page(moved), 2, "the object stays on its page");
+    d.validate().unwrap();
+    session.execute(crate::Command::Undo).unwrap();
+    assert_eq!(serde_json::to_vec(&session.document).unwrap(), before);
+    // Fit makes the new page the size of the guide page it lands at.
+    let small = page(2);
+    session
+        .execute(crate::Command::InsertPdfPages {
+            pages: vec![(Arc::new(small.bitmap), small.points)],
+            at: 2,
+            fit: true,
+        })
+        .unwrap();
+    let g = session.document.guide.clone().unwrap();
+    assert_eq!(g.page_count(), 3);
+    assert_eq!(g.page_size(2, [0, 0]), g.page_size(1, [0, 0]));
+    // Not a guide: a clear message.
+    let plain = Document::blank(200, 100).unwrap();
+    let p = page(0);
+    assert!(insert_pages(&plain, &[(p.bitmap, p.points)], 0, false).is_err());
+}
+
+#[test]
 fn a_guide_holds_as_many_pages_as_its_size_limits_allow() {
     let letter = [816, 1056];
     assert_eq!(pages_that_fit(&[letter; 10]), 10);

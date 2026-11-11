@@ -943,6 +943,13 @@ pub enum Command {
     Guide {
         action: guide_sections::Action,
     },
+    /// Insert › PDF pages into the open guide before page `at` (approved
+    /// beta 6 tab 6), as one Undo step.
+    InsertPdfPages {
+        pages: Vec<(std::sync::Arc<bitmap::Bitmap>, [f64; 2])>,
+        at: usize,
+        fit: bool,
+    },
     SetObjectsVisible {
         ids: Vec<u64>,
         visible: bool,
@@ -1590,6 +1597,11 @@ impl Session {
                             return Ok(());
                         }
                         self.document.resize_canvas(width, height, placement)?;
+                    }
+                    Command::InsertPdfPages { pages, at, fit } => {
+                        let pages: Vec<_> =
+                            pages.iter().map(|(b, p)| ((**b).clone(), *p)).collect();
+                        self.document = pdf_import::insert_pages(&self.document, &pages, at, fit)?;
                     }
                     Command::RotateImage {
                         degrees,

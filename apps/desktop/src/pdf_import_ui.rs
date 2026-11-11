@@ -42,6 +42,34 @@ type Imported = (
 enum Progress {
     Page,
     Done(Result<Imported, String>),
+    /// Insert mode: the prepared pages and their PDF sizes.
+    Pages(Result<Vec<(capture_core::bitmap::Bitmap, [f64; 2])>, String>),
+}
+
+/// Insert › PDF pages (approved beta 6 tab 6): where the pages go in the
+/// open guide and how they are sized.
+#[derive(Clone)]
+pub(crate) struct InsertInto {
+    /// The guide page in view (0-based) and the guide's page sizes.
+    current: usize,
+    sizes: Vec<[u32; 2]>,
+    place: Place,
+    fit: bool,
+}
+#[derive(Clone, Copy, PartialEq)]
+enum Place {
+    After,
+    Start,
+    End,
+}
+impl InsertInto {
+    fn at(&self) -> usize {
+        match self.place {
+            Place::After => (self.current + 1).min(self.sizes.len()),
+            Place::Start => 0,
+            Place::End => self.sizes.len(),
+        }
+    }
 }
 /// A picture the worker drew: (page, is the large preview, pixels).
 type Drawn = (usize, bool, image::RgbaImage);
@@ -65,6 +93,8 @@ pub(crate) struct PdfImport {
     drawn: Option<mpsc::Receiver<Drawn>>,
     want_preview: Option<mpsc::Sender<usize>>,
     start: bool,
+    /// Set for Insert › PDF pages.
+    insert: Option<InsertInto>,
 }
 
 /// Paper names for common page sizes in points.
@@ -152,6 +182,7 @@ impl PdfImport {
             drawn: None,
             want_preview: None,
             start: false,
+            insert: None,
         };
         value.open("");
         value
@@ -283,7 +314,53 @@ impl PdfImport {
             .find(|d| self.dpi_fits(*d))
             .unwrap_or(72)
     }
+    fn title(&self) -> &'static str {
+        if self.insert.is_some() {
+            "Insert PDF pages"
+        } else {
+            "New from PDF"
+        }
+    }
+    /// Insert mode: prepares the chosen pages without building a guide.
+    fn import_pages(&mut self, ctx: &egui::Context) {
+        let Some(file) = self.file.clone() else {
+            return;
+        };
+        let pages = self.chosen();
+        // Pictures share the open document's picture budget, so they come in
+        // at screen resolution.
+        let how = if self.pictures {
+            ImportAs::Pictures { dpi: 96 }
+        } else {
+            ImportAs::Editable { fallback_dpi: 96 }
+        };
+        let total = pages.len();
+        let (tx, rx) = mpsc::channel();
+        let repaint = ctx.clone();
+        std::thread::spawn(move || {
+            let mut out = vec![];
+            let mut result = Ok(());
+            for i in &pages {
+                match file.prepare(*i, how) {
+                    Ok(p) => out.push((p.bitmap, p.points)),
+                    Err(e) => {
+                        result = Err(e.to_string());
+                        break;
+                    }
+                }
+                let _ = tx.send(Progress::Page);
+                repaint.request_repaint();
+            }
+            let _ = tx.send(Progress::Pages(result.map(|()| out)));
+            repaint.request_repaint();
+        });
+        self.stage = Stage::Importing { rx, done: 0, total };
+    }
     fn import(&mut self, ctx: &egui::Context) {
+        if self.insert.is_some() {
+            self.import_pages(ctx);
+            return;
+        }
         let Some(file) = self.file.clone() else {
             return;
         };
@@ -436,6 +513,73 @@ fn picture_note(notes: &[(usize, PictureReason)], dpi: u32) -> Option<String> {
     (!parts.is_empty()).then(|| parts.join(" "))
 }
 impl Editor {
+    /// Insert › PDF pages into the open guide (approved beta 6 tab 6).
+    pub(crate) fn insert_pdf_pages(&mut self) {
+        let d = &self.session.document;
+        let Some(guide) = d.guide.as_ref().filter(|g| g.pages.is_some()) else {
+            self.status =
+                "Insert PDF pages works in a guide with pages. Use File › New › From PDF for a new guide."
+                    .into();
+            return;
+        };
+        let count = guide.page_count();
+        let sizes: Vec<[u32; 2]> = (0..count)
+            .map(|i| guide.page_size(i, [d.width, d.height]))
+            .collect();
+        let point = self
+            .selected_annotation()
+            .map(|a| a.start)
+            .or_else(|| {
+                self.view
+                    .current_transform()
+                    .map(|t| t.image_point(t.viewport.center()))
+            })
+            .unwrap_or([0.; 2]);
+        let current = guide.page_at(point);
+        self.suspend_global_capture();
+        if let Some(path) = rfd::FileDialog::new()
+            .set_directory(self.dialog_folder(capture_core::quick_preferences::Folder::Open))
+            .add_filter("PDF documents", &["pdf"])
+            .pick_file()
+        {
+            self.remember_dialog_folder(capture_core::quick_preferences::Folder::Open, &path);
+            let mut draft = PdfImport::new(path);
+            draft.insert = Some(InsertInto {
+                current,
+                sizes,
+                place: Place::After,
+                fit: false,
+            });
+            self.pdf_import = Some(draft);
+        }
+    }
+    fn finish_insert(
+        &mut self,
+        draft: PdfImport,
+        pages: Vec<(capture_core::bitmap::Bitmap, [f64; 2])>,
+    ) {
+        let Some(into) = draft.insert else { return };
+        let count = pages.len();
+        let pages: Vec<_> = pages
+            .into_iter()
+            .map(|(b, p)| (std::sync::Arc::new(b), p))
+            .collect();
+        match self.session.execute(capture_core::Command::InsertPdfPages {
+            pages,
+            at: into.at(),
+            fit: into.fit,
+        }) {
+            Ok(()) => {
+                self.needs_render = true;
+                self.status = format!(
+                    "Inserted {count} PDF {}. Undo removes {}.",
+                    if count == 1 { "page" } else { "pages" },
+                    if count == 1 { "it" } else { "them" }
+                );
+            }
+            Err(e) => self.status = e.to_string(),
+        }
+    }
     /// File › New › From PDF: Windows' picker filtered to PDF files.
     pub(crate) fn new_from_pdf(&mut self) {
         self.suspend_global_capture();
@@ -488,6 +632,7 @@ impl Editor {
             }
         }
         let mut done = None;
+        let mut inserted = None;
         match &mut draft.stage {
             Stage::Opening(rx) => match rx.try_recv() {
                 Ok(Ok(file)) => draft.opened(file, ctx),
@@ -520,6 +665,10 @@ impl Editor {
                         done = Some(result);
                         break;
                     }
+                    Ok(Progress::Pages(result)) => {
+                        inserted = Some(result);
+                        break;
+                    }
                     Err(mpsc::TryRecvError::Empty) => break,
                     Err(mpsc::TryRecvError::Disconnected) => {
                         done = Some(Err("The import stopped. Try again.".into()));
@@ -528,6 +677,20 @@ impl Editor {
                 }
             },
             _ => {}
+        }
+        if let Some(result) = inserted {
+            match result {
+                Ok(pages) => {
+                    let draft = self.pdf_import.take().unwrap();
+                    self.finish_insert(draft, pages);
+                }
+                Err(e) => {
+                    if let Some(d) = &mut self.pdf_import {
+                        d.stage = Stage::Failed(e);
+                    }
+                }
+            }
+            return;
         }
         if let Some(result) = done {
             match result {
@@ -548,6 +711,7 @@ impl Editor {
         let mut change_file = false;
         let modal = crate::controls::Modal::new(egui::Id::unique("new_from_pdf")).show(ctx, |ui| {
             let width = WIDTH.min((ctx.content_rect().width() - 48.).max(360.));
+            let title = draft.title();
             match &mut draft.stage {
                 Stage::Password { text, wrong, focus } => {
                     ui.set_width(380.);
@@ -589,7 +753,7 @@ impl Editor {
                 }
                 Stage::Opening(_) => {
                     ui.set_width(380.);
-                    crate::controls::dialog_title(ui, "New from PDF");
+                    crate::controls::dialog_title(ui, title);
                     ui.horizontal(|ui| {
                         ui.spinner();
                         ui.label(format!("Opening {}…", draft.name()));
@@ -600,7 +764,7 @@ impl Editor {
                 }
                 Stage::Failed(message) => {
                     ui.set_width(380.);
-                    crate::controls::dialog_title(ui, "New from PDF");
+                    crate::controls::dialog_title(ui, title);
                     let message = if message.is_empty() {
                         "The PDF couldn't be opened.".to_owned()
                     } else {
@@ -620,7 +784,7 @@ impl Editor {
                 }
                 Stage::Importing { done, total, .. } => {
                     ui.set_width(380.);
-                    crate::controls::dialog_title(ui, "New from PDF");
+                    crate::controls::dialog_title(ui, title);
                     ui.horizontal(|ui| {
                         ui.spinner();
                         ui.label(format!(
@@ -742,7 +906,7 @@ fn ready(ui: &mut egui::Ui, draft: &mut PdfImport) -> (bool, bool) {
         return (true, false);
     };
     let count = file.page_count();
-    crate::controls::dialog_title(ui, "New from PDF");
+    crate::controls::dialog_title(ui, draft.title());
     // File row.
     ui.horizontal(|ui| {
         ui.label(egui::RichText::new(draft.name()).strong());
@@ -1002,6 +1166,37 @@ fn ready(ui: &mut egui::Ui, draft: &mut PdfImport) -> (bool, bool) {
             }
         }
         let ui = &mut cols[1];
+        if let Some(into) = &mut draft.insert {
+            crate::controls::dialog_section(ui, "Into this guide", None);
+            let after = format!("After page {} (current)", into.current + 1);
+            crate::property_layout::choice(
+                ui,
+                "Place pages",
+                &mut into.place,
+                &[
+                    (Place::After, after.as_str()),
+                    (Place::Start, "At the start"),
+                    (Place::End, "At the end"),
+                ],
+                "Place pages · Where the new pages go in this guide.",
+            );
+            ui.horizontal(|ui| {
+                ui.add_sized([86., 20.], egui::Label::new("Page size"));
+                for (fit, label, tip) in [
+                    (false, "Match PDF", "Match PDF · Each new page is the size of its PDF page."),
+                    (true, "Fit this guide's pages", "Fit this guide's pages · New pages take the size of the guide page where they go."),
+                ] {
+                    if ui
+                        .add(egui::Button::selectable(into.fit == fit, label))
+                        .tip(tip)
+                        .clicked()
+                    {
+                        into.fit = fit;
+                    }
+                }
+            });
+            return;
+        }
         crate::controls::dialog_section(ui, "Guide", None);
         ui.horizontal(|ui| {
             ui.add_sized([86., 20.], egui::Label::new("Page size"));
@@ -1031,6 +1226,54 @@ fn ready(ui: &mut egui::Ui, draft: &mut PdfImport) -> (bool, bool) {
     }
     // Footer: what will happen, and the buttons.
     crate::panel_ui::divider(ui);
+    if let Some(into) = &draft.insert {
+        let chosen: Vec<usize> = draft.chosen();
+        let at = into.at();
+        let mut sizes = into.sizes.clone();
+        let reference = sizes[at.min(sizes.len().saturating_sub(1))];
+        let added: Vec<[u32; 2]> = chosen
+            .iter()
+            .map(|i| {
+                if into.fit {
+                    reference
+                } else {
+                    file.page_pixels(*i)
+                }
+            })
+            .collect();
+        sizes.splice(at..at, added);
+        let fits = pdf_import::pages_that_fit(&sizes) == sizes.len();
+        let n = chosen.len();
+        let (summary, ok) = if n == 0 {
+            ("Choose at least one page.".to_owned(), false)
+        } else if !fits {
+            (
+                "These pages don't fit in this guide. Insert fewer pages, or use File › New › From PDF to make linked parts.".to_owned(),
+                false,
+            )
+        } else {
+            (
+                format!(
+                    "Adds {n} {} · guide becomes {} pages",
+                    if n == 1 { "page" } else { "pages" },
+                    sizes.len()
+                ),
+                true,
+            )
+        };
+        ui.label(egui::RichText::new(summary).color(if ok {
+            egui::Color32::from_rgb(142, 154, 157)
+        } else {
+            egui::Color32::from_rgb(255, 170, 160)
+        }));
+        let action = format!("Insert {n} {}", if n == 1 { "page" } else { "pages" });
+        let (create, cancel) = crate::controls::dialog_actions(ui, &action, "Cancel", ok, false);
+        close |= cancel;
+        if create && ok {
+            draft.start = true;
+        }
+        return (close, change_file);
+    }
     let chosen = draft.chosen().len();
     let parts = draft.parts().len();
     let (summary, ok) = if chosen == 0 {
@@ -1283,6 +1526,42 @@ mod tests {
         .unwrap();
         let joined = pdf_import::open(std::fs::read(&path).unwrap(), "").unwrap();
         assert_eq!(joined.page_count(), 30);
+    }
+    #[test]
+    fn inserting_pdf_pages_from_the_dialog_adds_them_after_the_current_page() {
+        let ctx = egui::Context::default();
+        crate::shell::configure(&ctx);
+        let mut e = crate::canvas::tests::editor(&ctx);
+        let file = pdf_import::open(std::fs::read(sample_path()).unwrap(), "").unwrap();
+        let pages: Vec<_> = (0..2)
+            .map(|i| file.prepare(i, ImportAs::Pictures { dpi: 48 }).unwrap())
+            .collect();
+        e.session = capture_core::Session::new(pdf_import::build_guide(pages).unwrap()).unwrap();
+        let mut draft = PdfImport::ready_now(sample_path(), &ctx);
+        let d = &e.session.document;
+        let g = d.guide.as_ref().unwrap();
+        draft.insert = Some(InsertInto {
+            current: 0,
+            sizes: (0..2)
+                .map(|i| g.page_size(i, [d.width, d.height]))
+                .collect(),
+            place: Place::After,
+            fit: true,
+        });
+        draft.selected = parse_range("4", 8).unwrap();
+        draft.import(&ctx);
+        e.pdf_import = Some(draft);
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(120);
+        while e.pdf_import.is_some() {
+            assert!(std::time::Instant::now() < deadline, "insert finished");
+            let mut output = ctx.run_ui(Default::default(), |ui| e.show_pdf_import(ui.ctx()));
+            output.textures_delta.clear();
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+        assert!(e.status.contains("Inserted 1 PDF page"), "{}", e.status);
+        assert_eq!(e.session.document.guide.as_ref().unwrap().page_count(), 3);
+        e.execute(capture_core::Command::Undo);
+        assert_eq!(e.session.document.guide.as_ref().unwrap().page_count(), 2);
     }
     #[test]
     fn the_note_names_scans_and_effects_once() {

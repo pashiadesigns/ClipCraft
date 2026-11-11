@@ -377,7 +377,7 @@ When you export to PDF, SVG drawings stay shapes. Only the parts under a redacti
 id: new-from-pdf
 section: Images
 where: File › New › From PDF
-controls: From PDF, New from PDF, Change file…, Editable pages, Pictures, Scan after import, Include all parts, Previous part, Next part
+controls: From PDF, New from PDF, Change file…, Editable pages, Pictures, Scan after import, Include all parts, Previous part, Next part, PDF pages…, Insert PDF pages, Searchable text
 keywords: pdf, document, pages, import, open pdf, redact pdf, guide, acrobat
 ---
 New from PDF turns the pages of a PDF into a guide, one PDF page per guide page, sized to the PDF. Every image tool works on them as usual: Steps, Focus, Magnify, Obfuscate, Blocks and the rest.
@@ -395,6 +395,10 @@ A password-protected PDF asks for its password. ClipDesigner doesn't keep the pa
 One guide holds about 24 Letter pages. A longer PDF comes in as linked parts, such as "Vendor packet · part 1 of 10", grouped in the Library; Part 1 of 10 in the footer moves between them. When you export a part, Include all parts in one file puts every part back together: one PDF, or numbered pictures for PNG and JPEG.
 
 When you export to PDF, editable pages stay shapes. Where a redaction, blur or pixelation touches a page, only what is under it becomes a picture, and the covered words are removed from the file, not hidden. The project keeps the original pages, so share exports, not projects.
+
+To add pages to a guide you already have, open the Insert tab's Paste menu and choose PDF pages…. Pick the pages, then choose where they go and whether they keep their PDF size or take the size of the guide's pages. It's one Undo step.
+
+PDF export keeps the words of PDF pages searchable, so they can be found and copied in a PDF viewer. Words under a redaction, blur or pixelation are always removed. Turn off Searchable text in Export to leave it out.
 
 ClipDesigner doesn't edit the PDF's own text, fill forms, sign, or keep bookmarks, links and PDF comments. Edit text in a PDF editor first, and sign last, after exporting from ClipDesigner.
 

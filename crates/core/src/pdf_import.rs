@@ -634,6 +634,135 @@ pub fn without_pdf_pages(document: &Document) -> Option<Document> {
     Some(rest)
 }
 
+/// Insert › PDF pages (approved beta 6 tab 6): adds `pages` (pictures or
+/// drawings with their PDF size in points) to a guide before page `at`.
+/// `fit` sizes each new page like the guide's page at that place; otherwise
+/// each matches its PDF page. Later pages, their objects and sections move
+/// along; nothing else changes.
+pub fn insert_pages(
+    document: &Document,
+    pages: &[(Bitmap, [f64; 2])],
+    at: usize,
+    fit: bool,
+) -> Result<Document> {
+    use crate::guide_sections::PageSetup;
+    let not_guide = || {
+        Error::Invalid(
+            "Insert PDF pages works in a guide with pages. Use File › New › From PDF for a new guide."
+                .into(),
+        )
+    };
+    let guide = document.guide.as_ref().ok_or_else(not_guide)?;
+    let layout = guide.pages.as_ref().ok_or_else(not_guide)?;
+    if pages.is_empty() {
+        return Err(Error::Invalid("Choose at least one page.".into()));
+    }
+    let count = layout.count.max(1);
+    let at = at.min(count);
+    let existing: Vec<[u32; 2]> = (0..count)
+        .map(|i| guide.page_size(i, layout.size))
+        .collect();
+    let reference = existing[at.min(count - 1)];
+    let added: Vec<[u32; 2]> = pages
+        .iter()
+        .map(|(_, points)| {
+            if fit {
+                reference
+            } else {
+                guide_pixels(*points)
+            }
+        })
+        .collect();
+    let mut sizes = existing.clone();
+    sizes.splice(at..at, added.iter().copied());
+    if pages_that_fit(&sizes) < sizes.len() {
+        return Err(Error::Invalid(
+            "These pages don't fit in this guide. Insert fewer pages, or use File › New › From PDF to make linked parts."
+                .into(),
+        ));
+    }
+    let axis = usize::from(!layout.horizontal);
+    let shift: f32 = added.iter().map(|s| (s[axis] + layout.gap) as f32).sum();
+    let mut next = document.clone();
+    // Objects on later pages move along with their pages.
+    let mut moved = Vec::with_capacity(next.annotations.len());
+    for a in &document.annotations {
+        if document.object_page(a) >= at {
+            let mut delta = [0.; 2];
+            delta[axis] = shift;
+            moved.push(
+                crate::canvas_expansion::translated(std::slice::from_ref(a), delta)?.remove(0),
+            );
+        } else {
+            moved.push(a.clone());
+        }
+    }
+    next.annotations = moved;
+    let g = next.guide.as_mut().unwrap();
+    for s in &mut g.sections {
+        if s.page >= at {
+            s.page += pages.len();
+        }
+    }
+    let p = g.pages.as_mut().unwrap();
+    if !p.setup.is_empty() || !fit || added.iter().any(|s| *s != p.size) {
+        if p.setup.is_empty() {
+            // Give every existing page its own setup, as plain as before.
+            p.setup = existing
+                .iter()
+                .map(|s| PageSetup {
+                    size: *s,
+                    margins: [0.; 4],
+                    ..PageSetup::default()
+                })
+                .collect();
+        }
+        let new_setups: Vec<PageSetup> = pages
+            .iter()
+            .zip(&added)
+            .map(|((_, points), s)| PageSetup {
+                size: *s,
+                ppi: GUIDE_PPI,
+                physical_points: (!fit).then_some(*points),
+                margins: [0.; 4],
+                ..PageSetup::default()
+            })
+            .collect();
+        p.setup.splice(at..at, new_setups);
+    }
+    p.count = count + pages.len();
+    for owner in next.canvas_behavior.page_owners.values_mut() {
+        if *owner >= at {
+            *owner += pages.len();
+        }
+    }
+    let [w, h] = next.guide.as_ref().unwrap().canvas_size();
+    next.width = w;
+    next.height = h;
+    let mut id = next.annotations.iter().map(|a| a.id).max().unwrap_or(0);
+    let g = next.guide.clone().unwrap();
+    for (k, ((bitmap, _), size)) in pages.iter().zip(&added).enumerate() {
+        id += 1;
+        let origin = g.page_offset(at + k);
+        let [bw, bh] = bitmap.size();
+        // Fit keeps the page's proportions inside the guide page, centered.
+        let scale = (size[0] as f32 / bw as f32).min(size[1] as f32 / bh as f32);
+        let (dw, dh) = if fit {
+            (bw as f32 * scale, bh as f32 * scale)
+        } else {
+            (size[0] as f32, size[1] as f32)
+        };
+        let left = origin[0] + (size[0] as f32 - dw) / 2.;
+        let top = origin[1] + (size[1] as f32 - dh) / 2.;
+        let mut a = Arc::new(bitmap.clone()).annotation(id);
+        a.start = [left, top];
+        a.end = [left + dw, top + dh];
+        next.annotations.push(a);
+    }
+    next.validate()?;
+    Ok(next)
+}
+
 /// Where a guide sits in a set of linked parts made from one large PDF.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]

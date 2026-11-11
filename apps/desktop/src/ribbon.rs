@@ -849,6 +849,24 @@ impl Editor {
                         self.new_from_clipboard(&ctx);
                         ui.close();
                     }
+                    let guide = self
+                        .session
+                        .document
+                        .guide
+                        .as_ref()
+                        .is_some_and(|g| g.pages.is_some());
+                    if ui
+                        .add_enabled(guide, egui::Button::new("PDF pages…"))
+                        .tip(if guide {
+                            "PDF pages · Add pages from a PDF to this guide."
+                        } else {
+                            "PDF pages · Works in a guide with pages. Use File › New › From PDF for a new guide."
+                        })
+                        .clicked()
+                    {
+                        ui.close();
+                        self.insert_pdf_pages();
+                    }
                     if ui
                         .button("Image from file…")
                         .tip("Insert a PNG, JPEG, WebP, BMP, GIF, SVG or EPS file as an image object. SVG stays sharp at any size.")
