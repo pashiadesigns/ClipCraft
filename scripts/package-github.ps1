@@ -25,6 +25,12 @@ if ($LASTEXITCODE -ne 0) { throw 'Source audit failed.' }
 if ($LASTEXITCODE -ne 0) { throw 'Release metadata tests failed.' }
 & $pwsh -NoProfile -File scripts/verify-windows-resource.ps1
 if ($LASTEXITCODE -ne 0) { throw 'Windows resources failed verification.' }
+# Tests and the fixture render must not create a real profile: the installer
+# lifecycle test below refuses to run over existing ClipDesigner data.
+$realLocalAppData = $env:LOCALAPPDATA
+$testProfile = Join-Path ([IO.Path]::GetTempPath()) ("clipdesigner-package-" + [guid]::NewGuid())
+New-Item -ItemType Directory -Path $testProfile -Force | Out-Null
+$env:LOCALAPPDATA = $testProfile
 & $pwsh -NoProfile -File scripts/check.ps1
 if ($LASTEXITCODE -ne 0) { throw 'Rust checks failed.' }
 New-Item -ItemType Directory -Path $release -Force | Out-Null
@@ -44,6 +50,8 @@ if ($LASTEXITCODE -ne 0) { throw 'Demo generation failed.' }
 if ($LASTEXITCODE -ne 0) { throw 'Project reopen/render failed.' }
 & (Join-Path $package 'capture-cli.exe') compare (Join-Path $fixture 'demo.png') (Join-Path $fixture 'roundtrip.png')
 if ($LASTEXITCODE -ne 0) { throw 'Export roundtrip differs.' }
+$env:LOCALAPPDATA = $realLocalAppData
+Remove-Item -LiteralPath $testProfile -Recurse -Force
 Copy-Item -LiteralPath LICENSE,NOTICE,SECURITY.md,README.md -Destination $package
 Copy-Item -LiteralPath scripts/install-start-menu.ps1,scripts/register-project-files.ps1 -Destination $package
 Copy-Item -LiteralPath $notesPath -Destination (Join-Path $package 'release-notes.json')
