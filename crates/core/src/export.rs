@@ -321,6 +321,42 @@ pub fn encode_document(document: &Document, options: &Options) -> Result<Vec<u8>
         encode(&pixels, options)
     }
 }
+/// One PDF from linked parts (approved beta 6 tab 7), in order. Each part is
+/// prepared, drawn and written before the next is loaded, so memory stays at
+/// about one part however long the set is.
+pub fn encode_parts_pdf(
+    parts: impl Iterator<Item = Result<Document>>,
+    options: &Options,
+) -> Result<Vec<u8>> {
+    if options.format != Format::Pdf {
+        return Err(Error::Invalid("Only PDF joins parts into one file".into()));
+    }
+    let labels = options.redaction_labels;
+    vector_pdf::encode_parts(
+        parts.map(|part| {
+            let part = crate::redaction_labels::decorate(part?, labels)?;
+            if part.canvas_behavior.perspective.is_some()
+                || part.canvas_behavior.finish.is_some()
+                || options.watermark.is_some()
+            {
+                // Pictures with whole-picture effects become one picture per
+                // part; flatten them the way single exports do.
+                let mut pixels = part.render()?;
+                crate::watermark::apply(&mut pixels, options.watermark.as_ref())?;
+                let mut flat = Document::from_image(pixels)?;
+                // Keep the pages; the flattened picture has no sections.
+                if let Some(mut guide) = part.guide.clone() {
+                    guide.sections.clear();
+                    flat.guide = Some(guide);
+                }
+                Ok(flat)
+            } else {
+                Ok(part)
+            }
+        }),
+        options,
+    )
+}
 pub fn write(path: &Path, bytes: &[u8]) -> Result<()> {
     crate::atomic_write(path, bytes)
 }

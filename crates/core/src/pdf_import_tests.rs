@@ -437,6 +437,74 @@ fn faithfulness_report() {
 }
 
 #[test]
+fn large_imports_split_into_parts_that_export_as_one_pdf() {
+    let letter = [816, 1056];
+    let parts = plan_parts(&[letter; 60]);
+    assert_eq!(parts, vec![0..24, 24..48, 48..60]);
+    assert_eq!(plan_parts(&[]), vec![]);
+
+    // Three one-page parts from the sample, joined into one PDF.
+    let file = open(
+        include_bytes!("../tests/fixtures/pdf/sample-8-pages.pdf").to_vec(),
+        "",
+    )
+    .unwrap();
+    let set = new_set_id();
+    let documents: Vec<Document> = (0..3)
+        .map(|i| {
+            let page = file
+                .prepare(i, ImportAs::Editable { fallback_dpi: 72 })
+                .unwrap();
+            let mut d = build_guide(vec![page]).unwrap();
+            d.part = Some(PartOf {
+                set: set.clone(),
+                index: i as u32 + 1,
+                total: 3,
+                title: "Sample".into(),
+            });
+            d.validate().unwrap();
+            d
+        })
+        .collect();
+    assert_eq!(
+        documents[1].part.as_ref().unwrap().label(),
+        "Sample · part 2 of 3"
+    );
+    let json = serde_json::to_vec(&documents[2]).unwrap();
+    assert_eq!(
+        serde_json::from_slice::<Document>(&json).unwrap().part,
+        documents[2].part
+    );
+    let bytes = crate::export::encode_parts_pdf(
+        documents.iter().cloned().map(Ok),
+        &crate::export::Options {
+            format: crate::export::Format::Pdf,
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let joined = open(bytes, "").unwrap();
+    assert_eq!(joined.page_count(), 3);
+    // Page sizes carry through: the sample's first page is A4, the next Letter.
+    assert!((joined.page_points(0)[0] - 595.3).abs() < 1.);
+    assert!((joined.page_points(1)[0] - 612.).abs() < 1.);
+    // The second part's page looks like the sample's second page.
+    let scale = 600. / 792.;
+    let a = joined.render(1, scale);
+    let b = file.render(1, scale);
+    let b = image::imageops::resize(
+        &b,
+        a.width(),
+        a.height(),
+        image::imageops::FilterType::Triangle,
+    );
+    assert!(
+        share_different(&a, &b) < 0.02,
+        "the second part's page is the sample's second page"
+    );
+}
+
+#[test]
 fn a_guide_holds_as_many_pages_as_its_size_limits_allow() {
     let letter = [816, 1056];
     assert_eq!(pages_that_fit(&[letter; 10]), 10);

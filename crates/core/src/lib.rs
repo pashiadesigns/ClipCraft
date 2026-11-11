@@ -213,6 +213,10 @@ pub struct Document {
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
     pub object_states: object_state::ObjectStates,
     pub annotations: Vec<Annotation>,
+    /// One of several linked guides made from one large PDF (approved beta 6
+    /// tab 7); export can put the parts back into one file.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub part: Option<pdf_import::PartOf>,
 }
 
 /// Runs third-party parsing or drawing of untrusted input so that a panic
@@ -253,6 +257,7 @@ impl Document {
             guide: None,
             object_states: Default::default(),
             annotations: vec![],
+            part: None,
         })
     }
 
@@ -273,6 +278,7 @@ impl Document {
             guide: None,
             object_states: Default::default(),
             annotations: vec![],
+            part: None,
         })
     }
 
@@ -376,6 +382,9 @@ impl Document {
         self.validate_groups()?;
         if let Some(guide) = &self.guide {
             guide.validate(self)?;
+        }
+        if let Some(part) = &self.part {
+            part.validate()?;
         }
         if let Some([width, height]) = self.source_size {
             validate_dimensions(width, height)?;

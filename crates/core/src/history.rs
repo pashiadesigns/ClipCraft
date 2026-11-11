@@ -103,6 +103,9 @@ pub struct Entry {
     pub updated_ms: Option<u64>,
     #[serde(default, skip_serializing_if = "Organize::is_empty")]
     pub organize: Organize,
+    /// The linked set this item belongs to, from its document.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub part: Option<crate::pdf_import::PartOf>,
 }
 impl Entry {
     pub fn storage_id(&self) -> &str {
@@ -726,6 +729,7 @@ impl History {
             revision: (!matches!(mode, WriteMode::Snapshot)).then(|| storage_id.clone()),
             updated_ms: (!matches!(mode, WriteMode::Snapshot))
                 .then_some(elapsed.as_millis() as u64),
+            part: document.part.clone(),
             organize: replaced
                 .as_ref()
                 .map(|e| e.organize.clone())
@@ -1098,6 +1102,7 @@ mod tests {
             kind: Default::default(),
             tags: vec![],
             organize: Default::default(),
+            part: None,
             id: "00000000000000000000000000000000".into(),
             label: "Résumé Draft [1]".into(),
             origin: Origin::Saved,
@@ -1132,6 +1137,7 @@ mod tests {
             kind: Default::default(),
             tags: vec![],
             organize: Default::default(),
+            part: None,
             id: String::new(),
             label: String::new(),
             origin: Origin::Canvas,

@@ -695,6 +695,7 @@ mod tests {
             kind: Default::default(),
             tags: vec![],
             organize: Default::default(),
+            part: None,
             id: id.into(),
             label: label.into(),
             origin: Origin::Project,

@@ -634,6 +634,58 @@ pub fn without_pdf_pages(document: &Document) -> Option<Document> {
     Some(rest)
 }
 
+/// Where a guide sits in a set of linked parts made from one large PDF.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PartOf {
+    /// Shared by every part of the set.
+    pub set: String,
+    /// 1-based.
+    pub index: u32,
+    pub total: u32,
+    /// The PDF's name, for labels such as "Vendor packet · part 3 of 10".
+    pub title: String,
+}
+impl PartOf {
+    pub fn validate(&self) -> Result<()> {
+        if self.set.is_empty()
+            || self.set.len() > 64
+            || !self.set.chars().all(|c| c.is_ascii_alphanumeric())
+            || self.index == 0
+            || self.index > self.total
+            || self.total > 10_000
+            || self.title.chars().count() > 200
+            || self.title.chars().any(char::is_control)
+        {
+            return Err(Error::Invalid("Invalid linked part".into()));
+        }
+        Ok(())
+    }
+    pub fn label(&self) -> String {
+        format!("{} · part {} of {}", self.title, self.index, self.total)
+    }
+}
+/// A new identifier for a set of parts.
+pub fn new_set_id() -> String {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_nanos());
+    format!("{:032x}", now ^ (u128::from(std::process::id()) << 64))
+}
+
+/// Splits pages (guide pixel sizes, in order) into runs that each fit in one
+/// guide: the parts a large import becomes.
+pub fn plan_parts(sizes: &[[u32; 2]]) -> Vec<std::ops::Range<usize>> {
+    let mut parts = vec![];
+    let mut start = 0;
+    while start < sizes.len() {
+        let fit = pages_that_fit(&sizes[start..]).max(1);
+        parts.push(start..start + fit);
+        start += fit;
+    }
+    parts
+}
+
 /// How many of `sizes` (guide pixels) one guide can hold, in order.
 pub fn pages_that_fit(sizes: &[[u32; 2]]) -> usize {
     let mut width = 0u64;
