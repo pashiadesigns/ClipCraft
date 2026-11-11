@@ -234,7 +234,7 @@ impl Editor {
         self.set_timeline_expanded(true);
     }
 }
-pub(super) fn import_files(paths: &[PathBuf]) -> Result<Vec<Segment>, String> {
+pub(crate) fn import_files(paths: &[PathBuf]) -> Result<Vec<Segment>, String> {
     if paths.is_empty() || paths.len() > 64 {
         return Err("Import between 1 and 64 media files at a time.".into());
     }
@@ -321,7 +321,7 @@ pub(super) fn import_files(paths: &[PathBuf]) -> Result<Vec<Segment>, String> {
     Ok(clips)
 }
 
-pub(super) fn plan_import(original: &Project, clips: &[Segment], at: u64, track: u64) -> Project {
+pub(crate) fn plan_import(original: &Project, clips: &[Segment], at: u64, track: u64) -> Project {
     let mut p = original.clone();
     let mut cursor = at;
     for mut clip in clips.iter().cloned() {

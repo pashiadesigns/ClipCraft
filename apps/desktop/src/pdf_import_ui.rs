@@ -44,7 +44,32 @@ enum Progress {
     Done(Result<Imported, String>),
     /// Insert mode: the prepared pages and their PDF sizes.
     Pages(Result<Vec<(capture_core::bitmap::Bitmap, [f64; 2])>, String>),
+    /// Video mode: the pages as picture clips.
+    Clips(Result<Vec<capture_core::video::editor::Segment>, String>),
 }
+
+/// PDF pages in a video (approved beta 6 tab 6): each page becomes a
+/// picture clip at the playhead.
+#[derive(Clone)]
+pub(crate) struct VideoPages {
+    seconds: String,
+    crossfade: bool,
+    fill: bool,
+    /// The video's frame size, which the page pictures are drawn to fit.
+    frame: [u32; 2],
+    folder: PathBuf,
+}
+impl VideoPages {
+    fn seconds(&self) -> Option<f64> {
+        self.seconds
+            .trim()
+            .parse::<f64>()
+            .ok()
+            .filter(|s| s.is_finite() && (0.5..=600.0).contains(s))
+    }
+}
+/// How long neighbouring page clips overlap when they crossfade.
+const PAGE_FADE: u64 = 600;
 
 /// Insert › PDF pages (approved beta 6 tab 6): where the pages go in the
 /// open guide and how they are sized.
@@ -95,6 +120,8 @@ pub(crate) struct PdfImport {
     start: bool,
     /// Set for Insert › PDF pages.
     insert: Option<InsertInto>,
+    /// Set for PDF pages in a video.
+    video: Option<VideoPages>,
 }
 
 /// Paper names for common page sizes in points.
@@ -183,6 +210,7 @@ impl PdfImport {
             want_preview: None,
             start: false,
             insert: None,
+            video: None,
         };
         value.open("");
         value
@@ -317,9 +345,54 @@ impl PdfImport {
     fn title(&self) -> &'static str {
         if self.insert.is_some() {
             "Insert PDF pages"
+        } else if self.video.is_some() {
+            "Add PDF pages to video"
         } else {
             "New from PDF"
         }
+    }
+    /// Video mode: draws each chosen page to fit the video frame, saves it as
+    /// a picture in the Library's media folder and reads it as a clip.
+    fn import_video_pages(&mut self, ctx: &egui::Context) {
+        let (Some(file), Some(video)) = (self.file.clone(), self.video.clone()) else {
+            return;
+        };
+        let pages = self.chosen();
+        let total = pages.len();
+        let stem = std::path::Path::new(&self.name())
+            .file_stem()
+            .map_or_else(|| "PDF".to_owned(), |s| s.to_string_lossy().into_owned());
+        let (tx, rx) = mpsc::channel();
+        let repaint = ctx.clone();
+        std::thread::spawn(move || {
+            let result = (|| {
+                std::fs::create_dir_all(&video.folder).map_err(|e| e.to_string())?;
+                let stamp = pdf_import::new_set_id();
+                let mut paths = vec![];
+                for (n, i) in pages.iter().enumerate() {
+                    let [w, h] = file.page_points(*i);
+                    let [fw, fh] = video.frame.map(f64::from);
+                    // Twice the frame keeps text sharp when the clip is zoomed.
+                    let scale = (fw / w).min(fh / h) * 2.;
+                    let pixels = file.render(*i, scale);
+                    let path =
+                        video
+                            .folder
+                            .join(format!("{stem} page {} {}.png", i + 1, &stamp[..8]));
+                    pixels.save(&path).map_err(|e| e.to_string())?;
+                    capture_core::history::media_cleanup::mark_created(&path)
+                        .map_err(|e| e.to_string())?;
+                    paths.push(path);
+                    let _ = tx.send(Progress::Page);
+                    repaint.request_repaint();
+                    let _ = n;
+                }
+                crate::video_editor::imports::import_files(&paths)
+            })();
+            let _ = tx.send(Progress::Clips(result));
+            repaint.request_repaint();
+        });
+        self.stage = Stage::Importing { rx, done: 0, total };
     }
     /// Insert mode: prepares the chosen pages without building a guide.
     fn import_pages(&mut self, ctx: &egui::Context) {
@@ -359,6 +432,10 @@ impl PdfImport {
     fn import(&mut self, ctx: &egui::Context) {
         if self.insert.is_some() {
             self.import_pages(ctx);
+            return;
+        }
+        if self.video.is_some() {
+            self.import_video_pages(ctx);
             return;
         }
         let Some(file) = self.file.clone() else {
@@ -513,6 +590,78 @@ fn picture_note(notes: &[(usize, PictureReason)], dpi: u32) -> Option<String> {
     (!parts.is_empty()).then(|| parts.join(" "))
 }
 impl Editor {
+    /// PDF pages in a video project (approved beta 6 tab 6).
+    pub(crate) fn pdf_pages_to_video(&mut self) {
+        if self.session.document.video.is_none() {
+            return;
+        }
+        // The video frame is the document's size.
+        let frame = [self.session.document.width, self.session.document.height];
+        let Some(folder) = self.history.root().map(|r| r.join("pdf-pages")) else {
+            self.status = "The Library isn't available, so PDF pages can't be saved.".into();
+            return;
+        };
+        self.video.pause();
+        self.suspend_global_capture();
+        if let Some(path) = rfd::FileDialog::new()
+            .set_directory(self.dialog_folder(capture_core::quick_preferences::Folder::Open))
+            .add_filter("PDF documents", &["pdf"])
+            .pick_file()
+        {
+            self.remember_dialog_folder(capture_core::quick_preferences::Folder::Open, &path);
+            let mut draft = PdfImport::new(path);
+            draft.video = Some(VideoPages {
+                seconds: "4.0".into(),
+                crossfade: true,
+                fill: false,
+                frame,
+                folder,
+            });
+            self.pdf_import = Some(draft);
+        }
+    }
+    fn finish_video_pages(
+        &mut self,
+        draft: PdfImport,
+        mut clips: Vec<capture_core::video::editor::Segment>,
+    ) {
+        let (Some(video), Some(mut p)) = (draft.video, self.session.document.video.clone()) else {
+            return;
+        };
+        let ms = (video.seconds().unwrap_or(4.) * 1000.).round() as u64;
+        for clip in &mut clips {
+            clip.end = clip.start + ms;
+            clip.frame = Some(capture_core::video::frame::Frame {
+                fill: video.fill,
+                ..Default::default()
+            });
+        }
+        let at = p.cursor;
+        let track = p.add_media_track();
+        p = crate::video_editor::imports::plan_import(&p, &clips, at, track);
+        // Lay the pages end to end from the playhead, overlapping to crossfade.
+        let overlap = if video.crossfade {
+            PAGE_FADE.min(ms / 2)
+        } else {
+            0
+        };
+        let mut order: Vec<usize> = (0..p.segments.len())
+            .filter(|i| p.segments[*i].track == track)
+            .collect();
+        order.sort_by_key(|i| p.segments[*i].at);
+        let mut cursor = at;
+        for i in order {
+            p.segments[i].at = cursor;
+            cursor += p.segments[i].duration().saturating_sub(overlap);
+        }
+        let count = clips.len();
+        self.commit_video(p);
+        self.set_timeline_expanded(true);
+        self.status = format!(
+            "Added {count} PDF {} as picture clips at the playhead.",
+            if count == 1 { "page" } else { "pages" }
+        );
+    }
     /// Insert › PDF pages into the open guide (approved beta 6 tab 6).
     pub(crate) fn insert_pdf_pages(&mut self) {
         let d = &self.session.document;
@@ -633,6 +782,7 @@ impl Editor {
         }
         let mut done = None;
         let mut inserted = None;
+        let mut clips = None;
         match &mut draft.stage {
             Stage::Opening(rx) => match rx.try_recv() {
                 Ok(Ok(file)) => draft.opened(file, ctx),
@@ -669,6 +819,10 @@ impl Editor {
                         inserted = Some(result);
                         break;
                     }
+                    Ok(Progress::Clips(result)) => {
+                        clips = Some(result);
+                        break;
+                    }
                     Err(mpsc::TryRecvError::Empty) => break,
                     Err(mpsc::TryRecvError::Disconnected) => {
                         done = Some(Err("The import stopped. Try again.".into()));
@@ -677,6 +831,20 @@ impl Editor {
                 }
             },
             _ => {}
+        }
+        if let Some(result) = clips {
+            match result {
+                Ok(clips) => {
+                    let draft = self.pdf_import.take().unwrap();
+                    self.finish_video_pages(draft, clips);
+                }
+                Err(e) => {
+                    if let Some(d) = &mut self.pdf_import {
+                        d.stage = Stage::Failed(e);
+                    }
+                }
+            }
+            return;
         }
         if let Some(result) = inserted {
             match result {
@@ -1166,6 +1334,42 @@ fn ready(ui: &mut egui::Ui, draft: &mut PdfImport) -> (bool, bool) {
             }
         }
         let ui = &mut cols[1];
+        if let Some(video) = &mut draft.video {
+            crate::controls::dialog_section(ui, "Video", None);
+            ui.horizontal(|ui| {
+                ui.add_sized([110., 20.], egui::Label::new("Each page shows"));
+                ui.add(
+                    crate::unicode_input::TextEdit::singleline(&mut video.seconds)
+                        .desired_width(56.)
+                        .align(egui::Align2::RIGHT_CENTER),
+                )
+                .tip("Each page shows · Seconds each page stays on screen.");
+                ui.label("seconds");
+            });
+            crate::property_layout::choice(
+                ui,
+                "Between pages",
+                &mut video.crossfade,
+                &[(true, "Crossfade (600 ms)"), (false, "Cut")],
+                "Between pages · Fade each page into the next, or cut straight to it.",
+            );
+            ui.horizontal(|ui| {
+                ui.add_sized([110., 20.], egui::Label::new("Fit"));
+                for (fill, label, tip) in [
+                    (false, "Fit inside", "Fit inside · The whole page shows, with space around it."),
+                    (true, "Fill frame", "Fill frame · The page fills the video frame; edges may be cropped."),
+                ] {
+                    if ui
+                        .add(egui::Button::selectable(video.fill == fill, label))
+                        .tip(tip)
+                        .clicked()
+                    {
+                        video.fill = fill;
+                    }
+                }
+            });
+            return;
+        }
         if let Some(into) = &mut draft.insert {
             crate::controls::dialog_section(ui, "Into this guide", None);
             let after = format!("After page {} (current)", into.current + 1);
@@ -1226,6 +1430,47 @@ fn ready(ui: &mut egui::Ui, draft: &mut PdfImport) -> (bool, bool) {
     }
     // Footer: what will happen, and the buttons.
     crate::panel_ui::divider(ui);
+    if let Some(video) = &draft.video {
+        let n = draft.chosen().len();
+        let seconds = video.seconds();
+        let (summary, ok) = match (n, seconds) {
+            (0, _) => ("Choose at least one page.".to_owned(), false),
+            (_, None) => ("Each page shows for 0.5 to 600 seconds.".to_owned(), false),
+            (n, Some(s)) => {
+                let fade = if video.crossfade {
+                    0.6_f64.min(s / 2.)
+                } else {
+                    0.
+                };
+                let total = s * n as f64 - fade * (n as f64 - 1.);
+                (
+                    format!(
+                        "{n} {} · {:.0} s",
+                        if n == 1 { "clip" } else { "clips" },
+                        total
+                    ),
+                    n <= 64,
+                )
+            }
+        };
+        let summary = if n > 64 {
+            "Add up to 64 pages at a time.".to_owned()
+        } else {
+            summary
+        };
+        ui.label(egui::RichText::new(summary).color(if ok {
+            egui::Color32::from_rgb(142, 154, 157)
+        } else {
+            egui::Color32::from_rgb(255, 170, 160)
+        }));
+        let action = format!("Add {n} {}", if n == 1 { "clip" } else { "clips" });
+        let (create, cancel) = crate::controls::dialog_actions(ui, &action, "Cancel", ok, false);
+        close |= cancel;
+        if create && ok {
+            draft.start = true;
+        }
+        return (close, change_file);
+    }
     if let Some(into) = &draft.insert {
         let chosen: Vec<usize> = draft.chosen();
         let at = into.at();
@@ -1562,6 +1807,57 @@ mod tests {
         assert_eq!(e.session.document.guide.as_ref().unwrap().page_count(), 3);
         e.execute(capture_core::Command::Undo);
         assert_eq!(e.session.document.guide.as_ref().unwrap().page_count(), 2);
+    }
+    #[test]
+    fn pdf_pages_become_crossfading_picture_clips_in_a_video() {
+        let ctx = egui::Context::default();
+        crate::shell::configure(&ctx);
+        let mut e = crate::video_editor::repair_tests::editor(&ctx);
+        let folder = tempfile::tempdir().unwrap();
+        let before = e.session.document.video.as_ref().unwrap().segments.len();
+        let mut draft = PdfImport::ready_now(sample_path(), &ctx);
+        draft.video = Some(VideoPages {
+            seconds: "4".into(),
+            crossfade: true,
+            fill: false,
+            frame: [e.session.document.width, e.session.document.height],
+            folder: folder.path().to_path_buf(),
+        });
+        draft.selected = parse_range("1-2", 8).unwrap();
+        draft.import(&ctx);
+        e.pdf_import = Some(draft);
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(120);
+        while e.pdf_import.is_some() {
+            assert!(std::time::Instant::now() < deadline, "adding finished");
+            let mut output = ctx.run_ui(Default::default(), |ui| e.show_pdf_import(ui.ctx()));
+            output.textures_delta.clear();
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+        assert!(e.status.contains("Added 2 PDF pages"), "{}", e.status);
+        let p = e.session.document.video.as_ref().unwrap();
+        assert_eq!(p.segments.len(), before + 2);
+        let mut added: Vec<_> = p.segments[before..].iter().collect();
+        added.sort_by_key(|c| c.at);
+        assert!(added.iter().all(|c| c.duration() == 4000));
+        assert_eq!(
+            added[1].at - added[0].at,
+            4000 - PAGE_FADE,
+            "they crossfade"
+        );
+        let pictures = std::fs::read_dir(folder.path())
+            .unwrap()
+            .filter(|f| {
+                f.as_ref()
+                    .unwrap()
+                    .path()
+                    .extension()
+                    .is_some_and(|e| e == "png")
+            })
+            .count();
+        assert_eq!(
+            pictures, 2,
+            "one picture per page, marked as ClipDesigner media"
+        );
     }
     #[test]
     fn the_note_names_scans_and_effects_once() {

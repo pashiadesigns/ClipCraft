@@ -27,7 +27,7 @@ mod hide_tracks;
 pub(crate) use hide_tracks::{TrackType, track_kind};
 mod gif_audition;
 mod gif_studio;
-mod imports;
+pub(crate) mod imports;
 mod jump;
 #[cfg(test)]
 mod keyframe_tests;
@@ -52,7 +52,7 @@ mod public_beta_tests;
 #[cfg(test)]
 mod recording_repair_tests;
 #[cfg(test)]
-mod repair_tests;
+pub(crate) mod repair_tests;
 mod selection;
 mod still_frame;
 #[cfg(test)]
