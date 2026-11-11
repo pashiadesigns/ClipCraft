@@ -47,6 +47,14 @@ pub struct Bitmap {
     /// Recolor: draws the whole SVG in one color (icons and logos).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     tint: Option<[u8; 4]>,
+    /// A page imported from a PDF (approved PDF import): its drawing may be
+    /// larger than an imported SVG file.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pdf_page: bool,
+    /// The page's own words and where they are, so Find Sensitive Info can
+    /// use the real text instead of reading the picture.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    text_layer: Option<Arc<crate::pdf_import::TextLayer>>,
     /// Filters, border and edge. The original pixels are never changed.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     finish: Option<crate::picture_finish::Finish>,
@@ -74,6 +82,8 @@ impl PartialEq for Bitmap {
             && self.perspective == other.perspective
             && self.svg == other.svg
             && self.tint == other.tint
+            && self.pdf_page == other.pdf_page
+            && self.text_layer == other.text_layer
             && self.frame_opacity == other.frame_opacity
             && self.finish == other.finish
     }
@@ -245,6 +255,41 @@ impl Bitmap {
     pub fn is_svg(&self) -> bool {
         self.svg.is_some()
     }
+    /// A PDF page kept as a drawing, with its words, at `size` pixels.
+    pub fn from_pdf_page(
+        svg: String,
+        size: [u32; 2],
+        text: Option<crate::pdf_import::TextLayer>,
+    ) -> Result<Self> {
+        let pixels = crate::vector_import::render_pdf_page(&svg, size)?;
+        let mut value = Self::new(Arc::new(RasterImage::from_image(&pixels)?))?;
+        value.svg = Some(Arc::new(svg));
+        value.pdf_page = true;
+        value.text_layer = text.map(Arc::new);
+        value.validate_view()?;
+        Ok(value)
+    }
+    /// A PDF page that came in as a picture, keeping its words when it has them.
+    pub fn from_pdf_picture(
+        pixels: &RgbaImage,
+        text: Option<crate::pdf_import::TextLayer>,
+    ) -> Result<Self> {
+        let mut value = Self::new(Arc::new(RasterImage::from_image(pixels)?))?;
+        value.pdf_page = true;
+        value.text_layer = text.map(Arc::new);
+        value.validate_view()?;
+        Ok(value)
+    }
+    pub fn is_pdf_page(&self) -> bool {
+        self.pdf_page
+    }
+    pub fn text_layer(&self) -> Option<&crate::pdf_import::TextLayer> {
+        self.text_layer.as_deref()
+    }
+    /// The SVG text of a drawing, for exporting it as shapes.
+    pub(crate) fn svg_text(&self) -> Option<&str> {
+        self.svg.as_deref().map(String::as_str)
+    }
     pub fn tint(&self) -> Option<[u8; 4]> {
         self.tint
     }
@@ -268,7 +313,14 @@ impl Bitmap {
         {
             return Some(pixels.clone());
         }
-        let pixels = Arc::new(crate::vector_import::render_svg(text, size, self.tint).ok()?);
+        let pixels = Arc::new(
+            if self.pdf_page {
+                crate::vector_import::render_pdf_page(text, size)
+            } else {
+                crate::vector_import::render_svg(text, size, self.tint)
+            }
+            .ok()?,
+        );
         *cache = Some((size, self.tint, pixels.clone()));
         Some(pixels)
     }
@@ -306,11 +358,25 @@ impl Bitmap {
         {
             return Err(Error::Invalid("Invalid image focus point".into()));
         }
-        if self.svg.as_ref().is_some_and(|s| s.len() > 8 * 1024 * 1024)
+        let svg_limit = if self.pdf_page {
+            crate::vector_import::MAX_PDF_PAGE_SVG_BYTES
+        } else {
+            8 * 1024 * 1024
+        };
+        if self.svg.as_ref().is_some_and(|s| s.len() > svg_limit)
             || (self.svg.is_some() && (self.is_cursor() || self.vector.is_some()))
-            || (self.tint.is_some() && self.svg.is_none())
+            || (self.tint.is_some() && (self.svg.is_none() || self.pdf_page))
         {
             return Err(Error::Invalid("Invalid SVG image".into()));
+        }
+        if self.pdf_page && (self.icon || self.is_cursor() || self.vector.is_some()) {
+            return Err(Error::Invalid("Invalid PDF page image".into()));
+        }
+        if let Some(layer) = &self.text_layer {
+            if !self.pdf_page {
+                return Err(Error::Invalid("Only PDF pages keep a text layer".into()));
+            }
+            layer.validate()?;
         }
         if let Some(quad) = self.perspective
             && (self.is_cursor() || self.vector.is_some() || Homography::new(quad).is_none())
@@ -366,6 +432,8 @@ impl Bitmap {
             perspective: None,
             svg: None,
             tint: None,
+            pdf_page: false,
+            text_layer: None,
             svg_cache: Default::default(),
             frame_opacity: None,
             decoded: OnceLock::from(Ok(pixels)),
@@ -387,6 +455,8 @@ impl Bitmap {
             perspective: None,
             svg: None,
             tint: None,
+            pdf_page: false,
+            text_layer: None,
             svg_cache: Default::default(),
             frame_opacity: None,
             decoded: OnceLock::new(),

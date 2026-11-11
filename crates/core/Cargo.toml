@@ -23,3 +23,6 @@ harfrust = "0.12"
 unicode-segmentation = "1.13"
 vello_cpu = { version = "0.2.0", default-features = false, features = ["std", "u8_pipeline"] }
 resvg = "0.49.0"
+# PDF import (engine chosen in artifacts/pdf-engine-spike); 0.9 is pinned once it is two weeks old.
+hayro = "=0.8.0"
+hayro-svg = "=0.8.0"

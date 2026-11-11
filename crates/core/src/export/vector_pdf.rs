@@ -6,6 +6,7 @@ use crate::display::{
     vector::{Op, record},
 };
 use std::fmt::Write as _;
+mod drawing;
 #[cfg(test)]
 mod tests;
 use vello_cpu::{
@@ -386,6 +387,11 @@ pub(super) fn encode(document: &Document, options: &Options) -> Result<Vec<u8>> 
                 image(&mut pdf, &mut content, &p.pixels, p.origin)?;
             }
             Layer::Vector(a) => {
+                // Drawings stay shapes; only what a later redaction touches
+                // is flattened, with the covered part removed.
+                if drawing::write(&mut pdf, &mut content, &a, &future, bounds)? {
+                    continue;
+                }
                 let (lo, hi) = a.bounds();
                 let reach = a.width as f64 * 4. + 3.;
                 let r = Rect::new(

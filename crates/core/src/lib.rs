@@ -72,6 +72,7 @@ pub mod multi_selection;
 pub mod object_state;
 pub mod object_styles;
 pub mod palettes;
+pub mod pdf_import;
 pub mod polygon;
 pub mod quick_preferences;
 #[cfg(test)]
