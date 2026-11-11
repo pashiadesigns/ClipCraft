@@ -1075,3 +1075,77 @@ mod tests {
         assert_eq!(e.session.document.annotations.len(), before);
     }
 }
+
+#[cfg(test)]
+mod tool_switch_tests {
+    use crate::egui;
+    use capture_core::toolbar::ToolId;
+
+    fn index(id: ToolId) -> usize {
+        crate::shell::TOOLS.iter().position(|t| t.id == id).unwrap()
+    }
+
+    /// Retest of beta 4: after placing icons, switching to Focus left the
+    /// canvas in Move/pan and nothing could be placed.
+    #[test]
+    fn switching_from_icons_to_focus_draws_a_focus_window() {
+        use egui::{Event, Modifiers, PointerButton};
+        let ctx = egui::Context::default();
+        crate::shell::configure(&ctx);
+        let mut e = crate::canvas::tests::editor(&ctx);
+        e.quick_controls.set_snapping(false);
+        e.choose_tool(index(ToolId::Icons));
+        let icon = capture_core::icon_library::builtin::find("builtin-five-color").unwrap();
+        e.arm_icon(&ctx, icon.id.into(), icon.payload().unwrap());
+        let button = |pos, pressed| Event::PointerButton {
+            pos,
+            pressed,
+            modifiers: Modifiers::NONE,
+            button: PointerButton::Primary,
+        };
+        let t = crate::canvas::tests::frame(&ctx, &mut e, vec![]);
+        for at in [[150.0, 150.0], [300.0, 150.0]] {
+            let p = t.screen_point(at);
+            crate::canvas::tests::frame(&ctx, &mut e, vec![Event::PointerMoved(p), button(p, true)]);
+            crate::canvas::tests::frame(&ctx, &mut e, vec![button(p, false)]);
+        }
+        let icons = e.session.document.annotations.len();
+        assert_eq!(icons, 2, "icons placed: {}", e.status);
+        // Interact with a placed icon the way a user retesting would: resize the
+        // armed icon with Alt+wheel, click the first icon, then drag it a little.
+        let over = t.screen_point([150.0, 150.0]);
+        crate::canvas::tests::frame(
+            &ctx,
+            &mut e,
+            vec![
+                Event::PointerMoved(t.screen_point([220.0, 260.0])),
+                Event::ModifiersChanged(Modifiers::ALT),
+                Event::MouseWheel {
+                    unit: egui::MouseWheelUnit::Line,
+                    delta: egui::vec2(0.0, 2.0),
+                    modifiers: Modifiers::ALT,
+                    phase: egui::TouchPhase::Move,
+                    source: egui::MouseWheelSource::Unknown,
+                },
+                Event::ModifiersChanged(Modifiers::NONE),
+            ],
+        );
+        crate::canvas::tests::frame(&ctx, &mut e, vec![Event::PointerMoved(over), button(over, true)]);
+        crate::canvas::tests::frame(&ctx, &mut e, vec![button(over, false)]);
+        crate::canvas::tests::frame(&ctx, &mut e, vec![Event::PointerMoved(over), button(over, true)]);
+        crate::canvas::tests::frame(&ctx, &mut e, vec![Event::PointerMoved(over + egui::vec2(20.0, 10.0))]);
+        crate::canvas::tests::frame(&ctx, &mut e, vec![button(over + egui::vec2(20.0, 10.0), false)]);
+        let icons = e.session.document.annotations.len();
+        e.choose_tool(index(ToolId::Focus));
+        assert!(!e.shell.annotations_hidden && !e.shell.raster_preview, "canvas left in a preview mode");
+        let a = t.screen_point([80.0, 220.0]);
+        let b = t.screen_point([400.0, 340.0]);
+        crate::canvas::tests::frame(&ctx, &mut e, vec![Event::PointerMoved(a), button(a, true)]);
+        crate::canvas::tests::frame(&ctx, &mut e, vec![Event::PointerMoved(a + (b - a) * 0.5)]);
+        crate::canvas::tests::frame(&ctx, &mut e, vec![Event::PointerMoved(b)]);
+        crate::canvas::tests::frame(&ctx, &mut e, vec![button(b, false)]);
+        let after = &e.session.document.annotations;
+        assert_eq!(after.len(), icons + 1, "Focus window not created; status: {}", e.status);
+        assert!(after.last().unwrap().focus.is_some());
+    }
+}

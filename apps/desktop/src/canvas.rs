@@ -30,6 +30,7 @@ fn drawing_shift(ui: &egui::Ui) -> bool {
 
 impl Editor {
     pub(super) fn cancel_gesture(&mut self) {
+        crate::native_cursor::reset();
         self.icon_library.cancel_drag();
         self.marquee = None;
         self.quick_controls.format_source = None;

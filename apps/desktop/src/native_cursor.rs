@@ -260,6 +260,13 @@ mod platform {
         }
     }
 
+    /// Drops the tool cursor at once (tool change, Escape), so a cursor from the
+    /// previous tool can never outlive it until the next repaint (beta 4 retest).
+    pub(crate) fn reset() {
+        ACTIVE.store(0, Ordering::Relaxed);
+        REQUESTED.store(false, Ordering::Relaxed);
+    }
+
     /// `WM_SETCURSOR`: true when the tool cursor was applied.
     pub(crate) fn apply(lparam: isize) -> bool {
         let cursor = ACTIVE.load(Ordering::Relaxed);
@@ -354,6 +361,8 @@ pub(crate) fn show(_key: &str, _build: impl FnOnce() -> Option<Image>) -> bool {
 }
 #[cfg(not(all(windows, not(test))))]
 pub(crate) fn next_frame() {}
+#[cfg(not(all(windows, not(test))))]
+pub(crate) fn reset() {}
 #[cfg(all(windows, test))]
 pub(crate) fn apply(_lparam: isize) -> bool {
     false
