@@ -41,7 +41,12 @@ impl Editor {
             )
             .clicked()
             {
-                self.presets.reusable.open_groups();
+                let ids = self.group_preset_ids();
+                let current = (!ids.is_empty())
+                    .then(|| Composition::capture(&self.session.document, &ids).ok())
+                    .flatten()
+                    .map(Payload::Group);
+                self.presets.reusable.open_groups(current);
             }
             if crate::ribbon::command_tile(
                 ui,

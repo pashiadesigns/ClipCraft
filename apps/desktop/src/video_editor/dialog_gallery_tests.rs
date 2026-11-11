@@ -77,7 +77,7 @@ pub(super) fn dialogs() -> Vec<(&'static str, bool, Open, Show)> {
         (
             "blocks",
             false,
-            |_, e| e.presets.reusable.open_groups(),
+            |_, e| e.presets.reusable.open_groups(None),
             |c, e| e.presets.reusable.show(c),
         ),
         (
