@@ -164,6 +164,7 @@ impl Editor {
             && self.pending.is_none()
             && self.new_image.is_none()
             && self.pdf_import.is_none()
+            && self.rotate_image.is_none()
             && self.resize_image.is_none()
             && self.resize_canvas.is_none()
             && self.image_transform.is_none()
@@ -1199,6 +1200,7 @@ pub(crate) mod tests {
             export_preferences: Default::default(),
             icon_library: Default::default(),
             image_transform: None,
+            rotate_image: None,
             crop: None,
 
             cut_out: None,

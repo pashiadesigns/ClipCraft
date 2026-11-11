@@ -111,6 +111,16 @@ pub(crate) fn rotate_objects(
         .collect()
 }
 
+/// A rotated copy of a small picture for a live preview (same sampling as
+/// [`Command::RotateImage`](crate::Command::RotateImage)).
+pub fn rotate_preview(
+    source: &image::RgbaImage,
+    degrees: f32,
+    grow: bool,
+    corners: [u8; 4],
+) -> image::RgbaImage {
+    rotate_pixels(source, degrees, grow, corners)
+}
 /// The picture rotated about its center, sampled smoothly. `grow` makes the
 /// canvas big enough for every corner; new corners get `corners`.
 pub(crate) fn rotate_pixels(

@@ -77,7 +77,7 @@ pub mod polygon;
 pub mod quick_preferences;
 #[cfg(test)]
 mod redaction_tests;
-mod resize;
+pub mod resize;
 pub mod resize_modifiers;
 #[cfg(test)]
 mod resize_tests;

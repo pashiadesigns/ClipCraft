@@ -510,7 +510,7 @@ step: Undo reverses it. | title: Undo if needed
 id: resize
 section: Formatting
 where: Formatting › Size, Formatting › Rotate & flip
-controls: Resize image, Resize canvas, Rotate, Flip horizontal, Flip vertical, Rotate clockwise, Rotate counterclockwise, Flip horizontally, Flip vertically, Rotate 180 degrees, Page Setup
+controls: Resize image, Resize canvas, Rotate, Flip horizontal, Flip vertical, Rotate clockwise, Rotate counterclockwise, Flip horizontally, Flip vertically, Rotate 180 degrees, Page Setup, Rotate by angle, Rotate Image
 keywords: scale, size, dimensions, rotate, flip, canvas size
 hero: resize-hero
 ---

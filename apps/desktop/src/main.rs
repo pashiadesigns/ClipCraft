@@ -73,6 +73,7 @@ mod preferences;
 mod privacy_review;
 mod project_sessions;
 mod rich_text;
+mod rotate_image;
 mod sensitive_ui;
 mod single_instance;
 mod spelling;
@@ -201,6 +202,7 @@ struct Editor {
     export_preferences: export_ui::Preferences,
     icon_library: icon_library::Panel,
     image_transform: Option<capture_core::ImageTransform>,
+    rotate_image: Option<rotate_image::RotateImage>,
     crop: Option<crop::Crop>,
     cut_out: Option<cut_out::CutOut>,
 
@@ -399,6 +401,7 @@ impl Editor {
             export_preferences: Default::default(),
             icon_library: Default::default(),
             image_transform: None,
+            rotate_image: None,
             crop: None,
 
             cut_out: None,
@@ -766,6 +769,7 @@ impl Editor {
             && self.template_picker.is_none()
             && self.new_image.is_none()
             && self.pdf_import.is_none()
+            && self.rotate_image.is_none()
             && self.resize_image.is_none()
             && self.resize_canvas.is_none()
             && self.image_transform.is_none()
@@ -857,6 +861,7 @@ impl Editor {
             && self.template_picker.is_none()
             && self.new_image.is_none()
             && self.pdf_import.is_none()
+            && self.rotate_image.is_none()
             && self.resize_image.is_none()
             && self.resize_canvas.is_none()
             && self.image_transform.is_none()
@@ -1211,6 +1216,7 @@ impl eframe::App for Editor {
         self.show_voiceover_recorder(&ctx);
         self.show_page_setup(&ctx);
         self.show_image_transform(&ctx);
+        self.show_rotate_image(&ctx);
         self.editor_keybind_input(&ctx);
 
         self.shared_format_shortcuts(&ctx);
@@ -1264,6 +1270,7 @@ impl eframe::App for Editor {
                 && self.template_picker.is_none()
                 && self.new_image.is_none()
                 && self.pdf_import.is_none()
+                && self.rotate_image.is_none()
                 && self.text_draft.is_none()
                 && !self.capture_requested
                 && self.capture_result.is_none()

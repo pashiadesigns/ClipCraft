@@ -20,6 +20,7 @@ pub(super) enum Action {
     HalfTurn,
     FlipHorizontal,
     FlipVertical,
+    RotateAngle,
     Snapping,
     PixelGrid,
     AutoExpand,
@@ -41,6 +42,7 @@ impl Action {
             Self::HalfTurn => "Rotate 180 degrees",
             Self::FlipHorizontal => "Flip horizontally",
             Self::FlipVertical => "Flip vertically",
+            Self::RotateAngle => "Rotate by angle",
             Self::Snapping => "Canvas snapping",
             Self::PixelGrid => "Pixel grid · Ctrl+Alt+G · visible at 600% and above",
             Self::AutoExpand => "Auto-expand canvas",
@@ -164,6 +166,7 @@ impl Editor {
                     Action::HalfTurn,
                     Action::FlipHorizontal,
                     Action::FlipVertical,
+                    Action::RotateAngle,
                 ],
                 3,
             );
@@ -305,6 +308,7 @@ impl Editor {
                     });
                 }
                 Action::ResizeImage => self.begin_resize(),
+                Action::RotateAngle => self.begin_rotate_image(),
                 Action::ResizeCanvas => self.begin_resize_canvas(),
                 Action::FlattenAll => self.flatten_all(),
                 _ => {}
@@ -465,6 +469,18 @@ pub(crate) fn draw(p: &egui::Painter, c: egui::Pos2, name: &str, color: Color32)
             outline(box_at(-3.0, -2.0, 10.0, 8.0));
         }
         p.arrow(at(-3.0, 3.0), egui::vec2(10.0, -9.0), stroke);
+    } else if name == "Rotate by angle" {
+        // A square tilted by an angle, with the angle's arc.
+        let r = 6.0_f32;
+        let turn = |x: f32, y: f32| {
+            let (s, c) = 0.5_f32.sin_cos();
+            at(x * c - y * s, x * s + y * c)
+        };
+        p.add(egui::Shape::closed_line(
+            vec![turn(-r, -r), turn(r, -r), turn(r, r), turn(-r, r)],
+            stroke,
+        ));
+        p.line_segment([at(-9.0, 9.0), at(9.0, 9.0)], stroke);
     } else if name.starts_with("Rotate") {
         let d = if name.contains("counter") { -1.0 } else { 1.0 };
         p.add(egui::Shape::line(
