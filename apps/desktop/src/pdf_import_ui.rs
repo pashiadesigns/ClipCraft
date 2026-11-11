@@ -1645,6 +1645,27 @@ impl PdfImport {
             Stage::Failed("The file is damaged or isn't a PDF. Nothing was imported.".into());
         self
     }
+    /// Insert › PDF pages into a two-page guide, for the dialog gallery.
+    pub(crate) fn inserting(mut self) -> Self {
+        self.insert = Some(InsertInto {
+            current: 0,
+            sizes: vec![[816, 1056]; 2],
+            place: Place::After,
+            fit: false,
+        });
+        self
+    }
+    /// PDF pages in a video, for the dialog gallery.
+    pub(crate) fn into_video(mut self) -> Self {
+        self.video = Some(VideoPages {
+            seconds: "4.0".into(),
+            crossfade: true,
+            fill: false,
+            frame: [1920, 1080],
+            folder: std::env::temp_dir(),
+        });
+        self
+    }
 }
 
 #[cfg(test)]

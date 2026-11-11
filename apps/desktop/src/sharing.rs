@@ -255,6 +255,7 @@ impl Editor {
             )
             .show(ui, |ui| {
                 ui.horizontal(|ui| {
+                    ui.spacing_mut().item_spacing.x = 4.;
                     let (r, _) = ui.allocate_exact_size(egui::vec2(14., 14.), egui::Sense::hover());
                     paint_lock(ui.painter(), r, egui::Color32::from_rgb(242, 201, 76));
                     let since = time_of_day(lock.since_ms);

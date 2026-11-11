@@ -196,7 +196,185 @@ pub(super) fn dialogs() -> Vec<(&'static str, bool, Open, Show)> {
             |_, e| e.open_voiceover(),
             |c, e| e.show_voiceover_recorder(c),
         ),
+        // Beta 6 (approved artifacts/beta6-proposal).
+        (
+            "export-powerpoint",
+            false,
+            |_, e| e.begin_office_export_for_test(crate::export_ui::Office::PowerPoint),
+            |c, e| e.show_export(c, None),
+        ),
+        (
+            "export-word",
+            false,
+            |_, e| e.begin_office_export_for_test(crate::export_ui::Office::Word),
+            |c, e| e.show_export(c, None),
+        ),
+        (
+            "export-linked-part",
+            false,
+            |_, e| {
+                e.session.document.part = Some(sample_part());
+                e.begin_export(false);
+            },
+            |c, e| e.show_export(c, None),
+        ),
+        (
+            "rotate-image",
+            false,
+            |_, e| e.begin_rotate_image(),
+            |c, e| e.show_rotate_image(c),
+        ),
+        (
+            "insert-pdf-pages",
+            false,
+            |c, e| {
+                e.pdf_import = Some(
+                    crate::pdf_import_ui::PdfImport::ready_now(
+                        crate::pdf_import_ui::sample_path(),
+                        c,
+                    )
+                    .inserting(),
+                )
+            },
+            |c, e| e.show_pdf_import(c),
+        ),
+        (
+            "pdf-pages-in-video",
+            true,
+            |c, e| {
+                e.pdf_import = Some(
+                    crate::pdf_import_ui::PdfImport::ready_now(
+                        crate::pdf_import_ui::sample_path(),
+                        c,
+                    )
+                    .into_video(),
+                )
+            },
+            |c, e| e.show_pdf_import(c),
+        ),
+        (
+            "share-kit",
+            false,
+            |_, e| {
+                e.quick_controls
+                    .set_sensitive_types(vec![capture_core::privacy::custom::CustomType::new(
+                        "Employee ID",
+                        "EMP-#####",
+                    )])
+                    .unwrap();
+                e.open_share_kit();
+            },
+            |c, e| e.show_sharing(c),
+        ),
+        (
+            "add-kit",
+            false,
+            |_, e| {
+                let mut kit =
+                    capture_core::kit::Kit::new("Support team styles", "ClipDesigner 1.0.0-beta.6");
+                kit.sensitive_types = vec![
+                    capture_core::privacy::custom::CustomType::new("Employee ID", "E-####"),
+                    capture_core::privacy::custom::CustomType::new("Badge", "B-####"),
+                ];
+                kit.palettes = vec![capture_core::palettes::Palette {
+                    name: "Brand".into(),
+                    colors: vec![[24, 145, 193, 255], [242, 177, 52, 255]],
+                }];
+                e.quick_controls
+                    .set_sensitive_types(vec![capture_core::privacy::custom::CustomType::new(
+                        "Employee ID",
+                        "EMP-#####",
+                    )])
+                    .unwrap();
+                let dir = tempfile::tempdir().unwrap();
+                let path = dir.path().join("Support team styles.cdkit");
+                kit.write(&path).unwrap();
+                e.open_kit(&path);
+            },
+            |c, e| e.show_sharing(c),
+        ),
+        (
+            "preferences-team",
+            false,
+            |_, e| e.open_preferences(crate::preferences::Section::Team),
+            |c, e| e.show_preferences(c),
+        ),
+        (
+            "find-sensitive-parts",
+            false,
+            |_, e| {
+                e.session.document.part = Some(sample_part());
+                e.open_privacy_review();
+                crate::privacy_review::seed_results(e);
+            },
+            |c, e| e.show_privacy_review(c),
+        ),
     ]
+}
+
+/// Part 3 of 10 of a long PDF, for the gallery.
+fn sample_part() -> capture_core::pdf_import::PartOf {
+    capture_core::pdf_import::PartOf {
+        set: capture_core::pdf_import::new_set_id(),
+        index: 3,
+        total: 10,
+        title: "Vendor packet".into(),
+    }
+}
+
+/// The read-only banner over a shared project someone else has open.
+#[test]
+fn the_shared_project_banner_draws_for_the_audit() {
+    let ctx = egui::Context::default();
+    let mut e = image_editor(&ctx);
+    let dir = tempfile::tempdir().unwrap();
+    let project = dir
+        .path()
+        .join("Shared drives")
+        .join("Onboarding guide.iclip");
+    std::fs::create_dir_all(project.parent().unwrap()).unwrap();
+    capture_core::Document::blank(40, 30)
+        .unwrap()
+        .save(&project)
+        .unwrap();
+    let sam = capture_core::lock::Lock {
+        name: "Sam".into(),
+        computer: "SAM-LAPTOP".into(),
+        since_ms: std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis() as u64,
+    };
+    capture_core::lock::take(&project, &sam);
+    e.open_path(project);
+    let draw = |e: &mut Editor| {
+        PaintedOutput(ctx.run_ui(
+            egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    egui::vec2(1280., 120.),
+                )),
+                ..Default::default()
+            },
+            |ui| e.show_lock_banner(ui),
+        ))
+    };
+    let first = draw(&mut e);
+    let next = draw(&mut e);
+    assert!(crate::color_widgets::tests::text_rect(&next.shapes, "Open a copy").is_some());
+    if let Some(root) = std::env::var_os("CLIPDESIGNER_DIALOG_AUDIT_DIR") {
+        dump_meshes(
+            &ctx,
+            &root.to_string_lossy(),
+            "shared-lock-banner",
+            first,
+            next,
+        );
+    } else {
+        let (mut first, mut next) = (first, next);
+        first.0.textures_delta.clear();
+        next.0.textures_delta.clear();
+    }
 }
 
 /// One tracked redaction that still needs review, with a held range.

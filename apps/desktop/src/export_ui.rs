@@ -469,6 +469,9 @@ impl Editor {
                             None => {}
                         }
                         let office = d.office.kind.is_some();
+                        if office {
+                            ui.weak(FLATTENED);
+                        }
                         if d.options.format == Format::Pdf && !d.print && !office {
                             crate::controls::toggle(
                                 ui,
@@ -875,6 +878,17 @@ impl Editor {
             }
         }
         self.export_dialog = Some(d);
+    }
+}
+
+impl Editor {
+    /// Opens Export with PowerPoint or Word chosen, for the dialog gallery.
+    #[cfg(test)]
+    pub(crate) fn begin_office_export_for_test(&mut self, kind: Office) {
+        self.begin_export(false);
+        if let Some(d) = self.export_dialog.as_mut() {
+            d.office.kind = Some(kind);
+        }
     }
 }
 
