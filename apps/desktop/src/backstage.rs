@@ -565,10 +565,9 @@ pub(super) fn segmented_choice(
 ) -> Option<usize> {
     let (r, _) =
         ui.allocate_exact_size(egui::vec2(ui.available_width(), 30.), egui::Sense::hover());
+    // The approved mockups' segmented style: dark track, blue chosen pill.
     ui.painter()
-        .rect_filled(r, 7., Color32::from_rgb(30, 38, 41));
-    ui.painter()
-        .rect_stroke(r, 7., egui::Stroke::new(1., LINE), egui::StrokeKind::Inside);
+        .rect_filled(r, 6., crate::controls::SEGMENT_TRACK);
     let mut chosen = None;
     let part = r.width() / labels.len() as f32;
     for (i, label) in labels.iter().copied().enumerate() {
@@ -576,7 +575,7 @@ pub(super) fn segmented_choice(
             r.min + egui::vec2(i as f32 * part, 0.),
             egui::vec2(part, r.height()),
         )
-        .shrink(3.);
+        .shrink(2.);
         let on = i == selected;
         let response = ui.interact(
             half,
@@ -584,11 +583,10 @@ pub(super) fn segmented_choice(
             egui::Sense::click(),
         );
         if on {
-            ui.painter()
-                .rect_filled(half, 5., Color32::from_rgb(35, 65, 74));
+            ui.painter().rect_filled(half, 5., crate::shell::ACCENT);
         } else if response.hovered() {
             ui.painter()
-                .rect_filled(half, 5., Color32::from_rgb(44, 52, 56));
+                .rect_filled(half, 5., Color32::from_rgb(48, 57, 61));
         }
         ui.painter().text(
             half.center(),
@@ -598,7 +596,7 @@ pub(super) fn segmented_choice(
             if on {
                 Color32::WHITE
             } else {
-                Color32::from_gray(175)
+                Color32::from_rgb(170, 182, 186)
             },
         );
         response.widget_info(|| egui::WidgetInfo::selected(egui::Role::Button, true, on, label));

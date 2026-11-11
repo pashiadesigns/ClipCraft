@@ -1043,7 +1043,7 @@ fn shots() -> Vec<Shot> {
         C::Ribbon,
         &[R::T("Size")],
     );
-    dlg(&mut v, "resize-2", "resize-image", &[R::T("Apply")]);
+    dlg(&mut v, "resize-2", "resize-image", &[R::T("Resize")]);
     dlg(&mut v, "resize-hero", "resize-image", &[]);
     image(
         &mut v,

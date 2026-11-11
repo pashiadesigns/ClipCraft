@@ -1023,16 +1023,16 @@ impl Editor {
                                             if !exit {let before=timing.paired;crate::controls::toggle(ui,&mut timing.paired,"Pair with reverse exit");if timing.paired && !before {timing.exit=timing.entrance;timing.exit_ms=timing.entrance_ms;timing.exit_stack=timing.entrance_stack.clone();timing.exit_durations=timing.entrance_durations.clone();}}
                                             if exit && (timing.exit==Animation::Path || timing.exit_stack.contains(&Animation::Path)) {
                                                 ui.label(egui::RichText::new("Retraction direction").weak());
-                                                ui.horizontal_wrapped(|ui| {ui.selectable_value(&mut timing.retract_from_start,true,"First → Last node");ui.selectable_value(&mut timing.retract_from_start,false,"Last → First node");});
+                                                crate::controls::segments_wrapped(ui,|ui|{ui.selectable_value(&mut timing.retract_from_start,true,"First → Last node");ui.selectable_value(&mut timing.retract_from_start,false,"Last → First node");});
                                             }
                                         });
                                         ui.add_space(6.);
                                     }
                                     super::property_design::subgroup(ui,"Motion curve",if timing.smooth{"Smooth"}else{"Linear"},|ui| {
-                                        ui.horizontal(|ui| {ui.selectable_value(&mut timing.smooth,false,"Linear");ui.selectable_value(&mut timing.smooth,true,"Smooth");});
+                                        crate::controls::segments(ui,|ui|{ui.selectable_value(&mut timing.smooth,false,"Linear");ui.selectable_value(&mut timing.smooth,true,"Smooth");});
                                         if (timing.entrance==Animation::Path || timing.exit==Animation::Path || timing.entrance_stack.contains(&Animation::Path) || timing.exit_stack.contains(&Animation::Path)) && (a.is_shape() || a.kind==crate::Kind::Callout || a.highlighter_rect) {
                                             ui.label(egui::RichText::new("Path direction").weak());
-                                            ui.horizontal_wrapped(|ui| {ui.selectable_value(&mut timing.path_reverse,false,"Clockwise");ui.selectable_value(&mut timing.path_reverse,true,"Counterclockwise");});
+                                            crate::controls::segments_wrapped(ui,|ui|{ui.selectable_value(&mut timing.path_reverse,false,"Clockwise");ui.selectable_value(&mut timing.path_reverse,true,"Counterclockwise");});
                                         }
                                     });
                                 });
@@ -1101,7 +1101,7 @@ impl Editor {
                                 }
                             });
                             super::ui::section(ui, "Frame rate");
-                            ui.horizontal(|ui| {
+                            crate::controls::segments(ui, |ui| {
                                 for fps in [15, 30, 60] {
                                     let response =
                                         ui.selectable_value(&mut v.fps, fps, format!("{fps} fps"));
@@ -1169,7 +1169,7 @@ impl Editor {
     }
     fn video_fit_controls(&mut self, ui: &mut egui::Ui, v: &mut Project) {
         ui.label("Frame fit");
-        ui.horizontal(|ui| {
+        crate::controls::segments(ui, |ui| {
             ui.selectable_value(&mut v.fill, false, "Fit");
             ui.selectable_value(&mut v.fill, true, "Fill");
         });

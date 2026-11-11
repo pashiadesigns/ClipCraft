@@ -121,26 +121,28 @@ impl Editor {
             });
             ui.horizontal(|ui| {
                 ui.add_sized([72., 20.], egui::Label::new("Canvas"));
-                for (grow, label, tip) in [
-                    (
-                        true,
-                        "Grow to fit",
-                        "Grow to fit · The canvas grows so no corner is cut off.",
-                    ),
-                    (
-                        false,
-                        "Keep size",
-                        "Keep size · The canvas stays the same and the corners are cropped.",
-                    ),
-                ] {
-                    if ui
-                        .add(egui::Button::selectable(draft.grow == grow, label))
-                        .tip(tip)
-                        .clicked()
-                    {
-                        draft.grow = grow;
+                crate::controls::segments(ui, |ui| {
+                    for (grow, label, tip) in [
+                        (
+                            true,
+                            "Grow to fit",
+                            "Grow to fit · The canvas grows so no corner is cut off.",
+                        ),
+                        (
+                            false,
+                            "Keep size",
+                            "Keep size · The canvas stays the same and the corners are cropped.",
+                        ),
+                    ] {
+                        if ui
+                            .add(egui::Button::selectable(draft.grow == grow, label))
+                            .tip(tip)
+                            .clicked()
+                        {
+                            draft.grow = grow;
+                        }
                     }
-                }
+                });
             });
             let mut canvas_color = draft.canvas_color;
             crate::property_layout::choice(

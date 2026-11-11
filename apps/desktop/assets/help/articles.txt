@@ -518,12 +518,12 @@ controls: Resize image, Resize canvas, Rotate, Flip horizontal, Flip vertical, R
 keywords: scale, size, dimensions, rotate, flip, canvas size
 hero: resize-hero
 ---
-Resize image changes the output size and keeps objects editable. Resize canvas adds or removes space around the image. Rotate and flip turn the whole image.
+Resize image changes the output size and keeps objects editable. Choose pixels or percent, or inches or centimeters with a resolution to size the image for print; Resampling picks how pixels are blended. Resize canvas adds or removes space around the image. Rotate and flip turn the whole image; Rotate by angle turns it any amount, growing the canvas to fit or keeping its size.
 
 
 step: On the Formatting tab, click Resize image. | title: Open Resize image | pic: resize-1
-step: Enter the new size and click Apply. | title: Enter the size | pic: resize-2
-step: Use Rotate & flip for the other changes. | title: Rotate or flip
+step: Enter the new size and click Resize. | title: Enter the size | pic: resize-2
+step: Use Rotate & flip for the other changes, or Rotate by angle for any angle. | title: Rotate or flip
 
 # Snapping and the pixel grid
 id: snapping

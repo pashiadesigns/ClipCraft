@@ -809,7 +809,7 @@ impl Editor {
                 });
             }
             if d.same.iter().any(|n| *n > 0) {
-                crate::watermark_ui::row(ui, "Same names", |ui| {
+                crate::watermark_ui::segment_row(ui, "Same names", |ui| {
                     ui.selectable_value(&mut d.replace, false, "Keep both")
                         .tip("Keep both · Items with names you already use are added with a number, such as Brand (2).");
                     ui.selectable_value(&mut d.replace, true, "Replace mine")

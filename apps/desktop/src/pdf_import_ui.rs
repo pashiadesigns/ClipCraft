@@ -1355,7 +1355,7 @@ fn ready(ui: &mut egui::Ui, draft: &mut PdfImport) -> (bool, bool) {
             );
             ui.horizontal(|ui| {
                 ui.add_sized([110., 20.], egui::Label::new("Fit"));
-                for (fill, label, tip) in [
+                crate::controls::segments(ui, |ui| for (fill, label, tip) in [
                     (false, "Fit inside", "Fit inside · The whole page shows, with space around it."),
                     (true, "Fill frame", "Fill frame · The page fills the video frame; edges may be cropped."),
                 ] {
@@ -1366,7 +1366,7 @@ fn ready(ui: &mut egui::Ui, draft: &mut PdfImport) -> (bool, bool) {
                     {
                         video.fill = fill;
                     }
-                }
+                });
             });
             return;
         }
@@ -1386,7 +1386,7 @@ fn ready(ui: &mut egui::Ui, draft: &mut PdfImport) -> (bool, bool) {
             );
             ui.horizontal(|ui| {
                 ui.add_sized([86., 20.], egui::Label::new("Page size"));
-                for (fit, label, tip) in [
+                crate::controls::segments(ui, |ui| for (fit, label, tip) in [
                     (false, "Match PDF", "Match PDF · Each new page is the size of its PDF page."),
                     (true, "Fit this guide's pages", "Fit this guide's pages · New pages take the size of the guide page where they go."),
                 ] {
@@ -1397,7 +1397,7 @@ fn ready(ui: &mut egui::Ui, draft: &mut PdfImport) -> (bool, bool) {
                     {
                         into.fit = fit;
                     }
-                }
+                });
             });
             return;
         }

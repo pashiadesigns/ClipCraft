@@ -785,7 +785,7 @@ pub(crate) fn cover(ui: &mut egui::Ui, cover: &mut Cover) {
             "Redact replaces the pixels in the exported file. Blur and Pixelate are visual, and every cover stays editable.",
         ),
     );
-    ui.horizontal(|ui| {
+    crate::controls::segments(ui, |ui| {
         for (kind, label, tip) in [
             (
                 Kind::Redact,

@@ -71,6 +71,61 @@ pub(super) fn field_label(ui: &mut egui::Ui, title: &str, size: [f32; 2]) -> egu
 
 /// Property titles always precede their control. The whole labeled row is a
 /// keyboard-accessible target; only the compact track is painted as a switch.
+/// The track behind a segmented choice (approved mockups' `.seg`).
+pub(crate) const SEGMENT_TRACK: egui::Color32 = egui::Color32::from_rgb(34, 41, 44);
+/// A segmented choice as in the approved mockups: one dark rounded track
+/// holding every option, the chosen one a blue pill. `add` places the
+/// options with `selectable_value` / `selectable_label` as usual.
+pub(crate) fn segments<R>(
+    ui: &mut egui::Ui,
+    add: impl FnOnce(&mut egui::Ui) -> R,
+) -> egui::InnerResponse<R> {
+    segment_track(ui, false, add)
+}
+/// `segments` for long lists in narrow panes: the options wrap inside the
+/// track.
+pub(crate) fn segments_wrapped<R>(
+    ui: &mut egui::Ui,
+    add: impl FnOnce(&mut egui::Ui) -> R,
+) -> egui::InnerResponse<R> {
+    segment_track(ui, true, add)
+}
+fn segment_track<R>(
+    ui: &mut egui::Ui,
+    wrap: bool,
+    add: impl FnOnce(&mut egui::Ui) -> R,
+) -> egui::InnerResponse<R> {
+    egui::Frame::new()
+        .fill(SEGMENT_TRACK)
+        .corner_radius(6)
+        .inner_margin(2)
+        .show(ui, |ui| {
+            let body = |ui: &mut egui::Ui| {
+                ui.spacing_mut().item_spacing = egui::vec2(2., 2.);
+                ui.spacing_mut().button_padding = egui::vec2(12., 3.);
+                let v = ui.visuals_mut();
+                v.selection.bg_fill = crate::shell::ACCENT;
+                v.selection.stroke.color = egui::Color32::WHITE;
+                v.widgets.inactive.fg_stroke.color = egui::Color32::from_rgb(170, 182, 186);
+                v.widgets.hovered.weak_bg_fill = egui::Color32::from_rgb(48, 57, 61);
+                v.widgets.hovered.bg_fill = egui::Color32::from_rgb(48, 57, 61);
+                for w in [
+                    &mut v.widgets.inactive,
+                    &mut v.widgets.hovered,
+                    &mut v.widgets.active,
+                ] {
+                    w.corner_radius = egui::CornerRadius::same(5);
+                    w.bg_stroke = egui::Stroke::NONE;
+                }
+                add(ui)
+            };
+            if wrap {
+                ui.horizontal_wrapped(body).inner
+            } else {
+                ui.horizontal(body).inner
+            }
+        })
+}
 pub(super) fn toggle(ui: &mut egui::Ui, value: &mut bool, title: &str) -> egui::Response {
     ui.horizontal(|ui| {
         let label = ui.label(title);

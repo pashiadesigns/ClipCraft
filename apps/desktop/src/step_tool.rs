@@ -326,7 +326,7 @@ impl Editor {
         }
     }
     pub(super) fn step_properties(&mut self, ui: &mut egui::Ui) {
-        ui.horizontal(|ui| {
+        crate::controls::segments(ui, |ui| {
             let numeric = ui
                 .selectable_value(&mut self.step_letters, false, "1, 2, 3")
                 .clicked();

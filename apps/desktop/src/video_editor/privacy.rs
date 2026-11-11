@@ -426,6 +426,7 @@ impl Editor {
                         ui.horizontal(|ui| {
                             crate::controls::dialog_section_label(ui, "Scan", None);
                             let clip = d.clip.is_some();
+                            crate::controls::segments(ui, |ui| {
                             ui.add_enabled_ui(clip, |ui| {
                                 if ui
                                     .selectable_label(d.scope_clip && clip, "Active clip")
@@ -443,6 +444,7 @@ impl Editor {
                             {
                                 d.scope_clip = false;
                             }
+                            });
                             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                                 let label = if d.result.is_some() { "Scan again" } else { "Scan" };
                                 begin = ui

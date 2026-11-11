@@ -377,7 +377,7 @@ impl Editor {
                         // Room for the scrollbar, whether or not it is showing.
                         ui.set_max_width(ui.available_width() - 13.);
                         crate::controls::dialog_section(ui, "Output", None);
-                        row(ui, "Format", |ui| {
+                        crate::watermark_ui::segment_row(ui, "Format", |ui| {
                             for format in [Format::Png, Format::Jpeg, Format::Pdf] {
                                 let on = d.office.kind.is_none() && d.options.format == format;
                                 if ui.selectable_label(on, format.label()).clicked() {
@@ -426,7 +426,7 @@ impl Editor {
                                     ],
                                     "Each slide · One slide for each page, or for each step section of a guide.",
                                 );
-                                row(ui, "Objects", |ui| {
+                                crate::watermark_ui::segment_row(ui, "Objects", |ui| {
                                     ui.selectable_value(&mut s.editable, true, "Editable shapes")
                                         .tip("Editable shapes · Shapes, lines, arrows, Steps and text become PowerPoint shapes and text boxes. Effects PowerPoint can't draw the same way stay in the picture.");
                                     ui.selectable_value(&mut s.editable, false, "Pictures only")
@@ -516,14 +516,16 @@ impl Editor {
                                 .is_none_or(|p| p.setup.is_empty())
                         {
                             row(ui, "Paper", |ui| {
-                                for (label, size) in
-                                    [("Letter", [612., 792.]), ("A4", [595.276, 841.89])]
-                                {
-                                    let same = d.options.page.size == size;
-                                    if ui.selectable_label(same, label).clicked() {
-                                        d.options.page.size = size;
+                                crate::controls::segments(ui, |ui| {
+                                    for (label, size) in
+                                        [("Letter", [612., 792.]), ("A4", [595.276, 841.89])]
+                                    {
+                                        let same = d.options.page.size == size;
+                                        if ui.selectable_label(same, label).clicked() {
+                                            d.options.page.size = size;
+                                        }
                                     }
-                                }
+                                });
                                 if ui.button("Rotate page").clicked() {
                                     d.options.page.size.swap(0, 1);
                                 }
@@ -533,7 +535,7 @@ impl Editor {
                                 "Margin (pt)",
                                 egui::Slider::new(&mut d.options.page.margin, 0.0..=72.0),
                             );
-                            row(ui, "Long images", |ui| {
+                            crate::watermark_ui::segment_row(ui, "Long images", |ui| {
                                 ui.selectable_value(
                                     &mut d.options.page.paginate,
                                     false,

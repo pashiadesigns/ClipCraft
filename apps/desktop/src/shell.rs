@@ -760,7 +760,7 @@ impl Editor {
             Some(Kind::Rectangle | Kind::Ellipse | Kind::Polygon)
         ) {
             let mut kind = self.tool;
-            ui.horizontal(|ui| {
+            crate::controls::segments(ui, |ui| {
                 ui.selectable_value(&mut kind, Some(Kind::Rectangle), "Rectangle");
                 ui.selectable_value(&mut kind, Some(Kind::Ellipse), "Ellipse");
                 ui.selectable_value(&mut kind, Some(Kind::Polygon), "Polygon");

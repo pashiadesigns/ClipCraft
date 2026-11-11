@@ -153,21 +153,27 @@ impl Editor {
             });
             ui.horizontal(|ui| {
                 crate::property_layout::field_label(ui, "Shape", 28.);
-                for s in Shape::ALL {
-                    ui.selectable_value(&mut webcam.shape, s, s.label());
-                }
+                crate::controls::segments(ui, |ui| {
+                    for s in Shape::ALL {
+                        ui.selectable_value(&mut webcam.shape, s, s.label());
+                    }
+                });
             });
             ui.horizontal(|ui| {
                 crate::property_layout::field_label(ui, "Size", 28.);
-                for s in Size::ALL {
-                    ui.selectable_value(&mut webcam.size, s, s.label());
-                }
+                crate::controls::segments(ui, |ui| {
+                    for s in Size::ALL {
+                        ui.selectable_value(&mut webcam.size, s, s.label());
+                    }
+                });
             });
             ui.horizontal_wrapped(|ui| {
                 crate::property_layout::field_label(ui, "Corner", 28.);
-                for c in Corner::ALL {
-                    ui.selectable_value(&mut webcam.corner, c, c.label());
-                }
+                crate::controls::segments(ui, |ui| {
+                    for c in Corner::ALL {
+                        ui.selectable_value(&mut webcam.corner, c, c.label());
+                    }
+                });
             });
             // Placement preview on a 16:9 screen.
             let width = ui.available_width();
@@ -272,9 +278,11 @@ impl Editor {
                             section(ui, "Recording");
                             ui.horizontal(|ui| {
                                 ui.label("Frame rate");
-                                for fps in [15, 30, 60] {
-                                    ui.selectable_value(&mut options.fps, fps, format!("{fps} fps"));
-                                }
+                                crate::controls::segments(ui, |ui| {
+                                    for fps in [15, 30, 60] {
+                                        ui.selectable_value(&mut options.fps, fps, format!("{fps} fps"));
+                                    }
+                                });
                                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                                     ui.weak("MP4 · up to 1080p");
                                 });
@@ -282,9 +290,11 @@ impl Editor {
                             ui.horizontal(|ui| {
                                 ui.label("Quality")
                                     .tip("Higher quality keeps fast motion and fine detail, and makes larger files.");
-                                for quality in capture_core::video::Quality::ALL {
-                                    ui.selectable_value(&mut options.quality, quality, quality.label());
-                                }
+                                crate::controls::segments(ui, |ui| {
+                                    for quality in capture_core::video::Quality::ALL {
+                                        ui.selectable_value(&mut options.quality, quality, quality.label());
+                                    }
+                                });
                             });
                             ui.weak(format!(
                                 "{} About {} per minute.",
@@ -899,13 +909,15 @@ impl Editor {
                         });
                         ui.horizontal(|ui| {
                             ui.label("Start delay");
-                            for seconds in [0, 3, 5, 10] {
-                                ui.selectable_value(
-                                    &mut settings.delay_seconds,
-                                    seconds,
-                                    if seconds == 0 { "Off".into() } else { format!("{seconds} s") },
-                                );
-                            }
+                            crate::controls::segments(ui, |ui| {
+                                for seconds in [0, 3, 5, 10] {
+                                    ui.selectable_value(
+                                        &mut settings.delay_seconds,
+                                        seconds,
+                                        if seconds == 0 { "Off".into() } else { format!("{seconds} s") },
+                                    );
+                                }
+                            });
                         });
                         if settings.selection == Selection::Fullscreen {
                             ui.horizontal(|ui| {

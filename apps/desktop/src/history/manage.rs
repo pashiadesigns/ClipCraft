@@ -293,7 +293,7 @@ impl Editor {
                         ui.small("An existing tag with this name will be merged.");
                     } else {ui.label("Remove this tag from every Library item? Images and projects are kept.");}
                 },
-                Action::AddTags|Action::RemoveTags=>{ui.horizontal(|ui|{ui.label("Operation");ui.selectable_value(&mut d.action,Action::AddTags,"Add tags");ui.selectable_value(&mut d.action,Action::RemoveTags,"Remove tags");});ui.label(format!("{} selected captures",d.entries.len()));ui.label("Tags (comma separated)");let input=ui.text_edit_singleline(&mut d.tags);crate::controls::focus_once(&input,&mut d.focus_pending);},
+                Action::AddTags|Action::RemoveTags=>{ui.horizontal(|ui|{ui.label("Operation");crate::controls::segments(ui,|ui|{ui.selectable_value(&mut d.action,Action::AddTags,"Add tags");ui.selectable_value(&mut d.action,Action::RemoveTags,"Remove tags");});});ui.label(format!("{} selected captures",d.entries.len()));ui.label("Tags (comma separated)");let input=ui.text_edit_singleline(&mut d.tags);crate::controls::focus_once(&input,&mut d.focus_pending);},
                 Action::Delete=>{ui.label(format!("Delete {} selected capture(s) from Library?",d.entries.len()));ui.label("Stored projects are removed permanently. Exported files are kept. Deleting the open project clears its canvas.");ui.add_space(12.);crate::controls::toggle(ui,&mut d.cleanup,"Also delete unused ClipDesigner media");ui.small(&d.cleanup_summary);ui.small("Imported originals, shared files and media needed by other projects or Undo are always kept. Leave this off to keep all separate media.");},
                 Action::Export|Action::Rename=>{
                     ui.label(format!("{} selected captures",d.entries.len()));

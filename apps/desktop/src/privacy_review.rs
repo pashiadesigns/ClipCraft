@@ -267,7 +267,7 @@ impl Editor {
                     use crate::tips::Tip as _;
                     let all = format!("All {} parts", p.total);
                     ui.add_enabled_ui(!busy, |ui| {
-                        crate::watermark_ui::row(ui, "Scan", |ui| {
+                        crate::watermark_ui::segment_row(ui, "Scan", |ui| {
                             ui.selectable_value(&mut state.all_parts, false, "This part")
                                 .tip("This part · Scan only the part that is open.");
                             ui.selectable_value(&mut state.all_parts, true, all.as_str())

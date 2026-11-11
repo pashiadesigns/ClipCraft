@@ -722,9 +722,11 @@ impl Editor {
                     [62., 22.],
                     egui::Label::new(egui::RichText::new("Transition").weak()),
                 );
-                for curve in [Curve::Smooth, Curve::Linear, Curve::Hold] {
-                    ui.selectable_value(&mut c.curve, curve, format!("{curve:?}"));
-                }
+                crate::controls::segments(ui, |ui| {
+                    for curve in [Curve::Smooth, Curve::Linear, Curve::Hold] {
+                        ui.selectable_value(&mut c.curve, curve, format!("{curve:?}"));
+                    }
+                });
             });
         }
         ui.horizontal(|ui| {

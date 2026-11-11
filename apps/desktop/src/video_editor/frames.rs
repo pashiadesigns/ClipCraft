@@ -182,7 +182,7 @@ impl Editor {
                 {
                     f.view = v;
                 }
-                ui.horizontal(|ui| {
+                crate::controls::segments(ui, |ui| {
                     ui.selectable_value(&mut f.fill, true, "Fill");
                     ui.selectable_value(&mut f.fill, false, "Fit");
                 });

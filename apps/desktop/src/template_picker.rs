@@ -260,8 +260,7 @@ impl Editor {
         }
         if !video {
             // Template groups (bi-proposal 2): All, Guides, Support, Announce & share.
-            ui.horizontal_wrapped(|ui| {
-                ui.spacing_mut().item_spacing = egui::vec2(4., 4.);
+            crate::controls::segments(ui, |ui| {
                 for (i, name) in std::iter::once("All").chain(templates::GROUPS).enumerate() {
                     if ui
                         .selectable_label(group == i, name)
@@ -309,10 +308,12 @@ impl Editor {
                         }
                     });
                     ui.horizontal(|ui| {
-                        ui.selectable_value(grid, false, "Stacked")
-                            .tip("One step per row, with notes beside each screenshot");
-                        ui.selectable_value(grid, true, "Grid")
-                            .tip("Two steps per row");
+                        crate::controls::segments(ui, |ui| {
+                            ui.selectable_value(grid, false, "Stacked")
+                                .tip("One step per row, with notes beside each screenshot");
+                            ui.selectable_value(grid, true, "Grid")
+                                .tip("Two steps per row");
+                        });
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                             if ui.button("Cancel").clicked() {
                                 create_steps = Some(None);

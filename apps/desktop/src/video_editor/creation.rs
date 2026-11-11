@@ -325,7 +325,7 @@ impl Editor {
                         ui.label("seconds");
                         ui.end_row();
                         ui.label("Frame rate");
-                        ui.horizontal(|ui| {
+                        crate::controls::segments(ui, |ui| {
                             for fps in [15, 30, 60] {
                                 ui.selectable_value(&mut d.fps, fps, fps.to_string());
                             }

@@ -112,7 +112,7 @@ impl Editor {
             return;
         };
         let previous = cut.axis;
-        ui.horizontal(|ui| {
+        crate::controls::segments(ui, |ui| {
             ui.selectable_value(&mut cut.axis, CutAxis::Horizontal, "Horizontal");
             ui.selectable_value(&mut cut.axis, CutAxis::Vertical, "Vertical");
         });

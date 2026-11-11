@@ -237,7 +237,7 @@ impl Editor {
                 // Units as one row of segments, like the mockup.
                 ui.horizontal(|ui| {
                     ui.add_sized([72., 20.], egui::Label::new("Units"));
-                    ui.add_enabled_ui(old_dimensions.is_some(), |ui| {
+                    ui.add_enabled_ui(old_dimensions.is_some(), |ui| crate::controls::segments(ui, |ui| {
                         for units in Units::ALL {
                             let on = draft.units == units;
                             if ui
@@ -250,7 +250,7 @@ impl Editor {
                                 draft.set_units(units, d);
                             }
                         }
-                    });
+                    }));
                 });
                 ui.horizontal(|ui| {
                     if lock_toggle(ui, &mut draft.locked).changed() && draft.locked {

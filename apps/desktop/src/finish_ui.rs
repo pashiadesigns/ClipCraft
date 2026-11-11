@@ -25,7 +25,7 @@ fn end(ui: &mut egui::Ui, place: Place) {
 /// Filters are starting points that set the sliders below them.
 pub(crate) fn color_controls(ui: &mut egui::Ui, color: &mut ColorAdjust, place: Place) {
     begin(ui, place, "Filters");
-    ui.horizontal_wrapped(|ui| {
+    crate::controls::segments_wrapped(ui, |ui| {
         for (name, look) in ColorAdjust::LOOKS {
             if ui
                 .selectable_label(*color == look, name)
@@ -94,7 +94,7 @@ pub(crate) fn finish_controls(ui: &mut egui::Ui, f: &mut Finish, place: Place) {
     .tip("How round the picture's corners are.");
     end(ui, place);
     begin(ui, place, "Edge");
-    ui.horizontal_wrapped(|ui| {
+    crate::controls::segments_wrapped(ui, |ui| {
         for (style, name) in EdgeStyle::ALL {
             ui.selectable_value(&mut f.edge.style, style, name)
                 .tip_title(name)
