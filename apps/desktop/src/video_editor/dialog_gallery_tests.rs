@@ -51,6 +51,45 @@ pub(super) fn dialogs() -> Vec<(&'static str, bool, Open, Show)> {
             |c, e| e.show_new_image(c),
         ),
         (
+            "new-from-pdf",
+            false,
+            |c, e| {
+                e.pdf_import = Some(crate::pdf_import_ui::PdfImport::ready_now(
+                    crate::pdf_import_ui::sample_path(),
+                    c,
+                ))
+            },
+            |c, e| e.show_pdf_import(c),
+        ),
+        (
+            "new-from-pdf-password",
+            false,
+            |c, e| {
+                e.pdf_import = Some(
+                    crate::pdf_import_ui::PdfImport::ready_now(
+                        crate::pdf_import_ui::sample_path(),
+                        c,
+                    )
+                    .with_password_prompt(),
+                )
+            },
+            |c, e| e.show_pdf_import(c),
+        ),
+        (
+            "new-from-pdf-damaged",
+            false,
+            |c, e| {
+                e.pdf_import = Some(
+                    crate::pdf_import_ui::PdfImport::ready_now(
+                        crate::pdf_import_ui::sample_path(),
+                        c,
+                    )
+                    .with_failure(),
+                )
+            },
+            |c, e| e.show_pdf_import(c),
+        ),
+        (
             "resize-image",
             false,
             |_, e| e.begin_resize(),

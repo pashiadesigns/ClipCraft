@@ -59,6 +59,20 @@ impl Editor {
         self.privacy_review.texture = None;
         self.privacy_review.error.clear();
     }
+    /// Scan for sensitive info right after New from PDF, with the dialog's choices.
+    pub(super) fn scan_after_import(
+        &mut self,
+        ctx: &egui::Context,
+        options: Options,
+        phrases: String,
+        cover: crate::sensitive_ui::Cover,
+    ) {
+        self.open_privacy_review();
+        self.privacy_review.options = options;
+        self.privacy_review.phrases = phrases;
+        self.privacy_review.cover = cover;
+        self.scan_sensitive(ctx);
+    }
     fn scan_sensitive(&mut self, ctx: &egui::Context) {
         if self.is_video() {
             self.privacy_review.error = "Find Sensitive Info scans still images only. Automatic video tracking is not available.".into();
@@ -91,7 +105,7 @@ impl Editor {
             let result = (|| {
                 let fingerprint = fingerprint(&document)?;
                 let pixels = document.render().map_err(|e| e.to_string())?;
-                let findings = scan_tiles(&pixels, &options)?;
+                let findings = scan_document(&document, &pixels, &options)?;
                 Ok(Scan {
                     findings,
                     pixels,
@@ -462,6 +476,62 @@ mod tests {
 }
 
 /// Overlapping full-resolution tiles preserve small text on long scroll captures.
+/// PDF pages carry their own words (approved pdf-text-detection): those are
+/// matched exactly, and only the rest of the picture is read with OCR, with
+/// the PDF pages blanked so nothing is found twice.
+fn scan_document(
+    document: &capture_core::Document,
+    pixels: &image::RgbaImage,
+    options: &Options,
+) -> Result<Vec<Finding>, String> {
+    let (words, regions) = capture_core::pdf_import::document_words(document);
+    let mut findings = if words.is_empty() {
+        vec![]
+    } else {
+        privacy::detect(&words, options, [document.width, document.height])
+            .map_err(|e| e.to_string())?
+    };
+    if regions.is_empty() {
+        findings.extend(scan_tiles(pixels, options)?);
+        return Ok(findings);
+    }
+    let mut rest = pixels.clone();
+    for r in &regions {
+        let x0 = r[0].max(0.) as u32;
+        let y0 = r[1].max(0.) as u32;
+        let x1 = ((r[0] + r[2]).ceil().max(0.) as u32).min(rest.width());
+        let y1 = ((r[1] + r[3]).ceil().max(0.) as u32).min(rest.height());
+        for y in y0..y1 {
+            for x in x0..x1 {
+                rest.put_pixel(x, y, image::Rgba([255; 4]));
+            }
+        }
+    }
+    // Objects drawn on top of a PDF page (callouts, text) are still read.
+    if let Some(overlay) = capture_core::pdf_import::without_pdf_pages(document)
+        .and_then(|d| d.render().ok())
+        .filter(|o| o.dimensions() == rest.dimensions())
+    {
+        for r in &regions {
+            let x0 = r[0].max(0.) as u32;
+            let y0 = r[1].max(0.) as u32;
+            let x1 = ((r[0] + r[2]).ceil().max(0.) as u32).min(rest.width());
+            let y1 = ((r[1] + r[3]).ceil().max(0.) as u32).min(rest.height());
+            for y in y0..y1 {
+                for x in x0..x1 {
+                    let p = overlay.get_pixel(x, y);
+                    if p[3] > 0 {
+                        rest.put_pixel(x, y, *p);
+                    }
+                }
+            }
+        }
+    }
+    if rest.pixels().any(|p| p.0 != [255; 4]) {
+        findings.extend(scan_tiles(&rest, options)?);
+    }
+    Ok(findings)
+}
 /// A failed tile fails the scan; never present an incomplete scan as complete.
 fn scan_tiles(pixels: &image::RgbaImage, options: &Options) -> Result<Vec<Finding>, String> {
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(90);

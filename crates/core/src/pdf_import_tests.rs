@@ -400,6 +400,42 @@ fn editable_pages_export_as_shapes_and_redactions_remove_only_what_they_cover() 
     );
 }
 
+/// Prints how far each sample page's drawing is from the engine's picture.
+#[test]
+#[ignore = "report: cargo test -p capture-core faithfulness_report -- --ignored --nocapture"]
+fn faithfulness_report() {
+    let file = open(
+        include_bytes!("../tests/fixtures/pdf/sample-8-pages.pdf").to_vec(),
+        "",
+    )
+    .unwrap();
+    for i in 0..file.page_count() {
+        let svg = hayro_svg::convert(
+            &file.pdf.pages()[i],
+            &hayro_svg::RenderCache::new(),
+            &file.settings,
+            &hayro_svg::SvgRenderSettings::default(),
+        );
+        let [w, h] = file.page_points(i);
+        let reference = file.render(i, 900. / w.max(h));
+        let mut drawn =
+            crate::vector_import::render_pdf_page(&svg, [reference.width(), reference.height()])
+                .unwrap();
+        for p in drawn.pixels_mut() {
+            let a = u16::from(p[3]);
+            for c in 0..3 {
+                p[c] = ((u16::from(p[c]) * a + 255 * (255 - a) + 127) / 255) as u8;
+            }
+            p[3] = 255;
+        }
+        if let Ok(dir) = std::env::var("CLIPDESIGNER_PDF_IMPORT_DEBUG") {
+            reference.save(format!("{dir}/ref{i}.png")).unwrap();
+            drawn.save(format!("{dir}/svg{i}.png")).unwrap();
+        }
+        println!("page {}: {:.4}", i + 1, share_different(&reference, &drawn));
+    }
+}
+
 #[test]
 fn a_guide_holds_as_many_pages_as_its_size_limits_allow() {
     let letter = [816, 1056];

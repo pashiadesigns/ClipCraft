@@ -67,6 +67,7 @@ mod options;
 mod page_setup;
 mod page_setup_fields;
 mod panel_ui;
+mod pdf_import_ui;
 mod pixel_grid;
 mod preferences;
 mod privacy_review;
@@ -192,6 +193,7 @@ struct Editor {
     step_placement: Option<Annotation>,
     snapping_guides: [Option<f32>; 2],
     new_image: Option<new_image::NewImage>,
+    pdf_import: Option<pdf_import_ui::PdfImport>,
     template_picker: Option<template_picker::Picker>,
     resize_image: Option<resize_image::ResizeImage>,
     resize_canvas: Option<resize_canvas::ResizeCanvas>,
@@ -246,6 +248,14 @@ enum FileAction {
     New,
     CreateCanvas(new_image::CanvasSpec),
     FromClipboard(Session),
+    /// New from PDF: the guide, its Library label, a one-time note about
+    /// pages that came in as pictures, and the scan to run after import.
+    FromPdf {
+        session: Session,
+        label: String,
+        note: Option<String>,
+        scan: Option<(capture_core::privacy::Options, String, sensitive_ui::Cover)>,
+    },
     Template {
         session: Session,
         title: String,
@@ -381,6 +391,7 @@ impl Editor {
             step_placement: None,
             snapping_guides: [None; 2],
             new_image: None,
+            pdf_import: None,
             template_picker: None,
             resize_image: None,
             resize_canvas: None,
@@ -560,9 +571,10 @@ impl Editor {
         if let Some(path) = rfd::FileDialog::new()
             .set_directory(self.dialog_directory())
             .add_filter(
-                "Images, videos and ClipDesigner projects",
-                &["iclip", "vclip", "mp4", "png", "jpg", "jpeg"],
+                "Images, videos, PDFs and ClipDesigner projects",
+                &["iclip", "vclip", "mp4", "png", "jpg", "jpeg", "pdf"],
             )
+            .add_filter("PDF documents", &["pdf"])
             .add_filter("Image clips", &["iclip"])
             .add_filter("JSON project source", &["json"])
             .pick_file()
@@ -571,6 +583,10 @@ impl Editor {
         }
     }
     fn open_path(&mut self, path: PathBuf) {
+        if pdf_import_ui::is_pdf_path(&path) {
+            self.pdf_import = Some(pdf_import_ui::PdfImport::new(path));
+            return;
+        }
         if video_editor::supported(&path) {
             self.open_video(path);
             return;
@@ -749,6 +765,7 @@ impl Editor {
             && self.autosave.action.is_none()
             && self.template_picker.is_none()
             && self.new_image.is_none()
+            && self.pdf_import.is_none()
             && self.resize_image.is_none()
             && self.resize_canvas.is_none()
             && self.image_transform.is_none()
@@ -839,6 +856,7 @@ impl Editor {
             && !self.view.panning
             && self.template_picker.is_none()
             && self.new_image.is_none()
+            && self.pdf_import.is_none()
             && self.resize_image.is_none()
             && self.resize_canvas.is_none()
             && self.image_transform.is_none()
@@ -906,6 +924,28 @@ impl Editor {
                 }
                 self.status = "Template created. All objects and settings remain editable.".into();
                 self.record_history(&title, capture_core::history::Origin::Canvas);
+            }
+            FileAction::FromPdf {
+                session,
+                label,
+                note,
+                scan,
+            } => {
+                self.switch_session(session, None, None);
+                self.reset_document_tools();
+                self.view = canvas_view::CanvasView::default();
+                self.path = None;
+                self.select_only(None);
+                self.drag_start = None;
+                self.needs_render = true;
+                self.shell.return_to_editor();
+                self.status = note.unwrap_or_else(|| {
+                    "PDF pages imported. Annotate, redact and export like any image.".into()
+                });
+                self.record_history(&label, capture_core::history::Origin::Canvas);
+                if let Some((options, phrases, cover)) = scan {
+                    self.scan_after_import(ctx, options, phrases, cover);
+                }
             }
             FileAction::FromClipboard(session) => {
                 self.switch_session(session, None, None);
@@ -1151,6 +1191,8 @@ impl eframe::App for Editor {
                 )
                 .show(ui, |ui| self.show_workspace(ui));
         }
+        self.take_dropped_pdf(&ctx);
+        self.show_pdf_import(&ctx);
         self.show_template_picker(&ctx);
         self.show_template_management(&ctx);
         self.show_library_recovery(&ctx);
@@ -1221,6 +1263,7 @@ impl eframe::App for Editor {
                 && (!self.shell.annotations_hidden || self.is_video())
                 && self.template_picker.is_none()
                 && self.new_image.is_none()
+                && self.pdf_import.is_none()
                 && self.text_draft.is_none()
                 && !self.capture_requested
                 && self.capture_result.is_none()

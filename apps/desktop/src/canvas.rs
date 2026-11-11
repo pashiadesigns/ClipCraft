@@ -163,6 +163,7 @@ impl Editor {
             && self.video.still_frame.is_none()
             && self.pending.is_none()
             && self.new_image.is_none()
+            && self.pdf_import.is_none()
             && self.resize_image.is_none()
             && self.resize_canvas.is_none()
             && self.image_transform.is_none()
@@ -1190,6 +1191,7 @@ pub(crate) mod tests {
             step_placement: None,
             snapping_guides: [None; 2],
             new_image: None,
+            pdf_import: None,
             template_picker: None,
             resize_image: None,
             resize_canvas: None,

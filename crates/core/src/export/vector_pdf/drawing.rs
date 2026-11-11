@@ -137,6 +137,38 @@ impl Writer<'_> {
         // render_node shifts by the node's top left first; undo that.
         let pass = want * Affine::translate((f64::from(layer.x()), f64::from(layer.y())));
         resvg::render_node(node, transform(pass), &mut pixmap.as_mut());
+        self.emit(area, scale, &pixmap)
+    }
+    /// The whole drawing as one picture of its area: for drawings whose blend
+    /// modes need what is beneath them inside the drawing.
+    fn whole(&mut self, tree: &usvg::Tree) -> Result<()> {
+        let size = tree.size();
+        let area = self
+            .doc_rect(Rect::new(
+                0.,
+                0.,
+                f64::from(size.width()),
+                f64::from(size.height()),
+            ))
+            .intersect(self.bounds);
+        if area.width() <= 0. || area.height() <= 0. {
+            return Ok(());
+        }
+        let scale = RASTER_SCALE
+            .min((MAX_PART_PIXELS / (area.width() * area.height())).sqrt())
+            .max(0.05);
+        let w = (area.width() * scale).ceil().max(1.) as u32;
+        let h = (area.height() * scale).ceil().max(1.) as u32;
+        let Some(mut pixmap) = tiny_skia::Pixmap::new(w, h) else {
+            return Ok(());
+        };
+        let want = Affine::scale(scale) * Affine::translate((-area.x0, -area.y0)) * self.place;
+        resvg::render(tree, transform(want), &mut pixmap.as_mut());
+        self.emit(area, scale, &pixmap)
+    }
+    /// Erases later redactions from a picture of `area` and places it.
+    fn emit(&mut self, area: Rect, scale: f64, pixmap: &tiny_skia::Pixmap) -> Result<()> {
+        let (w, h) = (pixmap.width(), pixmap.height());
         let mut pixels = RgbaImage::new(w, h);
         for (p, c) in pixels.pixels_mut().zip(pixmap.pixels()) {
             let c = c.demultiply();
@@ -418,7 +450,19 @@ pub(super) fn write(
         bounds,
         states: HashMap::new(),
     };
-    writer.children(tree.root())?;
+    if blends(tree.root()) {
+        writer.whole(&tree)?;
+    } else {
+        writer.children(tree.root())?;
+    }
     writer.out.push_str("Q\n");
     Ok(true)
+}
+/// Whether any group mixes with what is beneath it.
+fn blends(group: &usvg::Group) -> bool {
+    group.children().iter().any(|node| match node {
+        usvg::Node::Group(g) => g.blend_mode() != usvg::BlendMode::Normal || blends(g),
+        usvg::Node::Text(t) => blends(t.flattened()),
+        _ => false,
+    })
 }

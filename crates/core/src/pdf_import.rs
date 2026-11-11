@@ -577,6 +577,29 @@ pub fn document_words(document: &Document) -> (Vec<crate::privacy::Word>, Vec<[f
     (words, regions)
 }
 
+/// The document without the PDF pages whose words [`document_words`] uses,
+/// so what is drawn on top of them can still be read with OCR. `None` when
+/// there are no such pages.
+pub fn without_pdf_pages(document: &Document) -> Option<Document> {
+    let mut rest = document.clone();
+    let before = rest.annotations.len();
+    rest.annotations.retain(|a| {
+        !a.image.as_ref().is_some_and(|b| {
+            b.text_layer().is_some()
+                && a.rotation_degrees == 0.
+                && !a.mirror_x
+                && b.perspective().is_none()
+                && b.view().rect == [0., 0., 1., 1.]
+        })
+    });
+    if rest.annotations.len() == before {
+        return None;
+    }
+    rest.prune_canvas_behavior();
+    rest.reconcile_guide();
+    Some(rest)
+}
+
 /// How many of `sizes` (guide pixels) one guide can hold, in order.
 pub fn pages_that_fit(sizes: &[[u32; 2]]) -> usize {
     let mut width = 0u64;

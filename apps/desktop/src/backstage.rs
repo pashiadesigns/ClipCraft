@@ -25,6 +25,7 @@ impl Editor {
     pub(super) fn show_backstage(&mut self, ui: &mut egui::Ui) {
         let ctx = ui.ctx().clone();
         if self.new_image.is_none()
+            && self.pdf_import.is_none()
             && self.pending.is_none()
             && self.template_picker.is_none()
             && !egui::Popup::is_any_open(&ctx)
@@ -214,6 +215,7 @@ impl Editor {
                 ("Capture", "Capture Clip", "Current capture settings", true),
                 ("Blank page", "Blank image", "Color or transparent", false),
                 ("New clipboard", "From clipboard", "Paste an image", false),
+                ("PDF", "From PDF", "Pages into a guide", false),
             ],
         ) {
             Some(0) => self.request_action(FileAction::Capture, ctx),
@@ -222,7 +224,8 @@ impl Editor {
                     self.quick_controls.blank_defaults(),
                 ));
             }
-            Some(_) => self.new_from_clipboard(ctx),
+            Some(2) => self.new_from_clipboard(ctx),
+            Some(_) => self.new_from_pdf(),
             None => {}
         }
         ui.add_space(18.);
@@ -664,6 +667,11 @@ pub(super) fn template_tile(
         egui::StrokeKind::Inside,
     );
     response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, name));
+    if name == "From PDF" {
+        return response.tip(
+            "From PDF\nPages into a guide: choose pages, then annotate, redact and export like any image.",
+        );
+    }
     response.tip(format!("{name}\n{description}"))
 }
 

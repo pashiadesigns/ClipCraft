@@ -71,6 +71,7 @@ impl Editor {
         self.cancel_gesture();
         self.options.recording = None;
         self.new_image = None;
+        self.pdf_import = None;
         self.resize_image = None;
         self.resize_canvas = None;
         self.image_transform = None;
