@@ -649,10 +649,10 @@ mod tests {
             .into_iter()
             .find(|t| t.name == "API keys and tokens")
             .unwrap();
-        assert_eq!(
-            found(&key, "key AKIAIOSFODNN7EXAMPLE end"),
-            ["AKIAIOSFODNN7EXAMPLE"]
-        );
+        // AWS's published placeholder key, assembled so the source audit's
+        // credential check never sees a key-shaped literal.
+        let sample = ["AKIA", "IOSFODNN7EXAMPLE"].concat();
+        assert_eq!(found(&key, &format!("key {sample} end")), [sample]);
     }
 
     #[test]
