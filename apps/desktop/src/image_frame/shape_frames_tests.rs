@@ -110,7 +110,7 @@ fn external_image_hover_drop_retains_frame_then_undo_and_invalid_drop_are_atomic
             .is_some()
     );
     assert_eq!(e.session.document.annotations[0], before);
-    if let Ok(dir) = std::env::var("CLIPCRAFT_FRAME_PAGES_UI") {
+    if let Ok(dir) = std::env::var("CLIPDESIGNER_FRAME_PAGES_UI") {
         dump_meshes(&ctx, &dir, "frame-drop-target", first, output);
     }
     frame(
@@ -213,7 +213,7 @@ fn single_click_shape_double_click_image_properties_and_frame_styles() {
             "{label}"
         );
     }
-    if let Ok(dir) = std::env::var("CLIPCRAFT_FRAME_PAGES_UI") {
+    if let Ok(dir) = std::env::var("CLIPDESIGNER_FRAME_PAGES_UI") {
         dump_meshes(&ctx, &dir, "shape-frame-properties", first, output);
     }
 }

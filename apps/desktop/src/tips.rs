@@ -20,17 +20,17 @@ struct Pending {
 struct Frame(Vec<Pending>);
 
 fn key() -> egui::Id {
-    egui::Id::unique("clipcraft-tips")
+    egui::Id::unique("clipdesigner-tips")
 }
 
 /// Registers the end-of-pass tooltip drawing once per context.
 pub(crate) fn install(ctx: &egui::Context) {
-    let installed = egui::Id::unique("clipcraft-tips-installed");
+    let installed = egui::Id::unique("clipdesigner-tips-installed");
     if ctx.data(|d| d.get_temp::<bool>(installed)).is_some() {
         return;
     }
     ctx.data_mut(|d| d.insert_temp(installed, true));
-    ctx.on_end_pass("clipcraft-tips", Arc::new(|ui| flush(ui.ctx())));
+    ctx.on_end_pass("clipdesigner-tips", Arc::new(|ui| flush(ui.ctx())));
 }
 
 fn record(response: &egui::Response, f: impl FnOnce(&mut Pending)) {
@@ -144,7 +144,7 @@ fn is_name(s: &str) -> bool {
 
 /// Preferences > Show tooltips.
 pub(crate) fn set_enabled(ctx: &egui::Context, enabled: bool) {
-    ctx.data_mut(|d| d.insert_temp(egui::Id::unique("clipcraft-tips-enabled"), enabled));
+    ctx.data_mut(|d| d.insert_temp(egui::Id::unique("clipdesigner-tips-enabled"), enabled));
 }
 /// The widest a tooltip grows before its text wraps.
 pub(crate) const MAX_WIDTH: f32 = 250.;
@@ -153,7 +153,7 @@ fn flush(ctx: &egui::Context) {
         .data_mut(|d| d.remove_temp::<Frame>(key()))
         .map_or_else(Vec::new, |Frame(pending)| pending);
     let enabled = ctx
-        .data(|d| d.get_temp::<bool>(egui::Id::unique("clipcraft-tips-enabled")))
+        .data(|d| d.get_temp::<bool>(egui::Id::unique("clipdesigner-tips-enabled")))
         .unwrap_or(true);
     let pending = if enabled { pending } else { Vec::new() };
     #[cfg(test)]
@@ -226,7 +226,7 @@ pub(crate) fn explain(title: &str) -> Option<&'static str> {
     if title.starts_with("Text justification") {
         return Some("Place the text in this part of the shape.");
     }
-    if title.ends_with("ClipCraft") {
+    if title.ends_with("ClipDesigner") {
         return Some("The open project. Drag here to move the window.");
     }
     // Tabs that show a count, such as "Icons (2)".
@@ -239,9 +239,9 @@ pub(crate) fn explain(title: &str) -> Option<&'static str> {
 }
 fn explain_exact(title: &str) -> Option<&'static str> {
     Some(match title {
-        "Close window" => "Close ClipCraft; it keeps running in the system tray.",
-        "Maximize window" => "Fill the screen with the ClipCraft window, or restore its size.",
-        "Minimize window" => "Minimize ClipCraft to the taskbar.",
+        "Close window" => "Close ClipDesigner; it keeps running in the system tray.",
+        "Maximize window" => "Fill the screen with the ClipDesigner window, or restore its size.",
+        "Minimize window" => "Minimize ClipDesigner to the taskbar.",
         "File" => "Open, save, export and print projects.",
         "Library" => "Your captures and saved projects.",
         "Insert" => "Add shapes, text, steps, icons and other objects.",
@@ -335,7 +335,7 @@ fn explain_exact(title: &str) -> Option<&'static str> {
         "System audio" => "Record the sound playing on this PC.",
         "Cursor" => "Record the mouse pointer as an editable cursor.",
         "Webcam" => "Record your webcam as its own picture-in-picture track.",
-        "Open editor" => "Open the recording in ClipCraft when it finishes.",
+        "Open editor" => "Open the recording in ClipDesigner when it finishes.",
         "Open folder" => "Show the recording in File Explorer when it finishes.",
         "Region" => "Drag to choose part of the screen.",
         "Window" => "Click a window to capture it.",
@@ -351,9 +351,9 @@ fn explain_exact(title: &str) -> Option<&'static str> {
         "Capture Video" => "Record a video of part of the screen.",
         "Hide UI" => "Hide the panels to see more of the canvas. Shortcut: Tab",
         "Show UI" => "Show the panels again. Shortcut: Tab",
-        "Minimize" => "Minimize ClipCraft to the taskbar.",
-        "Maximize" | "Restore" => "Resize the ClipCraft window.",
-        "Close" => "Close ClipCraft; it keeps running in the system tray.",
+        "Minimize" => "Minimize ClipDesigner to the taskbar.",
+        "Maximize" | "Restore" => "Resize the ClipDesigner window.",
+        "Close" => "Close ClipDesigner; it keeps running in the system tray.",
         "Align left" => "Line text up along the left edge.",
         "Align center" => "Center each line of text.",
         "Align right" => "Line text up along the right edge.",

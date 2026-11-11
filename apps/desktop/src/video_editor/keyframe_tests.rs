@@ -390,7 +390,7 @@ fn keyframes_render_inside_full_video_workspace() {
     }
     let last = repair_tests::render(&ctx, &mut e, vec![]);
     assert_eq!(e.video.keyframes.rows.unwrap().1, 2);
-    if let Some(folder) = std::env::var_os("CLIPCRAFT_GIF_EVIDENCE") {
+    if let Some(folder) = std::env::var_os("CLIPDESIGNER_GIF_EVIDENCE") {
         crate::property_layout::tests::dump_meshes(
             &ctx,
             &folder.to_string_lossy(),
@@ -835,7 +835,7 @@ fn keyframe_controls_fit_compact_and_wide_panes() {
                 );
             }
         }
-        if let Some(folder) = std::env::var_os("CLIPCRAFT_GIF_EVIDENCE") {
+        if let Some(folder) = std::env::var_os("CLIPDESIGNER_GIF_EVIDENCE") {
             crate::property_layout::tests::dump_meshes(
                 &ctx,
                 &folder.to_string_lossy(),

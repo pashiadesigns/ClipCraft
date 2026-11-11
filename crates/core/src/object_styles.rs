@@ -1,4 +1,4 @@
-//! Original geometry-free object templates. Reuses ClipCraft's validated style
+//! Original geometry-free object templates. Reuses ClipDesigner's validated style
 //! storage and atomic batch-command pattern; no image, label or pointer is saved.
 use crate::text::{HorizontalAlignment, TextFont, TextStyle, VerticalAlignment};
 use crate::{Annotation, Command, Error, Kind, Result, atomic_write};
@@ -702,7 +702,7 @@ pub fn presets(kind: Kind) -> Vec<ObjectStyle> {
         return vec![];
     }
     let colors = [
-        ("ClipCraft Blue", [24, 145, 193, 255]),
+        ("ClipDesigner Blue", [24, 145, 193, 255]),
         ("Lime", [135, 196, 105, 255]),
         ("Coral", [240, 85, 55, 255]),
         ("Gold", [220, 190, 80, 255]),

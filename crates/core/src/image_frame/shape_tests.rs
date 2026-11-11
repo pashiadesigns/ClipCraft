@@ -53,7 +53,7 @@ fn shape_frames_mask_source_preserve_geometry_crop_and_roundtrip() {
         let roundtrip: Document = serde_json::from_slice(&json).unwrap();
         roundtrip.validate().unwrap();
         assert_eq!(roundtrip.render().unwrap(), rendered);
-        if let Ok(dir) = std::env::var("CLIPCRAFT_FRAME_PAGES_FIXTURES") {
+        if let Ok(dir) = std::env::var("CLIPDESIGNER_FRAME_PAGES_FIXTURES") {
             std::fs::create_dir_all(&dir).unwrap();
             d.save(&std::path::Path::new(&dir).join(format!("frame-{kind:?}.capture.json")))
                 .unwrap();

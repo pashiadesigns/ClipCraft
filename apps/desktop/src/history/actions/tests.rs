@@ -111,7 +111,7 @@ fn rename_modal_sizes_to_content_and_actions_stay_bottom_right() {
         "Rename footer left a huge gap"
     );
     assert!(save.left() > title.left() + 180. && cancel.left() > save.right());
-    if let Ok(dir) = std::env::var("CLIPCRAFT_HEADLESS_LIBRARY_DIR") {
+    if let Ok(dir) = std::env::var("CLIPDESIGNER_HEADLESS_LIBRARY_DIR") {
         dump_meshes(&ctx, &dir, "library-rename", first, output);
     }
 }
@@ -183,7 +183,7 @@ fn details_show_real_file_properties_without_changing_the_project() {
             "missing {text}"
         );
     }
-    if let Ok(dir) = std::env::var("CLIPCRAFT_HEADLESS_LIBRARY_DIR") {
+    if let Ok(dir) = std::env::var("CLIPDESIGNER_HEADLESS_LIBRARY_DIR") {
         dump_meshes(&ctx, &dir, "library-details", first, output);
     }
     assert_eq!(before, serde_json::to_vec(&e.session.document).unwrap());
@@ -347,7 +347,7 @@ fn shared_library_and_recent_menu_actions_preserve_canvas_and_use_selected_entry
                 "{compact}: {label}"
             );
         }
-        if let Ok(dir) = std::env::var("CLIPCRAFT_HEADLESS_LIBRARY_DIR") {
+        if let Ok(dir) = std::env::var("CLIPDESIGNER_HEADLESS_LIBRARY_DIR") {
             dump_meshes(
                 &ctx,
                 &dir,

@@ -155,7 +155,7 @@ pub(crate) fn section(
             let mut use_default = default.as_ref() == Some(&w.name);
             if ui
                 .add_enabled(saved, egui::Checkbox::new(&mut use_default, "Use by default"))
-                .tip("Add this watermark to every export, copy and print, starting next time ClipCraft opens.")
+                .tip("Add this watermark to every export, copy and print, starting next time ClipDesigner opens.")
                 .changed()
             {
                 outcome = Outcome::Presets(

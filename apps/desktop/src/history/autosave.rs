@@ -155,7 +155,7 @@ impl Autosave {
         let ctx = ctx.clone();
         let (sender, receiver) = mpsc::channel();
         let thread = std::thread::Builder::new()
-            .name("clipcraft-autosave".into())
+            .name("clipdesigner-autosave".into())
             .spawn(move || {
                 let result = (|| {
                     let mut store = History::open(&root)?;

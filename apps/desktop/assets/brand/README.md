@@ -1,6 +1,6 @@
-# ClipCraft brand assets
+# ClipDesigner brand assets
 
-`clipcraft.svg` is the exact user-supplied `clipcraft logo.svg` adopted on
+`clipdesigner.svg` is the exact user-supplied `clipcraft logo.svg` adopted on
 2026-10-31, replacing the initial A / Capture vector. Its SHA-256 is
 `82da9a0ae8e2e4695235ce381002da22315fa0056bd85b02b69071696eb49152`.
 Preserve its square cyan background, white canvas and pointer, blue circle, and
@@ -13,7 +13,7 @@ Run `node scripts/build-brand-assets.cjs` from the workspace with the cached
 Then run the Windows SDK resource compiler from this directory:
 
 ```powershell
-rc.exe /nologo /fo clipcraft.res clipcraft.rc
+rc.exe /nologo /fo clipdesigner.res clipdesigner.rc
 ```
 
 The checked-in `.res` keeps normal offline builds independent of the resource

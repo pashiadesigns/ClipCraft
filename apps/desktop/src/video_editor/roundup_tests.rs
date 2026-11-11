@@ -120,7 +120,7 @@ fn image_frame_layers_and_tool_defaults_keep_controls_inside_the_pane() {
                 .unwrap()
                 .0;
             assert!(delete.bottom() <= 900.1, "{scene} {width}: {delete:?}");
-            if let Some(folder) = std::env::var_os("CLIPCRAFT_VIDEO_EDITOR_EVIDENCE") {
+            if let Some(folder) = std::env::var_os("CLIPDESIGNER_VIDEO_EDITOR_EVIDENCE") {
                 dump_meshes(
                     &ctx,
                     &folder.to_string_lossy(),
@@ -217,7 +217,7 @@ fn image_properties_contexts_fit_and_render_without_changing_objects() {
                 "Passive {:?} changed",
                 kind
             );
-            if let Some(folder) = std::env::var_os("CLIPCRAFT_VIDEO_EDITOR_EVIDENCE") {
+            if let Some(folder) = std::env::var_os("CLIPDESIGNER_VIDEO_EDITOR_EVIDENCE") {
                 dump_meshes(
                     &ctx,
                     &folder.to_string_lossy(),
@@ -567,7 +567,7 @@ fn full_hd_export_profile() {
     }
     let result = serde_json::json!({"duration_seconds":21,"size":[1920,1080],"fps":30,"export_seconds":export_seconds,"layer_ms_per_frame":decode_ms/30.,"composite_ms_per_frame":composite_ms/30.,"variants":variants});
     println!("{result}");
-    if let Some(path) = std::env::var_os("CLIPCRAFT_EXPORT_PROFILE") {
+    if let Some(path) = std::env::var_os("CLIPDESIGNER_EXPORT_PROFILE") {
         std::fs::write(path, result.to_string()).unwrap();
     }
 }
@@ -590,7 +590,7 @@ fn native_endpoint_inventory() {
 #[test]
 #[ignore = "Read-only representative user project profiling; original media is never changed"]
 fn representative_export_profile() {
-    let path = std::env::var_os("CLIPCRAFT_PROFILE_PROJECT").expect("project path");
+    let path = std::env::var_os("CLIPDESIGNER_PROFILE_PROJECT").expect("project path");
     let d = Document::load(std::path::Path::new(&path)).unwrap();
     let root = tempfile::tempdir().unwrap();
     let start = Instant::now();
@@ -603,7 +603,7 @@ fn representative_export_profile() {
     .unwrap();
     let result = serde_json::json!({"project_duration_seconds":d.video.as_ref().unwrap().duration() as f64/1000.,"export_seconds":start.elapsed().as_secs_f64(),"size":[d.width,d.height],"objects":d.annotations.len()});
     println!("{result}");
-    if let Some(out) = std::env::var_os("CLIPCRAFT_EXPORT_PROFILE") {
+    if let Some(out) = std::env::var_os("CLIPDESIGNER_EXPORT_PROFILE") {
         std::fs::write(out, result.to_string()).unwrap();
     }
 }
@@ -613,7 +613,7 @@ fn representative_export_profile() {
 #[ignore = "Read-only representative crossfade preparation benchmark"]
 fn representative_crossfade_profile() {
     let _runtime = media::Runtime::new().unwrap();
-    let path = std::env::var_os("CLIPCRAFT_PROFILE_PROJECT").expect("project path");
+    let path = std::env::var_os("CLIPDESIGNER_PROFILE_PROJECT").expect("project path");
     let d = Document::load(std::path::Path::new(&path)).unwrap();
     let p = d.video.as_ref().unwrap();
     let pair = p
@@ -666,7 +666,7 @@ fn representative_crossfade_profile() {
             reader.layers(p, [d.width, d.height], at)
         }
         .unwrap();
-        if std::env::var_os("CLIPCRAFT_PROFILE_CANVAS").is_some() {
+        if std::env::var_os("CLIPDESIGNER_PROFILE_CANVAS").is_some() {
             editor.video.frame_layers = frames.clone();
             editor.session.document.video.as_mut().unwrap().cursor = at;
             editor.video.frame_revision += 1;
@@ -684,7 +684,7 @@ fn representative_crossfade_profile() {
     }
     let result = serde_json::json!({"sampled_frames":count,"overlap_ms":end-start,"gpu_dissolve":gpu,"average_total_ms":began.elapsed().as_secs_f64()*1000./count as f64,"average_ui_ms":ui_ms/count as f64,"native_playback_verified":false});
     println!("{result}");
-    if let Some(out) = std::env::var_os("CLIPCRAFT_EXPORT_PROFILE") {
+    if let Some(out) = std::env::var_os("CLIPDESIGNER_EXPORT_PROFILE") {
         std::fs::write(out, result.to_string()).unwrap();
     }
 }

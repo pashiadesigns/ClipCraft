@@ -366,7 +366,7 @@ mod tests {
                         .any(|s| matches!(s.shape, egui::Shape::Mesh(_)))
                 );
             }
-            if let Ok(root) = std::env::var("CLIPCRAFT_HEADLESS_CREATION_DIR") {
+            if let Ok(root) = std::env::var("CLIPDESIGNER_HEADLESS_CREATION_DIR") {
                 dump_meshes(&ctx, &root, name, first, output);
             }
         }

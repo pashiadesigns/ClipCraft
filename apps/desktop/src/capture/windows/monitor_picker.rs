@@ -252,7 +252,7 @@ pub(super) fn choose(
                     lpfnWndProc: Some(procedure),
                     hInstance: GetModuleHandleW(null()),
                     hCursor: LoadCursorW(null_mut(), IDC_ARROW),
-                    lpszClassName: w!("ClipCraftMonitorPreview"),
+                    lpszClassName: w!("ClipDesignerMonitorPreview"),
                     ..Default::default()
                 };
                 let atom = RegisterClassW(&wc);
@@ -320,7 +320,7 @@ pub(super) fn choose(
         }
         let hwnd = CreateWindowExW(
             WS_EX_TOPMOST | WS_EX_TOOLWINDOW,
-            w!("ClipCraftMonitorPreview"),
+            w!("ClipDesignerMonitorPreview"),
             w!("Select monitor to capture"),
             WS_POPUP | WS_CLIPCHILDREN,
             work.left + (work.right - work.left - width) / 2,

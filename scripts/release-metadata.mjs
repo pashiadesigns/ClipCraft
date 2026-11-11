@@ -20,15 +20,15 @@ export function dependencyInventory(metadata, lockText, info, assets=[]) {
     return {SPDXID:packageId,name:p.name,versionInfo:p.version,downloadLocation:p.source?.startsWith('registry+')?`https://crates.io/api/v1/crates/${p.name}/${p.version}/download`:'NOASSERTION',
       filesAnalyzed:false,licenseConcluded:'NOASSERTION',licenseDeclared:p.license||'NOASSERTION',copyrightText:'NOASSERTION',
       ...(checksum?{checksums:[{algorithm:'SHA256',checksumValue:checksum}]}:{}),
-      ...(p.source?{externalRefs:[{referenceCategory:'PACKAGE-MANAGER',referenceType:'purl',referenceLocator:`pkg:cargo/${p.name}@${p.version}`}]}:{sourceInfo:`ClipCraft source commit ${info.commit}`})};
+      ...(p.source?{externalRefs:[{referenceCategory:'PACKAGE-MANAGER',referenceType:'purl',referenceLocator:`pkg:cargo/${p.name}@${p.version}`}]}:{sourceInfo:`ClipDesigner source commit ${info.commit}`})};
   });
   const relationships=metadata.workspace_members.map(key=>({spdxElementId:'SPDXRef-DOCUMENT',relationshipType:'DESCRIBES',relatedSpdxElement:id(key)}));
   for(const [key,node] of nodes) if(active.has(key)) for(const dep of node.deps) if(active.has(dep.pkg))relationships.push({spdxElementId:id(key),relationshipType:'DEPENDS_ON',relatedSpdxElement:id(dep.pkg)});
   for(const asset of assets) {packages.push({SPDXID:id(asset.name),name:asset.name,versionInfo:asset.version,downloadLocation:'NOASSERTION',filesAnalyzed:false,licenseConcluded:'NOASSERTION',licenseDeclared:asset.license,copyrightText:'NOASSERTION',sourceInfo:asset.source});
     relationships.push({spdxElementId:'SPDXRef-DOCUMENT',relationshipType:'DESCRIBES',relatedSpdxElement:id(asset.name)});}
-  return {spdxVersion:'SPDX-2.3',dataLicense:'CC0-1.0',SPDXID:'SPDXRef-DOCUMENT',name:`ClipCraft-${info.version}-windows-x64`,
-    documentNamespace:`https://spdx.org/spdxdocs/clipcraft-${info.version}-${info.commit}-${sha256(Buffer.from(info.created)).slice(0,12)}`,
-    creationInfo:{created:info.created,creators:['Tool: ClipCraft-release-metadata-1']},
+  return {spdxVersion:'SPDX-2.3',dataLicense:'CC0-1.0',SPDXID:'SPDXRef-DOCUMENT',name:`ClipDesigner-${info.version}-windows-x64`,
+    documentNamespace:`https://spdx.org/spdxdocs/clipdesigner-${info.version}-${info.commit}-${sha256(Buffer.from(info.created)).slice(0,12)}`,
+    creationInfo:{created:info.created,creators:['Tool: ClipDesigner-release-metadata-1']},
     comment:'Resolved Windows workspace build/test dependencies plus bundled source/font assets. Not an assertion that all packages are linked into both executables.',
     packages,relationships};
 }
@@ -43,9 +43,9 @@ export function writeMetadata(root, metadataPath, packageRoot, version) {
     rustc:execFileSync('rustc',['--version'],{encoding:'utf8'}).trim(),node:process.version,
     cargo_lock_sha256:sha256(readFileSync(resolve(root,'Cargo.lock'))),authenticode_signed:false};
   const assets=[
-    {name:'ClipCraft bundled Ubuntu fonts',version:'bundled',license:'Ubuntu-font-1.0',source:'crates/core/assets/fonts; licenses/text-fonts/Ubuntu-*'},
-    {name:'ClipCraft bundled Noto Emoji font',version:'Google Fonts',license:'OFL-1.1',source:'licenses/text-fonts/NotoEmoji-PROVENANCE.txt'},
-    {name:'ClipCraft bundled Hack fonts',version:'bundled',license:'MIT AND Bitstream-Vera',source:'crates/core/assets/fonts; licenses/text-fonts/Hack-LICENSE.md'},
+    {name:'ClipDesigner bundled Ubuntu fonts',version:'bundled',license:'Ubuntu-font-1.0',source:'crates/core/assets/fonts; licenses/text-fonts/Ubuntu-*'},
+    {name:'ClipDesigner bundled Noto Emoji font',version:'Google Fonts',license:'OFL-1.1',source:'licenses/text-fonts/NotoEmoji-PROVENANCE.txt'},
+    {name:'ClipDesigner bundled Hack fonts',version:'bundled',license:'MIT AND Bitstream-Vera',source:'crates/core/assets/fonts; licenses/text-fonts/Hack-LICENSE.md'},
     {name:'epaint bundled font assets',version:metadata.packages.find(p=>p.name==='epaint_default_fonts')?.version||'bundled',license:'OFL-1.1 AND Ubuntu-font-1.0 AND MIT AND Bitstream-Vera',source:'epaint_default_fonts/fonts; embedded license texts in THIRD-PARTY-NOTICES.txt'},
     {name:'DesignCraft adapted geometry and rendering helpers',version:'ea08e4c2ba290f092063c99d70c4bdd5afc45887',license:'MIT',source:'licenses/designcraft/PROVENANCE.txt'},
     {name:'Lucide UI icons',version:'4b203ec9b6002fd74fd5dadc8612220e64289305',license:'ISC AND MIT',source:'licenses/lucide/PROVENANCE.txt'},
@@ -64,7 +64,7 @@ export function writeMetadata(root, metadataPath, packageRoot, version) {
     return `${sha256(blobs.subarray(start,start+size))}  ${name}`;
   });
   writeFileSync(resolve(packageRoot,'SOURCE-SHA256SUMS.txt'),sourceHashes.join('\n')+'\n');
-  const included=new Set(sbom.packages.map(p=>p.SPDXID)), notices=['Third-party dependency and asset notices for ClipCraft\n'];
+  const included=new Set(sbom.packages.map(p=>p.SPDXID)), notices=['Third-party dependency and asset notices for ClipDesigner\n'];
   for(const pkg of metadata.packages.filter(p=>p.source&&included.has(id(p.id))).sort((a,b)=>a.name.localeCompare(b.name)||a.version.localeCompare(b.version))) {
     notices.push(`\n===== ${pkg.name} ${pkg.version} [${pkg.license||'NOASSERTION'}] =====\n`);
     const dir=dirname(pkg.manifest_path), licenseFiles=new Set(readdirSync(dir).filter(n=>/^(LICENSE|LICENCE|COPYING|NOTICE|UNLICENSE)([.-]|$)/i.test(n)).map(n=>resolve(dir,n)));
@@ -76,7 +76,7 @@ export function writeMetadata(root, metadataPath, packageRoot, version) {
   for(const dir of ['licenses/designcraft','licenses/text-fonts','licenses/wix','licenses/lucide'])for(const name of readdirSync(resolve(root,dir)).sort())notices.push(`\n===== ${dir}/${name} =====\n`+readFileSync(resolve(root,dir,name),'utf8'));
   writeFileSync(resolve(packageRoot,'THIRD-PARTY-NOTICES.txt'),notices.join('\n'));
   const notes=JSON.parse(readFileSync(resolve(root,'releases',version+'.json'),'utf8').replace(/^\uFEFF/,''));
-  const markdown=[`# ${notes.title}`,notes.summary,'**Unsigned Windows x64 beta. Choose the MSI installer or portable ZIP below.**',...Object.entries(notes.changes).flatMap(([title,items])=>['## '+title,...items.map(s=>'- '+s)]),'## Known limitations',...notes.limitations.map(s=>'- '+s),`Source commit: ${commit}`,'MSI: installs for the current user, with one ClipCraft shortcut and image/video project associations. Portable ZIP: extract all files and run ClipCraft.exe. No personal projects, recordings, settings or Library entries are included. Source archives are linked below. See docs/installing.md for storage locations.'];
+  const markdown=[`# ${notes.title}`,notes.summary,'**Unsigned Windows x64 beta. Choose the MSI installer or portable ZIP below.**',...Object.entries(notes.changes).flatMap(([title,items])=>['## '+title,...items.map(s=>'- '+s)]),'## Known limitations',...notes.limitations.map(s=>'- '+s),`Source commit: ${commit}`,'MSI: installs for the current user, with one ClipDesigner shortcut and image/video project associations. Portable ZIP: extract all files and run ClipDesigner.exe. No personal projects, recordings, settings or Library entries are included. Source archives are linked below. See docs/installing.md for storage locations.'];
   writeFileSync(resolve(packageRoot,'release-notes.md'),markdown.join('\n\n')+'\n');
   return info;
 }

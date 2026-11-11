@@ -14,7 +14,7 @@ pub fn record_ui_geometry(ui: &egui::Ui) {
         return;
     }
     ui.ctx().data_mut(|d| d.insert_temp(key, focused));
-    let Some(path) = std::env::var_os("CLIPCRAFT_FRAME_DIAGNOSTICS") else {
+    let Some(path) = std::env::var_os("CLIPDESIGNER_FRAME_DIAGNOSTICS") else {
         return;
     };
     if std::fs::metadata(&path).is_ok_and(|m| m.len() > 131072) {

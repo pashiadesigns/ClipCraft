@@ -31,7 +31,7 @@ fn broker() -> Option<&'static SyncSender<Request>> {
     static BROKER: OnceLock<Option<SyncSender<Request>>> = OnceLock::new();
     BROKER.get_or_init(|| {
         let (tx, rx) = mpsc::sync_channel::<Request>(8);
-        std::thread::Builder::new().name("clipcraft-step-context".into()).spawn(move || {
+        std::thread::Builder::new().name("clipdesigner-step-context".into()).spawn(move || {
             use windows::Win32::{System::Com::{CoInitializeEx, CoUninitialize, CoCreateInstance, COINIT_MULTITHREADED, CLSCTX_INPROC_SERVER}, UI::Accessibility::*};
             let prior = unsafe { SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) };
             let _dpi = (!prior.is_null()).then_some(DpiContext(prior));

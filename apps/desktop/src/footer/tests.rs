@@ -57,7 +57,7 @@ fn centered_single_row_survives_widths_views_and_scrolling_messages() {
             let original = serde_json::to_vec(&e.session.document).unwrap();
             let first = frame(&ctx, &mut e, width, vec![]);
             let initial = frame(&ctx, &mut e, width, vec![]);
-            if let Ok(root) = std::env::var("CLIPCRAFT_HEADLESS_FOOTER_DIR") {
+            if let Ok(root) = std::env::var("CLIPDESIGNER_HEADLESS_FOOTER_DIR") {
                 dump_meshes(
                     &ctx,
                     &root,

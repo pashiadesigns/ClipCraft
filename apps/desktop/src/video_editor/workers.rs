@@ -335,7 +335,7 @@ pub(crate) fn copy_recording(
         std::fs::File::open(source).map_err(|e| format!("Cannot read the recording: {e}"))?;
     let total = from.metadata().map_err(|e| e.to_string())?.len().max(1);
     let mut temp = tempfile::Builder::new()
-        .prefix(".clipcraft-export-")
+        .prefix(".clipdesigner-export-")
         .suffix(".tmp")
         .tempfile_in(path.parent().unwrap_or(Path::new(".")))
         .map_err(|e| e.to_string())?;
@@ -433,7 +433,7 @@ pub(crate) fn export_marked(
         let mut mix = media::Mixer::new(project)?;
         let folder = path.parent().unwrap_or(Path::new("."));
         let temp = tempfile::Builder::new()
-            .prefix(".clipcraft-export-")
+            .prefix(".clipdesigner-export-")
             .suffix(".mp4")
             .tempfile_in(folder)
             .map_err(|e| e.to_string())?
@@ -508,7 +508,7 @@ pub(crate) fn export_marked(
             }
         }
         #[cfg(test)]
-        if std::env::var_os("CLIPCRAFT_PROFILE_PROJECT").is_some() {
+        if std::env::var_os("CLIPDESIGNER_PROFILE_PROJECT").is_some() {
             println!(
                 "export stages seconds [decode/layers, composite, video encode, audio]: {profile:?}"
             );

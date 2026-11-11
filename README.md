@@ -1,13 +1,13 @@
-# ClipCraft
+# ClipDesigner
 
 **Capture a moment. Explain a workflow. Make it editable.**
 
-ClipCraft brings screen capture, step-by-step guides and video editing into one
+ClipDesigner brings screen capture, step-by-step guides and video editing into one
 local Windows workspace. Capture your screen, point out what matters, add narration,
 and share a polished image, PDF, GIF or video. Everything stays on your PC, and no
-ClipCraft account is required.
+ClipDesigner account is required.
 
-**[Download 1.0.0-beta.3](https://github.com/pashiadesigns/ClipCraft/releases/tag/v1.0.0-beta.3)**
+**[Download 1.0.0-beta.4](https://github.com/pashiadesigns/ClipDesigner/releases/tag/v1.0.0-beta.4)**
 · [Install & storage locations](docs/installing.md) · [Build from source](docs/building.md)
 · [Known limitations](#beta-notes)
 
@@ -15,14 +15,20 @@ Windows 10/11, x64. Choose the **MSI installer** or extract the **portable ZIP**
 This beta is unsigned. The source is available under Apache-2.0 with retained
 third-party notices. Older development project formats are not supported.
 
-## Who uses ClipCraft?
+> **New name, same app.** ClipDesigner was called ClipCraft through 1.0.0-beta.3,
+> and that release still installs and appears as ClipCraft. From 1.0.0-beta.4,
+> it installs as ClipDesigner, replaces the ClipCraft installation and moves your
+> Library, settings and presets from `%LOCALAPPDATA%\ClipCraft` to
+> `%LOCALAPPDATA%\ClipDesigner` the first time it starts.
+
+## Who uses ClipDesigner?
 
 | **Casual users** | **Power users** |
 | --- | --- |
 | **Who they are:** coordinators, analysts, support staff, team leads, or whoever on the team gets asked "how do I…?" | **Who they are:** trainers, instructional designers, documentation teams, product marketers and tutorial creators. |
-| **How they work:** a few times a week, a few minutes at a time. Each capture is a one-off answer. | **How they work:** ClipCraft stays open for hours, and they produce a series of material, not one-offs. |
+| **How they work:** a few times a week, a few minutes at a time. Each capture is a one-off answer. | **How they work:** ClipDesigner stays open for hours, and they produce a series of material, not one-offs. |
 | **What they make:**<br>• Point out a button for a colleague: capture, add an arrow, paste into chat<br>• Turn "how do I submit an expense?" into a six-step PDF guide<br>• Hide a customer name before sending a screenshot<br>• Record a 90-second narrated walkthrough of where a setting lives<br>• Find last Tuesday's capture in the Library | **What they make:**<br>• A 40-page onboarding manual with sections, headers, footers and page numbers<br>• Product tutorials with webcam, cursor-following zooms and animated callouts<br>• Clean narration with EQ, compression and de-essing<br>• GIF loops for release notes and social posts<br>• Videos recorded on live systems, with every tracked redaction reviewed before publishing |
-| **What ClipCraft gives them:** a capture hotkey, copy to clipboard, presets that look good with no settings, guide templates, Find Sensitive Info, and F1 Help on any control. | **What ClipCraft gives them:** custom presets, palettes and Blocks, Page Setup, multitrack video with keyframes, the Effects Workstation, GIF Studio, and Library folders and tags. |
+| **What ClipDesigner gives them:** a capture hotkey, copy to clipboard, presets that look good with no settings, guide templates, Find Sensitive Info, and F1 Help on any control. | **What ClipDesigner gives them:** custom presets, palettes and Blocks, Page Setup, multitrack video with keyframes, the Effects Workstation, GIF Studio, and Library folders and tags. |
 | **Where it ends up:** chat messages, email, support tickets and wiki pages. | **Where it ends up:** training courses, help centers, video channels, release notes and printed manuals. |
 
 *Most power users start as casual users. It's the same app and the same project files, so the depth is there when you need it.*
@@ -37,7 +43,7 @@ and Free perspective corners that follow the pointer for the whole drag.
 **Beta 2** was a large update: tracked video redaction with review, built-in
 illustrated Help, keyframes, GIF Studio, webcam picture-in-picture, filters and
 borders, Preferences, a clearer Library and a simpler ribbon. See the
-[release notes](https://github.com/pashiadesigns/ClipCraft/releases) for details.
+[release notes](https://github.com/pashiadesigns/ClipDesigner/releases) for details.
 
 ## Images that explain
 
@@ -124,7 +130,7 @@ type, app, website or date. Recent captures stay one click away in the editor.
 
 ## Help is built in
 
-![ClipCraft Help with illustrated, searchable articles](docs/images/help.png)
+![ClipDesigner Help with illustrated, searchable articles](docs/images/help.png)
 
 Illustrated, searchable articles cover every tool. Press **F1** over any control to
 open its article. **Preferences** (Ctrl+Comma) holds Start with Windows, editor,
@@ -160,9 +166,9 @@ or prepopulated Recent items.
 
 ## Source, licenses and reporting
 
-ClipCraft is written in Rust. See [building](docs/building.md),
+ClipDesigner is written in Rust. See [building](docs/building.md),
 [release verification](docs/github-releases.md), [licensing](docs/licensing.md),
 [contributing](CONTRIBUTING.md) and [security reporting](SECURITY.md).
 
-Report a bug through [GitHub Issues](https://github.com/pashiadesigns/ClipCraft/issues)
+Report a bug through [GitHub Issues](https://github.com/pashiadesigns/ClipDesigner/issues)
 with the version, reproduction steps and a non-sensitive example when possible.

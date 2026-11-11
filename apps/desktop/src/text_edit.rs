@@ -824,7 +824,7 @@ mod tests {
             e.execute(Command::Undo);
             assert_eq!(e.session.document.annotations[0], original);
             assert!(!e.session.can_undo());
-            if let Ok(root) = std::env::var("CLIPCRAFT_HEADLESS_STEP_DIR") {
+            if let Ok(root) = std::env::var("CLIPDESIGNER_HEADLESS_STEP_DIR") {
                 crate::property_layout::tests::dump_meshes(
                     &ctx,
                     &root,
@@ -900,7 +900,7 @@ mod tests {
             );
             assert_eq!(e.session.document.annotations, vec![a.clone()]);
             assert!(!e.session.can_undo());
-            if let Ok(root) = std::env::var("CLIPCRAFT_HEADLESS_TYPOGRAPHY_DIR") {
+            if let Ok(root) = std::env::var("CLIPDESIGNER_HEADLESS_TYPOGRAPHY_DIR") {
                 let selected = inline_frame(
                     &ctx,
                     &mut e,

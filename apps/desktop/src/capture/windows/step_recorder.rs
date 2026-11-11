@@ -338,7 +338,7 @@ pub(super) fn record(owner: HWND, cursor: bool, root: Option<PathBuf>) -> Captur
                     hInstance: GetModuleHandleW(null()),
                     hCursor: LoadCursorW(null_mut(), IDC_ARROW),
                     hbrBackground: null_mut(),
-                    lpszClassName: w!("ClipCraftStepRecorder"),
+                    lpszClassName: w!("ClipDesignerStepRecorder"),
                     ..Default::default()
                 };
                 let atom = RegisterClassW(&class);
@@ -382,8 +382,8 @@ pub(super) fn record(owner: HWND, cursor: bool, root: Option<PathBuf>) -> Captur
         });
         let hwnd = CreateWindowExW(
             WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_LAYERED,
-            w!("ClipCraftStepRecorder"),
-            w!("ClipCraft Step by Step"),
+            w!("ClipDesignerStepRecorder"),
+            w!("ClipDesigner Step by Step"),
             WS_POPUP | WS_CLIPCHILDREN,
             position[0],
             position[1],
@@ -493,7 +493,7 @@ pub(super) fn record(owner: HWND, cursor: bool, root: Option<PathBuf>) -> Captur
         let c = count.clone();
         let f = failure.clone();
         let worker = std::thread::Builder::new()
-            .name("clipcraft-step-writer".into())
+            .name("clipdesigner-step-writer".into())
             .spawn(move || {
                 let prior =
                     SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);

@@ -55,10 +55,10 @@ impl HistoryPanel {
         let root = crate::storage_locations::configured(
             capture_core::quick_preferences::Folder::ManagedProjects,
         )
-        .or_else(|| std::env::var_os("CLIPCRAFT_HISTORY_DIR").map(PathBuf::from))
+        .or_else(|| std::env::var_os("CLIPDESIGNER_HISTORY_DIR").map(PathBuf::from))
         .or_else(|| {
             std::env::var_os("LOCALAPPDATA")
-                .map(|p| PathBuf::from(p).join("ClipCraft").join("history-v1"))
+                .map(|p| PathBuf::from(p).join("ClipDesigner").join("history-v1"))
         });
         match root.map(|root| History::open(&root).map_err(|e| e.to_string())) {
             Some(Ok(store)) => Self {

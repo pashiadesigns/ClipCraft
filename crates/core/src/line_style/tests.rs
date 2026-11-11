@@ -107,7 +107,7 @@ fn circular_bend_is_round_and_node_endpoints_and_patterns_share_rendering() {
     fixture.promote_features();
     fixture.validate().unwrap();
     exact(&fixture);
-    if let Ok(root) = std::env::var("CLIPCRAFT_LINE_DIR") {
+    if let Ok(root) = std::env::var("CLIPDESIGNER_LINE_DIR") {
         let root = std::path::PathBuf::from(root);
         std::fs::create_dir_all(&root).unwrap();
         fixture.save(&root.join("lines.capture.json")).unwrap();
@@ -230,7 +230,7 @@ fn shape_outline_patterns_roundtrip_and_share_export_geometry() {
     }
     fixture.promote_features();
     fixture.validate().unwrap();
-    if let Some(root) = std::env::var_os("CLIPCRAFT_PATTERN_FIXTURES") {
+    if let Some(root) = std::env::var_os("CLIPDESIGNER_PATTERN_FIXTURES") {
         let root = std::path::PathBuf::from(root);
         std::fs::create_dir_all(&root).unwrap();
         fixture

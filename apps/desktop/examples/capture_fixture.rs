@@ -70,7 +70,7 @@ mod fixture {
                         DIB_RGB_COLORS,
                         SRCCOPY,
                     );
-                    let title: Vec<u16> = format!("ClipCraft synthetic capture fixture | {} x {} physical pixels | Escape closes this window", surface.width, surface.height).encode_utf16().collect();
+                    let title: Vec<u16> = format!("ClipDesigner synthetic capture fixture | {} x {} physical pixels | Escape closes this window", surface.width, surface.height).encode_utf16().collect();
                     SetTextColor(dc, 0xffffff);
                     SetBkColor(dc, 0x171717);
                     TextOutW(dc, 16, 16, title.as_ptr(), title.len() as i32);
@@ -116,7 +116,7 @@ mod fixture {
             let class = WNDCLASSW {
                 lpfnWndProc: Some(procedure),
                 hInstance: instance,
-                lpszClassName: w!("ClipCraftCaptureFixture"),
+                lpszClassName: w!("ClipDesignerCaptureFixture"),
                 hCursor: LoadCursorW(null_mut(), IDC_ARROW),
                 ..Default::default()
             };
@@ -124,7 +124,7 @@ mod fixture {
             let hwnd = CreateWindowExW(
                 0,
                 class.lpszClassName,
-                w!("ClipCraft capture fixture"),
+                w!("ClipDesigner capture fixture"),
                 WS_POPUP,
                 GetSystemMetrics(SM_XVIRTUALSCREEN),
                 GetSystemMetrics(SM_YVIRTUALSCREEN),

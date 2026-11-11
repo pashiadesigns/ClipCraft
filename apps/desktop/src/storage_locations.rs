@@ -36,11 +36,11 @@ impl Editor {
             .duration_since(std::time::UNIX_EPOCH)
             .map_err(|e| e.to_string())?
             .as_nanos();
-        Ok(root.join(format!("ClipCraft-{stamp}.mp4")))
+        Ok(root.join(format!("ClipDesigner-{stamp}.mp4")))
     }
     pub(crate) fn storage_location_options(&mut self, ui: &mut egui::Ui) {
         crate::panel_ui::heading(ui, "Library", "Storage locations");
-        ui.label("New recordings and projects are saved automatically. Folder changes take effect after restarting ClipCraft; existing files stay in their current folders.");
+        ui.label("New recordings and projects are saved automatically. Folder changes take effect after restarting ClipDesigner; existing files stay in their current folders.");
         for (kind, label, fallback) in [
             (
                 Folder::ManagedProjects,
@@ -51,11 +51,11 @@ impl Editor {
             (
                 Folder::Presets,
                 "Preset library",
-                std::env::var_os("CLIPCRAFT_STYLE_DIR")
+                std::env::var_os("CLIPDESIGNER_STYLE_DIR")
                     .map(PathBuf::from)
                     .or_else(|| {
                         std::env::var_os("LOCALAPPDATA")
-                            .map(|p| PathBuf::from(p).join("ClipCraft/styles-v1"))
+                            .map(|p| PathBuf::from(p).join("ClipDesigner/styles-v1"))
                     }),
             ),
         ] {
@@ -86,7 +86,7 @@ impl Editor {
                         {
                             Ok(()) => {
                                 self.status =
-                                    "Storage location saved. Restart ClipCraft to use it.".into()
+                                    "Storage location saved. Restart ClipDesigner to use it.".into()
                             }
                             Err(e) => self.status = e,
                         }

@@ -1,7 +1,7 @@
 //! Ellipse anchors adapted from DesignCraft's geom/src/shapes.rs, MIT licensed.
 //! Copyright (c) 2026 ArtCraft Team and the DesignCraft contributors.
 //! Upstream ea08e4c2ba290f092063c99d70c4bdd5afc45887; license: licenses/designcraft/LICENSE-MIT.
-//! Changes: image-coordinate arrays, bounded cubic sampling and ClipCraft rendering/hit testing.
+//! Changes: image-coordinate arrays, bounded cubic sampling and ClipDesigner rendering/hit testing.
 use crate::{Annotation, Kind};
 use image::RgbaImage;
 
@@ -82,7 +82,7 @@ pub(crate) fn hit_test(annotation: &Annotation, p: [f32; 2], tolerance: f32) -> 
 mod tests {
     use super::*;
     use crate::{Command, Document, Session, selection::Handle};
-    // Adapted upstream ellipse_bounds_and_area regression, plus ClipCraft history/output checks.
+    // Adapted upstream ellipse_bounds_and_area regression, plus ClipDesigner history/output checks.
     #[test]
     fn bounds_area_reverse_and_degenerate_paths() {
         let path = outline([0.0, 0.0], [100.0, 60.0]);

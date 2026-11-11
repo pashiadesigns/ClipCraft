@@ -221,7 +221,7 @@ fn voiceover_recorder_states_render_without_device_access() {
         };
         let first = render(&mut e);
         let output = render(&mut e);
-        if let Some(root) = std::env::var_os("CLIPCRAFT_VOICEOVER_EVIDENCE") {
+        if let Some(root) = std::env::var_os("CLIPDESIGNER_VOICEOVER_EVIDENCE") {
             dump_meshes(&ctx, &root.to_string_lossy(), name, first, output);
         }
     }

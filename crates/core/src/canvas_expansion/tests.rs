@@ -250,7 +250,7 @@ fn automatic_margins_follow_each_edge_inward_and_reopen_with_exact_original_pixe
         let expanded = serde_json::to_vec(&s.document).unwrap();
         let large = [s.document.width, s.document.height];
         let artifact = (delta == [-70.0, -50.0])
-            .then(|| std::env::var("CLIPCRAFT_HEADLESS_MARGIN_DIR").ok())
+            .then(|| std::env::var("CLIPDESIGNER_HEADLESS_MARGIN_DIR").ok())
             .flatten()
             .map(std::path::PathBuf::from);
         if let Some(root) = &artifact {

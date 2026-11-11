@@ -287,7 +287,7 @@ fn pasted_image_properties_and_render_are_visible_without_unusable_drawing_prese
     assert!(text("Opacity").is_some());
     assert!(text("Properties").is_some());
     assert!(text("Presets").is_none());
-    if let Ok(dir) = std::env::var("CLIPCRAFT_HEADLESS_CLIPBOARD_DIR") {
+    if let Ok(dir) = std::env::var("CLIPDESIGNER_HEADLESS_CLIPBOARD_DIR") {
         std::fs::create_dir_all(&dir).unwrap();
         e.session
             .document

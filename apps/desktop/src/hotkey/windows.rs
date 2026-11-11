@@ -274,7 +274,10 @@ mod tests {
     #[test]
     #[ignore = "Opt-in isolated native message/registration test; no input injection or screenshots"]
     fn windows_thread_hotkey_dispatches_without_window_handle() {
-        assert_eq!(std::env::var("CLIPCRAFT_HOTKEY_TEST").as_deref(), Ok("1"));
+        assert_eq!(
+            std::env::var("CLIPDESIGNER_HOTKEY_TEST").as_deref(),
+            Ok("1")
+        );
         let mut keys = Keybinds::default();
         keys.bindings[0].chord = Chord {
             key: 0x87,
@@ -301,7 +304,10 @@ mod tests {
     #[test]
     #[ignore = "requires explicit desktop availability; temporarily registers Ctrl+Alt+F24"]
     fn windows_registration_conflict_and_drop_release_the_chord() {
-        assert_eq!(std::env::var("CLIPCRAFT_HOTKEY_TEST").as_deref(), Ok("1"));
+        assert_eq!(
+            std::env::var("CLIPDESIGNER_HOTKEY_TEST").as_deref(),
+            Ok("1")
+        );
         let ctx = eframe::egui::Context::default();
         let mut keys = Keybinds::default();
         keys.bindings[0].chord = Chord {

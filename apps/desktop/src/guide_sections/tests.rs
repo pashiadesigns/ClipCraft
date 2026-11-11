@@ -152,7 +152,7 @@ fn rail_drag_moves_section_between_pages_with_live_landing_and_one_undo() {
         ),
         e.view.current_transform().unwrap().image
     );
-    if let Ok(root) = std::env::var("CLIPCRAFT_PAGE_POLISH_UI") {
+    if let Ok(root) = std::env::var("CLIPDESIGNER_PAGE_POLISH_UI") {
         dump_meshes(&ctx, &root, "section-drag", atlas, output);
     }
     draw(&mut e, vec![button(to, false)]);
@@ -298,7 +298,7 @@ fn page_layout_and_section_destination_menus_are_visible() {
         ctx.data(|d| d.get_temp::<egui::Rect>(egui::Id::unique(("page-button", 0usize, 2usize))))
             .is_some()
     );
-    if let Ok(dir) = std::env::var("CLIPCRAFT_FRAME_PAGES_UI") {
+    if let Ok(dir) = std::env::var("CLIPDESIGNER_FRAME_PAGES_UI") {
         dump_meshes(&ctx, &dir, "guide-pages", first, output);
     }
     let t = e.view.current_transform().unwrap();
@@ -381,7 +381,7 @@ fn page_buttons_add_blank_confirm_delete_and_restore_with_undo() {
         .data(|d| d.get_temp::<egui::Rect>(egui::Id::unique("delete-page-popup")))
         .unwrap();
     assert!(popup.width() <= 255. && popup.height() <= 140., "{popup:?}");
-    if let Ok(root) = std::env::var("CLIPCRAFT_PAGE_CONTROLS_UI") {
+    if let Ok(root) = std::env::var("CLIPDESIGNER_PAGE_CONTROLS_UI") {
         textures.borrow_mut().append(first.0.textures_delta.clone());
         first.0.textures_delta.clear();
         first.0.textures_delta = textures.borrow().clone();
@@ -432,7 +432,7 @@ fn bottom_handle_previews_reflow_commits_on_release_and_undoes_once() {
     assert_eq!(e.preview_document().annotations[..4], first);
     let first_paint = frame(&ctx, &mut e, vec![]);
     let second_paint = frame(&ctx, &mut e, vec![]);
-    if let Ok(dir) = std::env::var("CLIPCRAFT_GUIDE_UI_DIR") {
+    if let Ok(dir) = std::env::var("CLIPDESIGNER_GUIDE_UI_DIR") {
         initial
             .0
             .textures_delta

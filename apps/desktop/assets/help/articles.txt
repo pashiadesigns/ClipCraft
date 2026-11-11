@@ -1,10 +1,10 @@
-# Welcome to ClipCraft
+# Welcome to ClipDesigner
 id: welcome
 section: Getting started
 keywords: start, overview, introduction, tour, basics
 hero: welcome-hero
 ---
-ClipCraft captures your screen as images or videos, lets you mark them up, and turns them into guides, GIFs and videos. Everything you add stays editable until you export.
+ClipDesigner captures your screen as images or videos, lets you mark them up, and turns them into guides, GIFs and videos. Everything you add stays editable until you export.
 
 step: Capture something with Capture Clip or Capture Video at the right end of the tab row. | title: Capture something | icon: Capture | pic: welcome-1
 step: Pick a tool on the Insert tab and draw on the image. | title: Mark it up | icon: Shape | pic: welcome-2
@@ -249,7 +249,7 @@ controls: Find Sensitive Info…, Sensitive search, Find sensitive information a
 keywords: detect, ocr, email, phone, personal data, privacy, scan, tracking
 hero: sensitive-hero
 ---
-ClipCraft can look for emails, phone numbers and phrases you list, in an image or a video, and cover them with editable redactions in one step.
+ClipDesigner can look for emails, phone numbers and phrases you list, in an image or a video, and cover them with editable redactions in one step.
 
 step: Choose Obfuscate on the Insert tab or select a redaction, click Find Sensitive Info… in Properties, and choose what to look for. | title: Open Find Sensitive Info | pic: sensitive-1
 step: Click Scan, then tick the findings to cover. | title: Scan and tick | pic: sensitive-2
@@ -365,11 +365,11 @@ step: On the Insert tab, open the menu under Paste. | title: Open the Paste menu
 step: Choose Image from file… and pick your file. | title: Pick your file
 step: Move, resize, crop or tilt it like any other image object. | title: Edit the image | pic: import-image-3
 
-An SVG comes in as a vector icon: its shapes stay sharp at any size, and each of its colors (up to five) is its own swatch in Properties, just like ClipCraft's built-in icons. Importing an SVG into Icons works the same way. An SVG with pictures inside or more than five colors stays a drawing instead; it is still sharp, and Recolor draws it in one color. For safety, an SVG never loads web links or other files.
+An SVG comes in as a vector icon: its shapes stay sharp at any size, and each of its colors (up to five) is its own swatch in Properties, just like ClipDesigner's built-in icons. Importing an SVG into Icons works the same way. An SVG with pictures inside or more than five colors stays a drawing instead; it is still sharp, and Recolor draws it in one color. For safety, an SVG never loads web links or other files.
 
 art: svg | The same SVG at two sizes. Both are sharp.
 
-EPS files are PostScript. If Ghostscript is installed, ClipCraft uses it to draw the EPS in high resolution. Without it, ClipCraft uses the small preview stored in the file and tells you.
+EPS files are PostScript. If Ghostscript is installed, ClipDesigner uses it to draw the EPS in high resolution. Without it, ClipDesigner uses the small preview stored in the file and tells you.
 
 # Image objects
 id: image-objects
@@ -418,7 +418,7 @@ step: Select an object and click any color swatch in Properties. | title: Click 
 step: Choose from the palette, enter a hex value, or use the eyedropper. | title: Choose a color
 step: Use + to add the current color to your palette. | title: Add to your palette
 
-Palettes keep your own colors. Choose one from the list at the top of the picker; your choice is shared by every picker and remembered. Use + to add the current color, and right-click a swatch to replace, move or remove it. The ClipCraft palette is built in and can't be changed.
+Palettes keep your own colors. Choose one from the list at the top of the picker; your choice is shared by every picker and remembered. Use + to add the current color, and right-click a swatch to replace, move or remove it. The ClipDesigner palette is built in and can't be changed.
 
 The palette menu makes new palettes, builds one from the colors in the open image, and imports or exports GIMP (.gpl) and Adobe (.ase) palettes. Recent keeps the last colors you used.
 
@@ -578,7 +578,7 @@ controls: Paste, Copy, Cut, Format
 keywords: clipboard, ctrl c, ctrl v, paste image, duplicate
 hero: copy-paste-hero
 ---
-Ctrl+C copies the selected objects, or the whole image when nothing is selected. Ctrl+V pastes images and ClipCraft objects, which stay editable. With a watermark turned on, copies of the whole image include it.
+Ctrl+C copies the selected objects, or the whole image when nothing is selected. Ctrl+V pastes images and ClipDesigner objects, which stay editable. With a watermark turned on, copies of the whole image include it.
 
 
 step: Press Ctrl+C or use Copy on the Insert tab. | title: Copy | pic: copy-paste-1
@@ -681,11 +681,11 @@ controls: Keyframes, Add keyframe, Keyframes OFF, Keyframes ON, Previous key, Ne
 keywords: animate, animation, motion, move over time, interpolation
 hero: keyframes-hero
 ---
-Keyframes change an object's position, size, color or text over time. Turn on Keyframes, move the playhead, and change the object; ClipCraft adds a key. Numbers and colors blend smoothly between keys.
+Keyframes change an object's position, size, color or text over time. Turn on Keyframes, move the playhead, and change the object; ClipDesigner adds a key. Numbers and colors blend smoothly between keys.
 
 
 step: Select a clip or object and turn on Keyframes. | title: Turn on Keyframes | pic: keyframes-1
-step: Move the playhead and change the object. ClipCraft adds a key. | title: Add a key | pic: keyframes-2
+step: Move the playhead and change the object. ClipDesigner adds a key. | title: Add a key | pic: keyframes-2
 step: Repeat for each pose. Video clips keep position and size together on each key. | title: Repeat for each pose | pic: keyframes-3
 step: Choose how values blend in Transition. | title: Choose the blend | pic: keyframes-4
 
@@ -754,12 +754,12 @@ keywords: help, tooltip, hover, f1, explain
 ---
 Hover over any control to see its name and what it does. When the tooltip ends with "F1 Help", press F1 while it shows to open the article about that control.
 
-# If ClipCraft doesn't start
+# If ClipDesigner doesn't start
 id: startup
 section: Reference
 keywords: crash, doesn't open, startup, silent, error, check, laptop
 ---
-If ClipCraft doesn't open on a PC, run Check ClipCraft.cmd from the ClipCraft folder. It writes a local report you can share; it uploads nothing and installs nothing.
+If ClipDesigner doesn't open on a PC, run Check ClipDesigner.cmd from the ClipDesigner folder. It writes a local report you can share; it uploads nothing and installs nothing.
 
 # Filters and borders
 id: filters-and-borders
@@ -777,7 +777,7 @@ where: File › Preferences, or Ctrl+Comma
 controls: Preferences, Start with Windows, Keep running in the tray, Show tooltips, Snap while moving, Snap while resizing, Snap while drawing, Show the grid, Grid size, Hold to bypass, Background, Remember zoom and panel sizes, Keep previous versions
 keywords: settings, options, snapping, grid, startup, tray, tooltips, versions
 ---
-Preferences gathers ClipCraft's settings in one window. Apply saves your changes, Cancel leaves everything as it was, and Restore defaults affects only the section that is open. Snapping lines objects up with each other, the canvas edges and the grid when it is showing. Hold the bypass key to turn snapping off for one drag. The grid is a guide and never exports.
+Preferences gathers ClipDesigner's settings in one window. Apply saves your changes, Cancel leaves everything as it was, and Restore defaults affects only the section that is open. Snapping lines objects up with each other, the canvas edges and the grid when it is showing. Hold the bypass key to turn snapping off for one drag. The grid is a guide and never exports.
 
 # Library folders and Recent
 id: library-folders

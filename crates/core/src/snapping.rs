@@ -1,6 +1,6 @@
 //! Bounds-based smart guides. Closest-axis matching adapts DesignCraft
 //! geom/src/snap.rs at ea08e4c2ba290f092063c99d70c4bdd5afc45887 (MIT).
-//! Copyright and license: licenses/designcraft. ClipCraft adds annotation
+//! Copyright and license: licenses/designcraft. ClipDesigner adds annotation
 //! collection, group movement, canvas limits and guide validation.
 use crate::{Annotation, Error, Result, multi_selection};
 

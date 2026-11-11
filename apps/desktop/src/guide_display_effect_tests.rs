@@ -36,7 +36,7 @@ fn focus_drag_resize_rotation_and_zoom_reuse_lower_pixels() {
             "Focus blur {blur}: retained drag CPU {:.3} ms/update",
             now.elapsed().as_secs_f64() * 1000. / 40.
         );
-        if let Ok(root) = std::env::var("CLIPCRAFT_PUBLIC_UI") {
+        if let Ok(root) = std::env::var("CLIPDESIGNER_PUBLIC_UI") {
             let last = paint(&ctx, &mut scene, &d, 0.7);
             dump_meshes(&ctx, &root, &format!("focus-drag-{blur}"), first, last);
             d.render()
@@ -123,7 +123,7 @@ fn reduced_crossfade_surface_keeps_background_and_upper_annotations() {
     let last = draw();
     assert!(scene.vectors.contains_key(&5));
     assert!(!scene.images.is_empty());
-    if let Ok(root) = std::env::var("CLIPCRAFT_PUBLIC_UI") {
+    if let Ok(root) = std::env::var("CLIPDESIGNER_PUBLIC_UI") {
         dump_meshes(&ctx, &root, "reduced-crossfade-upper", first, last);
     }
 }
@@ -224,7 +224,7 @@ fn page_cut_flatten_undo_restores_retained_text_shapes_and_frames() {
     let before = paint(&ctx, &mut scene, &session.document, 0.5);
     let vector_count = scene.vectors.len();
     assert!(vector_count > 6);
-    if let Ok(root) = std::env::var("CLIPCRAFT_PAGE_UNDO_UI") {
+    if let Ok(root) = std::env::var("CLIPDESIGNER_PAGE_UNDO_UI") {
         dump_meshes(&ctx, &root, "Before", PaintedOutput(all.0.clone()), before);
     }
     for command in [
@@ -246,7 +246,7 @@ fn page_cut_flatten_undo_restores_retained_text_shapes_and_frames() {
     }
     let after = paint(&ctx, &mut scene, &session.document, 0.5);
     assert_eq!(scene.vectors.len(), vector_count);
-    if let Ok(root) = std::env::var("CLIPCRAFT_PAGE_UNDO_UI") {
+    if let Ok(root) = std::env::var("CLIPDESIGNER_PAGE_UNDO_UI") {
         dump_meshes(&ctx, &root, "After", all, after);
     }
 }
@@ -259,7 +259,7 @@ fn effects_retain_pixels_across_zoom_and_unrelated_edits_but_invalidate_dependen
         let first = paint(&ctx, &mut scene, &d, 1.);
         let still = paint(&ctx, &mut scene, &d, 1.);
         assert!(still.0.textures_delta.set.is_empty());
-        if let Ok(root) = std::env::var("CLIPCRAFT_EFFECTS_UI") {
+        if let Ok(root) = std::env::var("CLIPDESIGNER_EFFECTS_UI") {
             dump_meshes(&ctx, &root, &format!("{kind:?}"), first, still);
         }
         let id = scene.effects[&2].tiles[0].1.id();
@@ -399,7 +399,7 @@ fn magnified_callout_reuses_lower_textures_during_drag_zoom_and_resize() {
         assert_eq!(scene.effects[&2].clear.as_ref().unwrap()[0].1.id(), key);
         assert_eq!(scene.effects[&2].tiles[0].1.id(), affected_key);
     }
-    if let Ok(root) = std::env::var("CLIPCRAFT_GIF_EVIDENCE") {
+    if let Ok(root) = std::env::var("CLIPDESIGNER_GIF_EVIDENCE") {
         let last = paint(&ctx, &mut scene, &d, 0.7);
         dump_meshes(&ctx, &root, "magnified-canvas", first, last);
         d.render()
@@ -594,7 +594,7 @@ fn magnified_interaction_performance() {
     }
     let report = serde_json::json!({"measurement":"CPU preparation; excludes decoder, GPU upload/presentation and native display latency", "profiles":rows});
     println!("{report}");
-    if let Ok(root) = std::env::var("CLIPCRAFT_GIF_EVIDENCE") {
+    if let Ok(root) = std::env::var("CLIPDESIGNER_GIF_EVIDENCE") {
         std::fs::write(
             std::path::Path::new(&root).join("magnified-performance.json"),
             serde_json::to_vec_pretty(&report).unwrap(),

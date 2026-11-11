@@ -137,7 +137,7 @@ fn picture(ui: &mut egui::Ui, state: &mut State, key: &str, width: f32) {
                 .fit_to_exact_size(size)
                 .corner_radius(6),
         )
-        .tip("A sample project in ClipCraft");
+        .tip("A sample project in ClipDesigner");
     }
 }
 
@@ -163,8 +163,8 @@ impl crate::Editor {
         let keys = self.quick_controls.keybinds();
         let screen = ctx.content_rect();
         let size = egui::vec2(1180., 760.).min(screen.size() - egui::vec2(40., 40.));
-        let window = egui::Window::new("ClipCraft Help")
-            .id(egui::Id::unique("clipcraft-help"))
+        let window = egui::Window::new("ClipDesigner Help")
+            .id(egui::Id::unique("clipdesigner-help"))
             .title_bar(false)
             .frame(
                 egui::Frame::new()
@@ -183,7 +183,7 @@ impl crate::Editor {
                 ui.set_min_size(ui.available_size());
                 let state = &mut self.shell.help_window;
                 ui.horizontal(|ui| {
-                    ui.label(crate::panel_ui::title("ClipCraft Help", 20.));
+                    ui.label(crate::panel_ui::title("ClipDesigner Help", 20.));
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         let (rect, response) =
                             ui.allocate_exact_size(egui::vec2(26., 26.), egui::Sense::click());
@@ -960,12 +960,12 @@ fn about_page(ui: &mut egui::Ui) {
             let (r, _) = ui.allocate_exact_size(egui::vec2(56., 56.), egui::Sense::hover());
             crate::brand::paint(ui, r);
             ui.vertical(|ui| {
-                ui.label(RichText::new("ClipCraft").size(24.).strong());
+                ui.label(RichText::new("ClipDesigner").size(24.).strong());
                 ui.label(
                     RichText::new(format!(
                         "Version {}{}",
                         env!("CARGO_PKG_VERSION"),
-                        option_env!("CLIPCRAFT_BUILD")
+                        option_env!("CLIPDESIGNER_BUILD")
                             .map(|b| format!(" · build {b}"))
                             .unwrap_or_default()
                     ))
@@ -974,7 +974,7 @@ fn about_page(ui: &mut egui::Ui) {
             });
         });
         ui.add_space(14.);
-        ui.label("Capture, mark up and share instructional images and videos. ClipCraft is open source under the Apache License 2.0.");
+        ui.label("Capture, mark up and share instructional images and videos. ClipDesigner is open source under the Apache License 2.0.");
         ui.add_space(10.);
         ui.label("Help works offline. Nothing is sent anywhere.");
         let ui = &mut columns[1];
@@ -1005,7 +1005,7 @@ fn about_page(ui: &mut egui::Ui) {
             Some(path) => {
                 if ui
                     .button("Third-party notices")
-                    .tip("Open the licenses of the libraries and fonts ClipCraft uses.")
+                    .tip("Open the licenses of the libraries and fonts ClipDesigner uses.")
                     .clicked()
                 {
                     let _ = crate::export_ui::open_in_shell(&path);
@@ -1013,7 +1013,7 @@ fn about_page(ui: &mut egui::Ui) {
             }
             None => {
                 ui.label(
-                    RichText::new("Third-party notices ship beside ClipCraft.exe in release packages.")
+                    RichText::new("Third-party notices ship beside ClipDesigner.exe in release packages.")
                         .color(MUTED),
                 );
             }

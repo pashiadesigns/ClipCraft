@@ -2,8 +2,9 @@
 use std::{io::Write, path::PathBuf, sync::OnceLock};
 static LOG: OnceLock<PathBuf> = OnceLock::new();
 pub(crate) fn install() {
+    let migration = crate::legacy_name::migrate_local_data();
     if let Some(base) = std::env::var_os("LOCALAPPDATA") {
-        let folder = PathBuf::from(base).join("ClipCraft/logs");
+        let folder = PathBuf::from(base).join("ClipDesigner/logs");
         if std::fs::create_dir_all(&folder).is_ok() {
             let stamp = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
@@ -13,10 +14,13 @@ pub(crate) fn install() {
         }
     }
     note(concat!(
-        "ClipCraft ",
+        "ClipDesigner ",
         env!("CARGO_PKG_VERSION"),
         " starting"
     ));
+    if let Some(migration) = migration {
+        note(&migration);
+    }
     let previous = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
         note(&format!("Panic: {info}"));
@@ -44,7 +48,7 @@ pub(crate) fn failure(message: &str) {
         .unwrap_or_default();
     rfd::MessageDialog::new()
         .set_level(rfd::MessageLevel::Error)
-        .set_title("ClipCraft could not start")
+        .set_title("ClipDesigner could not start")
         .set_description(format!("{message}\n\nPlease share these details so we can identify the startup problem.{location}"))
         .show();
 }

@@ -1,7 +1,7 @@
-ClipCraft
-Copyright 2026 ClipCraft contributors
+ClipDesigner
+Copyright 2026 ClipDesigner contributors
 
-Original ClipCraft source and assets are licensed under Apache-2.0.
+Original ClipDesigner source and assets are licensed under Apache-2.0.
 Third-party components retain their licenses. This repository includes:
 - MIT-licensed DesignCraft adaptations listed in licenses/designcraft/PROVENANCE.txt.
 - Ubuntu and Hack font assets with licenses in licenses/text-fonts/.

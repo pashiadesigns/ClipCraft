@@ -10,7 +10,7 @@ pub struct Writer {
 impl Writer {
     pub fn new(folder: &Path) -> std::io::Result<Self> {
         let mut file = tempfile::Builder::new()
-            .prefix(".clipcraft-audio-")
+            .prefix(".clipdesigner-audio-")
             .suffix(".wav")
             .tempfile_in(folder)?;
         file.write_all(&[0; 44])?;

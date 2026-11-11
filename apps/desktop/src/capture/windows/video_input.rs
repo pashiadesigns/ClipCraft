@@ -64,7 +64,7 @@ impl Hook {
     fn start() -> Result<Self, String> {
         let (ready, started) = std::sync::mpsc::channel();
         let join = std::thread::Builder::new()
-            .name("clipcraft-click-hook".into())
+            .name("clipdesigner-click-hook".into())
             .spawn(move || unsafe {
                 let hook = SetWindowsHookExW(WH_MOUSE_LL, Some(mouse), GetModuleHandleW(null()), 0);
                 if hook.is_null() {

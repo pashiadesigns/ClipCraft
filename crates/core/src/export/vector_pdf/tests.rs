@@ -126,7 +126,7 @@ fn streams(bytes: &[u8]) -> Vec<Vec<u8>> {
     result
 }
 fn fixture(name: &str, d: &Document, o: &Options) {
-    if let Ok(dir) = std::env::var("CLIPCRAFT_VECTOR_PDF_FIXTURES") {
+    if let Ok(dir) = std::env::var("CLIPDESIGNER_VECTOR_PDF_FIXTURES") {
         let dir = std::path::Path::new(&dir);
         std::fs::create_dir_all(dir).unwrap();
         let bytes = encode(d, o).unwrap();

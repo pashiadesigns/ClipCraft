@@ -145,7 +145,7 @@ mod tests {
         // The captured import is independent of subsequent clipboard changes.
         Clipboard::new()
             .unwrap()
-            .set_text("ClipCraft synthetic clipboard test".to_owned())
+            .set_text("ClipDesigner synthetic clipboard test".to_owned())
             .unwrap();
         assert!(read().is_err());
         assert_eq!(snapshot.document.render().unwrap(), expected);
@@ -173,7 +173,7 @@ mod tests {
     #[ignore = "requires an explicit native Copy All of the synthetic callout fixture"]
     fn windows_native_copy_matches_saved_fixture() {
         assert_eq!(
-            std::env::var("CLIPCRAFT_NATIVE_CLIPBOARD_TEST").as_deref(),
+            std::env::var("CLIPDESIGNER_NATIVE_CLIPBOARD_TEST").as_deref(),
             Ok("1"),
             "Copy the synthetic native fixture first, then opt in explicitly"
         );
@@ -183,7 +183,7 @@ mod tests {
             .unwrap();
         let fixture = artifacts
             .join(
-                std::env::var("CLIPCRAFT_NATIVE_CLIPBOARD_FIXTURE")
+                std::env::var("CLIPDESIGNER_NATIVE_CLIPBOARD_FIXTURE")
                     .unwrap_or_else(|_| "native-alpha7/native-callouts.capture.json".into()),
             )
             .canonicalize()

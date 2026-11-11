@@ -11,10 +11,10 @@ $output = Join-Path $root 'artifacts/github/resource'
 New-Item -ItemType Directory -Path $output -Force | Out-Null
 Push-Location -LiteralPath $brand
 try {
-    & $compiler /nologo /fo (Join-Path $output 'clipcraft.res') clipcraft.rc
+    & $compiler /nologo /fo (Join-Path $output 'clipdesigner.res') clipdesigner.rc
     if ($LASTEXITCODE -ne 0) { throw 'Resource compilation failed.' }
 } finally { Pop-Location }
-$expected = (Get-FileHash -LiteralPath (Join-Path $brand 'clipcraft.res') -Algorithm SHA256).Hash
-$actual = (Get-FileHash -LiteralPath (Join-Path $output 'clipcraft.res') -Algorithm SHA256).Hash
+$expected = (Get-FileHash -LiteralPath (Join-Path $brand 'clipdesigner.res') -Algorithm SHA256).Hash
+$actual = (Get-FileHash -LiteralPath (Join-Path $output 'clipdesigner.res') -Algorithm SHA256).Hash
 if ($expected -ne $actual) { throw 'Checked-in Windows resource does not match its RC/ICO inputs.' }
 Write-Output 'Windows resource matches its source inputs.'

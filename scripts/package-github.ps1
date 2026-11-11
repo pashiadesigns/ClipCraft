@@ -14,7 +14,7 @@ $release = Join-Path $root "artifacts/github/releases/$Version"
 if (Test-Path -LiteralPath $release) { throw 'Release staging already exists; inspect it or choose a new version. Never overwrite a published package.' }
 $env:CARGO_BUILD_JOBS = '2'
 $env:RUST_TEST_THREADS = '2'
-$env:CARGO_ENCODED_RUSTFLAGS = @("--remap-path-prefix=$env:USERPROFILE=/build-user", "--remap-path-prefix=$root=/clipcraft", "-Ctarget-feature=+crt-static") -join [char]31
+$env:CARGO_ENCODED_RUSTFLAGS = @("--remap-path-prefix=$env:USERPROFILE=/build-user", "--remap-path-prefix=$root=/clipdesigner", "-Ctarget-feature=+crt-static") -join [char]31
 $pwsh = (Get-Process -Id $PID).Path
 $targetRoot = if ($env:CARGO_TARGET_DIR) { [IO.Path]::GetFullPath($env:CARGO_TARGET_DIR) } else { Join-Path $root 'target' }
 $desktopExe = Join-Path $targetRoot 'release/capture-desktop.exe'
@@ -25,6 +25,12 @@ if ($LASTEXITCODE -ne 0) { throw 'Source audit failed.' }
 if ($LASTEXITCODE -ne 0) { throw 'Release metadata tests failed.' }
 & $pwsh -NoProfile -File scripts/verify-windows-resource.ps1
 if ($LASTEXITCODE -ne 0) { throw 'Windows resources failed verification.' }
+# Tests and the fixture render must not create a real profile: the installer
+# lifecycle test below refuses to run over existing ClipDesigner data.
+$realLocalAppData = $env:LOCALAPPDATA
+$testProfile = Join-Path ([IO.Path]::GetTempPath()) ("clipdesigner-package-" + [guid]::NewGuid())
+New-Item -ItemType Directory -Path $testProfile -Force | Out-Null
+$env:LOCALAPPDATA = $testProfile
 & $pwsh -NoProfile -File scripts/check.ps1
 if ($LASTEXITCODE -ne 0) { throw 'Rust checks failed.' }
 New-Item -ItemType Directory -Path $release -Force | Out-Null
@@ -35,7 +41,7 @@ if ($LASTEXITCODE -ne 0) { throw 'Windows startup import verification failed.' }
 $package = Join-Path $release 'package'
 $public = Join-Path $release 'public'
 New-Item -ItemType Directory -Path $package,$public -Force | Out-Null
-Copy-Item -LiteralPath $desktopExe -Destination (Join-Path $package 'ClipCraft.exe')
+Copy-Item -LiteralPath $desktopExe -Destination (Join-Path $package 'ClipDesigner.exe')
 Copy-Item -LiteralPath $cliExe -Destination $package
 $fixture = Join-Path $release 'fixture'
 & (Join-Path $package 'capture-cli.exe') demo --out-dir $fixture
@@ -44,6 +50,8 @@ if ($LASTEXITCODE -ne 0) { throw 'Demo generation failed.' }
 if ($LASTEXITCODE -ne 0) { throw 'Project reopen/render failed.' }
 & (Join-Path $package 'capture-cli.exe') compare (Join-Path $fixture 'demo.png') (Join-Path $fixture 'roundtrip.png')
 if ($LASTEXITCODE -ne 0) { throw 'Export roundtrip differs.' }
+$env:LOCALAPPDATA = $realLocalAppData
+Remove-Item -LiteralPath $testProfile -Recurse -Force
 Copy-Item -LiteralPath LICENSE,NOTICE,SECURITY.md,README.md -Destination $package
 Copy-Item -LiteralPath scripts/install-start-menu.ps1,scripts/register-project-files.ps1 -Destination $package
 Copy-Item -LiteralPath $notesPath -Destination (Join-Path $package 'release-notes.json')
@@ -52,10 +60,10 @@ New-Item -ItemType Directory -Path $packageDocs -Force | Out-Null
 Copy-Item -LiteralPath docs/building.md,docs/security-model.md,docs/github-releases.md,docs/installing.md,docs/licensing.md -Destination $packageDocs
 Copy-Item -LiteralPath docs/images -Destination $packageDocs -Recurse
 @"
-ClipCraft $Version - unsigned Windows x64 beta
+ClipDesigner $Version - unsigned Windows x64 beta
 
-Extract the entire ZIP and run ClipCraft.exe. No ClipCraft account is required.
-Optional: run install-start-menu.ps1 for a ClipCraft
+Extract the entire ZIP and run ClipDesigner.exe. No ClipDesigner account is required.
+Optional: run install-start-menu.ps1 for a ClipDesigner
 Start menu entry. Run register-project-files.ps1 to associate .iclip projects
 with this portable copy; Windows preserves existing default-app choices.
 Use the File menu for new projects, exports, printing and options.
@@ -75,9 +83,9 @@ $packageHashes = Get-ChildItem -LiteralPath $package -Recurse -File | Sort-Objec
     (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant() + '  ' + $_.FullName.Substring($package.Length + 1).Replace('\','/')
 }
 $packageHashes | Set-Content -LiteralPath (Join-Path $package 'PACKAGE-SHA256SUMS.txt') -Encoding utf8
-$zip = Join-Path $public "clipcraft-$Version-windows-x64.zip"
+$zip = Join-Path $public "clipdesigner-$Version-windows-x64.zip"
 Compress-Archive -Path (Join-Path $package '*') -DestinationPath $zip -CompressionLevel Optimal
-$installer = Join-Path $public "clipcraft-$Version-windows-x64.msi"
+$installer = Join-Path $public "clipdesigner-$Version-windows-x64.msi"
 & $pwsh -NoProfile -File scripts/build-msi.ps1 -Package $package -Output $installer -Version $Version
 if ($LASTEXITCODE -ne 0) { throw 'Installer build failed.' }
 if ($env:GITHUB_ACTIONS -eq 'true') {

@@ -140,7 +140,7 @@ fn endpoint_menu_and_size_slider_apply_live_to_line_batch_and_inherit() {
     frame(&ctx, &mut e, vec![button(to, false)]);
     e.settle_property_preview(&ctx);
     let (_, output) = frame(&ctx, &mut e, vec![]);
-    if let Ok(root) = std::env::var("CLIPCRAFT_LINE_UI_DIR") {
+    if let Ok(root) = std::env::var("CLIPDESIGNER_LINE_UI_DIR") {
         let updates: LinePreviewTextures = ctx.data(|d| {
             d.get_temp(egui::Id::unique("line-preview-textures"))
                 .unwrap()
@@ -256,7 +256,7 @@ fn step_outline_toggle_and_width_drag_apply_live_to_batch_with_one_undo() {
     );
     e.execute(capture_core::Command::Undo);
     e.select_only(Some(2));
-    if let Ok(root) = std::env::var("CLIPCRAFT_HEADLESS_UI_DIR") {
+    if let Ok(root) = std::env::var("CLIPDESIGNER_HEADLESS_UI_DIR") {
         let paint_ctx = egui::Context::default();
         crate::shell::configure(&paint_ctx);
         let mut painted = crate::canvas::tests::editor(&paint_ctx);
@@ -303,7 +303,7 @@ fn frame(ctx: &egui::Context, e: &mut Editor, events: Vec<Event>) -> ([Rect; 2],
             egui::ScrollArea::vertical().show(ui, |ui| e.properties(ui));
         },
     );
-    if std::env::var_os("CLIPCRAFT_LINE_UI_DIR").is_some() {
+    if std::env::var_os("CLIPDESIGNER_LINE_UI_DIR").is_some() {
         ctx.data_mut(|d| {
             let key = egui::Id::unique("line-preview-textures");
             let mut textures = d.get_temp::<LinePreviewTextures>(key).unwrap_or_default();
@@ -421,7 +421,7 @@ fn tabs_separate_object_list_from_tool_settings_without_document_changes() {
 
 #[test]
 fn property_groups_remain_passive_and_fit_the_reference_width() {
-    if let Ok(root) = std::env::var("CLIPCRAFT_HEADLESS_HELP_DIR") {
+    if let Ok(root) = std::env::var("CLIPDESIGNER_HEADLESS_HELP_DIR") {
         dump_help_panels(&root);
     }
     let fixture: capture_core::Document = serde_json::from_str(include_str!(
@@ -487,7 +487,7 @@ fn property_groups_remain_passive_and_fit_the_reference_width() {
             "Edit text" | "Add text" | "Pointer position" | "Position" | "Font size" | "Font"
         )));
         // Optional headless paint data; never opens an application or captures a screen.
-        if let Ok(root) = std::env::var("CLIPCRAFT_HEADLESS_UI_DIR") {
+        if let Ok(root) = std::env::var("CLIPDESIGNER_HEADLESS_UI_DIR") {
             dump_meshes(&ctx, &root, &format!("{kind:?}"), first, output);
         }
     }

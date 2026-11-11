@@ -949,7 +949,7 @@ impl Editor {
                             .as_ref()
                             .map_or_else(|| "Video clip.vclip".into(), |n| format!("{n}.vclip")),
                     )
-                    .add_filter("ClipCraft video clip", &["vclip"])
+                    .add_filter("ClipDesigner video clip", &["vclip"])
                     .save_file()
                     .map(|mut p| {
                         p.set_extension("vclip");
@@ -1388,7 +1388,7 @@ impl Editor {
                     self.quick_controls.remember_watermarks(list, default);
                 }
             }
-            crate::watermark_ui::heading(ui, "After export", "What ClipCraft does when the video is saved.");
+            crate::watermark_ui::heading(ui, "After export", "What ClipDesigner does when the video is saved.");
             crate::controls::toggle(ui, &mut self.video.export_after[0], "Open export folder");
             crate::controls::toggle(ui, &mut self.video.export_after[1], "Open video after export");
             original

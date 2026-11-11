@@ -750,7 +750,7 @@ mod tests {
                     }
                     assert_eq!(serde_json::to_vec(&e.session.document).unwrap(), original);
                     if scale == 1.
-                        && let Ok(dir) = std::env::var("CLIPCRAFT_PAGE_SETUP_UI")
+                        && let Ok(dir) = std::env::var("CLIPDESIGNER_PAGE_SETUP_UI")
                     {
                         let mut captured = first.clone();
                         captured.textures_delta.clear();
@@ -884,7 +884,7 @@ mod tests {
             )
             .unwrap()
         );
-        if let Ok(dir) = std::env::var("CLIPCRAFT_PAGE_SETUP_UI") {
+        if let Ok(dir) = std::env::var("CLIPDESIGNER_PAGE_SETUP_UI") {
             dump_meshes(&ctx, &dir, "page-setup-error", first, output);
         }
         assert!(!e.session.can_undo());

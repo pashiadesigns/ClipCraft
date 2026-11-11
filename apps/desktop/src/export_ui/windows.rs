@@ -61,7 +61,7 @@ pub(super) fn print(
             let pages = settings
                 .document_pages(document)
                 .map_err(|e| e.to_string())?;
-            let title = "ClipCraft image\0".encode_utf16().collect::<Vec<_>>();
+            let title = "ClipDesigner image\0".encode_utf16().collect::<Vec<_>>();
             let info = DOCINFOW {
                 cbSize: size_of::<DOCINFOW>() as i32,
                 lpszDocName: title.as_ptr(),
@@ -92,7 +92,7 @@ pub(super) fn print(
                         && (page.media_size[0] > paper[0] + 1.
                             || page.media_size[1] > paper[1] + 1.)
                     {
-                        return Err("The selected printer paper is smaller than Page Setup output. Choose larger paper or change orientation; ClipCraft keeps the configured physical size.".into());
+                        return Err("The selected printer paper is smaller than Page Setup output. Choose larger paper or change orientation; ClipDesigner keeps the configured physical size.".into());
                     }
                     let bgra: Vec<u8> =
                         rgb.pixels().flat_map(|p| [p[2], p[1], p[0], 255]).collect();

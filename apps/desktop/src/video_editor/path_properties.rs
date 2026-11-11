@@ -39,7 +39,7 @@ pub(crate) fn reduction_picker(
                         ),
                     )
                     .tip_disabled(
-                        "This recording has no click data, because it was made before ClipCraft \
+                        "This recording has no click data, because it was made before ClipDesigner \
                          recorded clicks without Step by Step.",
                     )
                     .clicked()

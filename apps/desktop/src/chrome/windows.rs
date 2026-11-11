@@ -28,7 +28,7 @@ fn geometry_event(message: u32) -> bool {
     )
 }
 unsafe fn record_geometry(hwnd: HWND, message: u32) {
-    let path = std::env::var_os("CLIPCRAFT_FRAME_DIAGNOSTICS").map(std::path::PathBuf::from);
+    let path = std::env::var_os("CLIPDESIGNER_FRAME_DIAGNOSTICS").map(std::path::PathBuf::from);
     let Some(path) = path else {
         return;
     };

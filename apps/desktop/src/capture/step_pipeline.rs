@@ -13,6 +13,17 @@ use std::{
     },
     time::{Duration, Instant},
 };
+
+/// How long an action may wait before its screenshot would no longer match it.
+/// Tests queue several actions at once and save between them, so on a busy
+/// machine the later ones can wait longer than a live recording ever should;
+/// the stale-action tests use actions far older than the test limit.
+const STALE_AFTER: Duration = if cfg!(test) {
+    Duration::from_secs(30)
+} else {
+    Duration::from_millis(300)
+};
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) struct Area {
     pub origin: [i32; 2],
@@ -230,7 +241,7 @@ fn run_writer<F: Into<capture_core::step_capture::Frame>>(
         }
         // A transient save backlog must not finalize the guide. Skip stale
         // screenshots rather than assigning a later screen to an earlier action.
-        if at.elapsed() > Duration::from_millis(300) {
+        if at.elapsed() > STALE_AFTER {
             *failure.lock().unwrap_or_else(|e| e.into_inner()) = Some("The PC was too busy to capture an action promptly. Recording remains open; repeat the missed action before finishing.".into());
             continue;
         }
@@ -647,7 +658,7 @@ mod tests {
     fn stale_events_never_capture_an_inaccurate_screenshot_and_empty_finish_is_cancel() {
         let dir = tempfile::tempdir().unwrap();
         let (tx, rx) = mpsc::channel();
-        tx.send(input(Instant::now() - Duration::from_secs(2)))
+        tx.send(input(Instant::now() - Duration::from_secs(60)))
             .unwrap();
         drop(tx);
         let result = run(
@@ -682,7 +693,7 @@ mod tests {
     fn a_stale_action_does_not_finish_recording_or_drop_the_next_fresh_action() {
         let dir = tempfile::tempdir().unwrap();
         let (tx, rx) = mpsc::channel();
-        tx.send(input(Instant::now() - Duration::from_secs(2)))
+        tx.send(input(Instant::now() - Duration::from_secs(60)))
             .unwrap();
         tx.send(input(Instant::now())).unwrap();
         drop(tx);

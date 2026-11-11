@@ -169,7 +169,7 @@ fn workstation_geometry_icons_and_real_spectrum_screenshots() {
                 bounds = Some(size);
             }
             if width == 1440.
-                && let Some(root) = std::env::var_os("CLIPCRAFT_VOICEOVER_EVIDENCE")
+                && let Some(root) = std::env::var_os("CLIPDESIGNER_VOICEOVER_EVIDENCE")
             {
                 dump_meshes(
                     &ctx,
@@ -199,7 +199,7 @@ fn workstation_geometry_icons_and_real_spectrum_screenshots() {
             bounds
         );
         if width == 1440.
-            && let Some(root) = std::env::var_os("CLIPCRAFT_VOICEOVER_EVIDENCE")
+            && let Some(root) = std::env::var_os("CLIPDESIGNER_VOICEOVER_EVIDENCE")
         {
             dump_meshes(
                 &ctx,
@@ -290,7 +290,7 @@ fn adaptive_strength_updates_applied_clip_chain_and_undo() {
         .iter()
         .find_map(|s| text_pos(&s.shape))
         .unwrap();
-    if let Some(root) = std::env::var_os("CLIPCRAFT_VOICEOVER_EVIDENCE") {
+    if let Some(root) = std::env::var_os("CLIPDESIGNER_VOICEOVER_EVIDENCE") {
         dump_meshes(
             &ctx,
             &root.to_string_lossy(),
@@ -397,7 +397,7 @@ fn measured_spectrum_and_analysis_results_keep_workstation_geometry() {
     let first = render(&ctx, &mut e, vec![], 1440.);
     let output = render(&ctx, &mut e, vec![], 1440.);
     let bounds: egui::Rect = ctx.data(|d| d.get_temp(egui::Id::unique("effects-window")).unwrap());
-    if let Some(root) = std::env::var_os("CLIPCRAFT_VOICEOVER_EVIDENCE") {
+    if let Some(root) = std::env::var_os("CLIPDESIGNER_VOICEOVER_EVIDENCE") {
         dump_meshes(
             &ctx,
             &root.to_string_lossy(),
@@ -417,7 +417,7 @@ fn measured_spectrum_and_analysis_results_keep_workstation_geometry() {
     let output = render(&ctx, &mut e, vec![], 1440.);
     let r: egui::Rect = ctx.data(|d| d.get_temp(egui::Id::unique("effects-window")).unwrap());
     assert!((r.size() - bounds.size()).length() < 0.1);
-    if let Some(root) = std::env::var_os("CLIPCRAFT_VOICEOVER_EVIDENCE") {
+    if let Some(root) = std::env::var_os("CLIPDESIGNER_VOICEOVER_EVIDENCE") {
         dump_meshes(
             &ctx,
             &root.to_string_lossy(),

@@ -67,7 +67,7 @@ mod tests {
         .unwrap();
         let original = serde_json::to_vec(&s.document).unwrap();
         let original_pixels = s.document.render().unwrap();
-        if let Ok(root) = std::env::var("CLIPCRAFT_NEXT_FIXTURES") {
+        if let Ok(root) = std::env::var("CLIPDESIGNER_NEXT_FIXTURES") {
             std::fs::create_dir_all(&root).unwrap();
             s.save(&std::path::Path::new(&root).join("undo-guide.capture.json"))
                 .unwrap();
@@ -91,7 +91,7 @@ mod tests {
             .cloned()
             .collect();
         s.execute(Command::FlattenPage { page: 0 }).unwrap();
-        if let Ok(root) = std::env::var("CLIPCRAFT_NEXT_FIXTURES") {
+        if let Ok(root) = std::env::var("CLIPDESIGNER_NEXT_FIXTURES") {
             s.save(&std::path::Path::new(&root).join("flattened-page.capture.json"))
                 .unwrap();
         }

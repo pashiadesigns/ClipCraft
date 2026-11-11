@@ -122,7 +122,7 @@ impl Transport {
                         lpfnWndProc: Some(procedure),
                         hInstance: GetModuleHandleW(null()),
                         hCursor: LoadCursorW(null_mut(), IDC_ARROW),
-                        lpszClassName: w!("ClipCraftCaptureTransport"),
+                        lpszClassName: w!("ClipDesignerCaptureTransport"),
                         ..Default::default()
                     };
                     let atom = RegisterClassW(&c);
@@ -159,8 +159,8 @@ impl Transport {
             });
             let hwnd = CreateWindowExW(
                 WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_LAYERED,
-                w!("ClipCraftCaptureTransport"),
-                w!("ClipCraft capture controls"),
+                w!("ClipDesignerCaptureTransport"),
+                w!("ClipDesigner capture controls"),
                 WS_POPUP | WS_CLIPCHILDREN,
                 work.left + (work.right - work.left - px(width)) / 2,
                 work.top + px(12),

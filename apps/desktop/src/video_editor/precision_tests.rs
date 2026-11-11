@@ -90,7 +90,7 @@ fn timeline_file_hover_previews_real_duration_and_drop_imports_at_target() {
 
 #[test]
 fn review_screenshots_show_selection_track_scope_and_editable_focus() {
-    let Some(folder) = std::env::var_os("CLIPCRAFT_VIDEO_EDITOR_EVIDENCE") else {
+    let Some(folder) = std::env::var_os("CLIPDESIGNER_VIDEO_EDITOR_EVIDENCE") else {
         return;
     };
     let ctx = egui::Context::default();

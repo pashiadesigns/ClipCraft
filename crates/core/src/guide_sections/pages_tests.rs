@@ -209,7 +209,7 @@ fn overflow_respects_whole_sections_dimensions_and_pdf_pages() {
     )
     .unwrap();
     assert!(String::from_utf8_lossy(&pdf).contains("/Count 2"));
-    if let Ok(dir) = std::env::var("CLIPCRAFT_FRAME_PAGES_FIXTURES") {
+    if let Ok(dir) = std::env::var("CLIPDESIGNER_FRAME_PAGES_FIXTURES") {
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(std::path::Path::new(&dir).join("guide-pages.pdf"), pdf).unwrap();
         s.document

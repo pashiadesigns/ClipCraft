@@ -830,7 +830,7 @@ mod tests {
         assert!(output.shapes.iter().any(
             |s| matches!(&s.shape,egui::Shape::Rect(r) if r.fill==egui::Color32::from_rgb(65,71,74))
         ));
-        if let Ok(root) = std::env::var("CLIPCRAFT_HEADLESS_CONTROLS_DIR") {
+        if let Ok(root) = std::env::var("CLIPDESIGNER_HEADLESS_CONTROLS_DIR") {
             let snapshot_ctx = egui::Context::default();
             crate::shell::configure(&snapshot_ctx);
             let render = || {

@@ -83,7 +83,7 @@ impl Editor {
             egui::ViewportCommand::Visible(false),
         );
         self.status =
-            "ClipCraft is running in the system tray. Capture shortcuts remain active.".into();
+            "ClipDesigner is running in the system tray. Capture shortcuts remain active.".into();
     }
     pub(super) fn tray_action(&mut self, action: tray::Action, ctx: &egui::Context) {
         if let tray::Action::Open(path) = &action {
@@ -94,7 +94,7 @@ impl Editor {
         if action == tray::Action::Unavailable {
             self.lifecycle.available = false;
             self.lifecycle.error =
-                "System tray recovery failed. The editor remains open so you can access ClipCraft."
+                "System tray recovery failed. The editor remains open so you can access ClipDesigner."
                     .into();
             self.show_editor_window(ctx);
             return;
@@ -144,7 +144,7 @@ impl Editor {
         explicit_file: bool,
         window: StartupWindow,
     ) {
-        // BB1: ClipCraft always starts in the editor; the Capture Clip window
+        // BB1: ClipDesigner always starts in the editor; the Capture Clip window
         // opens only when you choose Capture Clip.
         let _ = (explicit_file, window);
         self.show_editor_window(ctx);

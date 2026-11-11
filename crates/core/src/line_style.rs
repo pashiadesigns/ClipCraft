@@ -2,7 +2,7 @@
 //! Endpoint local geometry/tangents/path trimming adapted from DesignCraft
 //! crates/doc/src/arrow.rs, MIT, ea08e4c2ba290f092063c99d70c4bdd5afc45887.
 //! Copyright (c) 2026 ArtCraft Team and the DesignCraft contributors.
-//! ClipCraft adds independent endpoint sizes, circular/quadratic bend geometry,
+//! ClipDesigner adds independent endpoint sizes, circular/quadratic bend geometry,
 //! bounded patterns, legacy preservation and its own annotation/command model.
 use crate::{Annotation, Error, Kind, Result};
 use serde::{Deserialize, Serialize};

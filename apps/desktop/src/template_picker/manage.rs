@@ -188,7 +188,7 @@ mod tests {
         let save = crate::color_widgets::tests::text_rect(&out.shapes, "Save")
             .unwrap()
             .center();
-        if let Ok(dir) = std::env::var("CLIPCRAFT_HEADLESS_RECOVERY_DIR") {
+        if let Ok(dir) = std::env::var("CLIPDESIGNER_HEADLESS_RECOVERY_DIR") {
             dump_meshes(&ctx, &dir, "template-rename", first, out);
         }
         for pressed in [true, false] {

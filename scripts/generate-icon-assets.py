@@ -1,4 +1,4 @@
-"""Generate ClipCraft's original starter stamp artwork (Pillow, optional asset tool)."""
+"""Generate ClipDesigner's original starter stamp artwork (Pillow, optional asset tool)."""
 from pathlib import Path
 from PIL import Image, ImageDraw
 ROOT=Path(__file__).resolve().parents[1]

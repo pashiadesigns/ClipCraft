@@ -99,7 +99,7 @@ fn cropped_rounded_frame_retains_source_undo_clipboard_and_saved_pixels() {
     ));
     assert_eq!(**bitmap.pixels().unwrap(), source);
     let framed = session.document.render().unwrap();
-    if let Some(dir) = std::env::var_os("CLIPCRAFT_IMAGE_FRAME_EVIDENCE_DIR") {
+    if let Some(dir) = std::env::var_os("CLIPDESIGNER_IMAGE_FRAME_EVIDENCE_DIR") {
         let dir = std::path::PathBuf::from(dir);
         std::fs::create_dir_all(&dir).unwrap();
         session.save(&dir.join("image-frame.capture.json")).unwrap();

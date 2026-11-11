@@ -317,7 +317,7 @@ fn approved_properties_layouts_render_with_adaptive_groups_without_editing_docum
             before,
             "{name} passive layout changed document"
         );
-        if let Some(folder) = std::env::var_os("CLIPCRAFT_VIDEO_EDITOR_EVIDENCE") {
+        if let Some(folder) = std::env::var_os("CLIPDESIGNER_VIDEO_EDITOR_EVIDENCE") {
             dump_meshes(&ctx, &folder.to_string_lossy(), name, first, third);
         }
     }
@@ -376,7 +376,7 @@ fn live_sources_keep_pixels_shared_apply_geometry_immediately_and_coalesce_seek_
     }
     assert_eq!(requests.take(), Some(99));
     assert_eq!(requests.take(), None);
-    if let Some(folder) = std::env::var_os("CLIPCRAFT_VIDEO_EDITOR_EVIDENCE") {
+    if let Some(folder) = std::env::var_os("CLIPDESIGNER_VIDEO_EDITOR_EVIDENCE") {
         std::fs::create_dir_all(&folder).unwrap();
         std::fs::write(
             PathBuf::from(folder).join("live-preview-performance.json"),

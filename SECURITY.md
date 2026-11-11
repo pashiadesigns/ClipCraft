@@ -1,6 +1,6 @@
 # Security
 
-ClipCraft is beta software. The latest published beta is the active maintenance
+ClipDesigner is beta software. The latest published beta is the active maintenance
 target; there is no security-support SLA or guarantee of vulnerability-free behavior.
 
 Use this repository's **Security → Report a vulnerability** private reporting form.

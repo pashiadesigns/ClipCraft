@@ -142,7 +142,7 @@ impl Preview {
                         lpfnWndProc: Some(procedure),
                         hInstance: GetModuleHandleW(null()),
                         hCursor: LoadCursorW(null_mut(), IDC_ARROW),
-                        lpszClassName: w!("ClipCraftScrollPreview"),
+                        lpszClassName: w!("ClipDesignerScrollPreview"),
                         ..Default::default()
                     };
                     let a = RegisterClassW(&c);
@@ -174,7 +174,7 @@ impl Preview {
             let inset = (12. * state.dpi) as i32;
             let hwnd = CreateWindowExW(
                 WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_LAYERED,
-                w!("ClipCraftScrollPreview"),
+                w!("ClipDesignerScrollPreview"),
                 w!("Preview · drag this header to move"),
                 WS_POPUP,
                 work.right - width - inset,
@@ -402,7 +402,7 @@ mod tests {
                     if expanded {
                         assert_eq!(size[0], source.width() + (4. * preview.state.dpi) as u32);
                     }
-                    if let Some(folder) = std::env::var_os("CLIPCRAFT_VIDEO_EVIDENCE_DIR") {
+                    if let Some(folder) = std::env::var_os("CLIPDESIGNER_VIDEO_EVIDENCE_DIR") {
                         let folder = std::path::PathBuf::from(folder);
                         std::fs::create_dir_all(&folder).unwrap();
                         pixels

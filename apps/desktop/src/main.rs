@@ -49,6 +49,7 @@ mod image_frame;
 mod image_properties;
 mod image_transform;
 mod launch;
+mod legacy_name;
 mod lifecycle;
 mod line_properties;
 mod mixed_selection;
@@ -125,7 +126,7 @@ fn main() -> std::process::ExitCode {
         }
         Err(_) => {
             startup::failure(
-                "An unexpected error interrupted ClipCraft. See the startup log for the last completed stage and error.",
+                "An unexpected error interrupted ClipDesigner. See the startup log for the last completed stage and error.",
             );
             std::process::ExitCode::FAILURE
         }
@@ -140,7 +141,7 @@ fn run() -> eframe::Result {
         Ok(None) => return Ok(()),
         Err(message) => {
             rfd::MessageDialog::new()
-                .set_title("ClipCraft")
+                .set_title("ClipDesigner")
                 .set_description(message)
                 .show();
             return Ok(());
@@ -158,7 +159,7 @@ fn run() -> eframe::Result {
     };
     startup::note("Starting window and graphics");
     eframe::run_native(
-        "ClipCraft",
+        "ClipDesigner",
         options,
         Box::new(|cc| Ok(Box::new(Editor::new(cc)))),
     )
@@ -265,7 +266,7 @@ enum FileAction {
 impl Editor {
     fn window_title(&self) -> String {
         format!(
-            "{}{} — ClipCraft",
+            "{}{} — ClipDesigner",
             if self.is_modified() && !self.library_saved() {
                 "*"
             } else {
@@ -559,7 +560,7 @@ impl Editor {
         if let Some(path) = rfd::FileDialog::new()
             .set_directory(self.dialog_directory())
             .add_filter(
-                "Images, videos and ClipCraft projects",
+                "Images, videos and ClipDesigner projects",
                 &["iclip", "vclip", "mp4", "png", "jpg", "jpeg"],
             )
             .add_filter("Image clips", &["iclip"])
@@ -656,7 +657,7 @@ impl Editor {
                             })
                             .unwrap_or_else(|| "capture.iclip".into()),
                     )
-                    .add_filter("ClipCraft image clip", &["iclip"]);
+                    .add_filter("ClipDesigner image clip", &["iclip"]);
                 dialog
                     .save_file()
                     .map(|p| capture_core::project_file::image_path(&p))

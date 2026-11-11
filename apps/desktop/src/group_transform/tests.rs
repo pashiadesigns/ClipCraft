@@ -161,7 +161,7 @@ fn group_corner_and_rotation_nodes_preview_commit_and_undo_once() {
         frame(&ctx, &mut e, vec![button(to, false)]);
         assert!(e.group_drag.is_none());
         assert_ne!(serde_json::to_vec(&e.session.document).unwrap(), before);
-        if let Ok(root) = std::env::var("CLIPCRAFT_GROUP_UI_DIR") {
+        if let Ok(root) = std::env::var("CLIPDESIGNER_GROUP_UI_DIR") {
             let v = egui::Context::default();
             crate::shell::configure(&v);
             let mut demo = editor(&v);

@@ -4,7 +4,7 @@ use super::*;
 #[test]
 #[ignore = "Opt-in synthetic OCR accuracy comparison; no desktop or clipboard"]
 fn synthetic_ocr_resolution_profile() {
-    let Some(dir) = std::env::var_os("CLIPCRAFT_OCR_ACCURACY_DIR") else {
+    let Some(dir) = std::env::var_os("CLIPDESIGNER_OCR_ACCURACY_DIR") else {
         return;
     };
     let dir = std::path::PathBuf::from(dir);
@@ -54,7 +54,7 @@ fn ocr_pixels_composite_transparency_and_resize_without_mutating_original() {
 #[ignore = "Opt-in synthetic small-font Windows OCR regression; no desktop or clipboard"]
 fn native_ocr_small_ui_text_light_and_dark() {
     let dir = std::path::PathBuf::from(
-        std::env::var_os("CLIPCRAFT_OCR_ACCURACY_DIR").expect("Set fixture directory"),
+        std::env::var_os("CLIPDESIGNER_OCR_ACCURACY_DIR").expect("Set fixture directory"),
     );
     let expected = std::fs::read_to_string(dir.join("expected.txt")).unwrap();
     let normalize = |text: &str| text.split_whitespace().collect::<Vec<_>>().join(" ");
@@ -77,7 +77,7 @@ fn result_modal_preserves_lines_and_copies_text_without_canvas_clipboard_or_docu
     let before = serde_json::to_vec(&e.session.document).unwrap();
     e.ocr.present(
         Ok(Recognized {
-            text: "ClipCraft local text\nSecond line 123".into(),
+            text: "ClipDesigner local text\nSecond line 123".into(),
             language: "en-US".into(),
             scaled: false,
             words: vec![],
@@ -103,7 +103,7 @@ fn result_modal_preserves_lines_and_copies_text_without_canvas_clipboard_or_docu
     };
     let first = render(&mut e, vec![]);
     let second = render(&mut e, vec![]);
-    if let Ok(dir) = std::env::var("CLIPCRAFT_HEADLESS_OCR_DIR") {
+    if let Ok(dir) = std::env::var("CLIPDESIGNER_HEADLESS_OCR_DIR") {
         dump_meshes(&ctx, &dir, "result", first, second);
     }
     let rect = ctx.data(|d| {
@@ -121,7 +121,7 @@ fn result_modal_preserves_lines_and_copies_text_without_canvas_clipboard_or_docu
         vec![egui::Event::PointerMoved(rect.center()), pointer(true)],
     );
     let copied = render(&mut e, vec![pointer(false)]);
-    assert!(copied.0.platform_output.commands.iter().any(|c|matches!(c,egui::OutputCommand::CopyText(t) if t=="ClipCraft local text\nSecond line 123")));
+    assert!(copied.0.platform_output.commands.iter().any(|c|matches!(c,egui::OutputCommand::CopyText(t) if t=="ClipDesigner local text\nSecond line 123")));
     assert_eq!(serde_json::to_vec(&e.session.document).unwrap(), before);
     e.ocr
         .present(Err("Injected recognition failure".into()), false, true);
@@ -166,7 +166,7 @@ fn native_ocr_recognizes_generated_fixture() {
         mirror_x: false,
         callout: None,
         text: Some(TextStyle {
-            content: "ClipCraft local text\nSecond line 123".into(),
+            content: "ClipDesigner local text\nSecond line 123".into(),
             size_points: 48.,
             bold: true,
             ..Default::default()
@@ -186,12 +186,12 @@ fn native_ocr_recognizes_generated_fixture() {
         "estimated color: {color:?}"
     );
     let text = result.text.to_lowercase();
-    assert!(text.contains("clipcraft local text"), "{}", result.text);
+    assert!(text.contains("clipdesigner local text"), "{}", result.text);
     assert!(text.contains("second line 123"), "{}", result.text);
     assert!(result.text.contains('\n'));
     let empty = recognize(&image::RgbaImage::from_pixel(80, 60, image::Rgba([255; 4]))).unwrap();
     assert!(empty.text.trim().is_empty());
-    if let Some(path) = std::env::var_os("CLIPCRAFT_OCR_EVIDENCE_DIR") {
+    if let Some(path) = std::env::var_os("CLIPDESIGNER_OCR_EVIDENCE_DIR") {
         let path = std::path::PathBuf::from(path);
         std::fs::create_dir_all(&path).unwrap();
         image.save(path.join("source.png")).unwrap();
@@ -280,7 +280,7 @@ fn rich_result_toggle_copy_error_and_close_use_real_controls_without_os_clipboar
         };
         let first = render(&mut state, vec![], &mut copied, fail);
         let second = render(&mut state, vec![], &mut copied, fail);
-        if let Ok(dir) = std::env::var("CLIPCRAFT_HEADLESS_OCR_DIR") {
+        if let Ok(dir) = std::env::var("CLIPDESIGNER_HEADLESS_OCR_DIR") {
             dump_meshes(&ctx, &dir, &format!("formatted-{}", size.x), first, second);
         }
         let click = |state: &mut State, id, copied: &mut Vec<(String, String)>, fail| {

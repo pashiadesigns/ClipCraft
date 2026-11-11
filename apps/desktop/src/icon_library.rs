@@ -1038,7 +1038,7 @@ mod tests {
         let first = frame(&mut e);
         let output = frame(&mut e);
         assert!(crate::color_widgets::tests::text_rect(&output.shapes, "Blue badge").is_some());
-        if let Ok(dir) = std::env::var("CLIPCRAFT_HEADLESS_BETA_DIR") {
+        if let Ok(dir) = std::env::var("CLIPDESIGNER_HEADLESS_BETA_DIR") {
             dump_meshes(&ctx, &dir, "Icons", first, output);
         }
         e.icon_library.query.clear();

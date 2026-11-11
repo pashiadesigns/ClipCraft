@@ -3,7 +3,7 @@ use super::*;
 
 /// Window chrome and read-outs that are not features with a Help topic.
 const NO_TOPIC: [&str; 11] = [
-    "ClipCraft",
+    "ClipDesigner",
     "Close window",
     "Maximize window",
     "Minimize window",
@@ -13,7 +13,7 @@ const NO_TOPIC: [&str; 11] = [
     "Minus",
     "Close",
     "960 × 540",
-    "Untitled — ClipCraft",
+    "Untitled — ClipDesigner",
 ];
 fn assert_controls_have_topics() {
     let missing: Vec<String> = crate::tips::tests::NAMED

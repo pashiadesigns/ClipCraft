@@ -5,7 +5,7 @@ use crate::property_layout::tests::{PaintedOutput, dump_meshes};
 
 #[test]
 fn fresh_profile_has_no_projects_or_personal_preferences() {
-    if std::env::var_os("CLIPCRAFT_FRESH_PROFILE_PROBE").is_some() {
+    if std::env::var_os("CLIPDESIGNER_FRESH_PROFILE_PROBE").is_some() {
         let history = crate::history::HistoryPanel::new();
         let prefs = crate::quick_controls::QuickControls::new();
         let presets = crate::presets::Presets::new();
@@ -16,8 +16,8 @@ fn fresh_profile_has_no_projects_or_personal_preferences() {
             prefs.startup_window(),
             capture_core::quick_preferences::StartupWindow::Editor
         );
-        let base =
-            std::path::PathBuf::from(std::env::var_os("LOCALAPPDATA").unwrap()).join("ClipCraft");
+        let base = std::path::PathBuf::from(std::env::var_os("LOCALAPPDATA").unwrap())
+            .join("ClipDesigner");
         assert_eq!(
             history.root().unwrap(),
             base.join("history-v1").canonicalize().unwrap()
@@ -44,8 +44,8 @@ fn fresh_profile_has_no_projects_or_personal_preferences() {
     let root = tempfile::tempdir().unwrap();
     let output=std::process::Command::new(std::env::current_exe().unwrap())
         .args(["--exact","video_editor::public_beta_tests::fresh_profile_has_no_projects_or_personal_preferences","--nocapture"])
-        .env("LOCALAPPDATA",root.path()).env("CLIPCRAFT_FRESH_PROFILE_PROBE","1")
-        .env_remove("CLIPCRAFT_HISTORY_DIR").env_remove("CLIPCRAFT_STYLE_DIR").env_remove("CLIPCRAFT_PREFERENCES_DIR")
+        .env("LOCALAPPDATA",root.path()).env("CLIPDESIGNER_FRESH_PROFILE_PROBE","1")
+        .env_remove("CLIPDESIGNER_HISTORY_DIR").env_remove("CLIPDESIGNER_STYLE_DIR").env_remove("CLIPDESIGNER_PREFERENCES_DIR")
         .output().unwrap();
     assert!(
         output.status.success(),
@@ -345,7 +345,7 @@ fn paint_window(
 
 #[test]
 fn public_image_and_video_workflows_use_synthetic_content() {
-    let Ok(root) = std::env::var("CLIPCRAFT_PUBLIC_UI") else {
+    let Ok(root) = std::env::var("CLIPDESIGNER_PUBLIC_UI") else {
         return;
     };
     for video in [false, true] {
@@ -367,7 +367,7 @@ fn public_image_and_video_workflows_use_synthetic_content() {
 /// generated demonstration content in an isolated Library.
 #[test]
 fn public_library_capture_and_privacy_use_synthetic_content() {
-    let Ok(root) = std::env::var("CLIPCRAFT_PUBLIC_UI") else {
+    let Ok(root) = std::env::var("CLIPDESIGNER_PUBLIC_UI") else {
         return;
     };
     // Library: generated captures in folders, with tags, sources and a pin.

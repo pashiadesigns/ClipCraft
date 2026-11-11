@@ -1,4 +1,4 @@
-"""Turns the headless Help scenes into the pictures shipped with ClipCraft.
+"""Turns the headless Help scenes into the pictures shipped with ClipDesigner.
 
 Input is the folder written by the help gallery test: one subfolder per
 picture with egui meshes, its texture atlases and spec.json (crop rectangle

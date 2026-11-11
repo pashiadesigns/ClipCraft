@@ -3,7 +3,7 @@
 //! Stroke/isolated glyph knockout adapted from DesignCraft paint_glyphs at
 //! ea08e4c2ba290f092063c99d70c4bdd5afc45887 (MIT).
 //! Copyright (c) 2026 ArtCraft Team and the DesignCraft contributors.
-//! See licenses/designcraft. ClipCraft changes: shared fitted glyph geometry,
+//! See licenses/designcraft. ClipDesigner changes: shared fitted glyph geometry,
 //! decoration union, caller-applied alpha, bounded widths and content clipping.
 use crate::{Annotation, Error, Result};
 use serde::{Deserialize, Serialize};

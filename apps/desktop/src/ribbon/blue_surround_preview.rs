@@ -5,7 +5,7 @@ use crate::property_layout::tests::{PaintedOutput, dump_meshes};
 #[test]
 #[ignore = "Optional headless design preview; no desktop access"]
 fn render_blue_surround_design_preview() {
-    let root = std::env::var("CLIPCRAFT_RIBBON_DESIGN_DIR").expect("Preview output directory");
+    let root = std::env::var("CLIPDESIGNER_RIBBON_DESIGN_DIR").expect("Preview output directory");
     for (connected, tab, name) in [
         (false, RibbonTab::Insert, "Current-Home"),
         (true, RibbonTab::Insert, "Proposed-Home"),

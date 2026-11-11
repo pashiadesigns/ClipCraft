@@ -162,7 +162,7 @@ fn guide_interaction_profile() {
     }
     let report = serde_json::to_string_pretty(&rows).unwrap();
     println!("{report}");
-    if let Ok(path) = std::env::var("CLIPCRAFT_GUIDE_PROFILE") {
+    if let Ok(path) = std::env::var("CLIPDESIGNER_GUIDE_PROFILE") {
         std::fs::write(path, report).unwrap();
     }
 }

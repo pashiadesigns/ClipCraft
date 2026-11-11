@@ -284,7 +284,7 @@ fn mixed_print_sizes_furniture_and_bleed_have_matching_raster_and_vector_outputs
         let pixels = p.print_pixels(doc).unwrap();
         assert_eq!(pixels.width(), (p.media_size[0] * 120. / 72.).ceil() as u32);
     }
-    if let Ok(dir) = std::env::var("CLIPCRAFT_PAGE_SETUP_FIXTURES") {
+    if let Ok(dir) = std::env::var("CLIPDESIGNER_PAGE_SETUP_FIXTURES") {
         let dir = std::path::Path::new(&dir);
         std::fs::create_dir_all(dir).unwrap();
         doc.save(&dir.join("page-setup-mixed.capture.json"))

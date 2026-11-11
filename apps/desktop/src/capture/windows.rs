@@ -80,13 +80,13 @@ fn hide_for_capture(owner: HWND) -> Result<(), String> {
         );
         if status < 0 {
             return Err(format!(
-                "Could not hide ClipCraft without animation ({status:#x}). Try the capture again."
+                "Could not hide ClipDesigner without animation ({status:#x}). Try the capture again."
             ));
         }
         ShowWindow(owner, SW_HIDE);
         if IsWindowVisible(owner) != 0 {
             return Err(
-                "ClipCraft is still visible. Close any open dialog and try the capture again."
+                "ClipDesigner is still visible. Close any open dialog and try the capture again."
                     .into(),
             );
         }
@@ -559,7 +559,8 @@ unsafe extern "system" fn window_proc(
                     return 0;
                 }
                 #[cfg(debug_assertions)]
-                if message != WM_MOUSEMOVE && std::env::var_os("CLIPCRAFT_CAPTURE_TRACE").is_some()
+                if message != WM_MOUSEMOVE
+                    && std::env::var_os("CLIPDESIGNER_CAPTURE_TRACE").is_some()
                 {
                     eprintln!(
                         "capture-input message={message} point={},{} origin={:?} size={:?}",
@@ -739,7 +740,7 @@ pub(super) fn select_image(
                     lpfnWndProc: Some(window_proc),
                     hInstance: GetModuleHandleW(null()),
                     hCursor: LoadCursorW(null_mut(), IDC_CROSS),
-                    lpszClassName: w!("ClipCraftRegionPicker"),
+                    lpszClassName: w!("ClipDesignerRegionPicker"),
                     ..Default::default()
                 };
                 let atom = RegisterClassW(&class);
@@ -779,14 +780,14 @@ pub(super) fn select_image(
             // scaling in accessibility/window navigation and mixed-DPI systems.
             // All overlays share the frozen desktop and one selection state.
             let title: Vec<u16> = format!(
-                "ClipCraft — Select region ({}, {})\0",
+                "ClipDesigner — Select region ({}, {})\0",
                 bounds.left, bounds.top
             )
             .encode_utf16()
             .collect();
             let hwnd = CreateWindowExW(
                 WS_EX_TOPMOST,
-                w!("ClipCraftRegionPicker"),
+                w!("ClipDesignerRegionPicker"),
                 title.as_ptr(),
                 WS_POPUP,
                 bounds.left,
@@ -1080,7 +1081,7 @@ mod hide_tests {
             let window = CreateWindowExW(
                 0,
                 w!("STATIC"),
-                w!("ClipCraft capture visibility fixture"),
+                w!("ClipDesigner capture visibility fixture"),
                 WS_OVERLAPPEDWINDOW,
                 0,
                 0,

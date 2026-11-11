@@ -316,7 +316,7 @@ mod tests {
             }
             assert!((94_000..99_000).contains(&samples), "{samples}");
             assert!((9_000..16_000).contains(&peak), "{peak}");
-            if let Some(root) = std::env::var_os("CLIPCRAFT_VIDEO_EVIDENCE_DIR") {
+            if let Some(root) = std::env::var_os("CLIPDESIGNER_VIDEO_EVIDENCE_DIR") {
                 let root = std::path::PathBuf::from(root);
                 std::fs::create_dir_all(&root).unwrap();
                 std::fs::copy(&path, root.join("synthetic-av.mp4")).unwrap();

@@ -152,7 +152,7 @@ mod tests {
             s.save(&path).unwrap();
             assert_eq!(Document::load(&path).unwrap().render().unwrap(), actual);
             if action == ImageTransform::FlipHorizontal
-                && let Ok(dir) = std::env::var("CLIPCRAFT_PATTERN_FIXTURES")
+                && let Ok(dir) = std::env::var("CLIPDESIGNER_PATTERN_FIXTURES")
             {
                 s.document
                     .save(&std::path::Path::new(&dir).join("editable-transforms.capture.json"))

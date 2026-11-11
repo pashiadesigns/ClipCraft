@@ -143,7 +143,7 @@ fn page_controls_review_shell_reserves_scrollbar_rails_in_restored_and_wide_wind
         })
         .unwrap();
         if width == 960.
-            && let Ok(root) = std::env::var("CLIPCRAFT_FRAME_PAGES_FIXTURES")
+            && let Ok(root) = std::env::var("CLIPDESIGNER_FRAME_PAGES_FIXTURES")
         {
             std::fs::create_dir_all(&root).unwrap();
             d.save(&std::path::Path::new(&root).join("review-guide.capture.json"))
@@ -209,7 +209,7 @@ fn page_controls_review_shell_reserves_scrollbar_rails_in_restored_and_wide_wind
                 );
             }
         }
-        if let Ok(root) = std::env::var("CLIPCRAFT_PAGE_CONTROLS_UI") {
+        if let Ok(root) = std::env::var("CLIPDESIGNER_PAGE_CONTROLS_UI") {
             dump_meshes(&ctx, &root, &format!("shell-{width:.0}"), first, output);
         }
     }
@@ -218,7 +218,7 @@ fn page_controls_review_shell_reserves_scrollbar_rails_in_restored_and_wide_wind
 #[test]
 #[ignore = "Production UI image export; synthetic content and no desktop access"]
 fn website_ui_previews() {
-    let root = std::env::var("CLIPCRAFT_WEBSITE_UI").expect("Set output directory");
+    let root = std::env::var("CLIPDESIGNER_WEBSITE_UI").expect("Set output directory");
     for scene in ["editor", "icons", "export"] {
         let ctx = egui::Context::default();
         crate::shell::configure(&ctx);
@@ -412,7 +412,7 @@ fn library_tab_reclaims_ribbon_space_with_connected_full_workspace_border() {
                 |s| matches!(&s.shape, egui::Shape::Text(t) if t.galley.job.text == "Clipboard")
             )
         );
-        if let Ok(root) = std::env::var("CLIPCRAFT_GUIDE_FIX_UI") {
+        if let Ok(root) = std::env::var("CLIPDESIGNER_GUIDE_FIX_UI") {
             dump_meshes(&ctx, &root, &format!("library-{width:.0}"), first, output);
         }
     }
@@ -876,7 +876,7 @@ fn headless_full_workspace_ribbon_fixtures() {
             );
             assert!(apply.top() > e.view.current_transform().unwrap().viewport.bottom());
         }
-        if let Ok(root) = std::env::var("CLIPCRAFT_HEADLESS_RIBBON_DIR") {
+        if let Ok(root) = std::env::var("CLIPDESIGNER_HEADLESS_RIBBON_DIR") {
             dump_meshes(&ctx, &root, name, first, output);
         }
         assert_eq!(e.session.document.annotations, fixture.annotations);

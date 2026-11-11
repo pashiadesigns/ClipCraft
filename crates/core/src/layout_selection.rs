@@ -1,7 +1,7 @@
 //! Bounds alignment/distribution adapted from DesignCraft engine/src/cmd/object.rs.
 //! Copyright (c) 2026 ArtCraft Team and the DesignCraft contributors. MIT.
 //! Upstream ea08e4c2ba290f092063c99d70c4bdd5afc45887; licenses/designcraft/LICENSE-MIT.
-//! Changes: ClipCraft annotations and atomic commands; explicit enum; stable
+//! Changes: ClipDesigner annotations and atomic commands; explicit enum; stable
 //! center ordering; combined centering; transparent canvas growth for first-object
 //! alignment; no page/spread model.
 use crate::{Annotation, Document, Error, Result};

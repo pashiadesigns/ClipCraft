@@ -364,7 +364,7 @@ mod tests {
                 };
                 let first = frame(&mut colors);
                 let second = frame(&mut colors);
-                if let Ok(dir) = std::env::var("CLIPCRAFT_COLOR_PREVIEW_DIR") {
+                if let Ok(dir) = std::env::var("CLIPDESIGNER_COLOR_PREVIEW_DIR") {
                     dump_meshes(
                         &ctx,
                         &dir,

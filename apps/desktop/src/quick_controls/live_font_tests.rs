@@ -212,7 +212,7 @@ fn ribbon_font_color_live_palette_changes_every_selected_kind_and_undoes_once() 
     let original = e.session.document.clone();
     let first = frame(&ctx, &mut e, vec![]);
     let second = frame(&ctx, &mut e, vec![]);
-    if let Ok(root) = std::env::var("CLIPCRAFT_HEADLESS_FONT_DIR") {
+    if let Ok(root) = std::env::var("CLIPDESIGNER_HEADLESS_FONT_DIR") {
         crate::property_layout::tests::dump_meshes(&ctx, &root, "FontControls", first, second);
     }
     let swatch = ctx.data(|d| {
@@ -261,7 +261,7 @@ fn ribbon_font_color_live_palette_changes_every_selected_kind_and_undoes_once() 
         reopened.render().unwrap(),
         e.session.document.render().unwrap()
     );
-    if let Ok(root) = std::env::var("CLIPCRAFT_HEADLESS_FONT_DIR") {
+    if let Ok(root) = std::env::var("CLIPDESIGNER_HEADLESS_FONT_DIR") {
         let root = std::path::Path::new(&root);
         original.export_png(&root.join("original.png")).unwrap();
         reopened

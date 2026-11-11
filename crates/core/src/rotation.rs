@@ -2,7 +2,7 @@
 //! Gesture delta/Shift snapping and corner zones adapt DesignCraft select.rs,
 //! MIT, revision ea08e4c2ba290f092063c99d70c4bdd5afc45887.
 //! Copyright (c) 2026 ArtCraft Team and the DesignCraft contributors.
-//! ClipCraft adds validated coordinates, inverse mapping, continuous angle
+//! ClipDesigner adds validated coordinates, inverse mapping, continuous angle
 //! unwrapping and a fixed-screen-distance dedicated handle.
 use crate::{Error, Result};
 

@@ -96,7 +96,7 @@ fn typography_metrics_highlight_clipping_render_and_persistence_match() {
     evidence.promote_features();
     assert_eq!(evidence.version, crate::MAX_PROJECT_VERSION);
     evidence.validate().unwrap();
-    if let Ok(root) = std::env::var("CLIPCRAFT_TYPOGRAPHY_DIR") {
+    if let Ok(root) = std::env::var("CLIPDESIGNER_TYPOGRAPHY_DIR") {
         let root = std::path::Path::new(&root);
         std::fs::create_dir_all(root).unwrap();
         evidence

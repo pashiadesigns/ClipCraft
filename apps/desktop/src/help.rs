@@ -1,4 +1,4 @@
-//! ClipCraft Help (HELP-001, approved bi-proposal 4): articles shipped with
+//! ClipDesigner Help (HELP-001, approved bi-proposal 4): articles shipped with
 //! the app, a local search that tolerates typos and everyday words, and F1
 //! from any control with an article. Tooltips and Help share control names,
 //! so a tooltip can say when F1 opens more.
@@ -17,7 +17,7 @@ pub(crate) enum Block {
     /// A numbered step: its instruction, an optional icon and picture, and the
     /// short title shown in the step list.
     Step(String, Option<String>, Option<String>, String),
-    /// An illustration drawn by ClipCraft itself, with a caption.
+    /// An illustration drawn by ClipDesigner itself, with a caption.
     Art(String, String),
     /// Two illustrations side by side, with a caption.
     Pair(String, String, String),
@@ -167,7 +167,7 @@ fn parse(source: &str) -> Vec<Article> {
     out
 }
 
-/// Everyday words people search with, and the ClipCraft words they mean.
+/// Everyday words people search with, and the ClipDesigner words they mean.
 const SYNONYMS: &[(&str, &[&str])] = &[
     ("hide", &["obfuscate", "redact", "blur", "pixelate"]),
     ("censor", &["redact", "blur", "pixelate"]),

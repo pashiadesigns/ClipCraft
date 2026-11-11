@@ -118,7 +118,7 @@ fn shared_center_transform_keeps_contents_spacing_and_source_with_one_undo() {
         Document::load(&path).unwrap().render().unwrap(),
         s.document.render().unwrap()
     );
-    if let Ok(root) = std::env::var("CLIPCRAFT_GROUP_DIR") {
+    if let Ok(root) = std::env::var("CLIPDESIGNER_GROUP_DIR") {
         let root = std::path::Path::new(&root);
         std::fs::create_dir_all(root).unwrap();
         s.document.save(&root.join("groups.capture.json")).unwrap();

@@ -158,7 +158,7 @@ fn pointer_selection_ranges_marquee_context_and_double_open() {
         );
     }
     assert_eq!(e.history.library.selected.len(), 2);
-    if let Ok(dir) = std::env::var("CLIPCRAFT_HEADLESS_LIBRARY_DIR") {
+    if let Ok(dir) = std::env::var("CLIPDESIGNER_HEADLESS_LIBRARY_DIR") {
         first.0.textures_delta.clear();
         for (id, patches) in deltas.borrow().iter() {
             first
@@ -382,7 +382,7 @@ fn library_sidebar_stays_open_with_headings_chips_and_folder_drop_feedback() {
         assert!(texts.iter().any(|t| t == row), "{row} missing");
     }
     assert!(texts.iter().any(|t| t == "All captures"));
-    if let Ok(path) = std::env::var("CLIPCRAFT_RICH_UI_DIR") {
+    if let Ok(path) = std::env::var("CLIPDESIGNER_RICH_UI_DIR") {
         dump_meshes(&ctx, &path, "LibraryExpanded", first, out);
     }
     let out = run(&mut e, vec![]);

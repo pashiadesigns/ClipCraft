@@ -776,7 +776,7 @@ pub(crate) mod tests {
                 assert_eq!(count, if opaque { 2 } else { 3 });
                 assert_eq!(color, original);
                 let tab = text_rect(&output.shapes, "Advanced").unwrap().center();
-                if let Ok(root) = std::env::var("CLIPCRAFT_HEADLESS_PALETTE_DIR") {
+                if let Ok(root) = std::env::var("CLIPDESIGNER_HEADLESS_PALETTE_DIR") {
                     dump_meshes(
                         &ctx,
                         &root,
@@ -820,7 +820,7 @@ pub(crate) mod tests {
                     );
                 }
                 assert_eq!(color, original, "switching tabs must not change color");
-                if let Ok(root) = std::env::var("CLIPCRAFT_HEADLESS_PALETTE_DIR") {
+                if let Ok(root) = std::env::var("CLIPDESIGNER_HEADLESS_PALETTE_DIR") {
                     dump_meshes(
                         &ctx,
                         &root,

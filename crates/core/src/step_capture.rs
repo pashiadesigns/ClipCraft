@@ -520,7 +520,7 @@ mod tests {
                 .0,
             [220, 20, 40, 255]
         );
-        if let Some(root) = std::env::var_os("CLIPCRAFT_STEP_FIXTURE_DIR") {
+        if let Some(root) = std::env::var_os("CLIPDESIGNER_STEP_FIXTURE_DIR") {
             let root = std::path::PathBuf::from(root);
             std::fs::create_dir_all(&root).unwrap();
             document.save(&root.join("guide.capture.json")).unwrap();
