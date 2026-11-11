@@ -10,16 +10,16 @@ serde.workspace = true
 serde_json.workspace = true
 image.workspace = true
 thiserror.workspace = true
-gif = "0.13"
-color_quant = "1.1"
-base64 = "0.22"
+gif = "0.14"
+color_quant = "2.0"
+base64 = "0.23"
 flate2 = "1"
 ttf-parser = "0.25"
-imageproc = { version = "0.25", default-features = false }
+imageproc = { version = "0.27", default-features = false }
 tempfile = "3"
 ab_glyph = "0.2.32"
 epaint_default_fonts = { version = "0.37", default-features = false }
-harfrust = "0.12"
+harfrust = "0.15"
 unicode-segmentation = "1.13"
-vello_cpu = { version = "0.2.0", default-features = false, features = ["std", "u8_pipeline"] }
+vello_cpu = { version = "0.3.0", default-features = false, features = ["std", "u8_pipeline"] }
 resvg = "0.49.0"
