@@ -87,6 +87,10 @@ impl Editor {
             header.right_center() - egui::vec2(16.0, 0.0),
             egui::vec2(24.0, 24.0),
         );
+        // BY11: Manage presets on the header row, left of the +.
+        if crate::manage_presets::header_link(ui, header, 36.0) {
+            self.manage_presets_from(ui.ctx());
+        }
         self.preset_save_button(ui, tool, Some(rect))
     }
     /// The "+" that saves the selected object's formatting as a preset. The
@@ -410,7 +414,6 @@ impl Editor {
             .unwrap_or(false);
         let mut remember = None;
         let mut save = None;
-        let mut manage = false;
         egui::ScrollArea::vertical()
             .id_salt("arrow_presets")
             .max_height(214.0)
@@ -418,21 +421,7 @@ impl Editor {
                 let saved_columns = crate::style_tile::columns(ui.available_width(), false);
                 // Approved option B: "Save current" always ends the saved presets.
                 {
-                    // The arrow pane has no room for another line (a taller
-                    // gallery brings in its scrollbar), so Manage presets
-                    // sits at the right end of the heading row.
-                    let heading = ui.small("Your styles").rect;
-                    let right = ui.max_rect().right();
-                    let link = egui::Rect::from_min_max(
-                        egui::pos2((right - 110.0).max(heading.right() + 6.0), heading.top()),
-                        egui::pos2(right, heading.bottom()),
-                    );
-                    ui.scope_builder(
-                        egui::UiBuilder::new()
-                            .max_rect(link)
-                            .layout(egui::Layout::right_to_left(egui::Align::Center)),
-                        |ui| manage = crate::manage_presets::manage_link(ui),
-                    );
+                    ui.small("Your styles");
                     egui::Grid::new("saved_arrow_styles")
                         .spacing([5.0, 5.0])
                         .show(ui, |ui| {
@@ -579,10 +568,6 @@ impl Editor {
         if let Some((key, name)) = hide {
             self.hide_preset(key, &name);
         }
-        if manage {
-            self.presets_ctx = Some(ui.ctx().clone());
-            self.open_manage_presets();
-        }
         if let Some(save) = save {
             self.preset_save_popup(ui, &save, Some(Kind::Arrow));
         }
@@ -642,7 +627,7 @@ impl Editor {
 fn arrow_tile(ui: &mut egui::Ui, arrow: &ArrowStyle, label: &str, active: bool) -> egui::Response {
     crate::style_tile::tile(ui, &arrow_object_style(arrow), label, active)
 }
-fn arrow_object_style(arrow: &ArrowStyle) -> capture_core::object_styles::ObjectStyle {
+pub(crate) fn arrow_object_style(arrow: &ArrowStyle) -> capture_core::object_styles::ObjectStyle {
     let mut style = capture_core::object_styles::presets(Kind::Arrow).remove(0);
     style.name = arrow.name.clone();
     style.color = arrow.color;

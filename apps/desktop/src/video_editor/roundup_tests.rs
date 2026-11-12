@@ -247,6 +247,21 @@ fn image_properties_contexts_fit_and_render_without_changing_objects() {
                 bounds.width() <= width + 0.1,
                 "{kind:?} at {width}: {bounds:?}"
             );
+            // BY11: Manage presets sits on the Presets header row, at its
+            // right end, inside the pane. (Text opens on its Text tab.)
+            if !matches!(kind, crate::Kind::Image | crate::Kind::Text) {
+                let (row, link): (egui::Rect, egui::Rect) = ctx
+                    .data(|d| d.get_temp(egui::Id::unique("manage-presets-link")))
+                    .unwrap_or_else(|| panic!("{kind:?}: no Manage presets link"));
+                assert!(
+                    link.right() <= width + 0.1 && (link.right() - row.right()).abs() < 1.,
+                    "{kind:?} at {width}: {link:?} in {row:?}"
+                );
+                assert!(
+                    link.top() >= row.top() - 0.1 && link.bottom() <= row.bottom() + 0.1,
+                    "{kind:?}: {link:?} off the header row {row:?}"
+                );
+            }
         }
     }
 }

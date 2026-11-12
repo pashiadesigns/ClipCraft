@@ -42,145 +42,211 @@ enum Stage {
     Rename(String),
 }
 
-/// The preset menu on `response` (a tile, card or row).
+/// Width of the preset menu: compact, like the app's other short menus (BY10:
+/// "way too large").
+pub(crate) const WIDTH: f32 = 176.;
+const ROW: f32 = 24.;
+
+/// One compact menu row.
+fn row(ui: &mut egui::Ui, label: &str, enabled: bool, danger: bool) -> egui::Response {
+    let (rect, r) = ui.allocate_exact_size(
+        egui::vec2(WIDTH, ROW),
+        if enabled {
+            egui::Sense::click()
+        } else {
+            egui::Sense::hover()
+        },
+    );
+    r.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, enabled, label));
+    #[cfg(test)]
+    ui.ctx()
+        .data_mut(|d| d.insert_temp(egui::Id::unique(("preset-menu-row", label)), rect));
+    let p = ui.painter();
+    let hot = enabled && r.hovered();
+    if hot {
+        p.rect_filled(
+            rect,
+            4.,
+            if danger {
+                egui::Color32::from_rgb(142, 58, 52)
+            } else {
+                crate::shell::ACCENT
+            },
+        );
+    }
+    let text = if !enabled {
+        egui::Color32::from_gray(124)
+    } else if danger && !hot {
+        crate::guided::RED
+    } else {
+        egui::Color32::from_rgb(232, 238, 240)
+    };
+    p.text(
+        rect.left_center() + egui::vec2(10., 0.),
+        egui::Align2::LEFT_CENTER,
+        label,
+        egui::FontId::proportional(13.),
+        text,
+    );
+    r
+}
+
+/// The preset menu on `response` (a tile, card or row). It stays open while
+/// you rename or answer Delete's question; any other choice closes it.
 pub(crate) fn context_menu(response: &egui::Response, m: &Menu) -> Option<Choice> {
     let key = response.id.with("preset-menu-stage");
+    // A fresh right-click always starts at the menu, never at an old question.
+    if response.secondary_clicked() {
+        response.ctx.data_mut(|d| d.insert_temp(key, Stage::Menu));
+    }
     let mut chosen = None;
-    response.context_menu(|ui| {
-        ui.set_min_width(200.);
-        let stage = ui
-            .ctx()
-            .data(|d| d.get_temp::<Stage>(key))
-            .unwrap_or(Stage::Menu);
-        let mut next = stage.clone();
-        match stage {
-            Stage::Confirm => {
-                // Delete asks inside the menu.
-                ui.label(
-                    egui::RichText::new(format!("Delete \u{201c}{}\u{201d}?", m.name)).strong(),
-                );
-                ui.weak("You can undo this.");
-                ui.horizontal(|ui| {
-                    if ui.button("Keep").clicked() {
-                        next = Stage::Menu;
-                    }
-                    if ui
-                        .add(
+    egui::Popup::context_menu(response)
+        .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
+        .width(WIDTH)
+        .show(|ui| {
+            ui.spacing_mut().item_spacing.y = 0.;
+            #[cfg(test)]
+            ui.ctx()
+                .data_mut(|d| d.insert_temp(egui::Id::unique("preset-menu-rect"), ui.max_rect()));
+            let stage = ui
+                .ctx()
+                .data(|d| d.get_temp::<Stage>(key))
+                .unwrap_or(Stage::Menu);
+            let mut next = stage.clone();
+            match stage {
+                Stage::Confirm => {
+                    // Delete asks in the same open menu.
+                    ui.add_space(4.);
+                    ui.add(
+                        egui::Label::new(
+                            egui::RichText::new(format!("Delete \u{201c}{}\u{201d}?", m.name))
+                                .strong()
+                                .size(13.),
+                        )
+                        .wrap()
+                        .selectable(false),
+                    );
+                    ui.add(
+                        egui::Label::new(
+                            egui::RichText::new("You can undo this.")
+                                .size(11.5)
+                                .color(egui::Color32::from_gray(150)),
+                        )
+                        .selectable(false),
+                    );
+                    ui.add_space(6.);
+                    ui.horizontal(|ui| {
+                        ui.spacing_mut().item_spacing.x = 6.;
+                        if ui
+                            .add(crate::controls::dialog_button("Keep", false))
+                            .clicked()
+                        {
+                            next = Stage::Menu;
+                        }
+                        let delete = ui.add(
                             egui::Button::new(
                                 egui::RichText::new("Delete").color(egui::Color32::WHITE),
                             )
                             .fill(egui::Color32::from_rgb(142, 58, 52)),
-                        )
-                        .clicked()
-                    {
-                        chosen = Some(Choice::Delete);
-                        next = Stage::Menu;
-                        ui.close();
-                    }
-                });
-            }
-            Stage::Rename(mut text) => {
-                // Rename edits the name in place.
-                let field = ui.add(
-                    crate::unicode_input::TextEdit::singleline(&mut text)
-                        .id(key.with("rename"))
-                        .desired_width(190.)
-                        .char_limit(80),
-                );
-                field.request_focus();
-                let enter = field.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
-                ui.horizontal(|ui| {
-                    if ui.button("Cancel").clicked() {
-                        next = Stage::Menu;
-                    } else if ui.button("Rename").clicked() || enter {
-                        if !text.trim().is_empty() {
-                            chosen = Some(Choice::Rename(text.trim().to_owned()));
+                        );
+                        #[cfg(test)]
+                        ui.ctx().data_mut(|d| {
+                            d.insert_temp(egui::Id::unique("preset-menu-confirm"), delete.rect)
+                        });
+                        if delete.clicked() {
+                            chosen = Some(Choice::Delete);
+                            next = Stage::Menu;
+                            ui.close();
                         }
-                        next = Stage::Menu;
-                        ui.close();
-                    } else {
-                        next = Stage::Rename(text.clone());
-                    }
-                });
-            }
-            Stage::Menu => {
-                let item = |ui: &mut egui::Ui, label: &str, key: &str, enabled: bool| {
-                    ui.add_enabled_ui(enabled, |ui| {
-                        ui.horizontal(|ui| {
-                            let r = crate::controls::menu_action(ui, label);
-                            if !key.is_empty() {
-                                ui.with_layout(
-                                    egui::Layout::right_to_left(egui::Align::Center),
-                                    |ui| {
-                                        ui.weak(key);
-                                    },
-                                );
+                    });
+                    ui.add_space(4.);
+                }
+                Stage::Rename(mut text) => {
+                    // Rename edits the name in place.
+                    ui.add_space(4.);
+                    let field = ui.add(
+                        crate::unicode_input::TextEdit::singleline(&mut text)
+                            .id(key.with("rename"))
+                            .desired_width(WIDTH - 8.)
+                            .char_limit(80),
+                    );
+                    field.request_focus();
+                    let enter = field.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+                    ui.add_space(6.);
+                    ui.horizontal(|ui| {
+                        ui.spacing_mut().item_spacing.x = 6.;
+                        if ui
+                            .add(crate::controls::dialog_button("Cancel", false))
+                            .clicked()
+                        {
+                            next = Stage::Menu;
+                        } else if ui
+                            .add(crate::controls::dialog_button("Rename", true))
+                            .clicked()
+                            || enter
+                        {
+                            if !text.trim().is_empty() {
+                                chosen = Some(Choice::Rename(text.trim().to_owned()));
                             }
-                            r
-                        })
-                        .inner
-                    })
-                    .inner
-                    .clicked()
-                };
-                if m.apply && item(ui, "Apply", "", true) {
-                    chosen = Some(Choice::Apply);
-                    ui.close();
-                }
-                if let Some((label, enabled)) = m.update
-                    && item(ui, label, "", enabled)
-                {
-                    chosen = Some(Choice::Update);
-                    ui.close();
-                }
-                if m.rename && item(ui, "Rename", "F2", true) {
-                    next = Stage::Rename(m.name.to_owned());
-                }
-                if m.duplicate && item(ui, "Duplicate", "Ctrl+D", true) {
-                    chosen = Some(Choice::Duplicate);
-                    ui.close();
-                }
-                if let Some(on) = m.favorite
-                    && item(
-                        ui,
-                        if on {
-                            "Remove from favorites"
+                            next = Stage::Menu;
+                            ui.close();
                         } else {
-                            "Favorite"
-                        },
-                        "",
-                        true,
-                    )
-                {
-                    chosen = Some(Choice::Favorite(!on));
-                    ui.close();
+                            next = Stage::Rename(text.clone());
+                        }
+                    });
+                    ui.add_space(4.);
                 }
-                if m.kit.is_some() || m.hide || m.delete {
-                    ui.separator();
-                }
-                if let Some(kit) = m.kit {
-                    ui.add_enabled(false, egui::Label::new(format!("From kit: {kit}")));
-                }
-                if m.hide && item(ui, "Hide", "", true) {
-                    chosen = Some(Choice::Hide);
-                    ui.close();
-                }
-                if m.delete
-                    && ui
-                        .add(
-                            egui::Button::new(
-                                egui::RichText::new("Delete\u{2026}").color(crate::guided::RED),
+                Stage::Menu => {
+                    let mut pick = |ui: &mut egui::Ui, c: Choice| {
+                        chosen = Some(c);
+                        ui.close();
+                    };
+                    if m.apply && row(ui, "Apply", true, false).clicked() {
+                        pick(ui, Choice::Apply);
+                    }
+                    if let Some((label, enabled)) = m.update
+                        && row(ui, label, enabled, false).clicked()
+                    {
+                        pick(ui, Choice::Update);
+                    }
+                    if m.rename && row(ui, "Rename", true, false).clicked() {
+                        next = Stage::Rename(m.name.to_owned());
+                    }
+                    if m.duplicate && row(ui, "Duplicate", true, false).clicked() {
+                        pick(ui, Choice::Duplicate);
+                    }
+                    if let Some(on) = m.favorite {
+                        let label = if on { "Unfavorite" } else { "Favorite" };
+                        if row(ui, label, true, false).clicked() {
+                            pick(ui, Choice::Favorite(!on));
+                        }
+                    }
+                    if m.kit.is_some() || m.hide || m.delete {
+                        ui.add_space(3.);
+                        ui.separator();
+                        ui.add_space(3.);
+                    }
+                    if let Some(kit) = m.kit {
+                        ui.add(
+                            egui::Label::new(
+                                egui::RichText::new(format!("From kit: {kit}"))
+                                    .size(11.5)
+                                    .color(egui::Color32::from_gray(150)),
                             )
-                            .frame(false),
-                        )
-                        .clicked()
-                {
-                    next = Stage::Confirm;
+                            .truncate()
+                            .selectable(false),
+                        );
+                    }
+                    if m.hide && row(ui, "Hide", true, false).clicked() {
+                        pick(ui, Choice::Hide);
+                    }
+                    if m.delete && row(ui, "Delete\u{2026}", true, true).clicked() {
+                        next = Stage::Confirm;
+                    }
                 }
             }
-        }
-        ui.ctx().data_mut(|d| d.insert_temp(key, next));
-    });
+            ui.ctx().data_mut(|d| d.insert_temp(key, next));
+        });
     chosen
 }
 
@@ -288,4 +354,110 @@ pub(crate) fn copy_name(name: &str, taken: impl Fn(&str) -> bool) -> String {
         .map(|n| format!("{} ({n})", name.trim()))
         .find(|c| !taken(c))
         .unwrap()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// BY10: the menu is compact, Delete… asks inside the same open menu,
+    /// Delete answers with Choice::Delete, and a new right-click starts at
+    /// the menu again.
+    #[test]
+    fn delete_asks_inside_the_open_compact_menu() {
+        let ctx = egui::Context::default();
+        crate::shell::configure(&ctx);
+        ctx.style_mut_of(egui::Theme::Dark, |style| style.animation_time = 0.);
+        let tile = egui::Rect::from_min_size(egui::pos2(40., 40.), egui::vec2(82., 52.));
+        let menu = Menu {
+            apply: true,
+            update: Some(("Update from selection", true)),
+            rename: true,
+            duplicate: true,
+            delete: true,
+            name: "Brand box",
+            ..Default::default()
+        };
+        let frame = |events: Vec<egui::Event>| {
+            let mut chosen = None;
+            let mut out = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        egui::vec2(800., 600.),
+                    )),
+                    focused: true,
+                    events,
+                    ..Default::default()
+                },
+                |ui| {
+                    let r = ui.interact(tile, egui::Id::unique("tile"), egui::Sense::click());
+                    chosen = context_menu(&r, &menu);
+                },
+            );
+            out.textures_delta.clear();
+            chosen
+        };
+        let click = |at: egui::Pos2, button| {
+            vec![
+                egui::Event::PointerMoved(at),
+                egui::Event::PointerButton {
+                    pos: at,
+                    button,
+                    pressed: true,
+                    modifiers: egui::Modifiers::NONE,
+                },
+                egui::Event::PointerButton {
+                    pos: at,
+                    button,
+                    pressed: false,
+                    modifiers: egui::Modifiers::NONE,
+                },
+            ]
+        };
+        let row = |label: &str| -> egui::Rect {
+            ctx.data(|d| d.get_temp(egui::Id::unique(("preset-menu-row", label))))
+                .unwrap_or_else(|| panic!("{label} row"))
+        };
+        frame(vec![]);
+        frame(click(tile.center(), egui::PointerButton::Secondary));
+        frame(vec![]);
+        assert!(egui::Popup::is_any_open(&ctx), "the menu opened");
+        let area: egui::Rect = ctx
+            .data(|d| d.get_temp(egui::Id::unique("preset-menu-rect")))
+            .unwrap();
+        assert!(area.width() <= WIDTH + 1., "compact: {area:?}");
+        assert!(row("Apply").height() <= ROW + 0.1);
+        let delete = row("Delete\u{2026}").center();
+        assert_eq!(frame(click(delete, egui::PointerButton::Primary)), None);
+        frame(vec![]);
+        assert!(
+            egui::Popup::is_any_open(&ctx),
+            "Delete\u{2026} keeps the menu open and asks there"
+        );
+        let confirm: egui::Rect = ctx
+            .data(|d| d.get_temp(egui::Id::unique("preset-menu-confirm")))
+            .expect("the question shows in the same menu");
+        assert_eq!(
+            frame(click(confirm.center(), egui::PointerButton::Primary)),
+            Some(Choice::Delete)
+        );
+        frame(vec![]);
+        assert!(!egui::Popup::is_any_open(&ctx), "Delete closes the menu");
+        // Ask again, then dismiss by clicking elsewhere: the next right-click
+        // starts at the menu, not at the old question.
+        frame(click(tile.center(), egui::PointerButton::Secondary));
+        frame(vec![]);
+        frame(click(
+            row("Delete\u{2026}").center(),
+            egui::PointerButton::Primary,
+        ));
+        frame(click(egui::pos2(700., 500.), egui::PointerButton::Primary));
+        frame(vec![]);
+        assert!(!egui::Popup::is_any_open(&ctx));
+        ctx.data_mut(|d| d.remove::<egui::Rect>(egui::Id::unique(("preset-menu-row", "Apply"))));
+        frame(click(tile.center(), egui::PointerButton::Secondary));
+        frame(vec![]);
+        row("Apply");
+    }
 }

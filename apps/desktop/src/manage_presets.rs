@@ -22,13 +22,27 @@ pub(crate) enum Item {
     Template(String),
 }
 
+/// What the row's preview shows (BY11: people need to see a preset to know
+/// whether to keep it).
+#[derive(Clone, Debug)]
+pub(crate) enum Preview {
+    /// Drawn like its gallery tile.
+    Style(Box<capture_core::object_styles::ObjectStyle>),
+    /// A block's thumbnail.
+    Block(u64, Box<capture_core::group_presets::Composition>),
+    Colors(Vec<[u8; 4]>),
+    /// A pattern or watermark text, in its color.
+    Text(String, [u8; 4]),
+    None,
+}
+
 #[derive(Clone, Debug)]
 pub(crate) struct Row {
     pub item: Item,
     pub name: String,
     pub kind: String,
     pub fingerprint: u64,
-    pub color: Option<[u8; 4]>,
+    pub preview: Preview,
 }
 
 /// FNV-1a: a fingerprint that stays the same from run to run.
@@ -48,23 +62,54 @@ struct Window {
     removing: Option<(String, bool)>,
     error: String,
 }
-/// The "Manage presets…" link under a preset gallery (outside its scroll
-/// area, so the gallery's height and scrollbar don't change). True when clicked.
-pub(crate) fn manage_link(ui: &mut egui::Ui) -> bool {
-    ui.add(
-        egui::Label::new(egui::RichText::new("Manage presets\u{2026}").small().color(crate::shell::ACCENT))
-            .selectable(false)
-            .sense(egui::Sense::click()),
-    )
-    .tip("Manage presets \u{b7} See every preset you saved, delete or export several at once, and remove a kit you added.")
-    .clicked()
+/// The "Manage presets" link at the right end of a Presets header row (BY11:
+/// on the header row, right-aligned, no ellipsis). `inset` keeps it clear of
+/// anything already at the right (a chevron). True when clicked.
+pub(crate) fn header_link(ui: &mut egui::Ui, row: egui::Rect, inset: f32) -> bool {
+    let galley = ui.painter().layout_no_wrap(
+        "Manage presets".into(),
+        egui::FontId::proportional(11.5),
+        crate::shell::ACCENT,
+    );
+    let rect = egui::Rect::from_min_size(
+        egui::pos2(
+            row.right() - inset - galley.size().x,
+            row.center().y - galley.size().y / 2.,
+        ),
+        galley.size(),
+    );
+    let r = ui
+        .interact(
+            rect.expand(3.),
+            egui::Id::unique(("manage-presets-link", row.left() as i32, row.top() as i32)),
+            egui::Sense::click(),
+        )
+        .on_hover_cursor(egui::CursorIcon::PointingHand)
+        .tip("Manage presets \u{b7} See every preset you saved, delete or export several at once, and remove a kit you added.");
+    r.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Link, true, "Manage presets"));
+    #[cfg(test)]
+    ui.ctx()
+        .data_mut(|d| d.insert_temp(egui::Id::unique("manage-presets-link"), (row, rect)));
+    let p = ui.painter();
+    p.galley(rect.min, galley, crate::shell::ACCENT);
+    if r.hovered() {
+        p.line_segment(
+            [rect.left_bottom(), rect.right_bottom()],
+            egui::Stroke::new(1., crate::shell::ACCENT),
+        );
+    }
+    r.clicked()
 }
-
 fn window_id() -> egui::Id {
     egui::Id::unique("manage-presets-window")
 }
 
 impl Editor {
+    /// The Presets header's link was clicked.
+    pub(crate) fn manage_presets_from(&mut self, ctx: &egui::Context) {
+        self.presets_ctx = Some(ctx.clone());
+        self.open_manage_presets();
+    }
     pub(crate) fn open_manage_presets(&mut self) {
         let ctx = self.presets_ctx.clone();
         if let Some(ctx) = ctx {
@@ -81,7 +126,7 @@ impl Editor {
                     name: s.name.clone(),
                     kind: "Style".into(),
                     fingerprint: fingerprint(s),
-                    color: Some(s.color),
+                    preview: Preview::Style(Box::new(s.clone())),
                 });
             }
         }
@@ -92,7 +137,7 @@ impl Editor {
                     name: s.name.clone(),
                     kind: "Arrow style".into(),
                     fingerprint: fingerprint(s),
-                    color: Some(s.color),
+                    preview: Preview::Style(Box::new(crate::presets::arrow_object_style(s))),
                 });
             }
         }
@@ -103,7 +148,12 @@ impl Editor {
                     name: e.name.clone(),
                     kind: e.payload.category().to_owned(),
                     fingerprint: fingerprint(&e.payload),
-                    color: None,
+                    preview: match &e.payload {
+                        capture_core::reusable_presets::Payload::Group(c) => {
+                            Preview::Block(e.id, Box::new(c.clone()))
+                        }
+                        _ => Preview::None,
+                    },
                 });
             }
         }
@@ -114,7 +164,7 @@ impl Editor {
                     name: palette.name.clone(),
                     kind: "Palette".into(),
                     fingerprint: fingerprint(&palette.colors),
-                    color: palette.colors.first().copied(),
+                    preview: Preview::Colors(palette.colors.clone()),
                 });
             }
         }
@@ -124,7 +174,7 @@ impl Editor {
                 name: t.name.clone(),
                 kind: "Sensitive type".into(),
                 fingerprint: fingerprint(&t),
-                color: None,
+                preview: Preview::Text(t.pattern.clone(), [200, 214, 219, 255]),
             });
         }
         for w in self.quick_controls.watermarks().0 {
@@ -133,7 +183,7 @@ impl Editor {
                 name: w.name.clone(),
                 kind: "Watermark".into(),
                 fingerprint: fingerprint(&w),
-                color: Some(w.color),
+                preview: Preview::Text(w.text.clone(), w.color),
             });
         }
         if let Some(root) = self.template_root()
@@ -145,7 +195,7 @@ impl Editor {
                     name: e.label.clone(),
                     kind: "Template".into(),
                     fingerprint: fingerprint(&(e.updated_ms, e.created_ms)),
-                    color: None,
+                    preview: Preview::None,
                 });
             }
         }
@@ -522,6 +572,70 @@ impl Editor {
         chosen
     }
     /// The Manage presets window.
+    /// The 82 × 52 preview at the start of a Manage presets row.
+    fn preset_preview(&mut self, ui: &mut egui::Ui, row: &Row) {
+        let c32 = |c: [u8; 4]| egui::Color32::from_rgba_unmultiplied(c[0], c[1], c[2], c[3]);
+        if let Preview::Style(style) = &row.preview {
+            crate::style_tile::preview(ui, style);
+            return;
+        }
+        let (rect, _) = ui.allocate_exact_size(egui::vec2(82., 52.), egui::Sense::hover());
+        #[cfg(test)]
+        ui.ctx().data_mut(|d| {
+            d.insert_temp(
+                egui::Id::unique(("manage-presets-preview", row.name.as_str())),
+                rect,
+            )
+        });
+        ui.painter()
+            .rect_filled(rect, 3., egui::Color32::from_rgb(42, 47, 50));
+        match &row.preview {
+            Preview::Block(id, c) => {
+                if let Some(t) = self.presets.reusable.group_texture(ui.ctx(), *id, c) {
+                    let size = t.size_vec2();
+                    let scale = ((rect.width() - 6.) / size.x).min((rect.height() - 6.) / size.y);
+                    ui.painter().image(
+                        t.id(),
+                        egui::Rect::from_center_size(rect.center(), size * scale),
+                        egui::Rect::from_min_max(egui::Pos2::ZERO, egui::pos2(1., 1.)),
+                        egui::Color32::WHITE,
+                    );
+                }
+            }
+            Preview::Colors(colors) => {
+                let n = colors.len().clamp(1, 6);
+                let w = (rect.width() - 12.) / n as f32;
+                for (i, c) in colors.iter().take(6).enumerate() {
+                    let cell = egui::Rect::from_min_size(
+                        egui::pos2(rect.left() + 6. + i as f32 * w, rect.top() + 12.),
+                        egui::vec2(w - 2., rect.height() - 24.),
+                    );
+                    ui.painter().rect_filled(cell, 2., c32(*c));
+                }
+            }
+            Preview::Text(text, color) => {
+                let galley = ui.painter().layout(
+                    text.clone(),
+                    egui::FontId::monospace(10.5),
+                    c32(*color),
+                    rect.width() - 8.,
+                );
+                let at = rect.center() - galley.size() / 2.;
+                ui.painter()
+                    .with_clip_rect(rect.shrink(3.))
+                    .galley(at, galley, c32(*color));
+            }
+            _ => {
+                ui.painter().text(
+                    rect.center(),
+                    egui::Align2::CENTER_CENTER,
+                    &row.kind,
+                    egui::FontId::proportional(10.5),
+                    egui::Color32::from_gray(150),
+                );
+            }
+        }
+    }
     pub(crate) fn show_manage_presets(&mut self, ctx: &egui::Context) {
         self.presets_ctx = Some(ctx.clone());
         let Some(mut w) = ctx.data(|d| d.get_temp::<Window>(window_id())) else {
@@ -591,22 +705,7 @@ impl Editor {
                                         w.ticked.remove(&r.item);
                                     }
                                 }
-                                let (sw, _) = ui.allocate_exact_size(
-                                    egui::vec2(30., 18.),
-                                    egui::Sense::hover(),
-                                );
-                                if let Some(c) = r.color {
-                                    ui.painter().rect_filled(
-                                        sw,
-                                        3.,
-                                        egui::Color32::from_rgba_unmultiplied(
-                                            c[0],
-                                            c[1],
-                                            c[2],
-                                            c[3].max(60),
-                                        ),
-                                    );
-                                }
+                                self.preset_preview(ui, r);
                                 ui.add_sized(
                                     [width * 0.36, 20.],
                                     egui::Label::new(&r.name).truncate(),
@@ -809,6 +908,60 @@ mod tests {
             "Blue box"
         );
         assert_eq!(e.quick_controls.sensitive_types()[0].name, "Staff ID");
+    }
+
+    /// BY11: every row in Manage presets shows a preview: a saved style is
+    /// drawn like its gallery tile, a custom type shows its pattern.
+    #[test]
+    fn manage_presets_rows_show_previews() {
+        let ctx = egui::Context::default();
+        crate::shell::configure(&ctx);
+        crate::text_layout::configure(&ctx);
+        ctx.style_mut_of(egui::Theme::Dark, |style| style.animation_time = 0.);
+        let dir = tempfile::tempdir().unwrap();
+        let mut e = editor(&ctx, dir.path());
+        e.presets
+            .templates
+            .as_mut()
+            .unwrap()
+            .save(style("Blue box"))
+            .unwrap();
+        e.quick_controls
+            .set_sensitive_types(vec![CustomType::new("Staff ID", "[WE]#{5}")])
+            .unwrap();
+        let rows = e.preset_rows();
+        assert!(matches!(
+            rows.iter().find(|r| r.name == "Blue box").unwrap().preview,
+            Preview::Style(_)
+        ));
+        assert!(matches!(
+            &rows.iter().find(|r| r.name == "Staff ID").unwrap().preview,
+            Preview::Text(p, _) if p == "[WE]#{5}"
+        ));
+        e.presets_ctx = Some(ctx.clone());
+        e.open_manage_presets();
+        for _ in 0..4 {
+            ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        egui::vec2(1200., 800.),
+                    )),
+                    ..Default::default()
+                },
+                |ui| e.show_manage_presets(ui.ctx()),
+            )
+            .textures_delta
+            .clear();
+        }
+        let tile: (egui::Rect, bool, bool) = ctx
+            .data(|d| d.get_temp(egui::Id::unique(("style-tile", "Rectangle", ""))))
+            .expect("the saved style is drawn like its tile");
+        assert_eq!(tile.0.size(), egui::vec2(82., 52.));
+        let pattern: egui::Rect = ctx
+            .data(|d| d.get_temp(egui::Id::unique(("manage-presets-preview", "Staff ID"))))
+            .expect("the custom type shows a preview");
+        assert_eq!(pattern.size(), egui::vec2(82., 52.));
     }
 
     /// Adding a kit records what it added; Remove a kit takes those out,

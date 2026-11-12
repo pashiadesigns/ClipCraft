@@ -490,16 +490,11 @@ impl Editor {
             ui.ctx()
                 .data_mut(|d| d.insert_temp(show_hidden_id, show_hidden));
         }
-        let manage = crate::manage_presets::manage_link(ui);
         if let Some((key, name)) = hide {
             self.hide_preset(key, &name);
         }
         if let Some((style, choice)) = menu_choice {
             self.style_menu_choice(style, choice);
-        }
-        if manage {
-            self.presets_ctx = Some(ui.ctx().clone());
-            self.open_manage_presets();
         }
         if let Some(save) = save {
             self.preset_save_popup(ui, &save, Some(kind));

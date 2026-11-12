@@ -80,7 +80,7 @@ impl State {
         self.error.clear();
     }
     /// A block's preview, rendered once at `THUMB` and drawn fitted into cards.
-    fn group_texture(
+    pub(crate) fn group_texture(
         &mut self,
         ctx: &egui::Context,
         id: u64,
