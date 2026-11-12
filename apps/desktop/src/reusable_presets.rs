@@ -642,8 +642,12 @@ impl State {
             egui::pos2(rect.left() + 10., preview.bottom() + 4.),
             egui::pos2(rect.right() - 6., rect.bottom() - 4.),
         );
+        // A fixed id: Insert shows only while the card is hovered, and moving
+        // down into the open ⋯ menu leaves the card, which used to renumber
+        // these widgets and close the menu (BV4).
         ui.scope_builder(
             egui::UiBuilder::new()
+                .id_salt(("block-card-meta", e.id))
                 .max_rect(meta)
                 .layout(egui::Layout::left_to_right(egui::Align::Center)),
             |ui| {

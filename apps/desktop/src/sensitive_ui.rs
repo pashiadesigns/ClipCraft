@@ -154,12 +154,24 @@ fn phrase_chips(ui: &mut egui::Ui, phrases: &mut String) -> egui::Response {
                 let text = egui::RichText::new(phrase)
                     .size(12.5)
                     .color(egui::Color32::WHITE);
-                let galley = egui::WidgetText::from(text).into_galley(
+                // Measured unwrapped so a chip is only as wide as its text;
+                // only a long phrase is cut to 260 px (BW1: chips filled whole
+                // rows instead of sitting side by side).
+                let text = egui::WidgetText::from(text);
+                let mut galley = text.clone().into_galley(
                     ui,
-                    Some(egui::TextWrapMode::Truncate),
-                    260.,
+                    Some(egui::TextWrapMode::Extend),
+                    f32::INFINITY,
                     egui::TextStyle::Body,
                 );
+                if galley.size().x > 260. {
+                    galley = text.into_galley(
+                        ui,
+                        Some(egui::TextWrapMode::Truncate),
+                        260.,
+                        egui::TextStyle::Body,
+                    );
+                }
                 let size = egui::vec2(galley.size().x + 32., 22.);
                 let (rect, response) = ui.allocate_exact_size(size, egui::Sense::click());
                 let p = ui.painter();
@@ -195,14 +207,21 @@ fn phrase_chips(ui: &mut egui::Ui, phrases: &mut String) -> egui::Response {
                     edit = Some(i);
                 }
             }
+            // A fixed id: each new chip comes before the field, which used to
+            // give it a new id and drop the cursor out of it (BW1).
             let field = ui.add(
                 crate::unicode_input::TextEdit::singleline(&mut typed)
+                    .id(id.with("field"))
                     .hint_text("Type a name or phrase, then Enter")
                     .frame(egui::Frame::NONE)
-                    .desired_width(ui.available_width().max(160.))
+                    .desired_width(ui.available_width().clamp(160., 260.))
                     .char_limit(512),
             );
             let enter = field.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+            if enter {
+                // Enter adds the phrase; it never starts the scan.
+                crate::controls::hold_dialog_enter(ui.ctx());
+            }
             if enter || typed.contains([',', ';']) {
                 let (done, rest) = match typed.rfind([',', ';']) {
                     Some(at) if !enter => (typed[..at].to_owned(), typed[at + 1..].to_owned()),
@@ -210,9 +229,8 @@ fn phrase_chips(ui: &mut egui::Ui, phrases: &mut String) -> egui::Response {
                 };
                 add_phrases(phrases, &done);
                 typed = rest;
-                if enter {
-                    field.request_focus();
-                }
+                // The cursor stays in the box, ready for the next one.
+                field.request_focus();
             } else if field.has_focus()
                 && typed.is_empty()
                 && !list.is_empty()
@@ -931,6 +949,83 @@ mod tests {
         );
         frame(vec![], &mut phrases);
         assert_eq!(phrases, "Jane Doe");
+    }
+    /// BW1: Enter, commas and semicolons add chips and leave the cursor in
+    /// the box; Enter never reaches the dialog's main button; chips sit side
+    /// by side until a row is full.
+    #[test]
+    fn the_cursor_stays_in_the_phrase_box_and_chips_share_rows() {
+        let ctx = egui::Context::default();
+        let mut phrases = String::new();
+        let frame = |events: Vec<egui::Event>, phrases: &mut String, focus: bool| {
+            let mut field = None;
+            let mut out = ctx.run_ui(
+                egui::RawInput {
+                    events,
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        egui::vec2(640., 400.),
+                    )),
+                    ..Default::default()
+                },
+                |ui| {
+                    let r = phrase_chips(ui, phrases);
+                    if focus {
+                        r.request_focus();
+                    }
+                    field = Some((r.id, r.rect));
+                },
+            );
+            out.textures_delta.clear();
+            field.unwrap()
+        };
+        let key = |key, pressed| egui::Event::Key {
+            key,
+            physical_key: None,
+            pressed,
+            repeat: false,
+            modifiers: egui::Modifiers::NONE,
+        };
+        frame(vec![], &mut phrases, true);
+        let first_row = frame(vec![], &mut phrases, false).1.top();
+        frame(
+            vec![egui::Event::Text("Jane Doe".into())],
+            &mut phrases,
+            false,
+        );
+        ctx.data_mut(|d| d.insert_temp(egui::Id::unique("dialog-enter"), true));
+        frame(
+            vec![key(egui::Key::Enter, true), key(egui::Key::Enter, false)],
+            &mut phrases,
+            false,
+        );
+        assert_eq!(phrases, "Jane Doe");
+        assert_eq!(
+            ctx.data(|d| d.get_temp::<bool>(egui::Id::unique("dialog-enter"))),
+            Some(false),
+            "Enter is kept from the Scan button"
+        );
+        let (id, _) = frame(vec![], &mut phrases, false);
+        assert!(
+            ctx.memory(|m| m.has_focus(id)),
+            "the cursor stays after Enter"
+        );
+        frame(
+            vec![egui::Event::Text("W74828;".into())],
+            &mut phrases,
+            false,
+        );
+        frame(vec![egui::Event::Text("Acme,".into())], &mut phrases, false);
+        let (id, rect) = frame(vec![], &mut phrases, false);
+        assert_eq!(phrases, "Jane Doe\nW74828\nAcme");
+        assert!(
+            ctx.memory(|m| m.has_focus(id)),
+            "the cursor stays after a comma"
+        );
+        assert!(
+            (rect.top() - first_row).abs() < 6. && rect.left() > 150.,
+            "three short chips and the box share the first row: {first_row} vs {rect:?}"
+        );
     }
     #[test]
     fn blocks_and_shorthand_round_trip_and_the_builder_saves_a_type() {

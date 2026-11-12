@@ -4,6 +4,35 @@ use std::sync::mpsc::{self, Receiver, TryRecvError};
 mod dialog;
 mod formatting;
 
+/// Where a word Windows found on tilted text really is. Windows reports the
+/// tilt (clockwise, in degrees) and gives word boxes as if the picture had
+/// been straightened about its center; this turns a box back and returns the
+/// box around it, so a redaction covers the whole word. Words used to be
+/// dropped at a tilt of 2° or more, which stopped Find Sensitive Info with
+/// "Rotate the text upright" on a slightly crooked page (BW13).
+pub(crate) fn untilted(rect: [f32; 4], degrees: f32, size: [f32; 2]) -> [f32; 4] {
+    if degrees == 0. || !degrees.is_finite() {
+        return rect;
+    }
+    let (sin, cos) = degrees.to_radians().sin_cos();
+    let center = [size[0] / 2., size[1] / 2.];
+    let [x, y, w, h] = rect;
+    let mut lo = [f32::INFINITY; 2];
+    let mut hi = [f32::NEG_INFINITY; 2];
+    for (px, py) in [(x, y), (x + w, y), (x, y + h), (x + w, y + h)] {
+        let (dx, dy) = (px - center[0], py - center[1]);
+        let turned = [
+            center[0] + dx * cos - dy * sin,
+            center[1] + dx * sin + dy * cos,
+        ];
+        for i in 0..2 {
+            lo[i] = lo[i].min(turned[i]);
+            hi[i] = hi[i].max(turned[i]);
+        }
+    }
+    [lo[0], lo[1], hi[0] - lo[0], hi[1] - lo[1]]
+}
+
 #[derive(Clone, Debug)]
 pub(crate) struct Recognized {
     pub text: String,
@@ -234,21 +263,24 @@ fn recognize_impl(
         }
         let start = text.len();
         text.push_str(&line);
-        if angle.abs() < 2.
-            && let Ok(words) = source.Words()
-        {
+        if let Ok(words) = source.Words() {
             for j in 0..words.Size().unwrap_or(0) {
                 if let Ok(word) = words.GetAt(j)
                     && let (Ok(value), Ok(b)) = (word.Text(), word.BoundingRect())
                 {
+                    let bounds = untilted(
+                        [b.X, b.Y, b.Width, b.Height],
+                        angle as f32,
+                        [pixels.width() as f32, pixels.height() as f32],
+                    );
                     geometry.push(capture_core::privacy::Word {
                         text: value.to_string(),
                         line: i,
                         bounds: [
-                            b.X * scale[0],
-                            b.Y * scale[1],
-                            b.Width * scale[0],
-                            b.Height * scale[1],
+                            bounds[0] * scale[0],
+                            bounds[1] * scale[1],
+                            bounds[2] * scale[0],
+                            bounds[3] * scale[1],
                         ],
                     });
                 }

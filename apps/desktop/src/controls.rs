@@ -262,6 +262,11 @@ pub(super) fn prepare_dialog_keys(ctx: &egui::Context) {
         );
     });
 }
+/// Keeps this frame's Enter away from the dialog's main button, for a field
+/// that uses Enter itself (adding a phrase chip, BW1).
+pub(crate) fn hold_dialog_enter(ctx: &egui::Context) {
+    ctx.data_mut(|d| d.insert_temp(egui::Id::unique("dialog-enter"), false));
+}
 pub(super) fn confirm_key(ui: &egui::Ui) -> bool {
     if ui.memory(|m| {
         m.top_modal_layer()
@@ -545,7 +550,19 @@ impl Modal {
                 clip.max.y = clip.max.y.min(edge + 16.);
                 body.set_clip_rect(clip);
             }
-            let result = content(&mut body);
+            // A dialog never grows past the window: its body scrolls instead,
+            // so every control and the buttons stay reachable (BW13). The
+            // scrollbar shows only when the content doesn't fit.
+            let limit = (ui.ctx().content_rect().height() - 80.).max(160.);
+            // The bar floats over the edge, so a dialog never changes width
+            // when it starts to scroll.
+            body.spacing_mut().scroll = egui::style::ScrollStyle::floating();
+            let result = egui::ScrollArea::vertical()
+                .id_salt(id.with("scroll"))
+                .max_height(limit)
+                .auto_shrink([true, true])
+                .show(&mut body, content)
+                .inner;
             let natural = body.min_rect().size();
             drop(body);
             ui.ctx().data_mut(|d| {

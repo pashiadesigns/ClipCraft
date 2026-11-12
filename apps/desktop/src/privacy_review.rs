@@ -635,6 +635,15 @@ fn scan_document(
     }
     Ok(findings)
 }
+/// The whole scan of a document, for tests that drive real OCR.
+#[cfg(test)]
+pub(crate) fn scan_document_for_test(
+    document: &capture_core::Document,
+    options: &Options,
+) -> Result<Vec<Finding>, String> {
+    let pixels = document.render().map_err(|e| e.to_string())?;
+    scan_document(document, &pixels, options)
+}
 /// A failed tile fails the scan; never present an incomplete scan as complete.
 fn scan_tiles(pixels: &image::RgbaImage, options: &Options) -> Result<Vec<Finding>, String> {
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(90);

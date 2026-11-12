@@ -386,6 +386,33 @@ fn perspective_tilts_image_objects_and_lays_them_flat_again() {
 }
 
 #[test]
+fn drawings_are_redrawn_larger_for_the_zoomed_canvas() {
+    // BV10: the canvas showed a PDF page's stored pixels stretched when zoomed.
+    let svg = r##"<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect x="0" y="0" width="32" height="64" fill="#ff0000"/></svg>"##;
+    let bitmap = Bitmap::from_svg(svg).unwrap();
+    let base = bitmap.display_pixels([64., 64.]).unwrap();
+    assert_eq!(base.dimensions(), (64, 64));
+    // At 1:1 and when zoomed out the stored pixels are used as they are.
+    assert!(Arc::ptr_eq(
+        &bitmap.display_pixels_at([64., 64.], 1.).unwrap(),
+        &base
+    ));
+    assert!(Arc::ptr_eq(
+        &bitmap.display_pixels_at([64., 64.], 0.5).unwrap(),
+        &base
+    ));
+    // Zoomed to 3x the drawing comes back at 4x, sharp at the red edge.
+    let zoomed = bitmap.display_pixels_at([64., 64.], 3.).unwrap();
+    assert_eq!(zoomed.dimensions(), (256, 256));
+    assert_eq!(zoomed.get_pixel(126, 100).0, [255, 0, 0, 255]);
+    assert_eq!(zoomed.get_pixel(129, 100)[3], 0);
+    // The same zoom reuses the same pixels.
+    assert!(Arc::ptr_eq(
+        &zoomed,
+        &bitmap.display_pixels_at([64., 64.], 3.5).unwrap()
+    ));
+}
+#[test]
 fn svg_image_objects_stay_sharp_when_enlarged_and_reopen() {
     let svg = r##"<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect x="0" y="0" width="32" height="64" fill="#ff0000"/></svg>"##;
     let bitmap = Arc::new(Bitmap::from_svg(svg).unwrap());

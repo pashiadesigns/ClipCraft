@@ -631,8 +631,11 @@ impl Editor {
         let ms = (video.seconds().unwrap_or(4.) * 1000.).round() as u64;
         for clip in &mut clips {
             clip.end = clip.start + ms;
+            // Square corners: a page is a rectangle, and plain frames let
+            // neighbouring pages crossfade on the GPU (BW15).
             clip.frame = Some(capture_core::video::frame::Frame {
                 fill: video.fill,
+                radius: 0.,
                 ..Default::default()
             });
         }
@@ -1740,6 +1743,38 @@ mod tests {
                 .any(|w| w.text.contains("dana.reyes@example.com"))
         );
         d.validate().unwrap();
+    }
+    /// BW13: scanning all 8 sample pages used to stop with "Rotate the text
+    /// upright" because Windows read page 4's circles as tilted text.
+    #[test]
+    #[ignore = "Opt-in local Windows OCR model; reads the review sample only"]
+    fn scanning_every_sample_page_finds_the_values() {
+        let ctx = egui::Context::default();
+        crate::shell::configure(&ctx);
+        let mut e = crate::canvas::tests::editor(&ctx);
+        let mut draft = PdfImport::ready_now(sample_path(), &ctx);
+        draft.selected = parse_range("1-8", 8).unwrap();
+        draft.import(&ctx);
+        e.pdf_import = Some(draft);
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(120);
+        while e.pdf_import.is_some() {
+            assert!(std::time::Instant::now() < deadline, "import finished");
+            let mut output = ctx.run_ui(Default::default(), |ui| e.show_pdf_import(ui.ctx()));
+            output.textures_delta.clear();
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+        let findings = crate::privacy_review::scan_document_for_test(
+            &e.session.document,
+            &capture_core::privacy::Options::default(),
+        )
+        .unwrap();
+        for value in ["dana.reyes@example.com", "078-05-1120"] {
+            assert!(
+                findings.iter().any(|f| f.text.contains(value)),
+                "{value}: {:?}",
+                findings.iter().map(|f| &f.text).collect::<Vec<_>>()
+            );
+        }
     }
     #[test]
     fn a_long_import_makes_linked_parts_that_export_as_one_pdf() {

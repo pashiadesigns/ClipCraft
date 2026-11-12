@@ -537,6 +537,10 @@ impl AudioOutputs {
     }
 }
 
+/// Saved settings hold custom sensitive types and watermarks, a logo each
+/// (BW6: a kit with those passed the old 16 KB cap, so adding it failed).
+const MAX_FILE_BYTES: u64 = 16 * 1024 * 1024;
+
 pub struct Store {
     root: PathBuf,
 }
@@ -556,7 +560,7 @@ impl Store {
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Preferences::default()),
             Err(e) => return Err(e.into()),
         };
-        if metadata.len() > 16384 {
+        if metadata.len() > MAX_FILE_BYTES {
             return Err(Error::Invalid(
                 "Quick control preferences are too large; file preserved".into(),
             ));
@@ -579,9 +583,9 @@ impl Store {
         next.choose(choice)?;
         next.validate()?;
         let bytes = serde_json::to_vec_pretty(&next)?;
-        if bytes.len() > 16384 {
+        if bytes.len() as u64 > MAX_FILE_BYTES {
             return Err(Error::Invalid(
-                "Quick control preferences exceed storage limit".into(),
+                "Your saved settings would pass 16 MB. Remove some saved watermarks or custom sensitive types, then try again.".into(),
             ));
         }
         atomic_write(&self.root.join("quick-controls-v2.json"), &bytes)?;
@@ -746,6 +750,26 @@ mod tests {
         for bytes in [b"{broken".to_vec(),vec![b'x';16385],br#"{"version":99,"alignment":"left","distribution":"horizontal_gaps","justification":"center_middle"}"#.to_vec()] {
             fs::write(&path,&bytes).unwrap();assert!(Store::open(temp.path()).is_err());assert_eq!(fs::read(&path).unwrap(),bytes);
         }
+    }
+    /// BW6: settings past the old 16 KB cap (kits add custom types and
+    /// watermarks here) are saved and read back.
+    #[test]
+    fn settings_past_sixteen_kilobytes_save_and_load() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = Store::open(temp.path()).unwrap();
+        let mut team = store.read().unwrap().team;
+        for i in 0..200 {
+            team.added
+                .insert(format!("{i:03} {}", "kit name ".repeat(12)), i);
+        }
+        store.remember(Choice::Team(team.clone())).unwrap();
+        assert!(
+            fs::metadata(temp.path().join("quick-controls-v2.json"))
+                .unwrap()
+                .len()
+                > 16384
+        );
+        assert_eq!(Store::open(temp.path()).unwrap().read().unwrap().team, team);
     }
     #[test]
     fn automatic_tool_switching_defaults_off_but_explicit_on_survives_restart() {

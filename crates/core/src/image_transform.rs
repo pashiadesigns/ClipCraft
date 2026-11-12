@@ -224,7 +224,21 @@ impl Document {
             pixels.height() as f32 / 2. - center[1],
         ];
         let annotations = rotate_objects(&self.annotations, center, degrees, offset)?;
+        // A turned object's own (unturned) box can reach past the canvas even
+        // when it is drawn inside it, and Keep size crops corners away. Such
+        // objects stay editable past the edge instead of failing the rotate
+        // (BW19).
+        let (w, h) = (pixels.width() as f32, pixels.height() as f32);
+        let reaches_out = annotations.iter().any(|a| {
+            [a.start, a.end]
+                .iter()
+                .chain(&a.points)
+                .any(|p| p[0] < 0. || p[1] < 0. || p[0] > w || p[1] > h)
+        });
         let raster = std::sync::Arc::new(RasterImage::from_image(&pixels)?);
+        if reaches_out {
+            self.canvas_behavior.allow_overflow = true;
+        }
         self.source_size = Some(self.source_size.unwrap_or([self.width, self.height]));
         self.width = pixels.width();
         self.height = pixels.height();
@@ -338,6 +352,44 @@ mod tests {
         assert!(!same.rotate_image(360., true, None).unwrap());
         assert!(same.rotate_image(f32::NAN, true, None).is_err());
         assert!(same.rotate_image(400., true, None).is_err());
+    }
+    /// BW19: objects near the corners used to fail validation after a turn,
+    /// so Rotate did nothing. Both canvas choices now succeed through the
+    /// session and Undo restores the overflow setting too.
+    #[test]
+    fn rotating_with_objects_at_the_edges_succeeds() {
+        for grow in [true, false] {
+            let mut doc = photo(400, 200);
+            for (i, (start, end)) in [
+                ([0., 0.], [180., 60.]),
+                ([250., 150.], [400., 200.]),
+                ([10., 120.], [390., 190.]),
+            ]
+            .into_iter()
+            .enumerate()
+            {
+                let mut shape =
+                    crate::templates::text(i as u64 + 1, [0., 0., 10., 10.], "", 12., false);
+                shape.kind = crate::Kind::Rectangle;
+                shape.start = start;
+                shape.end = end;
+                doc.annotations.push(shape);
+            }
+            let mut session = Session::new(doc).unwrap();
+            let before = serde_json::to_vec(&session.document).unwrap();
+            for degrees in [12., -45., 90.5] {
+                session
+                    .execute(Command::RotateImage {
+                        degrees,
+                        grow,
+                        corners: None,
+                    })
+                    .unwrap_or_else(|e| panic!("{degrees} grow={grow}: {e}"));
+                assert_eq!(session.document.annotations.len(), 3);
+                session.execute(Command::Undo).unwrap();
+            }
+            assert_eq!(serde_json::to_vec(&session.document).unwrap(), before);
+        }
     }
     #[test]
     fn resampling_choice_is_saved_and_changes_only_resized_pictures() {

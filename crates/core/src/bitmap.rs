@@ -489,6 +489,33 @@ impl Bitmap {
             None => pixels,
         })
     }
+    /// What the object shows on screen at `scale` screen pixels per canvas
+    /// pixel. A drawing (an SVG or an editable PDF page) without a finish is
+    /// redrawn at the size it appears once that is larger than its stored
+    /// pixels, so text stays sharp when zoomed in (BV10). Sizes go up in
+    /// steps of two, so zooming doesn't redraw it on every frame.
+    pub fn display_pixels_at(&self, extent: [f32; 2], scale: f32) -> Result<Arc<RgbaImage>> {
+        if self.svg.is_some() && self.finish().is_none() && scale.is_finite() {
+            let crop = self.view().rect;
+            let base = self.pixels()?;
+            let stored = [f64::from(base.width()), f64::from(base.height())];
+            let want = [0, 1].map(|i| {
+                f64::from(extent[i]) * f64::from(scale) / f64::from(crop[i + 2]).max(1e-6)
+            });
+            let ratio = (want[0] / stored[0]).max(want[1] / stored[1]);
+            if ratio > 1.1 {
+                let limit = f64::from(crate::vector_import::MAX_SIDE) / stored[0].max(stored[1]);
+                let step = 2f64.powf(ratio.log2().ceil()).min(limit);
+                if step > 1.05
+                    && let Some(pixels) =
+                        self.svg_pixels(stored.map(|v| (v * step).round().max(1.) as u32))
+                {
+                    return Ok(pixels);
+                }
+            }
+        }
+        self.display_pixels(extent)
+    }
     /// These pixels with the finish applied to the part the object shows.
     fn finished(
         &self,

@@ -614,7 +614,83 @@ impl Editor {
                             egui::vec2(ui.available_width(), 220.),
                             egui::Sense::hover(),
                         );
-                        if paged {
+                        if let Some(kind) = d.office.kind {
+                            // Each slide or Word step on its own sheet, as it
+                            // will be in the file (BW2).
+                            let sheets = match kind {
+                                Office::PowerPoint => capture_core::export::office::slide_sheets(
+                                    &d.document,
+                                    &d.office.slides,
+                                ),
+                                Office::Word => capture_core::export::office::word_sheets(
+                                    &d.document,
+                                    &d.office.word,
+                                ),
+                            };
+                            if !sheets.is_empty() {
+                                d.page = d.page.min(sheets.len() - 1);
+                                let s = &sheets[d.page];
+                                let scale = (480. / s.sheet[0]).min(200. / s.sheet[1]);
+                                let paper = egui::Rect::from_center_size(
+                                    rect.center(),
+                                    egui::vec2(
+                                        (s.sheet[0] * scale) as f32,
+                                        (s.sheet[1] * scale) as f32,
+                                    ),
+                                );
+                                ui.painter().rect_filled(paper, 0., egui::Color32::WHITE);
+                                let [x, y, w, h] = s.place;
+                                let image = egui::Rect::from_min_size(
+                                    paper.min + egui::vec2((x * scale) as f32, (y * scale) as f32),
+                                    egui::vec2((w * scale) as f32, (h * scale) as f32),
+                                );
+                                if kind == Office::Word {
+                                    // The step heading above its picture.
+                                    let bar = egui::Rect::from_min_size(
+                                        image.min - egui::vec2(0., 9.),
+                                        egui::vec2(image.width() * 0.45, 4.),
+                                    );
+                                    ui.painter().rect_filled(
+                                        bar,
+                                        1.,
+                                        egui::Color32::from_rgb(47, 84, 150),
+                                    );
+                                }
+                                let [sx, sy, sw, sh] = s.source;
+                                let (pw, ph) = (d.pixels.width() as f32, d.pixels.height() as f32);
+                                ui.painter().image(
+                                    texture.id(),
+                                    image,
+                                    egui::Rect::from_min_max(
+                                        egui::pos2(sx / pw, sy / ph),
+                                        egui::pos2((sx + sw) / pw, (sy + sh) / ph),
+                                    ),
+                                    egui::Color32::WHITE,
+                                );
+                                let noun = match kind {
+                                    Office::PowerPoint => "Slide",
+                                    Office::Word => "Step",
+                                };
+                                ui.horizontal(|ui| {
+                                    if ui
+                                        .add_enabled(d.page > 0, egui::Button::new("Previous"))
+                                        .clicked()
+                                    {
+                                        d.page -= 1;
+                                    }
+                                    ui.label(format!("{noun} {} of {}", d.page + 1, sheets.len()));
+                                    if ui
+                                        .add_enabled(
+                                            d.page + 1 < sheets.len(),
+                                            egui::Button::new("Next"),
+                                        )
+                                        .clicked()
+                                    {
+                                        d.page += 1;
+                                    }
+                                });
+                            }
+                        } else if paged {
                             if let Ok(pages) = &pages {
                                 d.page = d.page.min(pages.len() - 1);
                                 let p = &pages[d.page];

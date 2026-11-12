@@ -202,6 +202,9 @@ fn regions(document: &Document, each: Each, editable: bool) -> Result<Vec<Region
     let natives = if editable { natives(&visible) } else { vec![] };
     let mut background = document.clone();
     background.annotations.retain(|a| !natives.contains(&a.id));
+    // Objects taken out for native shapes must leave no page or pasteboard
+    // records behind, or the picture fails validation (BW2).
+    background.prune_canvas_behavior();
     let pixels = background.render()?;
     let mut out = vec![];
     for rect in rects(document, each) {
@@ -236,6 +239,101 @@ fn regions(document: &Document, each: Each, editable: bool) -> Result<Vec<Region
 // ---------------------------------------------------------------- PowerPoint
 
 const EMU_PER_PX: f64 = 9525.; // 914400 EMU per inch at 96 px per inch
+
+/// The slide size in EMU for a chosen size and the first slide's region.
+fn slide_size(size: SlideSize, rect: [f32; 4]) -> (i64, i64) {
+    match size {
+        SlideSize::Widescreen => (12_192_000, 6_858_000),
+        SlideSize::Standard => (9_144_000, 6_858_000),
+        SlideSize::MatchPage => {
+            let w = (f64::from(rect[2]) * EMU_PER_PX).round() as i64;
+            let h = (f64::from(rect[3]) * EMU_PER_PX).round() as i64;
+            let k = (51_206_400. / w.max(h).max(1) as f64).min(1.);
+            ((w as f64 * k) as i64, (h as f64 * k) as i64)
+        }
+    }
+}
+
+/// Word page size in twips (1/1440 inch) and the margin on every side.
+fn paper_twips(paper: Paper) -> (i32, i32) {
+    match paper {
+        Paper::Letter => (12_240, 15_840),
+        Paper::A4 => (11_906, 16_838),
+    }
+}
+const MARGIN_TWIPS: i32 = 1_440;
+/// Room kept above a step's picture for its heading, in EMU (about 0.8 in).
+const HEADING_EMU: i64 = 731_520;
+
+/// A step picture's size in EMU: the text width (three fifths of it beside
+/// the text), made smaller when needed so the heading and the whole picture
+/// always fit on one page together (BW4).
+fn word_picture(options: &DocumentOptions, rect: [f32; 4]) -> (i64, i64) {
+    let (page_w, page_h) = paper_twips(options.paper);
+    let text_w = i64::from(page_w - 2 * MARGIN_TWIPS) * 635;
+    let text_h = i64::from(page_h - 2 * MARGIN_TWIPS) * 635;
+    let mut width = if options.beside {
+        text_w * 3 / 5
+    } else {
+        text_w
+    };
+    let ratio = f64::from(rect[3]) / f64::from(rect[2].max(1.));
+    let room = text_h - HEADING_EMU;
+    let mut height = (width as f64 * ratio) as i64;
+    if height > room {
+        height = room;
+        width = (room as f64 / ratio) as i64;
+    }
+    (width.max(1), height.max(1))
+}
+
+/// One slide or Word step in the export preview: the part of the canvas it
+/// shows, the sheet it is on, and where the picture lands on that sheet.
+/// All sheet values are in the same unit (EMU).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct PreviewSheet {
+    pub source: [f32; 4],
+    pub sheet: [f64; 2],
+    pub place: [f64; 4],
+}
+/// The slides a PowerPoint export makes, for the export preview (BW2: the
+/// preview showed the whole canvas instead of the slides).
+pub fn slide_sheets(document: &Document, options: &SlideOptions) -> Vec<PreviewSheet> {
+    let rects = rects(document, options.each);
+    let Some(first) = rects.first() else {
+        return vec![];
+    };
+    let (sw, sh) = slide_size(options.size, *first);
+    let (sw, sh) = (sw as f64, sh as f64);
+    rects
+        .into_iter()
+        .map(|rect| {
+            let scale = (sw / f64::from(rect[2].max(1.))).min(sh / f64::from(rect[3].max(1.)));
+            let (w, h) = (f64::from(rect[2]) * scale, f64::from(rect[3]) * scale);
+            PreviewSheet {
+                source: rect,
+                sheet: [sw, sh],
+                place: [(sw - w) / 2., (sh - h) / 2., w, h],
+            }
+        })
+        .collect()
+}
+/// The steps a Word export makes, each on its page at the size Word uses.
+pub fn word_sheets(document: &Document, options: &DocumentOptions) -> Vec<PreviewSheet> {
+    let (page_w, page_h) = paper_twips(options.paper);
+    let margin = f64::from(MARGIN_TWIPS) * 635.;
+    rects(document, Each::Section)
+        .into_iter()
+        .map(|rect| {
+            let (w, h) = word_picture(options, rect);
+            PreviewSheet {
+                source: rect,
+                sheet: [f64::from(page_w) * 635., f64::from(page_h) * 635.],
+                place: [margin, margin + HEADING_EMU as f64, w as f64, h as f64],
+            }
+        })
+        .collect()
+}
 
 /// Where a region lands on a slide: EMU per document pixel and the offset.
 struct Place {
@@ -402,16 +500,7 @@ pub fn pptx(
     for document in documents {
         let document = document?;
         for region in regions(&document, options.each, options.editable)? {
-            let (sw, sh) = *size.get_or_insert_with(|| match options.size {
-                SlideSize::Widescreen => (12_192_000, 6_858_000),
-                SlideSize::Standard => (9_144_000, 6_858_000),
-                SlideSize::MatchPage => {
-                    let w = (f64::from(region.rect[2]) * EMU_PER_PX).round() as i64;
-                    let h = (f64::from(region.rect[3]) * EMU_PER_PX).round() as i64;
-                    let k = (51_206_400. / w.max(h) as f64).min(1.);
-                    ((w as f64 * k) as i64, (h as f64 * k) as i64)
-                }
-            });
+            let (sw, sh) = *size.get_or_insert_with(|| slide_size(options.size, region.rect));
             let scale =
                 (sw as f64 / f64::from(region.rect[2])).min(sh as f64 / f64::from(region.rect[3]));
             let place = Place {
@@ -646,13 +735,8 @@ pub fn docx(
     options: &DocumentOptions,
 ) -> Result<Vec<u8>> {
     let mut zip = Zip::new();
-    let (page_w, page_h) = match options.paper {
-        Paper::Letter => (12_240, 15_840),
-        Paper::A4 => (11_906, 16_838),
-    };
-    let margin = 1_440;
-    // Text width in EMU (1 twip = 635 EMU).
-    let text_w = i64::from(page_w - 2 * margin) * 635;
+    let (page_w, page_h) = paper_twips(options.paper);
+    let margin = MARGIN_TWIPS;
     let mut body = String::new();
     if options.contents {
         let _ = write!(
@@ -678,13 +762,7 @@ pub fn docx(
                 rels,
                 "<Relationship Id=\"{rid}\" Type=\"{REL}/image\" Target=\"media/image{media}.png\"/>"
             );
-            let width = if options.beside {
-                text_w * 3 / 5
-            } else {
-                text_w
-            };
-            let height = (width as f64 * f64::from(region.rect[3])
-                / f64::from(region.rect[2].max(1.))) as i64;
+            let (width, height) = word_picture(options, region.rect);
             let picture = format!(
                 "<w:p><w:r><w:drawing><wp:inline distT=\"0\" distB=\"0\" distL=\"0\" distR=\"0\"><wp:extent cx=\"{width}\" cy=\"{height}\"/><wp:docPr id=\"{media}\" name=\"Step {step}\"/><a:graphic xmlns:a=\"http://schemas.openxmlformats.org/drawingml/2006/main\"><a:graphicData uri=\"http://schemas.openxmlformats.org/drawingml/2006/picture\"><pic:pic xmlns:pic=\"http://schemas.openxmlformats.org/drawingml/2006/picture\"><pic:nvPicPr><pic:cNvPr id=\"{media}\" name=\"Step {step}\"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed=\"{rid}\"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x=\"0\" y=\"0\"/><a:ext cx=\"{width}\" cy=\"{height}\"/></a:xfrm><a:prstGeom prst=\"rect\"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>"
             );
@@ -697,7 +775,7 @@ pub fn docx(
                 .unwrap_or_else(|| format!("Step {step}"));
             let _ = write!(
                 body,
-                "<w:p><w:pPr><w:pStyle w:val=\"Heading1\"/></w:pPr><w:r><w:t xml:space=\"preserve\">{step}. {}</w:t></w:r></w:p>",
+                "<w:p><w:pPr><w:pStyle w:val=\"Heading1\"/><w:keepNext/><w:keepLines/></w:pPr><w:r><w:t xml:space=\"preserve\">{step}. {}</w:t></w:r></w:p>",
                 esc(&heading)
             );
             let text: String = lines
@@ -711,7 +789,7 @@ pub fn docx(
             if options.beside {
                 let _ = write!(
                     body,
-                    "<w:tbl><w:tblPr><w:tblW w:w=\"0\" w:type=\"auto\"/><w:tblLayout w:type=\"fixed\"/></w:tblPr><w:tblGrid><w:gridCol w:w=\"{}\"/><w:gridCol w:w=\"{}\"/></w:tblGrid><w:tr><w:tc><w:tcPr><w:tcW w:w=\"{}\" w:type=\"dxa\"/></w:tcPr>{picture}</w:tc><w:tc><w:tcPr><w:tcW w:w=\"{}\" w:type=\"dxa\"/></w:tcPr>{}</w:tc></w:tr></w:tbl><w:p/>",
+                    "<w:tbl><w:tblPr><w:tblW w:w=\"0\" w:type=\"auto\"/><w:tblLayout w:type=\"fixed\"/></w:tblPr><w:tblGrid><w:gridCol w:w=\"{}\"/><w:gridCol w:w=\"{}\"/></w:tblGrid><w:tr><w:trPr><w:cantSplit/></w:trPr><w:tc><w:tcPr><w:tcW w:w=\"{}\" w:type=\"dxa\"/></w:tcPr>{picture}</w:tc><w:tc><w:tcPr><w:tcW w:w=\"{}\" w:type=\"dxa\"/></w:tcPr>{}</w:tc></w:tr></w:tbl><w:p/>",
                     (page_w - 2 * margin) * 3 / 5,
                     (page_w - 2 * margin) * 2 / 5,
                     (page_w - 2 * margin) * 3 / 5,

@@ -15,6 +15,9 @@ pub(crate) struct RotateImage {
     /// The picture reduced for the preview, rendered once.
     small: Option<image::RgbaImage>,
     shown: Option<(f32, bool, bool, egui::TextureHandle)>,
+    /// Why the last Rotate failed, shown in the dialog (BW19: it used to go to
+    /// the status bar behind the dialog, so Rotate seemed to do nothing).
+    error: String,
 }
 impl RotateImage {
     pub(crate) fn new() -> Self {
@@ -25,6 +28,7 @@ impl RotateImage {
             canvas_color: false,
             small: None,
             shown: None,
+            error: String::new(),
         }
     }
     fn parse(text: &str) -> Option<f32> {
@@ -41,7 +45,20 @@ impl RotateImage {
 impl Editor {
     pub(crate) fn begin_rotate_image(&mut self) {
         self.cancel_gesture();
-        self.rotate_image = Some(RotateImage::new());
+        let mut draft = RotateImage::new();
+        if self
+            .session
+            .document
+            .guide
+            .as_ref()
+            .is_some_and(|g| g.pages.is_some())
+        {
+            // Said up front, not after a click that cannot work.
+            draft.error =
+                "Rotate Image works on single images. On guide pages, rotate the objects instead."
+                    .into();
+        }
+        self.rotate_image = Some(draft);
     }
     fn corner_color(&self, canvas_color: bool) -> Option<[u8; 4]> {
         canvas_color
@@ -176,6 +193,9 @@ impl Editor {
                 );
             }
             let valid = RotateImage::parse(&draft.text).is_some();
+            if !draft.error.is_empty() {
+                ui.colored_label(egui::Color32::from_rgb(255, 170, 160), &draft.error);
+            }
             ui.label(
                 egui::RichText::new(if !valid {
                     "Type an angle from -360 to 360 degrees."
@@ -222,7 +242,11 @@ impl Editor {
                         "Rotated the image {degrees}°. Objects stay editable; Undo restores it."
                     );
                 }
-                Err(e) => self.status = e.to_string(),
+                Err(e) => {
+                    if let Some(d) = self.rotate_image.as_mut() {
+                        d.error = e.to_string();
+                    }
+                }
             }
         }
     }

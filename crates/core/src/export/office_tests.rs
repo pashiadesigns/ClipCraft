@@ -112,6 +112,19 @@ fn powerpoint_keeps_shapes_and_text_editable() {
     assert!(entries.iter().any(|(n, _)| n == "ppt/media/image1.png"));
 }
 
+/// BW2: an editable shape that the document also records (held on the
+/// pasteboard or owned by a guide page) made the slide picture fail with
+/// "Invalid pasteboard object ownership", so nothing was saved.
+#[test]
+fn shapes_with_page_records_still_export() {
+    let mut document = sample();
+    document.canvas_behavior.held.insert(1);
+    document.canvas_behavior.held.insert(3);
+    let entries = unzip(&pptx(std::iter::once(Ok(document)), &SlideOptions::default()).unwrap());
+    well_formed(&entries);
+    assert!(text(&entries, "ppt/slides/slide1.xml").contains("prst=\"rect\""));
+}
+
 #[test]
 fn pictures_only_and_redactions_flatten() {
     let options = SlideOptions {
@@ -172,6 +185,56 @@ fn word_steps_in_built_in_styles() {
         assert!(text(&entries, "word/styles.xml").contains("heading 1"));
         assert!(entries.iter().any(|(n, _)| n == "word/media/image1.png"));
     }
+}
+
+/// BW4: a tall step picture is made small enough to sit on one page with
+/// its heading, and the heading stays with it.
+#[test]
+fn word_pictures_fit_on_the_page_with_their_heading() {
+    let tall = Document::blank(800, 3200).unwrap();
+    for (paper, beside) in [(Paper::Letter, false), (Paper::A4, true)] {
+        let options = DocumentOptions {
+            paper,
+            beside,
+            ..Default::default()
+        };
+        let entries = unzip(&docx(std::iter::once(Ok(tall.clone())), &options).unwrap());
+        let body = text(&entries, "word/document.xml");
+        let cy: i64 = body
+            .split("<wp:extent cx=\"")
+            .nth(1)
+            .and_then(|s| s.split("cy=\"").nth(1))
+            .and_then(|s| s.split('"').next())
+            .unwrap()
+            .parse()
+            .unwrap();
+        let page_h = if paper == Paper::Letter {
+            15_840
+        } else {
+            16_838
+        };
+        let text_h = (page_h - 2 * 1_440) * 635;
+        assert!(
+            cy + 731_520 <= text_h,
+            "{cy} doesn't leave room for the heading"
+        );
+        assert!(body.contains("<w:keepNext/>"));
+        assert_eq!(body.contains("<w:cantSplit/>"), beside);
+        let sheets = word_sheets(&tall, &options);
+        assert_eq!(sheets.len(), 1);
+        assert_eq!(sheets[0].place[3] as i64, cy);
+    }
+}
+
+/// The export preview shows one sheet per slide at the chosen slide shape.
+#[test]
+fn slide_sheets_match_the_slides() {
+    let sheets = slide_sheets(&sample(), &SlideOptions::default());
+    assert_eq!(sheets.len(), 1);
+    assert_eq!(sheets[0].sheet, [12_192_000., 6_858_000.]);
+    let [x, y, w, h] = sheets[0].place;
+    assert!(x >= 0. && y >= 0. && x + w <= 12_192_001. && h <= 6_858_001.);
+    assert!(((w / h) - 800. / 600.).abs() < 0.01);
 }
 
 /// Writes sample files for checking in Office or another reader

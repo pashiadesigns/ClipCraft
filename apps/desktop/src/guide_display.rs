@@ -718,7 +718,11 @@ impl Scene {
                 let (lo, hi) = a.body_bounds();
                 // A border, edge or filter is part of the texture, so moving the
                 // object only moves the texture (the finish is cached).
-                let pixels = b.display_pixels([hi[0] - lo[0], hi[1] - lo[1]])?;
+                // Drawings are redrawn at the zoomed size, so PDF text stays sharp.
+                let pixels = b.display_pixels_at(
+                    [hi[0] - lo[0], hi[1] - lo[1]],
+                    t.scale * ui.ctx().pixels_per_point(),
+                )?;
                 let pixels = &pixels;
                 let key = Arc::as_ptr(pixels) as usize;
                 retained.push(key);
