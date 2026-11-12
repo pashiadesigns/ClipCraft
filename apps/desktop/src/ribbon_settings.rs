@@ -21,6 +21,7 @@ pub(super) enum Action {
     FlipHorizontal,
     FlipVertical,
     RotateAngle,
+    ResetRotation,
     Snapping,
     PixelGrid,
     AutoExpand,
@@ -43,6 +44,7 @@ impl Action {
             Self::FlipHorizontal => "Flip horizontally",
             Self::FlipVertical => "Flip vertically",
             Self::RotateAngle => "Rotate by angle",
+            Self::ResetRotation => "Reset rotation",
             Self::Snapping => "Canvas snapping",
             Self::PixelGrid => "Pixel grid · Ctrl+Alt+G · visible at 600% and above",
             Self::AutoExpand => "Auto-expand canvas",
@@ -68,6 +70,10 @@ impl Action {
             Self::FlipVertical => Some(T::FlipVertical),
             _ => None,
         }
+    }
+    #[cfg(test)]
+    pub(crate) fn enabled_for_test(self, e: &Editor) -> bool {
+        self.enabled(e)
     }
     fn enabled(self, e: &Editor) -> bool {
         if e.is_video() {
@@ -112,6 +118,7 @@ impl Action {
             }
             Self::Ungroup => e.selected_objects().iter().any(|a| a.group.is_some()),
             Self::FlattenAll => !e.session.document.annotations.is_empty(),
+            Self::ResetRotation => e.session.document.can_reset_rotation(),
             _ => true,
         }
     }
@@ -157,7 +164,7 @@ impl Editor {
         if video {
             return;
         }
-        group(ui, "Rotate & flip", 100.0, height, |ui| {
+        group(ui, "Rotate & flip", 132.0, height, |ui| {
             self.settings_grid(
                 ui,
                 &[
@@ -167,8 +174,9 @@ impl Editor {
                     Action::FlipHorizontal,
                     Action::FlipVertical,
                     Action::RotateAngle,
+                    Action::ResetRotation,
                 ],
-                3,
+                4,
             );
         });
         divider(ui, height);
@@ -309,6 +317,7 @@ impl Editor {
                 }
                 Action::ResizeImage => self.begin_resize(),
                 Action::RotateAngle => self.begin_rotate_image(),
+                Action::ResetRotation => self.reset_rotation(),
                 Action::ResizeCanvas => self.begin_resize_canvas(),
                 Action::FlattenAll => self.flatten_all(),
                 _ => {}
@@ -469,6 +478,21 @@ pub(crate) fn draw(p: &egui::Painter, c: egui::Pos2, name: &str, color: Color32)
             outline(box_at(-3.0, -2.0, 10.0, 8.0));
         }
         p.arrow(at(-3.0, 3.0), egui::vec2(10.0, -9.0), stroke);
+    } else if name == "Reset rotation" {
+        // An upright square with an arrow turning back.
+        outline(box_at(0.0, 2.0, 12.0, 12.0));
+        p.add(egui::Shape::line(
+            vec![
+                at(7.0, -9.0),
+                at(0.0, -10.0),
+                at(-6.0, -8.0),
+                at(-9.0, -4.0),
+            ],
+            stroke,
+        ));
+        p.arrow(at(-9.0, -4.0), egui::vec2(0.0, 0.1), stroke);
+        p.line_segment([at(-9.0, -4.0), at(-9.0, -8.0)], stroke);
+        p.line_segment([at(-9.0, -4.0), at(-5.0, -4.0)], stroke);
     } else if name == "Rotate by angle" {
         // A square tilted by an angle, with the angle's arc.
         let r = 6.0_f32;

@@ -1092,6 +1092,9 @@ pub enum Command {
         grow: bool,
         corners: Option<[u8; 4]>,
     },
+    /// Bring back the picture as it was before Rotate by angle, with every
+    /// object turned back (BY3).
+    ResetRotation,
     /// Flatten at the current size and resize in one reversible operation.
     ResizeImageFlattened {
         width: u32,
@@ -1336,6 +1339,7 @@ impl Session {
                     | Command::ResizeImage { .. }
                     | Command::ResizeImageResampled { .. }
                     | Command::RotateImage { .. }
+                    | Command::ResetRotation
                     | Command::ResizeImageFlattened { .. }
                     | Command::ResizeCanvas { .. }
             )
@@ -1615,6 +1619,11 @@ impl Session {
                         corners,
                     } => {
                         if !self.document.rotate_image(degrees, grow, corners)? {
+                            return Ok(());
+                        }
+                    }
+                    Command::ResetRotation => {
+                        if !self.document.reset_rotation()? {
                             return Ok(());
                         }
                     }

@@ -66,6 +66,21 @@ impl Editor {
             .flatten()
             .map(|b| b.get_pixel(0, 0).0)
     }
+    /// Reset rotation (BY3): the picture as it was before Rotate by angle.
+    pub(crate) fn reset_rotation(&mut self) {
+        if !self.commit_text() {
+            return;
+        }
+        match self.session.execute(Command::ResetRotation) {
+            Ok(()) => {
+                self.view = crate::canvas_view::CanvasView::default();
+                self.needs_render = true;
+                self.status =
+                    "Rotated the image back to the original. Undo restores the turns.".into();
+            }
+            Err(e) => self.fail(e.to_string()),
+        }
+    }
     pub(crate) fn show_rotate_image(&mut self, ctx: &egui::Context) {
         if self.rotate_image.is_none() {
             return;
@@ -109,6 +124,8 @@ impl Editor {
         }
         let mut apply = false;
         let mut cancel = false;
+        let can_reset = self.session.document.can_reset_rotation();
+        let mut back_to_original = false;
         let modal = crate::controls::Modal::new(egui::Id::unique("rotate_image")).show(ctx, |ui| {
             ui.set_width(400.);
             crate::controls::dialog_title(ui, "Rotate Image");
@@ -230,6 +247,23 @@ impl Editor {
                     egui::Color32::from_rgb(255, 170, 160)
                 }),
             );
+            // BY3: back to the original picture at any time, after any turns.
+            if can_reset {
+                ui.horizontal(|ui| {
+                    ui.label(
+                        egui::RichText::new("This picture has been turned.")
+                            .size(11.5)
+                            .color(egui::Color32::from_rgb(142, 154, 157)),
+                    );
+                    if ui
+                        .button("Reset rotation")
+                        .tip("Reset rotation · Bring back the picture as it was before you turned it (0°). Objects turn back with it.")
+                        .clicked()
+                    {
+                        back_to_original = true;
+                    }
+                });
+            }
             let (ok, closed) = crate::controls::dialog_actions(
                 ui,
                 "Rotate",
@@ -241,6 +275,12 @@ impl Editor {
             cancel = closed;
         });
         cancel |= crate::text_edit::cancel_on_escape(&modal);
+        if back_to_original {
+            crate::guided::clear(ctx, "rotate:angle");
+            self.rotate_image = None;
+            self.reset_rotation();
+            return;
+        }
         if cancel || apply {
             crate::guided::clear(ctx, "rotate:angle");
         }
@@ -277,6 +317,42 @@ impl Editor {
 #[cfg(test)]
 mod tests {
     use super::*;
+    /// BY3: after two different turns, Reset rotation (the Formatting
+    /// button and the dialog's button) brings the original picture back.
+    #[test]
+    fn reset_rotation_works_any_time_after_several_turns() {
+        let ctx = egui::Context::default();
+        let mut e = crate::canvas::tests::editor(&ctx);
+        e.session = crate::Session::new(crate::Document::blank(300, 200).unwrap()).unwrap();
+        assert!(!crate::ribbon_settings::Action::ResetRotation.enabled_for_test(&e));
+        for (degrees, grow) in [(30., true), (-12.5, false)] {
+            e.session
+                .execute(Command::RotateImage {
+                    degrees,
+                    grow,
+                    corners: None,
+                })
+                .unwrap();
+        }
+        assert!(crate::ribbon_settings::Action::ResetRotation.enabled_for_test(&e));
+        // The dialog offers it too.
+        e.begin_rotate_image();
+        for _ in 0..3 {
+            ctx.run_ui(Default::default(), |ui| e.show_rotate_image(ui.ctx()))
+                .textures_delta
+                .clear();
+        }
+        let out = crate::property_layout::tests::PaintedOutput(
+            ctx.run_ui(Default::default(), |ui| e.show_rotate_image(ui.ctx())),
+        );
+        assert!(crate::color_widgets::tests::text_rect(&out.shapes, "Reset rotation").is_some());
+        e.rotate_image = None;
+        e.run_settings_action(crate::ribbon_settings::Action::ResetRotation);
+        let d = &e.session.document;
+        assert_eq!([d.width, d.height], [300, 200]);
+        assert!(!d.can_reset_rotation());
+        assert!(e.status.starts_with("Rotated the image back"));
+    }
     #[test]
     fn angles_parse_with_or_without_the_degree_sign() {
         assert_eq!(RotateImage::parse("12°"), Some(12.));

@@ -13,6 +13,48 @@ pub enum ImageTransform {
     FlipVertical,
 }
 
+/// The picture before its first Rotate by angle, and every turn since
+/// (BY3: reset back to 0° at any time, even after several turns).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Turned {
+    pub width: u32,
+    pub height: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub raster: Option<std::sync::Arc<RasterImage>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_size: Option<[u32; 2]>,
+    pub allow_overflow: bool,
+    /// Each turn: the center it turned about, the angle and the shift that
+    /// recentred it on the new canvas.
+    pub turns: Vec<Turn>,
+    /// Fingerprint of the picture the last turn made. If the picture has
+    /// changed since (a crop, a resize), Reset isn't offered.
+    pub after: u64,
+}
+// Angles are always finite (checked before a turn is recorded).
+impl Eq for Turned {}
+
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Turn {
+    pub center: [f32; 2],
+    pub degrees: f32,
+    pub offset: [f32; 2],
+}
+
+/// FNV-1a over the picture's PNG text and size.
+fn fingerprint(raster: Option<&RasterImage>, size: [u32; 2]) -> u64 {
+    let start = (0xcbf2_9ce4_8422_2325_u64 ^ u64::from(size[0])).wrapping_mul(0x0100_0000_01b3)
+        ^ u64::from(size[1]);
+    raster
+        .map_or(&[][..], |r| r.png.as_bytes())
+        .iter()
+        .fold(start, |h, b| {
+            (h ^ u64::from(*b)).wrapping_mul(0x0100_0000_01b3)
+        })
+}
+
 /// Transform editable objects as one selection. Local source geometry is retained.
 pub fn transform_objects(
     objects: &[crate::Annotation],
@@ -236,6 +278,29 @@ impl Document {
                 .any(|p| p[0] < 0. || p[1] < 0. || p[0] > w || p[1] > h)
         });
         let raster = std::sync::Arc::new(RasterImage::from_image(&pixels)?);
+        // Remember the picture as it was before its first turn; a turn after
+        // some other change to the picture starts a new record.
+        let mut turned = self
+            .canvas_behavior
+            .turned
+            .take()
+            .filter(|t| t.after == fingerprint(self.raster.as_deref(), [self.width, self.height]))
+            .unwrap_or_else(|| Turned {
+                width: self.width,
+                height: self.height,
+                raster: self.raster.clone(),
+                source_size: self.source_size,
+                allow_overflow: self.canvas_behavior.allow_overflow,
+                turns: vec![],
+                after: 0,
+            });
+        turned.turns.push(Turn {
+            center,
+            degrees,
+            offset,
+        });
+        turned.after = fingerprint(Some(&raster), [pixels.width(), pixels.height()]);
+        self.canvas_behavior.turned = Some(turned);
         if reaches_out {
             self.canvas_behavior.allow_overflow = true;
         }
@@ -246,6 +311,44 @@ impl Document {
         self.annotations = annotations;
         self.auto_canvas_base = None;
         self.version = crate::MAX_PROJECT_VERSION;
+        Ok(true)
+    }
+    /// Whether Reset rotation can bring back the picture as it was before
+    /// Rotate by angle (it hasn't been changed some other way since).
+    pub fn can_reset_rotation(&self) -> bool {
+        self.canvas_behavior.turned.as_ref().is_some_and(|t| {
+            !t.turns.is_empty()
+                && t.after == fingerprint(self.raster.as_deref(), [self.width, self.height])
+        })
+    }
+    /// Reset rotation (BY3): the original picture comes back exactly, and
+    /// every object (including ones added since) turns back with it.
+    pub(crate) fn reset_rotation(&mut self) -> Result<bool> {
+        if !self.can_reset_rotation() {
+            return Ok(false);
+        }
+        let turned = self.canvas_behavior.turned.clone().unwrap();
+        let mut annotations = self.annotations.clone();
+        for turn in turned.turns.iter().rev() {
+            // A turn moved p to R(p - c) + c + o; undo it about c + o.
+            annotations = rotate_objects(
+                &annotations,
+                [
+                    turn.center[0] + turn.offset[0],
+                    turn.center[1] + turn.offset[1],
+                ],
+                -turn.degrees,
+                [-turn.offset[0], -turn.offset[1]],
+            )?;
+        }
+        self.width = turned.width;
+        self.height = turned.height;
+        self.raster = turned.raster;
+        self.source_size = turned.source_size;
+        self.canvas_behavior.allow_overflow = turned.allow_overflow;
+        self.canvas_behavior.turned = None;
+        self.annotations = annotations;
+        self.auto_canvas_base = None;
         Ok(true)
     }
     pub(crate) fn transform_image(&mut self, transform: ImageTransform) -> Result<bool> {
@@ -282,6 +385,96 @@ mod tests {
     fn photo(w: u32, h: u32) -> Document {
         let pixels = RgbaImage::from_fn(w, h, |x, y| Rgba([(x * 3) as u8, (y * 5) as u8, 90, 255]));
         Document::from_image(pixels).unwrap()
+    }
+    /// BY3: after several different turns (and an object added between
+    /// them), Reset rotation brings back the exact original picture and size,
+    /// puts the first object back where it was, and is one Undo step.
+    #[test]
+    fn reset_rotation_brings_back_the_original_after_several_turns() {
+        let mut doc = photo(200, 100);
+        let mut shape = crate::templates::text(1, [10., 10., 40., 30.], "", 12., false);
+        shape.kind = crate::Kind::Rectangle;
+        doc.annotations.push(shape.clone());
+        let original = doc.base_image().unwrap();
+        let mut session = Session::new(doc).unwrap();
+        assert!(!session.document.can_reset_rotation());
+        session
+            .execute(Command::RotateImage {
+                degrees: 30.,
+                grow: true,
+                corners: None,
+            })
+            .unwrap();
+        let mut added = shape.clone();
+        added.id = 2;
+        added.start = [60., 60.];
+        added.end = [90., 80.];
+        session
+            .execute(Command::Add {
+                annotation: added.clone(),
+            })
+            .unwrap();
+        session
+            .execute(Command::RotateImage {
+                degrees: -75.,
+                grow: false,
+                corners: Some([255, 255, 255, 255]),
+            })
+            .unwrap();
+        let turned_size = [session.document.width, session.document.height];
+        assert!(session.document.can_reset_rotation());
+        session.execute(Command::ResetRotation).unwrap();
+        let d = &session.document;
+        assert_eq!([d.width, d.height], [200, 100]);
+        assert_eq!(
+            d.base_image().unwrap(),
+            original,
+            "the original pixels, exactly"
+        );
+        assert!(!d.can_reset_rotation());
+        let back = d.annotations.iter().find(|a| a.id == 1).unwrap();
+        assert!(
+            back.rotation_degrees
+                .rem_euclid(360.)
+                .min(360. - back.rotation_degrees.rem_euclid(360.))
+                < 0.01
+        );
+        let (c, o) = (back.rotation().center, shape.rotation().center);
+        assert!(
+            (c[0] - o[0]).abs() < 0.6 && (c[1] - o[1]).abs() < 0.6,
+            "{o:?} -> {c:?}"
+        );
+        // The object added after the first turn turned back by that turn too.
+        let second = d.annotations.iter().find(|a| a.id == 2).unwrap();
+        assert!((second.rotation_degrees.rem_euclid(360.) - 330.).abs() < 0.01);
+        session.execute(Command::Undo).unwrap();
+        assert_eq!(
+            [session.document.width, session.document.height],
+            turned_size
+        );
+        assert!(session.document.can_reset_rotation());
+    }
+    /// A crop or resize after a turn changes the picture: Reset isn't offered.
+    #[test]
+    fn reset_rotation_is_not_offered_after_the_picture_changes() {
+        let mut session = Session::new(photo(200, 100)).unwrap();
+        session
+            .execute(Command::RotateImage {
+                degrees: 20.,
+                grow: true,
+                corners: None,
+            })
+            .unwrap();
+        assert!(session.document.can_reset_rotation());
+        session
+            .execute(Command::ResizeImage {
+                width: 120,
+                height: 80,
+            })
+            .unwrap();
+        assert!(!session.document.can_reset_rotation());
+        session.execute(Command::ResetRotation).unwrap();
+        assert_eq!([session.document.width, session.document.height], [120, 80]);
     }
     #[test]
     fn rotate_by_any_angle_keeps_objects_editable_and_is_one_undo() {

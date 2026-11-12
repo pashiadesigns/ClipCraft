@@ -518,11 +518,11 @@ step: Undo reverses it. | title: Undo if needed
 id: resize
 section: Formatting
 where: Formatting › Size, Formatting › Rotate & flip
-controls: Resize image, Resize canvas, Rotate, Flip horizontal, Flip vertical, Rotate clockwise, Rotate counterclockwise, Flip horizontally, Flip vertically, Rotate 180 degrees, Page Setup, Rotate by angle, Rotate Image
+controls: Resize image, Resize canvas, Rotate, Flip horizontal, Flip vertical, Rotate clockwise, Rotate counterclockwise, Flip horizontally, Flip vertically, Rotate 180 degrees, Page Setup, Rotate by angle, Rotate Image, Reset rotation
 keywords: scale, size, dimensions, rotate, flip, canvas size
 hero: resize-hero
 ---
-Resize image changes the output size and keeps objects editable. Choose pixels or percent, or inches or centimeters with a resolution to size the image for print; Resampling picks how pixels are blended. Resize canvas adds or removes space around the image. Rotate and flip turn the whole image; Rotate by angle turns it any amount, growing the canvas to fit or keeping its size.
+Resize image changes the output size and keeps objects editable. Choose pixels or percent, or inches or centimeters with a resolution to size the image for print; Resampling picks how pixels are blended. Resize canvas adds or removes space around the image. Rotate and flip turn the whole image; Rotate by angle turns it any amount, growing the canvas to fit or keeping its size. Reset rotation brings back the picture as it was before you turned it, however many turns you made; objects turn back with it.
 
 
 step: On the Formatting tab, click Resize image. | title: Open Resize image | pic: resize-1

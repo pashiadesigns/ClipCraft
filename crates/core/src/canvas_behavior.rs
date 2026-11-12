@@ -25,6 +25,10 @@ pub struct CanvasBehavior {
         skip_serializing_if = "crate::resize::Resampling::is_automatic"
     )]
     pub resampling: crate::resize::Resampling,
+    /// The picture before its first Rotate by angle and each turn since, so
+    /// Reset rotation can bring the original back (BY3).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub turned: Option<crate::image_transform::Turned>,
 }
 impl Default for CanvasBehavior {
     fn default() -> Self {
@@ -36,6 +40,7 @@ impl Default for CanvasBehavior {
             perspective: None,
             finish: None,
             resampling: Default::default(),
+            turned: None,
         }
     }
 }
