@@ -821,7 +821,9 @@ impl Editor {
                     self.show_history(ui, false);
                 });
             if let Some(active) = self.shell.library_tab_rect {
-                // A separate screen-clipped layer bridges the two panels.
+                // A separate screen-clipped layer bridges the two panels. It
+                // stops at the Library's blue border, like the ribbon tabs do
+                // (user, 2026-11-12: it ran over the border).
                 // ui.painter().with_clip_rect cannot widen the panel's clip.
                 ui.ctx()
                     .layer_painter(egui::LayerId::new(
@@ -831,7 +833,7 @@ impl Editor {
                     .rect_filled(
                         egui::Rect::from_min_max(
                             egui::pos2(active.left(), active.bottom() - 4.),
-                            egui::pos2(active.right(), frame.response.rect.top() + 2.),
+                            egui::pos2(active.right(), frame.response.rect.top()),
                         ),
                         0.,
                         crate::tabs::ACTIVE_BLUE,

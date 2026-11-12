@@ -708,7 +708,8 @@ impl Editor {
                     ui.painter().rect_filled(
                         egui::Rect::from_min_max(
                             egui::pos2(active.left(), active.bottom() - 4.),
-                            egui::pos2(active.right(), ui.min_rect().bottom() + 1.),
+                            // Up to the Library's border, not over it.
+                            egui::pos2(active.right(), ui.min_rect().bottom()),
                         ),
                         0.,
                         crate::tabs::ACTIVE_BLUE,

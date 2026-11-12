@@ -407,6 +407,22 @@ fn library_tab_reclaims_ribbon_space_with_connected_full_workspace_border() {
         );
         assert!(rect.width() >= width - 14. && rect.bottom() <= 720.);
         assert!(output.0.shapes.iter().any(|s| matches!(&s.shape, egui::Shape::Rect(r) if r.stroke.color == crate::tabs::ACTIVE_BLUE && r.rect == rect)));
+        // The tab's blue join meets the Library's border without running
+        // over it.
+        for s in &output.0.shapes {
+            if let egui::Shape::Rect(r) = &s.shape
+                && r.fill == crate::tabs::ACTIVE_BLUE
+                && (r.rect.left() - tab.left()).abs() < 0.5
+                && r.rect.bottom() > tab.bottom()
+            {
+                assert!(
+                    r.rect.bottom() <= rect.top() + 0.1,
+                    "join {:?} runs over the border at {}",
+                    r.rect,
+                    rect.top()
+                );
+            }
+        }
         assert!(
             !output.0.shapes.iter().any(
                 |s| matches!(&s.shape, egui::Shape::Text(t) if t.galley.job.text == "Clipboard")
