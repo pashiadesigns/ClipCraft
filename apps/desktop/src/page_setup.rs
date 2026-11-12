@@ -801,7 +801,10 @@ mod tests {
                 events,
                 ..Default::default()
             },
-            |_| e.show_page_setup(ctx),
+            |_| {
+                e.show_page_setup(ctx);
+                crate::guided::paint(ctx);
+            },
         ))
     }
     #[test]
@@ -998,6 +1001,33 @@ mod tests {
         );
         assert!(crate::color_widgets::tests::text_rect(&output.shapes, g.message).is_some());
         assert_eq!(e.session.document.width, 1000, "nothing changed yet");
+        // The note sits beside the ringed control, never on it, and goes
+        // away once the pointer reaches the control to fix it (the ring
+        // stays until the value is right).
+        frame(&ctx, &mut e, 960., vec![]);
+        let (ring, note): (egui::Rect, egui::Rect) = ctx
+            .data(|data| data.get_temp(egui::Id::unique("guided-note")))
+            .expect("the note shows");
+        assert!(!note.intersects(ring), "{note:?} covers {ring:?}");
+        assert!(note.right() <= 960. && note.bottom() <= 780.);
+        frame(
+            &ctx,
+            &mut e,
+            960.,
+            vec![egui::Event::PointerMoved(ring.center())],
+        );
+        frame(&ctx, &mut e, 960., vec![]);
+        assert!(
+            ctx.data(
+                |data| data.get_temp::<(egui::Rect, egui::Rect)>(egui::Id::unique("guided-note"))
+            )
+            .is_none(),
+            "the note is put away once you start the fix"
+        );
+        assert_eq!(
+            crate::guided::active(&ctx).as_deref(),
+            Some("page-setup:Resize behavior")
+        );
         // Choosing Scale proportionally clears the ring; the message turns green.
         ctx.data_mut(|data| {
             let mut d = data.get_temp::<Draft>(key()).unwrap();

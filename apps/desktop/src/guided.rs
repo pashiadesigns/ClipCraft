@@ -317,6 +317,9 @@ struct Ring {
     name: String,
     note: String,
     since: f64,
+    /// The note is put away once the person starts the fix (points at or
+    /// presses the ringed control, or opens its list); the ring stays.
+    note_done: bool,
 }
 fn ring_id() -> Id {
     Id::unique("guided-ring")
@@ -336,6 +339,7 @@ pub(crate) fn request(ctx: &egui::Context, name: &str, note: String) {
                 name: name.to_owned(),
                 note,
                 since: now,
+                note_done: false,
             },
         )
     });
@@ -404,7 +408,19 @@ pub(crate) fn paint(ctx: &egui::Context) {
         );
         ctx.request_repaint();
     }
-    if !ring.note.is_empty() {
+    // The note never sits on the control or on anything opened from it
+    // (user, 2026-11-12: messages must not keep covering the fix).
+    let starting = ctx.input(|i| {
+        i.pointer
+            .latest_pos()
+            .is_some_and(|p| r.expand(2.).contains(p))
+    }) || egui::Popup::is_any_open(ctx);
+    if starting && !ring.note_done {
+        let mut done = ring.clone();
+        done.note_done = true;
+        ctx.data_mut(|d| d.insert_temp(ring_id(), done));
+    }
+    if !ring.note.is_empty() && !ring.note_done && !starting {
         let galley = painter.layout(
             ring.note.clone(),
             egui::FontId::proportional(12.5),
@@ -412,13 +428,9 @@ pub(crate) fn paint(ctx: &egui::Context) {
             270.,
         );
         let size = galley.size() + egui::vec2(20., 16.);
-        let mut at = egui::pos2(r.right() - size.x, r.bottom() + 10.);
-        let screen = ctx.content_rect();
-        if at.y + size.y > screen.bottom() {
-            at.y = r.top() - 10. - size.y;
-        }
-        at.x = at.x.clamp(screen.left() + 4., screen.right() - size.x - 4.);
-        let note = Rect::from_min_size(at, size);
+        let note = note_place(r, size, ctx.content_rect());
+        #[cfg(test)]
+        ctx.data_mut(|d| d.insert_temp(Id::unique("guided-note"), (r, note)));
         painter.rect_filled(note, 6., Color32::from_rgb(59, 50, 32));
         painter.rect_stroke(
             note,
@@ -427,9 +439,56 @@ pub(crate) fn paint(ctx: &egui::Context) {
             egui::StrokeKind::Inside,
         );
         painter.galley(note.min + egui::vec2(10., 8.), galley, Color32::WHITE);
+    } else {
+        #[cfg(test)]
+        ctx.data_mut(|d| d.remove::<(Rect, Rect)>(Id::unique("guided-note")));
     }
 }
 
+/// Where the ring's note goes: beside the control (right, then left), so the
+/// rows above and below stay clear; else below or above it. It never
+/// overlaps the control.
+pub(crate) fn note_place(target: Rect, size: egui::Vec2, screen: Rect) -> Rect {
+    let gap = 12.;
+    let clamp_y = |y: f32| {
+        y.clamp(
+            screen.top() + 4.,
+            (screen.bottom() - size.y - 4.).max(screen.top() + 4.),
+        )
+    };
+    let clamp_x = |x: f32| {
+        x.clamp(
+            screen.left() + 4.,
+            (screen.right() - size.x - 4.).max(screen.left() + 4.),
+        )
+    };
+    let y = clamp_y(target.center().y - size.y / 2.);
+    let candidates = [
+        egui::pos2(target.right() + gap, y),
+        egui::pos2(target.left() - gap - size.x, y),
+        egui::pos2(clamp_x(target.right() - size.x), target.bottom() + gap),
+        egui::pos2(
+            clamp_x(target.right() - size.x),
+            target.top() - gap - size.y,
+        ),
+    ];
+    candidates
+        .iter()
+        .map(|p| Rect::from_min_size(*p, size))
+        .find(|n| screen.contains_rect(*n) && !n.intersects(target))
+        .unwrap_or_else(|| {
+            // Nowhere fits whole: the side with the most room, still clear
+            // of the control.
+            let right = screen.right() - target.right();
+            let left = target.left() - screen.left();
+            let x = if right >= left {
+                target.right() + gap
+            } else {
+                target.left() - gap - size.x
+            };
+            Rect::from_min_size(egui::pos2(x, y), size)
+        })
+}
 // ------------------------------------------------------- shared drawing
 
 /// The round kind icon: "!" for errors and warnings, an animated check for
@@ -533,6 +592,49 @@ pub(crate) fn dialog_message(ui: &mut egui::Ui, kind: Kind, text: &str, show_me:
 #[cfg(test)]
 mod tests {
     use super::*;
+    /// The ring's note goes beside the control, then on the other side,
+    /// then below or above; it never overlaps the control.
+    #[test]
+    fn the_note_never_covers_the_control() {
+        let screen = Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1200., 800.));
+        let size = egui::vec2(260., 52.);
+        for (x, y, w) in [
+            (100., 300., 220.),
+            (900., 300., 220.),
+            (20., 20., 1100.),
+            (20., 740., 1100.),
+            (0., 0., 1200.),
+        ] {
+            let target = Rect::from_min_size(egui::pos2(x, y), egui::vec2(w, 30.));
+            let note = note_place(target, size, screen);
+            assert!(!note.intersects(target), "{note:?} on {target:?}");
+        }
+        let target = Rect::from_min_size(egui::pos2(100., 300.), egui::vec2(220., 30.));
+        assert!(
+            note_place(target, size, screen).left() > target.right(),
+            "right first"
+        );
+        let target = Rect::from_min_size(egui::pos2(900., 300.), egui::vec2(220., 30.));
+        assert!(
+            note_place(target, size, screen).right() < target.left(),
+            "then left"
+        );
+    }
+    /// The bar's card tucks away once a control is ringed (it would cover
+    /// the fix otherwise).
+    #[test]
+    fn the_message_card_tucks_away_while_a_control_is_ringed() {
+        let ctx = egui::Context::default();
+        crate::shell::configure(&ctx);
+        let mut e = crate::canvas::tests::editor(&ctx);
+        e.fail("Choose Scale proportionally, then Apply again.");
+        assert!(e.notice.card);
+        request(&ctx, "page-setup:Resize behavior", String::new());
+        ctx.run_ui(Default::default(), |ui| e.show_footer(ui))
+            .textures_delta
+            .clear();
+        assert!(!e.notice.card, "the card tucked into the bar");
+    }
     #[test]
     fn internal_checks_are_never_shown_as_they_are() {
         for raw in [

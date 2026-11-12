@@ -207,7 +207,14 @@ impl Editor {
             if response.clicked() {
                 self.notice.card = !self.notice.card;
             }
-            if self.notice.card {
+            // The card never covers the fix (user, 2026-11-12): it tucks into
+            // the bar once a control is ringed, and waits while a dialog is
+            // open (the dialog shows its own message).
+            if self.notice.card && crate::guided::active(ui.ctx()).is_some() {
+                self.notice.card = false;
+            }
+            let dialog_open = ui.ctx().memory(|m| m.top_modal_layer()).is_some();
+            if self.notice.card && !dialog_open {
                 self.message_card(ui, rect, kind);
             }
             return;
