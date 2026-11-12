@@ -622,20 +622,34 @@ impl State {
             let value = !e.favorite;
             self.result(|s| s.favorite(id, value));
         }
-        // Insert on the hovered or selected card, with room below it.
-        if hovered || selected {
-            let button = egui::Rect::from_min_max(
-                egui::pos2(preview.left() + 10., preview.bottom() - 10. - 28.),
-                egui::pos2(preview.right() - 10., preview.bottom() - 10.),
-            );
-            let insert = ui.put(
-                button,
-                egui::Button::new(egui::RichText::new("Insert").strong())
-                    .fill(crate::shell::ACCENT),
-            );
-            if insert.clicked() {
-                action = Some(CardAction::Insert);
-            }
+        // Insert on the hovered or selected card, with room below it. It is
+        // always laid out and only hidden, so the card's widgets never change
+        // with hover: a hover-only button closed the open ⋯ menu as soon as
+        // the pointer left the card to reach it (BV4, BX11).
+        let button = egui::Rect::from_min_max(
+            egui::pos2(preview.left() + 10., preview.bottom() - 10. - 28.),
+            egui::pos2(preview.right() - 10., preview.bottom() - 10.),
+        );
+        let insert = ui
+            .scope_builder(
+                egui::UiBuilder::new()
+                    .id_salt(("block-card-insert", e.id))
+                    .max_rect(button)
+                    .sense(egui::Sense::hover()),
+                |ui| {
+                    if !(hovered || selected) {
+                        ui.set_invisible();
+                    }
+                    ui.put(
+                        button,
+                        egui::Button::new(egui::RichText::new("Insert").strong())
+                            .fill(crate::shell::ACCENT),
+                    )
+                },
+            )
+            .inner;
+        if insert.clicked() {
+            action = Some(CardAction::Insert);
         }
         // Name, category and the ⋯ menu.
         let meta = egui::Rect::from_min_max(
@@ -660,7 +674,7 @@ impl State {
                         "Block"
                     });
                 });
-                ui.menu_button("…", |ui| {
+                let _menu = ui.menu_button("…", |ui| {
                     if crate::controls::menu_action(ui, "Rename").clicked() {
                         self.edit = Some((Some(e.id), e.name.clone(), e.payload.clone()));
                         self.rename = true;
@@ -686,6 +700,13 @@ impl State {
                         self.delete = Some(e.id);
                         ui.close();
                     }
+                });
+                #[cfg(test)]
+                ui.ctx().data_mut(|d| {
+                    d.insert_temp(
+                        egui::Id::unique(("block-card-menu", e.id)),
+                        _menu.response.rect,
+                    )
                 });
             },
         );
@@ -995,6 +1016,97 @@ mod tests {
         }
         let reopen = Store::open(s.test_root.as_ref().unwrap().path()).unwrap();
         assert_eq!(reopen.entries(), s.store.as_ref().unwrap().entries());
+    }
+
+    /// BV4/BX11: the card's … menu stays open while the pointer moves from
+    /// the button down into the menu, leaving the card on the way.
+    #[test]
+    fn block_card_menu_stays_open_while_the_pointer_moves_into_it() {
+        use capture_core::group_presets::Composition;
+        let ctx = egui::Context::default();
+        crate::shell::configure(&ctx);
+        crate::text_layout::configure(&ctx);
+        ctx.style_mut_of(egui::Theme::Dark, |style| style.animation_time = 0.);
+        let mut doc = capture_core::Document::blank(640, 400).unwrap();
+        let mut a = capture_core::steps::marker(
+            1,
+            [120., 120.],
+            40,
+            [24, 145, 193, 255],
+            (1, false),
+            [640, 400],
+        )
+        .unwrap();
+        a.id = 1;
+        let mut b = a.clone();
+        b.id = 2;
+        b.kind = crate::Kind::Rectangle;
+        b.text = None;
+        b.start = [160., 104.];
+        b.end = [360., 136.];
+        doc.annotations = vec![a, b];
+        let mut s = State::default();
+        s.init();
+        let store = s.store.as_mut().unwrap();
+        store
+            .save(
+                "One",
+                Payload::Group(Composition::capture(&doc, &[1, 2]).unwrap()),
+            )
+            .unwrap();
+        store
+            .save(
+                "Two",
+                Payload::Group(Composition::capture(&doc, &[1, 2]).unwrap()),
+            )
+            .unwrap();
+        s.open_groups(None);
+        let frame = |s: &mut State, events: Vec<egui::Event>| {
+            let mut out = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        egui::vec2(1000., 760.),
+                    )),
+                    focused: true,
+                    events,
+                    ..Default::default()
+                },
+                |ui| {
+                    crate::controls::prepare_dialog_keys(ui.ctx());
+                    s.show(ui.ctx());
+                },
+            );
+            out.textures_delta.clear();
+        };
+        for _ in 0..3 {
+            frame(&mut s, vec![]);
+        }
+        let id = s.store.as_ref().unwrap().entries()[0].id;
+        let button: egui::Rect = ctx
+            .data(|d| d.get_temp(egui::Id::unique(("block-card-menu", id))))
+            .expect("the card drew its menu button");
+        let at = button.center();
+        let press = |pressed| egui::Event::PointerButton {
+            pos: at,
+            button: egui::PointerButton::Primary,
+            pressed,
+            modifiers: egui::Modifiers::NONE,
+        };
+        frame(&mut s, vec![egui::Event::PointerMoved(at)]);
+        frame(&mut s, vec![press(true)]);
+        frame(&mut s, vec![press(false)]);
+        frame(&mut s, vec![]);
+        assert!(egui::Popup::is_any_open(&ctx), "the menu opened");
+        // Down and to the right, into where the menu's first items are.
+        for step in 1..=12 {
+            let p = at + egui::vec2(step as f32 * 3., step as f32 * 6.);
+            frame(&mut s, vec![egui::Event::PointerMoved(p)]);
+            assert!(
+                egui::Popup::is_any_open(&ctx),
+                "closed after moving to {p:?}"
+            );
+        }
     }
 
     /// Approved tab 2: Blocks as a card grid with Insert, favorites and the

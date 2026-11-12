@@ -189,6 +189,19 @@ fn describe(selected: &[bool]) -> String {
 }
 
 impl PdfImport {
+    /// The same dialog for another PDF: where the pages go (a new guide, an
+    /// open guide or a video) and the import and scan choices carry over.
+    pub(crate) fn with_file(self, path: PathBuf) -> Self {
+        let mut next = Self::new(path);
+        next.insert = self.insert;
+        next.video = self.video;
+        next.pictures = self.pictures;
+        next.scan = self.scan;
+        next.options = self.options;
+        next.phrases = self.phrases;
+        next.cover = self.cover;
+        next
+    }
     pub(crate) fn new(path: PathBuf) -> Self {
         let mut value = Self {
             path,
@@ -978,8 +991,20 @@ impl Editor {
         }
 
         if change_file {
-            self.pdf_import = None;
-            self.new_from_pdf();
+            // The dialog stays open behind the file picker; cancelling it
+            // returns to the dialog as it was, and a new file keeps what the
+            // dialog was doing (inserting, video pages, scan choices).
+            self.suspend_global_capture();
+            if let Some(path) = rfd::FileDialog::new()
+                .set_directory(self.dialog_folder(capture_core::quick_preferences::Folder::Open))
+                .add_filter("PDF documents", &["pdf"])
+                .pick_file()
+            {
+                self.remember_dialog_folder(capture_core::quick_preferences::Folder::Open, &path);
+                if let Some(old) = self.pdf_import.take() {
+                    self.pdf_import = Some(old.with_file(path));
+                }
+            }
         } else if close {
             self.pdf_import = None;
         } else if self
@@ -1690,6 +1715,26 @@ mod tests {
         assert_eq!(paper([612., 792.]), "Letter");
         assert_eq!(paper([842., 595.]), "A4");
         assert_eq!(paper([300., 200.]), "4.2 × 2.8 in");
+    }
+    /// Change file… keeps the dialog's job and choices for the new PDF.
+    #[test]
+    fn changing_the_file_keeps_where_the_pages_go_and_the_scan_choices() {
+        let mut draft = PdfImport::new(sample_path());
+        draft.insert = Some(InsertInto {
+            current: 2,
+            sizes: vec![[800, 600]; 3],
+            place: Place::After,
+            fit: true,
+        });
+        draft.scan = true;
+        draft.phrases = "Dana Reyes".into();
+        draft.pictures = true;
+        let next = draft.with_file(PathBuf::from("other.pdf"));
+        assert_eq!(next.path, PathBuf::from("other.pdf"));
+        let into = next.insert.as_ref().unwrap();
+        assert!(into.fit && into.current == 2);
+        assert!(next.scan && next.pictures && next.phrases == "Dana Reyes");
+        assert!(next.file.is_none(), "the new file is read afresh");
     }
     #[test]
     fn importing_the_sample_builds_a_guide_with_one_page_per_pdf_page() {

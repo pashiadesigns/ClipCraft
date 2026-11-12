@@ -135,6 +135,18 @@ impl Editor {
                 {
                     draft.degrees = value;
                 }
+                // Back to how the dialog opened (BX1).
+                let original = draft.degrees == 0. && draft.grow && !draft.canvas_color;
+                if ui
+                    .add_enabled(!original, egui::Button::new("Reset"))
+                    .tip("Reset · Put the angle back to 0° and the canvas and corners back to their defaults.")
+                    .clicked()
+                {
+                    draft.degrees = 0.;
+                    draft.text = "0°".into();
+                    draft.grow = true;
+                    draft.canvas_color = false;
+                }
             });
             ui.horizontal(|ui| {
                 ui.add_sized([72., 20.], egui::Label::new("Canvas"));

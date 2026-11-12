@@ -197,15 +197,24 @@ fn rects(document: &Document, each: Each) -> Vec<[f32; 4]> {
     }
 }
 
+/// Whether a text object sits under a redaction, blur or pixelate area.
+fn hidden_text(a: &Annotation, visible: &[&Annotation]) -> bool {
+    let (lo, hi) = a.bounds();
+    visible.iter().any(|b| {
+        b.id != a.id && matches!(b.kind, Kind::Redact | Kind::Blur | Kind::Pixelate) && {
+            let (blo, bhi) = b.bounds();
+            lo[0] < bhi[0] && blo[0] < hi[0] && lo[1] < bhi[1] && blo[1] < hi[1]
+        }
+    })
+}
+
 fn regions(document: &Document, each: Each, editable: bool) -> Result<Vec<Region>> {
     let visible = visible(document);
     let natives = if editable { natives(&visible) } else { vec![] };
-    let mut background = document.clone();
-    background.annotations.retain(|a| !natives.contains(&a.id));
-    // Objects taken out for native shapes must leave no page or pasteboard
-    // records behind, or the picture fails validation (BW2).
-    background.prune_canvas_behavior();
-    let pixels = background.render()?;
+    // Objects taken out for native shapes must leave no page, pasteboard,
+    // section or group records behind, or the picture fails validation
+    // (BW2, BX2).
+    let pixels = document.without_objects(&natives).render()?;
     let mut out = vec![];
     for rect in rects(document, each) {
         let [x, y, w, h] = rect.map(|v| v.max(0.) as u32);
@@ -220,6 +229,9 @@ fn regions(document: &Document, each: Each, editable: bool) -> Result<Vec<Region
         let mut texts: Vec<(f32, f32, String)> = visible
             .iter()
             .filter(|a| inside(a, rect) && matches!(a.kind, Kind::Text | Kind::Callout))
+            // Text under a redaction, blur or pixelate (and the REDACTED labels
+            // drawn on redactions) never becomes notes or paragraphs (BW4).
+            .filter(|a| !hidden_text(a, &visible))
             .filter_map(|a| {
                 let t = a.text.as_ref()?.content.trim().to_owned();
                 (!t.is_empty()).then(|| (a.start[1].min(a.end[1]), a.start[0].min(a.end[0]), t))
@@ -737,22 +749,72 @@ pub fn docx(
     let mut zip = Zip::new();
     let (page_w, page_h) = paper_twips(options.paper);
     let margin = MARGIN_TWIPS;
-    let mut body = String::new();
-    if options.contents {
-        let _ = write!(
-            body,
-            "<w:p><w:pPr><w:pStyle w:val=\"Title\"/></w:pPr><w:r><w:t xml:space=\"preserve\">{}</w:t></w:r></w:p><w:p><w:r><w:fldChar w:fldCharType=\"begin\" w:dirty=\"true\"/></w:r><w:r><w:instrText xml:space=\"preserve\"> TOC \\o \"1-1\" \\h \\z \\u </w:instrText></w:r><w:r><w:fldChar w:fldCharType=\"separate\"/></w:r><w:r><w:t>Right-click and choose Update Field to show the contents.</w:t></w:r><w:r><w:fldChar w:fldCharType=\"end\"/></w:r></w:p>",
-            esc(&options.title)
-        );
-    }
+    // Steps are numbered sections of a step guide. A guide's title block is
+    // the document's title and introduction, not step 1, and a guide of plain
+    // pages (a PDF, say) comes in as pages without step numbers (BX4, BW4).
+    let mut steps_body = String::new();
+    let mut intro = String::new();
+    let mut title = options.title.clone();
     let mut rels = String::new();
     let mut media = 0usize;
     let mut step = 0usize;
+    let mut items = 0usize;
+    let paragraph = |text: &str| {
+        format!(
+            "<w:p><w:r><w:t xml:space=\"preserve\">{}</w:t></w:r></w:p>",
+            esc(text)
+        )
+    };
     for document in documents {
         let document = document?;
-        for region in regions(&document, Each::Section, false)? {
-            step += 1;
+        let kinds: Vec<Option<crate::guide_sections::SectionKind>> = match &document.guide {
+            Some(g) if !g.sections.is_empty() => g.sections.iter().map(|s| Some(s.kind)).collect(),
+            _ => vec![],
+        };
+        for (i, region) in regions(&document, Each::Section, false)?
+            .into_iter()
+            .enumerate()
+        {
+            use crate::guide_sections::SectionKind;
+            let kind = kinds.get(i).copied().flatten();
+            let lines: Vec<&str> = region
+                .text
+                .iter()
+                .flat_map(|t| t.lines())
+                .map(str::trim)
+                .filter(|l| !l.is_empty())
+                .collect();
+            match kind {
+                Some(SectionKind::Blank) => continue,
+                Some(SectionKind::Header) => {
+                    // The guide's own title replaces the generic one.
+                    let mut rest = lines.iter();
+                    if let Some(first) = rest.next()
+                        && (title.trim().is_empty() || title == DocumentOptions::default().title)
+                    {
+                        title = (*first).to_owned();
+                    }
+                    for l in rest {
+                        intro.push_str(&paragraph(l));
+                    }
+                    items += 1;
+                    continue;
+                }
+                Some(SectionKind::Text) => {
+                    for l in &lines {
+                        steps_body.push_str(&paragraph(l));
+                    }
+                    items += 1;
+                    continue;
+                }
+                _ => {}
+            }
+            let numbered = kind == Some(SectionKind::Image);
+            items += 1;
             media += 1;
+            if numbered {
+                step += 1;
+            }
             zip.add(
                 &format!("word/media/image{media}.png"),
                 &png(&region.picture)?,
@@ -763,32 +825,34 @@ pub fn docx(
                 "<Relationship Id=\"{rid}\" Type=\"{REL}/image\" Target=\"media/image{media}.png\"/>"
             );
             let (width, height) = word_picture(options, region.rect);
+            let name = if numbered {
+                format!("Step {step}")
+            } else {
+                format!("Page {media}")
+            };
             let picture = format!(
-                "<w:p><w:r><w:drawing><wp:inline distT=\"0\" distB=\"0\" distL=\"0\" distR=\"0\"><wp:extent cx=\"{width}\" cy=\"{height}\"/><wp:docPr id=\"{media}\" name=\"Step {step}\"/><a:graphic xmlns:a=\"http://schemas.openxmlformats.org/drawingml/2006/main\"><a:graphicData uri=\"http://schemas.openxmlformats.org/drawingml/2006/picture\"><pic:pic xmlns:pic=\"http://schemas.openxmlformats.org/drawingml/2006/picture\"><pic:nvPicPr><pic:cNvPr id=\"{media}\" name=\"Step {step}\"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed=\"{rid}\"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x=\"0\" y=\"0\"/><a:ext cx=\"{width}\" cy=\"{height}\"/></a:xfrm><a:prstGeom prst=\"rect\"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>"
+                "<w:p><w:r><w:drawing><wp:inline distT=\"0\" distB=\"0\" distL=\"0\" distR=\"0\"><wp:extent cx=\"{width}\" cy=\"{height}\"/><wp:docPr id=\"{media}\" name=\"{name}\"/><a:graphic xmlns:a=\"http://schemas.openxmlformats.org/drawingml/2006/main\"><a:graphicData uri=\"http://schemas.openxmlformats.org/drawingml/2006/picture\"><pic:pic xmlns:pic=\"http://schemas.openxmlformats.org/drawingml/2006/picture\"><pic:nvPicPr><pic:cNvPr id=\"{media}\" name=\"{name}\"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed=\"{rid}\"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x=\"0\" y=\"0\"/><a:ext cx=\"{width}\" cy=\"{height}\"/></a:xfrm><a:prstGeom prst=\"rect\"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>"
             );
-            // The first line of the step's text is its heading; the rest is
-            // its body.
-            let mut lines = region.text.iter().flat_map(|t| t.lines());
-            let heading = lines
-                .next()
-                .map(str::to_owned)
-                .unwrap_or_else(|| format!("Step {step}"));
-            let _ = write!(
-                body,
-                "<w:p><w:pPr><w:pStyle w:val=\"Heading1\"/><w:keepNext/><w:keepLines/></w:pPr><w:r><w:t xml:space=\"preserve\">{step}. {}</w:t></w:r></w:p>",
-                esc(&heading)
-            );
-            let text: String = lines
-                .map(|l| {
-                    format!(
-                        "<w:p><w:r><w:t xml:space=\"preserve\">{}</w:t></w:r></w:p>",
-                        esc(l)
-                    )
-                })
-                .collect();
-            if options.beside {
+            let mut rest = lines.iter();
+            if numbered {
+                // A step's first line is its heading; the rest is its text.
+                let heading = rest
+                    .next()
+                    .map(|l| (*l).to_owned())
+                    .unwrap_or_else(|| format!("Step {step}"));
                 let _ = write!(
-                    body,
+                    steps_body,
+                    "<w:p><w:pPr><w:pStyle w:val=\"Heading1\"/><w:keepNext/><w:keepLines/></w:pPr><w:r><w:t xml:space=\"preserve\">{step}. {}</w:t></w:r></w:p>",
+                    esc(&heading)
+                );
+            } else if media > 1 {
+                // Plain pages: each on its own page, like the original.
+                steps_body.push_str("<w:p><w:r><w:br w:type=\"page\"/></w:r></w:p>");
+            }
+            let text: String = rest.map(|l| paragraph(l)).collect();
+            if options.beside && numbered {
+                let _ = write!(
+                    steps_body,
                     "<w:tbl><w:tblPr><w:tblW w:w=\"0\" w:type=\"auto\"/><w:tblLayout w:type=\"fixed\"/></w:tblPr><w:tblGrid><w:gridCol w:w=\"{}\"/><w:gridCol w:w=\"{}\"/></w:tblGrid><w:tr><w:trPr><w:cantSplit/></w:trPr><w:tc><w:tcPr><w:tcW w:w=\"{}\" w:type=\"dxa\"/></w:tcPr>{picture}</w:tc><w:tc><w:tcPr><w:tcW w:w=\"{}\" w:type=\"dxa\"/></w:tcPr>{}</w:tc></w:tr></w:tbl><w:p/>",
                     (page_w - 2 * margin) * 3 / 5,
                     (page_w - 2 * margin) * 2 / 5,
@@ -801,14 +865,30 @@ pub fn docx(
                     }
                 );
             } else {
-                body.push_str(&picture);
-                body.push_str(&text);
+                steps_body.push_str(&picture);
+                steps_body.push_str(&text);
             }
         }
     }
-    if step == 0 {
+    if items == 0 {
         return Err(Error::Invalid("Nothing to export".into()));
     }
+    let mut body = String::new();
+    if options.contents {
+        let _ = write!(
+            body,
+            "<w:p><w:pPr><w:pStyle w:val=\"Title\"/></w:pPr><w:r><w:t xml:space=\"preserve\">{}</w:t></w:r></w:p>",
+            esc(&title)
+        );
+        body.push_str(&intro);
+        // Contents only lists something when there are steps.
+        if step > 0 {
+            body.push_str("<w:p><w:r><w:fldChar w:fldCharType=\"begin\" w:dirty=\"true\"/></w:r><w:r><w:instrText xml:space=\"preserve\"> TOC \\o \"1-1\" \\h \\z \\u </w:instrText></w:r><w:r><w:fldChar w:fldCharType=\"separate\"/></w:r><w:r><w:t>Right-click and choose Update Field to show the contents.</w:t></w:r><w:r><w:fldChar w:fldCharType=\"end\"/></w:r></w:p>");
+        }
+    } else {
+        body.push_str(&intro);
+    }
+    body.push_str(&steps_body);
     let _ = write!(
         body,
         "<w:sectPr><w:pgSz w:w=\"{page_w}\" w:h=\"{page_h}\"/><w:pgMar w:top=\"{margin}\" w:right=\"{margin}\" w:bottom=\"{margin}\" w:left=\"{margin}\" w:header=\"720\" w:footer=\"720\" w:gutter=\"0\"/></w:sectPr>"
