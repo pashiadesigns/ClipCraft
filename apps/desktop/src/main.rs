@@ -4,7 +4,7 @@ use eframe::egui;
 use std::path::PathBuf;
 use std::sync::mpsc::{Receiver, TryRecvError};
 
-mod backstage;
+pub(crate) mod backstage;
 mod blank_dialog;
 mod brand;
 mod canvas;
@@ -1299,7 +1299,8 @@ impl eframe::App for Editor {
                     egui::Key::S,
                 )
             }) {
-                self.save(true);
+                // Ctrl+Shift+S is Save a copy (approved File menu).
+                self.save_copy();
             } else if ctx.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::S)) {
                 self.save(false);
             }

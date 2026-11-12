@@ -860,7 +860,7 @@ impl Editor {
                         .tip(if guide {
                             "PDF pages · Add pages from a PDF to this guide."
                         } else {
-                            "PDF pages · Works in a guide with pages. Use File › New › From PDF for a new guide."
+                            "PDF pages · Works in a guide with pages. Use File › Home › From PDF for a new guide."
                         })
                         .clicked()
                     {

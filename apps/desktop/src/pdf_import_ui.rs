@@ -1,5 +1,5 @@
 //! New from PDF (approved `artifacts/pdf-import-proposal`, engine chosen in
-//! `artifacts/pdf-engine-spike`). File › New › From PDF, File › Open of a PDF
+//! `artifacts/pdf-engine-spike`). File › Home › From PDF, File › Open of a PDF
 //! and a PDF dropped on the window all come here.
 //!
 //! The PDF is opened, drawn and converted off the window thread; the dialog
@@ -683,7 +683,7 @@ impl Editor {
         let d = &self.session.document;
         let Some(guide) = d.guide.as_ref().filter(|g| g.pages.is_some()) else {
             self.status =
-                "Insert PDF pages works in a guide with pages. Use File › New › From PDF for a new guide."
+                "Insert PDF pages works in a guide with pages. Use File › Home › From PDF for a new guide."
                     .into();
             return;
         };
@@ -745,7 +745,7 @@ impl Editor {
             Err(e) => self.fail(e),
         }
     }
-    /// File › New › From PDF: Windows' picker filtered to PDF files.
+    /// File › Home › From PDF: Windows' picker filtered to PDF files.
     pub(crate) fn new_from_pdf(&mut self) {
         self.suspend_global_capture();
         if let Some(path) = rfd::FileDialog::new()
@@ -1521,7 +1521,7 @@ fn ready(ui: &mut egui::Ui, draft: &mut PdfImport) -> (bool, bool) {
             ("Choose at least one page.".to_owned(), false)
         } else if !fits {
             (
-                "These pages don't fit in this guide. Insert fewer pages, or use File › New › From PDF to make linked parts.".to_owned(),
+                "These pages don't fit in this guide. Insert fewer pages, or use File › Home › From PDF to make linked parts.".to_owned(),
                 false,
             )
         } else {

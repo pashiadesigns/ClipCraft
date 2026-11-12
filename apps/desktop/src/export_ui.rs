@@ -960,13 +960,16 @@ impl Editor {
 }
 
 impl Editor {
-    /// Opens Export with PowerPoint or Word chosen, for the dialog gallery.
-    #[cfg(test)]
-    pub(crate) fn begin_office_export_for_test(&mut self, kind: Office) {
+    /// Opens Export with PowerPoint or Word chosen (File › Export cards).
+    pub(crate) fn begin_office_export(&mut self, kind: Office) {
         self.begin_export(false);
         if let Some(d) = self.export_dialog.as_mut() {
             d.office.kind = Some(kind);
         }
+    }
+    #[cfg(test)]
+    pub(crate) fn begin_office_export_for_test(&mut self, kind: Office) {
+        self.begin_office_export(kind);
     }
 }
 

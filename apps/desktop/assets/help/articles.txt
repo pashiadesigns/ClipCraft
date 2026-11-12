@@ -376,13 +376,13 @@ When you export to PDF, SVG drawings stay shapes. Only the parts under a redacti
 # New from PDF
 id: new-from-pdf
 section: Images
-where: File › New › From PDF
+where: File › Home › From PDF
 controls: From PDF, New from PDF, Change file…, Editable pages, Pictures, Scan after import, Include all parts, Previous part, Next part, PDF pages…, Insert PDF pages, Searchable text, This part, All parts, Skip to next part
 keywords: pdf, document, pages, import, open pdf, redact pdf, guide, acrobat
 ---
 New from PDF turns the pages of a PDF into a guide, one PDF page per guide page, sized to the PDF. Every image tool works on them as usual: Steps, Focus, Magnify, Obfuscate, Blocks and the rest.
 
-step: Open File › New and choose From PDF, or drop a PDF on the window. | title: Choose a PDF
+step: Open File › Home and choose From PDF, or drop a PDF on the window. | title: Choose a PDF
 step: Click pages to include or leave them out, or type a range such as 1-3, 6. The arrow keys step through the preview. | title: Pick pages
 step: Choose Editable pages or Pictures, then Create guide. | title: Create the guide
 
@@ -672,14 +672,14 @@ Rename on File › Info renames the file, its Library entry and the window title
 # Templates
 id: templates
 section: Files
-where: File › New › Templates
+where: File › Home › Templates
 controls: Templates, Save as Template, Apply image template
 keywords: template, guide, steps, how-to, issue report, bug report, release notes, slide, social card, checklist, faq, annotated, zoom, shortcuts, process, flow, do and don't, showcase
 hero: templates-hero
 ---
 Templates start a guide with ready-made sections. Steps asks how many steps you want (2 to 8) and whether to stack them or lay them out in a grid. Others include Annotated screen, Zoom detail, Shortcut sheet, Process flow, Do / Don't, Window showcase, Troubleshooting Q&A, Release notes, a 16:9 Tutorial slide and a square Social card. Filter by Guides, Support or Announce & share. Your captures fill the image frames and everything stays editable.
 
-step: Open File › New. | title: Open New | pic: templates-1
+step: Open File › Home. | title: Open Home | pic: templates-1
 step: Choose a template from the gallery. | title: Choose a template | pic: templates-2
 step: Your captures fill the image frames, and everything stays editable. | title: Fill the frames
 
