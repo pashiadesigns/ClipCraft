@@ -18,6 +18,18 @@ impl Editor {
             self.import_timeline_media(paths, at, track);
         }
     }
+    /// Insert › Media › Pictures: picture files only.
+    pub(super) fn pick_timeline_pictures(&mut self, at: u64, track: u64) {
+        self.video.pause();
+        self.suspend_global_capture();
+        if let Some(paths) = rfd::FileDialog::new()
+            .set_title("Add pictures to timeline")
+            .add_filter("Pictures", &["png", "jpg", "jpeg", "webp"])
+            .pick_files()
+        {
+            self.import_timeline_media(paths, at, track);
+        }
+    }
     pub(super) fn import_timeline_media(&mut self, paths: Vec<PathBuf>, at: u64, track: u64) {
         if self.video.importing.is_some() {
             self.status = "Wait for the current media import to finish.".into();

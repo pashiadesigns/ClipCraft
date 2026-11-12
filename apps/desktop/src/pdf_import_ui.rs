@@ -58,6 +58,9 @@ pub(crate) struct VideoPages {
     /// The video's frame size, which the page pictures are drawn to fit.
     frame: [u32; 2],
     folder: PathBuf,
+    /// Where the pages go on the timeline: where the PDF was dropped, or
+    /// (None) the playhead.
+    at: Option<u64>,
 }
 impl VideoPages {
     fn seconds(&self) -> Option<f64> {
@@ -612,12 +615,6 @@ impl Editor {
         if self.session.document.video.is_none() {
             return;
         }
-        // The video frame is the document's size.
-        let frame = [self.session.document.width, self.session.document.height];
-        let Some(folder) = self.history.root().map(|r| r.join("pdf-pages")) else {
-            self.status = "The Library isn't available, so PDF pages can't be saved.".into();
-            return;
-        };
         self.video.pause();
         self.suspend_global_capture();
         if let Some(path) = rfd::FileDialog::new()
@@ -626,16 +623,32 @@ impl Editor {
             .pick_file()
         {
             self.remember_dialog_folder(capture_core::quick_preferences::Folder::Open, &path);
-            let mut draft = PdfImport::new(path);
-            draft.video = Some(VideoPages {
-                seconds: "4.0".into(),
-                crossfade: true,
-                fill: false,
-                frame,
-                folder,
-            });
-            self.pdf_import = Some(draft);
+            self.pdf_pages_to_video_from(path, None);
         }
+    }
+    /// PDF pages for this video from path, placed at t (where it was
+    /// dropped on the timeline) or at the playhead.
+    pub(crate) fn pdf_pages_to_video_from(&mut self, path: PathBuf, at: Option<u64>) {
+        if self.session.document.video.is_none() || self.pdf_import.is_some() {
+            return;
+        }
+        // The video frame is the document's size.
+        let frame = [self.session.document.width, self.session.document.height];
+        let Some(folder) = self.history.root().map(|r| r.join("pdf-pages")) else {
+            self.status = "The Library isn't available, so PDF pages can't be saved.".into();
+            return;
+        };
+        self.video.pause();
+        let mut draft = PdfImport::new(path);
+        draft.video = Some(VideoPages {
+            seconds: "4.0".into(),
+            crossfade: true,
+            fill: false,
+            frame,
+            folder,
+            at,
+        });
+        self.pdf_import = Some(draft);
     }
     fn finish_video_pages(
         &mut self,
@@ -656,7 +669,7 @@ impl Editor {
                 ..Default::default()
             });
         }
-        let at = p.cursor;
+        let at = video.at.unwrap_or(p.cursor);
         let track = p.add_media_track();
         p = crate::video_editor::imports::plan_import(&p, &clips, at, track);
         // Lay the pages end to end from the playhead, overlapping to crossfade.
@@ -1687,6 +1700,11 @@ impl PdfImport {
         });
         self
     }
+    /// Where video pages go (None: no video pages; Some(None): the playhead).
+    #[cfg(test)]
+    pub(crate) fn video_at_for_test(&self) -> Option<Option<u64>> {
+        self.video.as_ref().map(|v| v.at)
+    }
     /// PDF pages in a video, for the dialog gallery.
     pub(crate) fn into_video(mut self) -> Self {
         self.video = Some(VideoPages {
@@ -1695,6 +1713,7 @@ impl PdfImport {
             fill: false,
             frame: [1920, 1080],
             folder: std::env::temp_dir(),
+            at: None,
         });
         self
     }
@@ -1960,6 +1979,7 @@ mod tests {
             fill: false,
             frame: [e.session.document.width, e.session.document.height],
             folder: folder.path().to_path_buf(),
+            at: None,
         });
         draft.selected = parse_range("1-2", 8).unwrap();
         draft.import(&ctx);

@@ -485,3 +485,81 @@ fn independent_clip_and_track_dsp_mono_and_mute_match_export_audio() {
     );
     assert_eq!(std::fs::read(file).unwrap(), original);
 }
+
+/// Approved option A: a PDF dropped on the timeline opens PDF pages that go
+/// in where it was dropped; the hover says so instead of reading it as media.
+#[test]
+fn a_pdf_dropped_on_the_timeline_opens_pdf_pages_at_that_spot() {
+    let ctx = egui::Context::default();
+    let mut e = editor(&ctx);
+    let temp = tempfile::tempdir().unwrap();
+    let history = tempfile::tempdir().unwrap();
+    e.history = crate::history::HistoryPanel::isolated(history.path());
+    let path = temp.path().join("pages.pdf");
+    std::fs::write(&path, b"%PDF-1.4\n").unwrap();
+    let pos = egui::pos2(470., 90.);
+    let draw = |e: &mut Editor, hover: bool, drop: bool| {
+        let input = egui::RawInput {
+            screen_rect: Some(egui::Rect::from_min_size(
+                egui::Pos2::ZERO,
+                egui::vec2(1000., 500.),
+            )),
+            events: vec![egui::Event::PointerMoved(pos)],
+            hovered_files: if hover {
+                vec![egui::HoveredFile {
+                    path: Some(path.clone()),
+                    ..Default::default()
+                }]
+            } else {
+                vec![]
+            },
+            dropped_files: if drop {
+                vec![Arc::new(DropFile(path.clone()))]
+            } else {
+                vec![]
+            },
+            ..Default::default()
+        };
+        crate::property_layout::tests::PaintedOutput(ctx.run_ui(input, |ui| {
+            let p = e.session.document.video.clone().unwrap();
+            let whole = egui::Rect::from_min_max(egui::pos2(0., 0.), egui::pos2(1000., 400.));
+            e.video_media_rows(ui, &p, whole, 210., 0.05, 36.);
+        }))
+    };
+    let output = draw(&mut e, true, false);
+    assert!(
+        crate::color_widgets::tests::text_rect(&output.0.shapes, "Drop to add PDF pages here")
+            .is_some()
+    );
+    assert!(e.video.drop_probe.is_none(), "a PDF isn't read as media");
+    assert_eq!(e.notice.kind, crate::guided::Kind::Plain, "{}", e.status);
+    draw(&mut e, false, true);
+    let draft = e.pdf_import.as_ref().expect("PDF pages opened");
+    assert_eq!(draft.video_at_for_test(), Some(Some(5200)));
+    assert!(e.video.importing.is_none());
+}
+
+/// Insert › Media fits its labels inside the compact buttons.
+#[test]
+fn the_media_group_labels_fit_their_buttons() {
+    let ctx = egui::Context::default();
+    crate::shell::configure(&ctx);
+    let mut e = editor(&ctx);
+    let output = crate::property_layout::tests::PaintedOutput(ctx.run_ui(
+        egui::RawInput {
+            screen_rect: Some(egui::Rect::from_min_size(
+                egui::Pos2::ZERO,
+                egui::vec2(1600., 200.),
+            )),
+            ..Default::default()
+        },
+        |ui| {
+            ui.horizontal(|ui| e.video_insert_ribbon(ui, 58.));
+        },
+    ));
+    for label in ["Video/audio", "Pictures", "PDF pages", "Record more"] {
+        let r = crate::color_widgets::tests::text_rect(&output.0.shapes, label)
+            .unwrap_or_else(|| panic!("{label}"));
+        assert!(r.width() + 25. <= 100., "{label}: {r:?}");
+    }
+}

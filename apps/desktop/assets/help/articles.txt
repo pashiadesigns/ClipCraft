@@ -709,13 +709,15 @@ Library storage and recovery sets how much space history uses and can bring back
 id: video-editor
 section: Video
 where: Video timeline
-controls: Timeline, Split, Trim, Play / Pause, Play, Pause, Hide track, Add Track, Drag to reorder track, Timeline snapping, Fit preview, Zoom preview in, Zoom preview out, Zoom timeline in, Zoom timeline out, Next, Previous, Follow playhead, Video setup, Video Setup
+controls: Timeline, Split, Trim, Play / Pause, Play, Pause, Hide track, Add Track, Drag to reorder track, Timeline snapping, Fit preview, Zoom preview in, Zoom preview out, Zoom timeline in, Zoom timeline out, Next, Previous, Follow playhead, Video setup, Video Setup, Media, Video/audio, Pictures, PDF pages, Record more
 keywords: video, timeline, clips, tracks, cut, split, edit video, playhead
 hero: video-editor-hero
 ---
 Recordings open in the video editor. The timeline shows the recording, objects, zooms and audio on separate tracks. Drag object edges to set when they appear.
 
 Space plays and pauses. Select a clip and Split cuts it at the playhead.
+
+To add media, use the Media group on the Insert tab: Video/audio, Pictures, PDF pages, or Record more to add another recording. Each goes in at the playhead. You can also drop files onto a timeline row: a blue outline shows where they will land, and a PDF opens PDF pages at that spot.
 
 # Jump to Object
 id: jump

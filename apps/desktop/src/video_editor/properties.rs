@@ -1196,6 +1196,62 @@ impl Editor {
     }
     pub(crate) fn video_insert_ribbon(&mut self, ui: &mut egui::Ui, _height: f32) {
         ui.set_min_height(_height + 14.);
+        // Everything that adds media sits here (approved option A), as a
+        // compact 2 × 2 so the tab still fits a 1440 px window.
+        crate::ribbon::group(ui, "Media", 2. * 100. + 4., _height, |ui| {
+            let items = [
+                (
+                    "Add Track",
+                    "Video/audio",
+                    "Add a video, sound or music file at the playhead.",
+                ),
+                (
+                    "Image",
+                    "Pictures",
+                    "Add pictures as clips at the playhead.",
+                ),
+                (
+                    "Open",
+                    "PDF pages",
+                    "Add pages from a PDF as picture clips at the playhead.",
+                ),
+                (
+                    "Capture Video",
+                    "Record more",
+                    "Record another part and add it to this video.",
+                ),
+            ];
+            let mut chosen = None;
+            ui.vertical(|ui| {
+                ui.spacing_mut().item_spacing = egui::vec2(4., 2.);
+                for row in items.chunks(2) {
+                    ui.horizontal(|ui| {
+                        for (glyph, name, tip) in row {
+                            if super::ui::button(ui, glyph, name, 100., false)
+                                .tip_title(*name)
+                                .tip(*tip)
+                                .clicked()
+                            {
+                                chosen = Some(*name);
+                            }
+                        }
+                    });
+                }
+            });
+            if let Some(name) = chosen {
+                let (at, track) = {
+                    let v = self.session.document.video.as_ref().unwrap();
+                    (v.cursor, *v.media_tracks.last().unwrap())
+                };
+                match name {
+                    "Video/audio" => self.pick_timeline_media(at, track),
+                    "Pictures" => self.pick_timeline_pictures(at, track),
+                    "PDF pages" => self.pdf_pages_to_video(),
+                    _ => self.open_video_capture(),
+                }
+            }
+        });
+        crate::ribbon::divider(ui, _height);
         crate::ribbon::group(
             ui,
             "Annotations",

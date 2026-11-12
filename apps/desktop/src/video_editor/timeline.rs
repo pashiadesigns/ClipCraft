@@ -400,19 +400,8 @@ impl Editor {
                         if jump.clicked() {
                             self.jump_to_object();
                         }
-                        if super::ui::button(ui, "Add Track", "Import…", 82., false)
-                            .tip("Import audio, image or video at the playhead")
-                            .clicked()
-                        {
-                            let v = self.session.document.video.as_ref().unwrap();
-                            self.pick_timeline_media(v.cursor, *v.media_tracks.last().unwrap());
-                        }
-                        if super::ui::button(ui, "Open", "PDF pages…", 96., false)
-                            .tip("PDF pages · Add pages from a PDF as picture clips at the playhead.")
-                            .clicked()
-                        {
-                            self.pdf_pages_to_video();
-                        }
+                        // Import… and PDF pages… moved to Insert › Media (approved
+                        // option A, artifacts/by-proposal/library-and-import.html).
                         self.keyframe_toggle(ui);
                         self.hide_tracks_menu(ui);
                         ui.add_space((ui.available_width() - 164.).max(0.));
