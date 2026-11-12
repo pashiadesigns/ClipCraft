@@ -212,6 +212,27 @@ impl Editor {
             }
             return;
         }
+        // A finished action that can be undone shows its link at the end.
+        if kind == crate::guided::Kind::Done
+            && let Some((label, action)) = self.notice.action.clone()
+        {
+            let at = Rect::from_min_size(
+                egui::pos2(rect.right() - 64., rect.center().y - 11.),
+                egui::vec2(60., 22.),
+            );
+            let link = ui.put(
+                at,
+                egui::Button::new(
+                    egui::RichText::new(label).color(Color32::from_rgb(127, 208, 239)),
+                )
+                .frame(false),
+            );
+            if link.clicked() {
+                let ctx = ui.ctx().clone();
+                self.notice.action = None;
+                self.run_fix(action, &ctx);
+            }
+        }
         let response = response.tip(format!("{save}\n{}\nClick for details", self.status));
         egui::Popup::from_toggle_button_response(&response).show(|ui| {
             ui.set_width(320.);

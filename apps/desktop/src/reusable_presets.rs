@@ -15,6 +15,8 @@ pub(crate) struct State {
     edit: Option<(Option<u64>, String, Payload)>,
     focus: bool,
     delete: Option<u64>,
+    /// Deleted from a card or row, for the editor to offer Undo.
+    pub(crate) deleted: Vec<(String, Payload)>,
     group_only: bool,
     placed_group: Option<capture_core::group_presets::Composition>,
     group_thumbs: std::collections::BTreeMap<u64, egui::TextureHandle>,
@@ -651,6 +653,44 @@ impl State {
         if insert.clicked() {
             action = Some(CardAction::Insert);
         }
+        // Approved removing presets: the shared menu on the card and an ×
+        // on hover.
+        let menu = crate::preset_menu::Menu {
+            apply: true,
+            rename: true,
+            duplicate: true,
+            favorite: Some(e.favorite),
+            delete: true,
+            name: &e.name,
+            ..Default::default()
+        };
+        let choice = crate::preset_menu::context_menu(&response, &menu).or_else(|| {
+            crate::preset_menu::hover_delete(
+                ui,
+                preview.with_max_x(preview.right() - 34.),
+                response.id,
+                &e.name,
+            )
+            .then_some(crate::preset_menu::Choice::Delete)
+        });
+        if let Some(choice) = choice {
+            use crate::preset_menu::Choice;
+            let id = e.id;
+            match choice {
+                Choice::Apply => action = Some(CardAction::Insert),
+                Choice::Rename(name) => self.result(|s| s.rename(id, &name)),
+                Choice::Duplicate => self.result(|s| s.duplicate(id).map(|_| ())),
+                Choice::Favorite(on) => self.result(|s| s.favorite(id, on)),
+                Choice::Delete => {
+                    let entry = (e.name.clone(), e.payload.clone());
+                    self.result(|s| s.remove(id));
+                    if self.error.is_empty() {
+                        self.deleted.push(entry);
+                    }
+                }
+                _ => {}
+            }
+        }
         // Name, category and the ⋯ menu.
         let meta = egui::Rect::from_min_max(
             egui::pos2(rect.left() + 10., preview.bottom() + 4.),
@@ -794,7 +834,7 @@ impl State {
                                 if crate::controls::menu_action(ui,"Delete").clicked(){self.delete=Some(e.id);ui.close();}
                             });});
                         });
-                        if self.delete==Some(e.id){ui.horizontal(|ui|{ui.label("Delete this preset?");if crate::controls::menu_action(ui,"Delete").clicked(){self.result(|s|s.remove(e.id));self.delete=None;}
+                        if self.delete==Some(e.id){ui.horizontal(|ui|{ui.label("Delete this preset?");if crate::controls::menu_action(ui,"Delete").clicked(){let entry=(e.name.clone(),e.payload.clone());self.result(|s|s.remove(e.id));if self.error.is_empty(){self.deleted.push(entry);}self.delete=None;}
 if ui.button("Cancel").clicked(){self.delete=None;}});}
                         crate::panel_ui::divider(ui);
                     });

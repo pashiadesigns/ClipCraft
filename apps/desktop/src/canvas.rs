@@ -1222,6 +1222,7 @@ pub(crate) mod tests {
             last_directory: std::path::PathBuf::from("."),
             status: String::new(),
             notice: Default::default(),
+            presets_ctx: None,
             selected: None,
             extra_selected: Default::default(),
             selection_order: vec![],

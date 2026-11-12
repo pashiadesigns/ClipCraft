@@ -105,6 +105,44 @@ pub struct Preferences {
     /// Preferences › Team (approved beta 6 tab 3).
     #[serde(default)]
     pub team: Team,
+    /// Hidden built-in presets and what each kit added (approved removing
+    /// presets mockup).
+    #[serde(default, skip_serializing_if = "PresetRecords::is_empty")]
+    pub presets: PresetRecords,
+}
+/// Built-in presets hidden from the galleries, as "<gallery>:<name>", and
+/// the items each kit added, so a kit can be removed again.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct PresetRecords {
+    pub hidden: Vec<String>,
+    pub kits: std::collections::BTreeMap<String, Vec<KitItem>>,
+}
+/// One item a kit added: its kind (a kit category label), its name, and a
+/// fingerprint of it as added, to tell whether it was changed since.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct KitItem {
+    pub kind: String,
+    pub name: String,
+    pub fingerprint: u64,
+}
+impl PresetRecords {
+    pub fn is_empty(&self) -> bool {
+        self.hidden.is_empty() && self.kits.is_empty()
+    }
+    pub fn validate(&self) -> Result<()> {
+        if self.hidden.len() > 512
+            || self.kits.len() > 256
+            || self.kits.values().any(|v| v.len() > 4096)
+            || self.hidden.iter().any(|h| h.len() > 200)
+        {
+            return Err(Error::Invalid(
+                "Too many hidden presets or kit records. Show some presets again, or remove a kit."
+                    .into(),
+            ));
+        }
+        Ok(())
+    }
 }
 /// Preferences › Team: a shared folder of kits, and locks for projects
 /// opened from shared folders.
@@ -255,6 +293,7 @@ impl Default for Preferences {
             workspace: Workspace::default(),
             sensitive_types: Vec::new(),
             team: Team::default(),
+            presets: PresetRecords::default(),
         }
     }
 }
@@ -319,6 +358,10 @@ impl Preferences {
             Choice::Team(team) => {
                 team.validate()?;
                 self.team = team;
+            }
+            Choice::Presets(records) => {
+                records.validate()?;
+                self.presets = records;
             }
             Choice::Watermarks(list, default) => {
                 if list.len() > 32
@@ -495,6 +538,7 @@ pub enum Choice {
     Watermarks(Vec<crate::watermark::Watermark>, Option<String>),
     SensitiveTypes(Vec<crate::privacy::custom::CustomType>),
     Team(Team),
+    Presets(PresetRecords),
     Keybinds(crate::keybinds::Keybinds),
     Capture(crate::capture_options::Settings),
     Video(crate::video::Options),

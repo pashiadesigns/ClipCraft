@@ -53,6 +53,7 @@ mod launch;
 mod legacy_name;
 mod lifecycle;
 mod line_properties;
+mod manage_presets;
 mod mixed_selection;
 mod motion;
 mod move_tool;
@@ -71,6 +72,7 @@ mod panel_ui;
 mod pdf_import_ui;
 mod pixel_grid;
 mod preferences;
+mod preset_menu;
 mod privacy_review;
 mod project_sessions;
 mod rich_text;
@@ -227,6 +229,8 @@ struct Editor {
     status: String,
     /// How the message bar shows status (guided errors).
     notice: guided::Notice,
+    /// The window's context, for preset stores that redraw palettes.
+    presets_ctx: Option<egui::Context>,
     selected: Option<u64>,
     extra_selected: std::collections::BTreeSet<u64>,
     selection_order: Vec<u64>,
@@ -430,6 +434,7 @@ impl Editor {
             last_directory,
             status: startup_status,
             notice: Default::default(),
+            presets_ctx: None,
             selected: None,
             extra_selected: Default::default(),
             selection_order: vec![],
@@ -1420,6 +1425,26 @@ impl eframe::App for Editor {
         self.poll_library_import();
         self.show_history_dialog(&ctx);
         self.presets.reusable.show(&ctx);
+        // Deleted from a Blocks card or the preset library: offer Undo.
+        let deleted = std::mem::take(&mut self.presets.reusable.deleted);
+        if !deleted.is_empty() {
+            let n = deleted.len();
+            let what = if n == 1 {
+                format!("\u{201c}{}\u{201d}", deleted[0].0)
+            } else {
+                format!("{n} presets")
+            };
+            let undo = deleted
+                .into_iter()
+                .map(|(name, payload)| guided::Restore::Entry(name, payload))
+                .collect();
+            self.done_with(
+                format!("Deleted {what}."),
+                "Undo",
+                guided::Action::Restore(undo),
+            );
+        }
+        self.show_manage_presets(&ctx);
         self.place_group_preset();
         #[cfg(windows)]
         brand::sync_window_icons(self.hotkey_owner);

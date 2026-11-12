@@ -258,6 +258,8 @@ step: In videos, covers follow the text as it moves. Check any stretch flagged N
 
 Before a video export, every tracked redaction must be reviewed. Export video lists them with any Needs review ranges; Mark all as reviewed approves them in one step after you have checked them, and Undo takes it back.
 
+Manage types… opens your custom types: turn each on or off for scans, click one to change it, start from a ready-made type with Use, or make a new one, and test it on sample text as you go.
+
 Detection helps you review; it can miss things. Check every part before you share.
 
 # Focus
@@ -469,7 +471,7 @@ tip: Select objects of different kinds together and Properties shows what they s
 id: presets
 section: Formatting
 where: Properties › Presets
-controls: Presets, Blocks, Group presets, Save as block
+controls: Presets, Blocks, Group presets, Save as block, Manage presets…
 keywords: style, saved style, reuse, template, group preset
 hero: presets-hero
 ---
@@ -479,6 +481,8 @@ Presets apply a saved look in one click; the active preset has a border. Blocks 
 step: Select an object. | title: Select an object | pic: presets-1
 step: Click a tile in Presets to apply that look. | title: Apply a preset | pic: presets-2
 step: Use Save current to keep your own. | title: Save your own | pic: presets-3
+
+Right-click any preset for Apply, Update from selection, Rename, Duplicate and Delete; hover a saved one for its ×. Delete offers Undo in the message bar. Built-in presets and ones from a team kit can be hidden instead; Show hidden brings them back. Manage presets lists everything you've saved, every kind in one place, to delete or export several at once, and removes a kit you added.
 
 # Arrange and align
 id: arrange
@@ -600,7 +604,7 @@ Preferences › Team can point at a shared folder of kits, such as a Google Driv
 
 A project opened from a shared folder gets a small lock file, so others see who has it and since when, and it opens read-only for them. Open a copy makes your own copy in the Library. The lock clears when you close ClipDesigner, or after 12 hours if a PC went offline.
 
-To hand a project to someone, choose Pack project in Save As: the project and all its media go in one .cdpack file. Opening it unpacks a normal project into a new folder beside it.
+To hand a project to someone, choose Pack project on File › Save: the project and all its media go in one .cdpack file. Opening it unpacks a normal project into a new folder beside it.
 
 step: On the File › Export page, click Share a kit…, choose what to include and save it. | title: Share a kit
 step: Open the .cdkit, or use File › Open › Add a kit…, then choose what to add. | title: Add a kit

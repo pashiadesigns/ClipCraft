@@ -504,7 +504,20 @@ impl Editor {
     }
     /// Adds the chosen categories of `kit`. Items whose names are taken are
     /// renamed ("Brand (2)"), or replace the existing ones when `replace`.
+    /// Adds a kit and records what it added, so it can be removed again.
     pub(crate) fn add_kit(
+        &mut self,
+        ctx: &egui::Context,
+        kit: &Kit,
+        include: [bool; 6],
+        replace: bool,
+    ) -> Result<usize, String> {
+        let before = self.preset_rows();
+        let result = self.add_kit_items(ctx, kit, include, replace);
+        self.record_kit(&kit.name, &before);
+        result
+    }
+    fn add_kit_items(
         &mut self,
         ctx: &egui::Context,
         kit: &Kit,

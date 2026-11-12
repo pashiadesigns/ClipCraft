@@ -33,6 +33,21 @@ pub(crate) enum Action {
     ReviewRedactions,
     /// Open Manage presets.
     ManagePresets,
+    /// Undo: put deleted presets back.
+    Restore(Vec<Restore>),
+}
+
+/// A deleted preset, kept so Undo can put it back.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) enum Restore {
+    ObjectStyle(capture_core::object_styles::ObjectStyle),
+    Arrow(capture_core::styles::ArrowStyle),
+    Entry(String, capture_core::reusable_presets::Payload),
+    SensitiveType(capture_core::privacy::custom::CustomType),
+    Watermark(capture_core::watermark::Watermark),
+    Palette(String, Vec<[u8; 4]>),
+    /// A hidden built-in shown again.
+    Hidden(String),
 }
 
 /// The message in the bar and how it shows.
@@ -226,6 +241,15 @@ impl Editor {
             fix.map(|(l, a)| (l.to_owned(), a)),
         );
     }
+    /// A finished action with a fix-it link in the bar (Undo after a
+    /// delete).
+    pub(crate) fn done_with(&mut self, message: impl ToString, label: &str, action: Action) {
+        self.say(
+            Kind::Done,
+            message.to_string(),
+            Some((label.to_owned(), action)),
+        );
+    }
     fn say(&mut self, kind: Kind, text: String, action: Option<(String, Action)>) {
         self.status = text.clone();
         self.notice = Notice {
@@ -278,8 +302,10 @@ impl Editor {
                 }
             }
             Action::ManagePresets => {
-                self.open_preferences(crate::preferences::Section::General);
+                self.presets_ctx = Some(ctx.clone());
+                self.open_manage_presets();
             }
+            Action::Restore(items) => self.restore_presets(items),
         }
     }
 }

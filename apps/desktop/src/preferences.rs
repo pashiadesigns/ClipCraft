@@ -182,7 +182,26 @@ impl Editor {
                     self.preferences_library(ui, &mut open.draft.workspace.keep_versions)
                 }
                 Section::Toolbar => self.toolbar_section(ui),
-                Section::Team => crate::sharing::team_section(ui, &mut open.draft.team),
+                Section::Team => {
+                    crate::sharing::team_section(ui, &mut open.draft.team);
+                    // Remove a kit (approved removing presets mockup).
+                    ui.add_space(10.);
+                    crate::panel_ui::heading(ui, "Presets", "Kits you added");
+                    let key = egui::Id::unique("preferences-removing-kit");
+                    let mut removing = ui
+                        .ctx()
+                        .data(|d| d.get_temp::<Option<(String, bool)>>(key))
+                        .flatten();
+                    if let Some((kit, keep)) = self.kit_list(ui, &mut removing) {
+                        self.remove_kit(&kit, keep);
+                        removing = None;
+                    }
+                    ui.ctx().data_mut(|d| d.insert_temp(key, removing));
+                    if ui.button("Manage presets\u{2026}").clicked() {
+                        self.presets_ctx = Some(ui.ctx().clone());
+                        self.open_manage_presets();
+                    }
+                }
                 Section::Shortcuts => {}
             });
     }

@@ -345,9 +345,31 @@ fn paint_tile(
             egui::StrokeKind::Inside,
         );
     }
+    let more = if ui
+        .ctx()
+        .data(|d| d.get_temp::<bool>(egui::Id::unique("style-tile-menu")))
+        .unwrap_or(false)
+    {
+        " Right-click for more."
+    } else {
+        ""
+    };
     response.tip(format!(
-        "{label}\nClick to apply to the selection and use for new objects."
+        "{label}\nClick to apply to the selection and use for new objects.{more}"
     ))
+}
+/// A tile that has the preset right-click menu: its tooltip says so.
+pub(crate) fn tile_with_menu(
+    ui: &mut egui::Ui,
+    style: &capture_core::object_styles::ObjectStyle,
+    label: &str,
+    active: bool,
+) -> egui::Response {
+    let key = egui::Id::unique("style-tile-menu");
+    ui.ctx().data_mut(|d| d.insert_temp(key, true));
+    let r = tile(ui, style, label, active);
+    ui.ctx().data_mut(|d| d.insert_temp(key, false));
+    r
 }
 
 // Use the production callout renderer, including its triangular tail and rounding.

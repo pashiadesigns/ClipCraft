@@ -114,6 +114,25 @@ impl QuickControls {
         }
         self.warning.clone().map_or(Ok(()), Err)
     }
+    /// Tests: saved settings in their own folder.
+    #[cfg(test)]
+    pub(crate) fn use_store_for_test(&mut self, dir: &std::path::Path) {
+        let store = Store::open(dir).unwrap();
+        self.prefs = store.read().unwrap();
+        self.store = Some(store);
+    }
+    pub(crate) fn preset_records(&self) -> capture_core::quick_preferences::PresetRecords {
+        self.prefs.presets.clone()
+    }
+    pub(crate) fn set_preset_records(
+        &mut self,
+        records: capture_core::quick_preferences::PresetRecords,
+    ) -> Result<(), String> {
+        if self.prefs.presets != records {
+            self.remember(Choice::Presets(records));
+        }
+        self.warning.clone().map_or(Ok(()), Err)
+    }
     pub(super) fn thumbnail_details(&self) -> bool {
         self.prefs.thumbnail_details
     }
