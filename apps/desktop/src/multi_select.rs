@@ -176,7 +176,7 @@ impl Editor {
             [self.session.document.width, self.session.document.height],
         ) {
             Ok(annotations) => self.execute(Command::UpdateMany { annotations }),
-            Err(error) => self.status = error.to_string(),
+            Err(error) => self.fail(error),
         }
     }
 

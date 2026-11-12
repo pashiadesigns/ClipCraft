@@ -15,6 +15,74 @@ pub(super) struct Draft {
     pub(super) automatic: bool,
     pub(super) distribute: bool,
     error: String,
+    /// The change that would fix the last Apply error (guided errors).
+    guidance: Option<Guidance>,
+}
+
+/// What Apply needs changed, the tab and row to ring, and how to tell when
+/// it has been done.
+#[derive(Clone)]
+struct Guidance {
+    tab: usize,
+    row: String,
+    note: &'static str,
+    message: &'static str,
+    ready: &'static str,
+    want: Want,
+}
+#[derive(Clone, Copy)]
+enum Want {
+    Scale,
+    Overflow,
+    /// Any margin smaller than these.
+    Margins([f64; 4]),
+}
+impl Guidance {
+    fn met(&self, d: &Draft) -> bool {
+        match self.want {
+            Want::Scale => d.scale,
+            Want::Overflow => d.automatic,
+            Want::Margins(m) => (0..4).any(|i| d.settings.margins[i] < m[i]),
+        }
+    }
+}
+/// The guided version of an Apply error that a setting here can fix.
+fn guidance_for(error: &str, d: &Draft) -> Option<Guidance> {
+    let unit = if d.settings.centimeters { "cm" } else { "in" };
+    let low = error.to_lowercase();
+    if low.contains("outside the image") && !d.scale {
+        return Some(Guidance {
+            tab: 1,
+            row: "page-setup:Resize behavior".into(),
+            note: "Choose Scale proportionally so objects shrink with the page.",
+            message: "Some objects would end up off the page. Choose Scale proportionally, or make the page larger on Paper.",
+            ready: "Ready. Objects will scale with the page. Click Apply.",
+            want: Want::Scale,
+        });
+    }
+    if (low.starts_with("section exceeds its page") || low.starts_with("page is full"))
+        && !d.automatic
+    {
+        return Some(Guidance {
+            tab: 1,
+            row: "page-setup:Overflow pages".into(),
+            note: "Turn on Overflow pages so sections continue on a new page.",
+            message: "A section doesn't fit its page. Turn on Overflow pages, or make the page taller on Paper.",
+            ready: "Ready. Sections will continue on new pages. Click Apply.",
+            want: Want::Overflow,
+        });
+    }
+    if low.contains("taller than the printable area") || low.contains("no printable area") {
+        return Some(Guidance {
+            tab: 1,
+            row: format!("page-setup:Top ({unit})"),
+            note: "Make the Top and Bottom margins smaller.",
+            message: "A section doesn't fit between the margins. Reduce Top and Bottom margins, make the page taller, or choose Scale proportionally.",
+            ready: "Margins changed. Click Apply to check again.",
+            want: Want::Margins(d.settings.margins),
+        });
+    }
+    None
 }
 fn key() -> egui::Id {
     egui::Id::unique("page-setup-draft")
@@ -91,6 +159,7 @@ impl Editor {
                 .is_none_or(|p| p.auto_overflow),
             distribute: false,
             error: String::new(),
+            guidance: None,
         };
         ctx.data_mut(|data| data.insert_temp(key(), d));
     }
@@ -246,6 +315,18 @@ impl Editor {
                                         *label,
                                     )
                                 });
+                                // A tab that needs a change gets an amber dot.
+                                if d.tab != i
+                                    && d.guidance
+                                        .as_ref()
+                                        .is_some_and(|g| g.tab == i && !g.met(&d))
+                                {
+                                    ui.painter().circle_filled(
+                                        r.rect.right_top() + egui::vec2(-8., 8.),
+                                        3.5,
+                                        crate::guided::AMBER,
+                                    );
+                                }
                                 if r.clicked() {
                                     d.tab = i;
                                 }
@@ -377,14 +458,26 @@ impl Editor {
                             egui::vec2(width - 30., 58.),
                             egui::Sense::hover(),
                         );
-                        let message = validation
-                            .as_ref()
-                            .err()
-                            .map_or(d.error.as_str(), String::as_str);
+                        // Guided errors: the message says what to change, the
+                        // row is ringed, and once it's changed the message
+                        // turns green (approved Page Setup example).
+                        use crate::guided::Kind;
+                        let (kind, message, show_me) = match (&validation, &d.guidance) {
+                            (Err(e), _) => (Kind::Error, e.clone(), false),
+                            (Ok(()), Some(g)) if g.met(&d) => {
+                                crate::guided::clear(ui.ctx(), &g.row);
+                                (Kind::Done, g.ready.to_owned(), false)
+                            }
+                            (Ok(()), Some(g)) => {
+                                (Kind::Error, g.message.to_owned(), d.tab != g.tab)
+                            }
+                            (Ok(()), None) => (Kind::Error, d.error.clone(), false),
+                        };
                         let message_rect = egui::Rect::from_min_max(
                             bar.min,
                             egui::pos2(bar.right() - 190., bar.bottom()),
                         );
+                        let mut show = false;
                         fixed_pane(
                             ui,
                             egui::UiBuilder::new()
@@ -392,15 +485,13 @@ impl Editor {
                                 .layout(egui::Layout::left_to_right(egui::Align::Center)),
                             |ui| {
                                 ui.set_clip_rect(message_rect.intersect(ui.clip_rect()));
-                                ui.add(
-                                    egui::Label::new(
-                                        egui::RichText::new(message)
-                                            .color(egui::Color32::LIGHT_RED),
-                                    )
-                                    .wrap(),
-                                );
+                                show = crate::guided::dialog_message(ui, kind, &message, show_me);
                             },
                         );
+                        if show && let Some(g) = d.guidance.clone() {
+                            d.tab = g.tab;
+                            crate::guided::request(ui.ctx(), &g.row, g.note.into());
+                        }
                         fixed_pane(
                             ui,
                             egui::UiBuilder::new().max_rect(egui::Rect::from_min_size(
@@ -427,6 +518,9 @@ impl Editor {
             });
         cancel |= crate::text_edit::cancel_on_escape(&modal);
         if cancel {
+            if let Some(g) = &d.guidance {
+                crate::guided::clear(ctx, &g.row);
+            }
             ctx.data_mut(|data| data.remove::<Draft>(key()));
             return;
         }
@@ -444,13 +538,28 @@ impl Editor {
             if let Command::Guide { action } = &command {
                 match self.session.document.edit_guide(action) {
                     Ok(_) => {
+                        if let Some(g) = &d.guidance {
+                            crate::guided::clear(ctx, &g.row);
+                        }
                         self.execute(command);
                         ctx.data_mut(|data| data.remove::<Draft>(key()));
                         self.status =
                             "Page Setup applied. Undo restores the previous layout.".into();
                         return;
                     }
-                    Err(e) => d.error = e.to_string(),
+                    Err(e) => {
+                        let raw = e.to_string();
+                        // A setting here can fix it: take them there and ring it.
+                        d.guidance = guidance_for(&raw, &d);
+                        match &d.guidance {
+                            Some(g) => {
+                                d.tab = g.tab;
+                                crate::guided::request(ctx, &g.row, g.note.into());
+                                d.error.clear();
+                            }
+                            None => d.error = crate::guided::friendly(&raw),
+                        }
+                    }
                 }
             }
         }
@@ -837,7 +946,67 @@ mod tests {
             automatic: true,
             distribute: false,
             error: String::new(),
+            guidance: None,
         }
+    }
+    /// The approved guided-errors example: a narrower page with Keep sizes
+    /// leaves an object off the page. Apply goes to Layout, rings Resize
+    /// behavior and says to choose Scale proportionally; choosing it clears
+    /// the ring and Apply works.
+    #[test]
+    fn apply_error_takes_you_to_resize_behavior_and_clears_when_fixed() {
+        let ctx = egui::Context::default();
+        crate::shell::configure(&ctx);
+        let mut e = crate::canvas::tests::editor(&ctx);
+        e.session = crate::Session::new(crate::Document::blank(1000, 600).unwrap()).unwrap();
+        let a = e.new_annotation(crate::Kind::Rectangle, [800., 100.], [950., 200.]);
+        e.execute(Command::Add { annotation: a });
+        e.open_page_setup(&ctx);
+        frame(&ctx, &mut e, 960., vec![]);
+        ctx.data_mut(|data| {
+            let mut d = data.get_temp::<Draft>(key()).unwrap();
+            d.settings.size = [500, 600];
+            d.settings.physical_points = None;
+            data.insert_temp(key(), d);
+        });
+        let output = frame(&ctx, &mut e, 960., vec![]);
+        let apply = crate::color_widgets::tests::text_rect(&output.shapes, "Apply").unwrap();
+        let click = |pressed| egui::Event::PointerButton {
+            pos: apply.center(),
+            button: egui::PointerButton::Primary,
+            pressed,
+            modifiers: egui::Modifiers::NONE,
+        };
+        frame(
+            &ctx,
+            &mut e,
+            960.,
+            vec![egui::Event::PointerMoved(apply.center())],
+        );
+        frame(&ctx, &mut e, 960., vec![click(true)]);
+        frame(&ctx, &mut e, 960., vec![click(false)]);
+        let output = frame(&ctx, &mut e, 960., vec![]);
+        let d = ctx
+            .data(|data| data.get_temp::<Draft>(key()))
+            .expect("still open");
+        let g = d.guidance.as_ref().expect("guided");
+        assert_eq!(d.tab, 1, "Layout is shown");
+        assert_eq!(g.row, "page-setup:Resize behavior");
+        assert_eq!(
+            crate::guided::active(&ctx).as_deref(),
+            Some("page-setup:Resize behavior")
+        );
+        assert!(crate::color_widgets::tests::text_rect(&output.shapes, g.message).is_some());
+        assert_eq!(e.session.document.width, 1000, "nothing changed yet");
+        // Choosing Scale proportionally clears the ring; the message turns green.
+        ctx.data_mut(|data| {
+            let mut d = data.get_temp::<Draft>(key()).unwrap();
+            d.scale = true;
+            data.insert_temp(key(), d);
+        });
+        let output = frame(&ctx, &mut e, 960., vec![]);
+        assert_eq!(crate::guided::active(&ctx), None);
+        assert!(crate::color_widgets::tests::text_rect(&output.shapes, g.ready).is_some());
     }
     #[test]
     fn scope_is_adjacent_and_actionable_errors_stay_inside_the_fixed_footer() {

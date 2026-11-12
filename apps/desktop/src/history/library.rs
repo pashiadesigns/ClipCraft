@@ -776,7 +776,7 @@ impl Editor {
                 self.history.error.clear();
                 self.history.refresh();
             }
-            Err(e) => self.history.error = e.to_string(),
+            Err(e) => self.history.error = crate::guided::friendly(&e.to_string()),
         }
     }
     /// Search, Sort, size, Details, Import and Refresh in one bar.
@@ -1182,7 +1182,7 @@ impl Editor {
                     self.history.refresh();
                     return;
                 }
-                Err(e) => naming.error = e.to_string(),
+                Err(e) => naming.error = crate::guided::friendly(&e.to_string()),
             }
         }
         self.history.library.naming = Some(naming);

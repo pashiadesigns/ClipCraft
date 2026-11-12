@@ -105,8 +105,7 @@ impl Watermark {
             || !(-90. ..=90.).contains(&self.rotation)
         {
             return Err(Error::Invalid(
-                "Give the watermark a name and text or a logo, 5–100 % opacity and 5–60 % size."
-                    .into(),
+                "Add text or a logo, and keep Opacity 5–100% and Size 5–60%.".into(),
             ));
         }
         Ok(())

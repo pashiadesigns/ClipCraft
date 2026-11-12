@@ -85,7 +85,7 @@ pub fn translated(
                 || min[axis] < 0.0
                 || max[axis] > canvas[axis] as f32
             {
-                return Err(Error::Invalid("Object is outside the canvas".into()));
+                return Err(Error::Invalid("Drop the object inside the canvas, or turn on Extend canvas in Preferences › Editor.".into()));
             }
             low[axis] = low[axis].max(-min[axis]);
             high[axis] = high[axis].min(canvas[axis] as f32 - max[axis]);

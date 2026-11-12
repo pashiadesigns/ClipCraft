@@ -300,7 +300,7 @@ impl History {
         if next.entries.len() > limits.entries
             || next.entries.iter().map(|e| e.bytes).sum::<u64>() > limits.bytes
         {
-            return Err(Error::Invalid("Capacity is below current usage. Export or delete selected items first; nothing was removed.".into()));
+            return Err(Error::Invalid("Capacity is below what the Library holds now. Remove some items or raise Capacity; nothing was removed.".into()));
         }
         atomic_write(
             &self.root.join("limits.json"),

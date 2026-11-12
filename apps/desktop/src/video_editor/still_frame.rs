@@ -63,10 +63,10 @@ impl Editor {
                                         );
                                         return;
                                     }
-                                    Err(e) => state.error = e.to_string(),
+                                    Err(e) => state.error = crate::guided::friendly(&e.to_string()),
                                 }
                             }
-                            Err(e) => state.error = e.to_string(),
+                            Err(e) => state.error = crate::guided::friendly(&e.to_string()),
                         }
                     }
                 }
@@ -112,7 +112,7 @@ impl Editor {
                 state.error.clear();
                 state.job = Some(rx);
             } else {
-                state.error = "Choose a project storage folder in Settings, then try again.".into();
+                state.error = "Choose a Project folder in Preferences › General first.".into();
             }
         }
         self.video.still_frame = Some(state);

@@ -278,7 +278,7 @@ impl Editor {
                 true
             }
             Err(error) => {
-                self.presets.error = error.to_string();
+                self.presets.error = crate::guided::friendly(&error.to_string());
                 false
             }
         }
@@ -313,7 +313,7 @@ impl Editor {
     }
     pub(crate) fn apply_arrow_style(&mut self, style: &ArrowStyle) {
         if let Err(e) = style.validate() {
-            self.status = e.to_string();
+            self.fail(e);
             return;
         }
         if let Some(a) = self.selected_annotation() {
@@ -359,7 +359,7 @@ impl Editor {
                         "Updated {name} from the selection. Existing arrows are unchanged."
                     );
                 }
-                Err(e) => self.presets.error = e.to_string(),
+                Err(e) => self.presets.error = crate::guided::friendly(&e.to_string()),
             }
         }
     }
@@ -529,7 +529,7 @@ impl Editor {
                     self.presets.error.clear();
                     self.status = format!("Deleted {name}. Existing arrows are unchanged.");
                 }
-                Err(e) => self.presets.error = e.to_string(),
+                Err(e) => self.presets.error = crate::guided::friendly(&e.to_string()),
             }
         }
         if !self.presets.error.is_empty() {

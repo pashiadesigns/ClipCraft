@@ -447,7 +447,7 @@ fn font_fields(ui: &mut egui::Ui, state: &mut State) {
                             state.range = range.start..range.start + count;
                             state.refresh_fields();
                         }
-                        Err(e) => state.error = e.to_string(),
+                        Err(e) => state.error = crate::guided::friendly(&e.to_string()),
                     };
                     ui.close();
                 }
@@ -604,7 +604,7 @@ fn changed_text(state: &mut State, result: capture_core::Result<String>) {
             state.pending = None;
             state.error = message;
         }
-        Err(e) => state.error = e.to_string(),
+        Err(e) => state.error = crate::guided::friendly(&e.to_string()),
     }
 }
 fn spelling_fields(ui: &mut egui::Ui, state: &mut State) {

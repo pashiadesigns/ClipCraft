@@ -824,7 +824,7 @@ impl Editor {
                 }
                 .into();
             }
-            Err(error) => self.status = error.to_string(),
+            Err(error) => self.fail(error),
         }
     }
 
@@ -923,7 +923,7 @@ impl Editor {
                     "Formatting copied. Undo restores all target objects."
                 }.into();
             }
-            Err(error) => self.status = error.to_string(),
+            Err(error) => self.fail(error),
             _ => {}
         }
     }
@@ -1102,7 +1102,7 @@ impl Editor {
                     draft.preview = preview;
                     self.needs_render = true;
                 }
-                Err(error) => self.status = error.to_string(),
+                Err(error) => self.fail(error),
             }
         } else {
             let several = self.selected_objects().len() > 1;
@@ -1121,7 +1121,7 @@ impl Editor {
                 .collect();
             match annotations {
                 Ok(annotations) => self.execute(Command::UpdateMany { annotations }),
-                Err(error) => self.status = error.to_string(),
+                Err(error) => self.fail(error),
             }
         }
     }
@@ -1149,7 +1149,7 @@ impl Editor {
             .collect::<capture_core::Result<Vec<_>>>();
         match annotations {
             Ok(annotations) => self.preview_property_batch(annotations),
-            Err(error) => self.status = error.to_string(),
+            Err(error) => self.fail(error),
         }
     }
     pub(super) fn show_layout_grid(
@@ -1771,7 +1771,7 @@ mod tests {
         e.apply_quick_text(TextAction::SetSize(144.0));
         assert_eq!(e.session.document.annotations, before);
         assert!(!e.session.can_undo());
-        assert!(e.status.contains("larger canvas"));
+        assert!(e.status.contains("enlarge the image"));
     }
 
     #[test]

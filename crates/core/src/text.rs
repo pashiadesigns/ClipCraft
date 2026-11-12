@@ -656,7 +656,7 @@ impl Annotation {
             .any(|(s, limit)| !s.is_finite() || *s > limit as f32)
         {
             return Err(Error::Invalid(
-                "Text needs a larger canvas. Choose Shrink text on overflow or enlarge the image."
+                "The text doesn't fit. Choose Shrink text on overflow, or enlarge the image."
                     .into(),
             ));
         }

@@ -339,7 +339,7 @@ impl Editor {
                     texture_office: false,
                 })
             }
-            Err(e) => self.status = e.to_string(),
+            Err(e) => self.fail(e),
         }
     }
     pub(super) fn show_export(&mut self, ctx: &egui::Context, frame: Option<&eframe::Frame>) {
@@ -581,7 +581,7 @@ impl Editor {
                                     d.pixels = pixels;
                                     d.texture = None;
                                 }
-                                Err(e) => d.error = e.to_string(),
+                                Err(e) => d.error = crate::guided::friendly(&e.to_string()),
                             }
                         }
                         if d.texture_office != office {
@@ -917,7 +917,7 @@ impl Editor {
                         }
                         return;
                     }
-                    Err(e) => d.error = e.to_string(),
+                    Err(e) => d.error = crate::guided::friendly(&e.to_string()),
                 }
             }
         }

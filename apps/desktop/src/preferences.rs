@@ -286,7 +286,7 @@ impl Editor {
     fn apply_preferences(&mut self, ctx: &egui::Context, open: &Open) {
         self.quick_controls.apply_preferences(&open.draft);
         if let Err(e) = crate::windows_startup::set(open.start_with_windows) {
-            self.status = e;
+            self.fail(e);
         }
         self.save_library_capacity(ctx);
         // A new team folder or a kit turned back on is added straight away.

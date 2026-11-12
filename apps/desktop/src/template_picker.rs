@@ -104,7 +104,7 @@ impl Editor {
                     id: Some(t.id),
                     document: Arc::new(doc),
                 }),
-                Err(e) => c.error = e.to_string(),
+                Err(e) => c.error = crate::guided::friendly(&e.to_string()),
             }
         }
         if let Some(root) = self.template_root() {
@@ -121,11 +121,11 @@ impl Editor {
                                 id: None,
                                 document: Arc::new(doc),
                             }),
-                            Err(e) => c.error = e.to_string(),
+                            Err(e) => c.error = crate::guided::friendly(&e.to_string()),
                         }
                     }
                 }
-                Err(e) => c.error = e.to_string(),
+                Err(e) => c.error = crate::guided::friendly(&e.to_string()),
             }
         }
         for choice in &c.choices {
@@ -143,7 +143,7 @@ impl Editor {
                     egui::TextureOptions::LINEAR,
                 )),
                 Err(e) => {
-                    c.error = e.to_string();
+                    c.error = crate::guided::friendly(&e.to_string());
                     break;
                 }
             }
@@ -383,7 +383,7 @@ impl Editor {
                     },
                     &ctx,
                 ),
-                Err(e) => self.status = e.to_string(),
+                Err(e) => self.fail(e),
             }
         } else if create_steps.is_some() {
             steps = None;
@@ -422,7 +422,7 @@ impl Editor {
                         },
                         &ctx,
                     ),
-                    Err(e) => self.status = e.to_string(),
+                    Err(e) => self.fail(e),
                 }
             }
             Some(Pick::Video(t)) => self.new_video(t),
@@ -436,7 +436,7 @@ impl Editor {
                         },
                         &ctx,
                     ),
-                    Err(e) => self.status = e.to_string(),
+                    Err(e) => self.fail(e),
                 }
             }
             None => {}
@@ -520,7 +520,7 @@ impl Editor {
             match self.replace_frame_image_from_path(id, &path) {
                 Ok(()) => self
                     .remember_dialog_folder(capture_core::quick_preferences::Folder::Open, &path),
-                Err(e) => self.status = e,
+                Err(e) => self.fail(e),
             }
         }
     }

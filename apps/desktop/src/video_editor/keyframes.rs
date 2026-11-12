@@ -248,7 +248,7 @@ impl Editor {
             .any(|a| self.session.document.object_state(a.id).locked)
         {
             return Err(capture_core::Error::Invalid(
-                "Unlock the selected object before editing its animation.".into(),
+                "This object is locked. Unlock it to animate it.".into(),
             ));
         }
         let mut doc = self.session.document.clone();

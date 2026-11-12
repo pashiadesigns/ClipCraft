@@ -127,9 +127,7 @@ impl Default for Options {
 impl Options {
     pub fn validate(&self) -> Result<()> {
         if ![15, 30, 60].contains(&self.fps) {
-            return Err(Error::Invalid(
-                "Choose 15, 30 or 60 frames per second.".into(),
-            ));
+            return Err(Error::Invalid("Pick 15, 30 or 60 under Frame rate.".into()));
         }
         if !matches!(
             self.selection,
@@ -146,7 +144,7 @@ impl Options {
     pub fn output_size(source: [u32; 2]) -> Result<[u32; 2]> {
         if source[0] < 64 || source[1] < 64 {
             return Err(Error::Invalid(
-                "Select a video area at least 64 × 64 pixels.".into(),
+                "Drag a larger area: at least 64 × 64 pixels.".into(),
             ));
         }
         let scale = (1920.0 / source[0] as f64)
@@ -158,7 +156,7 @@ impl Options {
         ];
         if size[0] < 64 || size[1] < 64 {
             return Err(Error::Invalid(
-                "This selection is too narrow for video. Choose a wider or taller area.".into(),
+                "This area is too narrow. Drag a wider or taller area.".into(),
             ));
         }
         Ok(size)

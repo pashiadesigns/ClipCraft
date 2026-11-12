@@ -87,7 +87,8 @@ impl Editor {
     }
     fn scan_sensitive(&mut self, ctx: &egui::Context) {
         if self.is_video() {
-            self.privacy_review.error = "Find Sensitive Info scans still images only. Automatic video tracking is not available.".into();
+            self.privacy_review.error =
+                "For video, use Privacy › Track on the timeline instead.".into();
             return;
         }
         if SCANNING.swap(true, std::sync::atomic::Ordering::AcqRel) {
@@ -427,7 +428,7 @@ impl Editor {
         };
         if fingerprint(&self.session.document).ok() != Some(result.fingerprint) {
             self.privacy_review.error =
-                "The image changed. Scan again before applying redactions.".into();
+                "The image changed since the scan. Scan again to update the findings.".into();
             false
         } else {
             let findings = result
@@ -508,7 +509,7 @@ mod tests {
         e.open_privacy_review();
         e.scan_sensitive(&ctx);
         assert!(e.privacy_review.pending.is_none());
-        assert!(e.privacy_review.error.contains("still images only"));
+        assert!(e.privacy_review.error.contains("Privacy › Track"));
         assert!(!e.apply_sensitive_findings());
         assert_eq!(serde_json::to_value(&e.session.document).unwrap(), before);
     }
@@ -715,7 +716,7 @@ fn scan_with(
                     findings.push(f);
                 }
                 if findings.len() > 2048 {
-                    return Err("More than 2048 findings: scan a smaller image.".into());
+                    return Err("Over 2,048 findings. Turn off some types under Look for, or scan one page at a time.".into());
                 }
             }
             if x + 2048 >= pixels.width() {

@@ -78,7 +78,7 @@ impl Editor {
         let pixels = match self.ocr_pixels() {
             Ok(pixels) => pixels,
             Err(error) => {
-                self.status = error;
+                self.fail(error);
                 return;
             }
         };
@@ -112,7 +112,7 @@ impl Editor {
             let lo = [0, 1].map(|i| lo[i].floor().clamp(0., size[i] as f32) as u32);
             let hi = [0, 1].map(|i| hi[i].ceil().clamp(0., size[i] as f32) as u32);
             if hi[0] <= lo[0] || hi[1] <= lo[1] {
-                return Err("Select an area inside the canvas to recognize text.".into());
+                return Err("Drag over text inside the image.".into());
             }
             pixels = image::imageops::crop_imm(&pixels, lo[0], lo[1], hi[0] - lo[0], hi[1] - lo[1])
                 .to_image();
@@ -325,7 +325,7 @@ fn recognize_impl(
             }
         }
         if text.len() > 131072 {
-            return Err("Recognized text exceeds the result limit; select a smaller area".into());
+            return Err("Too much text at once. Drag over a smaller area.".into());
         }
     }
     Ok(Recognized {

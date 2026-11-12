@@ -157,7 +157,7 @@ impl State {
         };
         match root.map(|p| Store::open(&p)) {
             Some(Ok(s)) => self.store = Some(s),
-            Some(Err(e)) => self.error = e.to_string(),
+            Some(Err(e)) => self.error = crate::guided::friendly(&e.to_string()),
             None => self.error = "Local preset storage is unavailable.".into(),
         }
     }

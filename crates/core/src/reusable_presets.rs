@@ -197,7 +197,7 @@ impl Payload {
                 frame.validate()
             }
             _ => Err(Error::Invalid(
-                "The preset contains invalid settings.".into(),
+                "This preset's settings can't be used. Delete it and save it again.".into(),
             )),
         }
     }
@@ -234,7 +234,7 @@ fn name(value: &str) -> Result<String> {
 fn validate(entries: &[Entry]) -> Result<()> {
     if entries.len() > LIMIT {
         return Err(Error::Invalid(
-            "The preset library holds up to 256 entries. Delete an unused preset first.".into(),
+            "The preset library is full (256). Delete unused ones in Manage presets.".into(),
         ));
     }
     for (i, e) in entries.iter().enumerate() {
@@ -248,7 +248,7 @@ fn validate(entries: &[Entry]) -> Result<()> {
             })
         {
             return Err(Error::Invalid(
-                "Preset identifiers and names must be unique within a category.".into(),
+                "A preset with that name already exists. Choose another name.".into(),
             ));
         }
     }

@@ -98,7 +98,7 @@ impl Editor {
         {
             Ok(plan) => plan,
             Err(error) => {
-                self.status = error.to_string();
+                self.fail(error);
                 return;
             }
         };

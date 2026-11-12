@@ -82,7 +82,7 @@ impl Editor {
                     copy.display()
                 );
             }
-            Err(e) => self.status = e.to_string(),
+            Err(e) => self.fail(e),
         }
     }
     /// Palette menu > New from image colors: the open image's main colors.

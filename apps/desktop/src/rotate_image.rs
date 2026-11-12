@@ -55,7 +55,7 @@ impl Editor {
         {
             // Said up front, not after a click that cannot work.
             draft.error =
-                "Rotate Image works on single images. On guide pages, rotate the objects instead."
+                "Guide pages can't turn as a whole. Select the objects and rotate them instead."
                     .into();
         }
         self.rotate_image = Some(draft);
@@ -112,7 +112,7 @@ impl Editor {
         let modal = crate::controls::Modal::new(egui::Id::unique("rotate_image")).show(ctx, |ui| {
             ui.set_width(400.);
             crate::controls::dialog_title(ui, "Rotate Image");
-            ui.horizontal(|ui| {
+            let angle_row = ui.horizontal(|ui| {
                 ui.add_sized([72., 20.], egui::Label::new("Angle"));
                 let before = draft.degrees;
                 crate::controls::slider(
@@ -148,6 +148,7 @@ impl Editor {
                     draft.canvas_color = false;
                 }
             });
+            crate::guided::mark(ui, "rotate:angle", angle_row.response.rect);
             ui.horizontal(|ui| {
                 ui.add_sized([72., 20.], egui::Label::new("Canvas"));
                 crate::controls::segments(ui, |ui| {
@@ -205,6 +206,12 @@ impl Editor {
                 );
             }
             let valid = RotateImage::parse(&draft.text).is_some();
+            // Guided: an angle that can't be used rings the Angle row.
+            if valid {
+                crate::guided::clear(ui.ctx(), "rotate:angle");
+            } else if crate::guided::active(ui.ctx()).as_deref() != Some("rotate:angle") {
+                crate::guided::request(ui.ctx(), "rotate:angle", String::new());
+            }
             if !draft.error.is_empty() {
                 ui.colored_label(egui::Color32::from_rgb(255, 170, 160), &draft.error);
             }
@@ -234,6 +241,9 @@ impl Editor {
             cancel = closed;
         });
         cancel |= crate::text_edit::cancel_on_escape(&modal);
+        if cancel || apply {
+            crate::guided::clear(ctx, "rotate:angle");
+        }
         if cancel {
             self.rotate_image = None;
         } else if apply {
@@ -256,7 +266,7 @@ impl Editor {
                 }
                 Err(e) => {
                     if let Some(d) = self.rotate_image.as_mut() {
-                        d.error = e.to_string();
+                        d.error = crate::guided::friendly(&e.to_string());
                     }
                 }
             }

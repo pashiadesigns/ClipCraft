@@ -83,7 +83,7 @@ impl Editor {
                         gesture,
                     })
                 }
-                Err(error) => self.status = error.to_string(),
+                Err(error) => self.fail(error),
             }
         }
         let Some(drag) = &mut self.rotation_drag else {
@@ -98,7 +98,7 @@ impl Editor {
                         ui.ctx().request_repaint();
                     }
                 }
-                Err(error) => self.status = error.to_string(),
+                Err(error) => self.fail(error),
             }
         }
         if released {

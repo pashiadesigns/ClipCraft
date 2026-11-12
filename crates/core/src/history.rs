@@ -671,7 +671,7 @@ impl History {
             && next.entries.iter().map(|e| e.bytes).sum::<u64>() - old.bytes + bytes > max_bytes
         {
             return Err(Error::Invalid(
-                "Library storage is full; existing items were preserved.".into(),
+                "The Library is full. Raise its capacity in Preferences › Library, or remove older items; your work is kept.".into(),
             ));
         }
         // A version2 Library is durable, including when an older API caller

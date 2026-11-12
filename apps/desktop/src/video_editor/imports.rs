@@ -45,7 +45,7 @@ impl Editor {
         if let Some(result) = result {
             self.video.importing = None;
             match result {
-                Err(e) => self.status = e,
+                Err(e) => self.fail(e),
                 Ok(clips) => {
                     self.append_media_clips(clips, self.video.import_at, self.video.import_track);
                 }
@@ -152,7 +152,7 @@ impl Editor {
         let mut added = match added {
             Ok(a) => a,
             Err(e) => {
-                self.status = e.to_string();
+                self.fail(e);
                 return;
             }
         };
@@ -180,7 +180,7 @@ impl Editor {
             }
         }
         if let Err(e) = capture_core::groups::freshen(&mut added, &self.session.document) {
-            self.status = e.to_string();
+            self.fail(e);
             return;
         }
         let mut annotations = self.session.document.annotations.clone();

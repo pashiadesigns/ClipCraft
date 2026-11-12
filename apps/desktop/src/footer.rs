@@ -94,17 +94,67 @@ impl Editor {
     }
 
     fn footer_confirmation(&mut self, ui: &mut egui::Ui) {
-        let (save, color) = self.autosave_summary();
-        let (rect, response) = ui.allocate_exact_size(ui.available_size(), egui::Sense::click());
-        ui.painter()
-            .circle_filled(egui::pos2(rect.left() + 5., rect.center().y), 3., color);
-        let message = if self.status.is_empty() {
-            save
+        let now = ui.input(|i| i.time);
+        self.sync_notice(now);
+        let kind = if self.status.is_empty() {
+            crate::guided::Kind::Plain
         } else {
-            &self.status
+            self.notice.kind
         };
+        let since = self.notice.since.unwrap_or(now);
+        let (save, color) = self.autosave_summary();
+        let save = save.to_owned();
+        let (rect, response) = ui.allocate_exact_size(ui.available_size(), egui::Sense::click());
+        // Errors and warnings fill the slot in their color; an error flashes
+        // twice when it appears (approved message bar).
+        if matches!(
+            kind,
+            crate::guided::Kind::Error | crate::guided::Kind::Warning
+        ) {
+            let base = if kind == crate::guided::Kind::Error {
+                crate::guided::RED
+            } else {
+                crate::guided::AMBER
+            };
+            let t = (now - since) as f32;
+            let flash = if kind == crate::guided::Kind::Error
+                && t < 2.4
+                && ui.ctx().global_style().animation_time > 0.
+            {
+                ui.ctx().request_repaint();
+                1. - (t % 1.2) / 1.2
+            } else {
+                0.
+            };
+            let slot = rect.shrink2(egui::vec2(0., 4.));
+            ui.painter()
+                .rect_filled(slot, 6., base.gamma_multiply(0.16 + 0.3 * flash));
+            ui.painter().rect_filled(
+                Rect::from_min_size(slot.min, egui::vec2(3., slot.height())),
+                egui::CornerRadius {
+                    nw: 6,
+                    sw: 6,
+                    ne: 0,
+                    se: 0,
+                },
+                base,
+            );
+        }
+        let dot = egui::pos2(rect.left() + 13., rect.center().y);
+        if kind == crate::guided::Kind::Plain {
+            ui.painter().circle_filled(dot, 3., color);
+        } else {
+            crate::guided::icon(ui, dot, kind, since);
+        }
+        let message = if self.status.is_empty() {
+            save.as_str()
+        } else {
+            self.status.as_str()
+        };
+        let message = message.to_owned();
+        let message = message.as_str();
         response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, message));
-        let text_rect = Rect::from_min_max(rect.min + egui::vec2(16., 0.), rect.max);
+        let text_rect = Rect::from_min_max(rect.min + egui::vec2(26., 0.), rect.max);
         let galley = ui.painter().layout_no_wrap(
             message.into(),
             egui::FontId::proportional(12.),
@@ -147,12 +197,89 @@ impl Editor {
                 (text_rect, offset, distance),
             )
         });
+        if matches!(
+            kind,
+            crate::guided::Kind::Error | crate::guided::Kind::Warning
+        ) {
+            // The card above the bar: the whole message and its fix. It stays
+            // until closed; a click elsewhere hides it and the bar keeps its
+            // color; clicking the bar brings it back.
+            if response.clicked() {
+                self.notice.card = !self.notice.card;
+            }
+            if self.notice.card {
+                self.message_card(ui, rect, kind);
+            }
+            return;
+        }
         let response = response.tip(format!("{save}\n{}\nClick for details", self.status));
         egui::Popup::from_toggle_button_response(&response).show(|ui| {
             ui.set_width(320.);
             ui.label(&self.status);
             self.autosave_status(ui);
         });
+    }
+
+    fn message_card(&mut self, ui: &mut egui::Ui, bar: Rect, kind: crate::guided::Kind) {
+        let color = if kind == crate::guided::Kind::Error {
+            crate::guided::RED
+        } else {
+            crate::guided::AMBER
+        };
+        let mut close = false;
+        let mut run = None;
+        let area = egui::Area::new(egui::Id::unique("message-card"))
+            .order(egui::Order::Foreground)
+            .pivot(egui::Align2::LEFT_BOTTOM)
+            .fixed_pos(egui::pos2(bar.left(), bar.top() - 6.))
+            .show(ui.ctx(), |ui| {
+                egui::Frame::new()
+                    .fill(Color32::from_rgb(52, 59, 62))
+                    .stroke(egui::Stroke::new(1., color))
+                    .corner_radius(8)
+                    .inner_margin(egui::Margin::symmetric(14, 12))
+                    .show(ui, |ui| {
+                        ui.set_max_width(380.);
+                        ui.add(
+                            egui::Label::new(egui::RichText::new(&self.status).strong().size(13.5))
+                                .wrap(),
+                        );
+                        ui.add_space(6.);
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            if let Some((label, action)) = &self.notice.action
+                                && ui
+                                    .add(crate::controls::dialog_button(label, true))
+                                    .clicked()
+                            {
+                                run = Some(action.clone());
+                            }
+                            if ui
+                                .add(crate::controls::dialog_button("Close", false))
+                                .clicked()
+                            {
+                                close = true;
+                            }
+                        });
+                    });
+            });
+        // A click anywhere else (the canvas, say) hides the card.
+        let card = area.response.rect;
+        if ui.input(|i| {
+            i.pointer.any_pressed()
+                && i.pointer
+                    .interact_pos()
+                    .is_some_and(|p| !card.contains(p) && !bar.contains(p))
+        }) {
+            close = true;
+        }
+        if close {
+            self.notice.card = false;
+        }
+        if let Some(action) = run {
+            self.notice.card = false;
+            let ctx = ui.ctx().clone();
+            self.run_fix(action, &ctx);
+        }
     }
 
     fn footer_controls(&mut self, ui: &mut egui::Ui) {

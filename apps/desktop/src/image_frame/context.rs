@@ -171,7 +171,7 @@ impl Editor {
                     },
                 );
                 if let Err(e) = result {
-                    self.status = e;
+                    self.fail(e);
                 }
             }
             Some("From Library…") => {
@@ -207,7 +207,7 @@ impl Editor {
                             a.image = Some(Arc::new(b));
                             self.execute(Command::Update { annotation: a });
                         }
-                        Err(e) => self.status = e.to_string(),
+                        Err(e) => self.fail(e),
                     }
                 }
             }

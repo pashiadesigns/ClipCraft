@@ -14,7 +14,7 @@ pub fn split_object(doc: &mut Document, id: u64, time: u64) -> Result<u64> {
     let mut next = doc.clone();
     if next.object_state(id).locked {
         return Err(Error::Invalid(
-            "Unlock the selected object before splitting it.".into(),
+            "This object is locked. Unlock it to split it.".into(),
         ));
     }
     let project = next

@@ -25,7 +25,7 @@ impl Editor {
         let root = self
             .history
             .root()
-            .ok_or("Choose a project storage folder in Settings before recording.")?
+            .ok_or("Choose a Project folder in Preferences › General first.")?
             .join("recordings");
         std::fs::create_dir_all(&root).map_err(|e| {
             format!(
@@ -88,7 +88,7 @@ impl Editor {
                                 self.status =
                                     "Storage location saved. Restart ClipDesigner to use it.".into()
                             }
-                            Err(e) => self.status = e,
+                            Err(e) => self.fail(e),
                         }
                     }
                 }

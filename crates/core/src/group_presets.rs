@@ -16,7 +16,7 @@ impl Composition {
         let mut objects = ObjectPayload::capture(doc, ids)?;
         if objects.objects.len() < 2 || objects.objects.len() > 128 {
             return Err(Error::Invalid(
-                "Select between 2 and 128 objects for a block.".into(),
+                "Select 2 to 128 objects, then Save as block.".into(),
             ));
         }
         let mut timing = BTreeMap::new();

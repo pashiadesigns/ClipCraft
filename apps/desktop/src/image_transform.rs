@@ -28,10 +28,12 @@ impl Editor {
                     }
                     self.needs_render = true;
                 }
-                Err(error) => self.status = error.to_string(),
+                Err(error) => self.fail(error),
             }
         } else if self.selected.is_some() {
-            self.status = "Unlock the selected object before transforming it.".into();
+            self.fail(
+                "This object is locked, so it can't turn or flip. Unlock it, then try again.",
+            );
         } else if self.session.document.annotations.is_empty() {
             self.finish_image_transform(transform);
         } else {
@@ -51,7 +53,7 @@ impl Editor {
                     label(transform)
                 );
             }
-            Err(error) => self.status = error.to_string(),
+            Err(error) => self.fail(error),
         }
     }
 

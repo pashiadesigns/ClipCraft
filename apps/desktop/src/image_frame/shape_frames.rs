@@ -29,7 +29,7 @@ impl Editor {
         if let Some(a) = self.selected_annotation() {
             match a.converted_frame(frame) {
                 Ok(annotation) => self.execute(Command::Update { annotation }),
-                Err(e) => self.status = e.to_string(),
+                Err(e) => self.fail(e),
             }
         }
     }

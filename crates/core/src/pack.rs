@@ -83,8 +83,7 @@ pub fn pack(
     }
     if total > MAX_TOTAL - (1 << 20) {
         return Err(Error::Invalid(
-            "This project and its media are over 4 GB, too large for one pack. Share the project folder instead."
-                .into(),
+            "Too large for one pack (over 4 GB). Share the project folder instead.".into(),
         ));
     }
     let temp = tempfile::Builder::new()

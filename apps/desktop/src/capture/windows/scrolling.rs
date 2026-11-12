@@ -479,7 +479,7 @@ fn wheel_once() -> Result<(), String> {
             },
         };
         if SendInput(1, &input, size_of::<INPUT>() as i32) != 1 {
-            Err("Windows blocked automatic scrolling. Switch to Manual.".into())
+            Err("This window doesn't allow automatic scrolling. Switch to Manual and scroll it yourself.".into())
         } else {
             Ok(())
         }

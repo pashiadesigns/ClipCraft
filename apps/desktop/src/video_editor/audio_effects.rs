@@ -448,7 +448,7 @@ impl Editor {
                 }
                 Err(e) => {
                     fx.proposal = None;
-                    fx.error = e.to_string();
+                    fx.error = crate::guided::friendly(&e.to_string());
                 }
             }
         }

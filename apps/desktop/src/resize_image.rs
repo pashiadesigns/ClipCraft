@@ -76,7 +76,7 @@ impl ResizeImage {
             .parse::<f64>()
             .map_err(|_| "Enter a resolution in pixels per inch.".to_string())?;
         if !ppi.is_finite() || !(1.0..=9600.0).contains(&ppi) {
-            return Err("Resolution must be 1 to 9,600 pixels per inch.".into());
+            return Err("Set Resolution between 1 and 9,600 pixels per inch.".into());
         }
         Ok(ppi)
     }
@@ -105,11 +105,11 @@ impl ResizeImage {
                     )
                 })?;
                 if !value.is_finite() || value <= 0.0 {
-                    return Err("Enter a positive, finite size.".into());
+                    return Err("Type a size above zero.".into());
                 }
                 let pixels = (value * self.scale(i)?).round();
                 if pixels > 32768.0 {
-                    return Err("Each side must be at most 32,768 pixels.".into());
+                    return Err("Set Width and Height to 32,768 pixels or less.".into());
                 }
                 pixels.max(1.) as u32
             };
@@ -256,7 +256,7 @@ impl Editor {
                     if lock_toggle(ui, &mut draft.locked).changed() && draft.locked {
                         draft.link(true);
                     }
-                    egui::Grid::new("resize_dimensions").show(ui, |ui| {
+                    let grid = egui::Grid::new("resize_dimensions").show(ui, |ui| {
                         let suffix = draft.units.suffix();
                         let label = ui.label("Width");
                         let input = ui
@@ -289,9 +289,10 @@ impl Editor {
                         ui.label(suffix);
                         ui.end_row();
                     });
+                    crate::guided::mark(ui, "resize:size", grid.response.rect);
                 });
                 if draft.units.physical() {
-                    ui.horizontal(|ui| {
+                    let row = ui.horizontal(|ui| {
                         let label = ui.add_sized([72., 20.], egui::Label::new("Resolution"));
                         // Keep the printed size; the pixel size follows the resolution.
                         let before = draft.dimensions().ok();
@@ -306,6 +307,7 @@ impl Editor {
                         field.tip("Resolution · Pixels per inch. 96 is the usual screen resolution; 300 suits print.");
                         ui.label("pixels per inch");
                     });
+                    crate::guided::mark(ui, "resize:resolution", row.response.rect);
                 }
                 let mut resampling = draft.resampling;
                 let options: Vec<(Resampling, &str)> =
@@ -328,8 +330,21 @@ impl Editor {
                         );
                     }
                     Err(error) => {
-                        ui.colored_label(egui::Color32::from_rgb(255, 170, 160), error);
+                        // Guided: the field to change is ringed while the message shows.
+                        crate::guided::dialog_message(ui, crate::guided::Kind::Error, error, false);
+                        let target = if error.contains("Resolution") {
+                            "resize:resolution"
+                        } else {
+                            "resize:size"
+                        };
+                        if crate::guided::active(ui.ctx()).as_deref() != Some(target) {
+                            crate::guided::request(ui.ctx(), target, String::new());
+                        }
                     }
+                }
+                if spec.is_ok() {
+                    crate::guided::clear(ui.ctx(), "resize:size");
+                    crate::guided::clear(ui.ctx(), "resize:resolution");
                 }
                 let changed = spec.as_ref().is_ok_and(|size| {
                     *size != draft.original
@@ -346,6 +361,10 @@ impl Editor {
             && !modal.any_popup_open
             && (modal.backdrop_response.clicked()
                 || ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape)));
+        if cancel || apply.is_some() {
+            crate::guided::clear(ctx, "resize:size");
+            crate::guided::clear(ctx, "resize:resolution");
+        }
         if cancel {
             self.resize_image = None;
         } else if let Some(size) = apply {
@@ -376,7 +395,7 @@ impl Editor {
                     draft.confirmation = Some([width, height]);
                 }
             }
-            Err(error) => self.status = error.to_string(),
+            Err(error) => self.fail(error),
         }
     }
     fn finish_resize(&mut self, [width, height]: [u32; 2]) {
@@ -393,7 +412,7 @@ impl Editor {
                     "Resized to {width} × {height} px. Undo restores the previous image and objects."
                 );
             }
-            Err(error) => self.status = error.to_string(),
+            Err(error) => self.fail(error),
         }
     }
     fn show_resize_confirmation(&mut self, ctx: &egui::Context, size: [u32; 2]) {

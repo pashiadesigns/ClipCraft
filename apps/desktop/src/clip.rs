@@ -511,7 +511,7 @@ impl Editor {
             } else {
                 match capture_core::Session::unsaved(document) {
                     Ok(session) => self.accept_video(session, video.path),
-                    Err(e) => self.status = e.to_string(),
+                    Err(e) => self.fail(e),
                 }
             }
             self.shell.return_to_editor();
@@ -564,7 +564,7 @@ impl Editor {
                         );
                     }
                     Err(e) => {
-                        self.status = e.to_string();
+                        self.fail(e);
                         return;
                     }
                 }
@@ -587,7 +587,7 @@ impl Editor {
         copy: impl FnOnce(&capture_core::Document) -> Result<(), String>,
     ) {
         if let Err(e) = document.validate() {
-            self.status = e.to_string();
+            self.fail(e);
             return;
         }
         let copy_status = if settings.clipboard {
@@ -636,7 +636,7 @@ impl Editor {
                     settings.selection.label()
                 );
             }
-            Err(e) => self.status = e.to_string(),
+            Err(e) => self.fail(e),
         }
     }
     /// Image frame > From Capture: captures with the current settings and puts
@@ -657,7 +657,7 @@ impl Editor {
                 self.capture_requested = crate::CAPTURE_ENABLED;
                 ctx.request_repaint_of(egui::ViewportId::ROOT);
             }
-            Err(e) => self.status = e.to_string(),
+            Err(e) => self.fail(e),
         }
     }
     pub(super) fn place_capture_in_frame(&mut self, id: u64, document: capture_core::Document) {
@@ -710,7 +710,7 @@ impl Editor {
         match self.quick_controls.capture_for(selection).request() {
             Ok(settings) => self.request_action(FileAction::StartCapture(settings), ctx),
             Err(e) => {
-                self.status = e.to_string();
+                self.fail(e);
                 self.open_clip();
             }
         }

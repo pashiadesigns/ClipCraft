@@ -209,7 +209,8 @@ impl PageSettings {
             || self.size.iter().any(|n| *n <= self.margin * 2.)
         {
             return Err(Error::Invalid(
-                "Page size and margins leave no printable area.".into(),
+                "The margins cover the whole page. Reduce the margins or make the page larger."
+                    .into(),
             ));
         }
         let area = self.size.map(|n| n - self.margin * 2.);
@@ -226,7 +227,7 @@ impl PageSettings {
         let count = image[1].div_ceil(rows);
         if count > 1000 {
             return Err(Error::Invalid(
-                "Output exceeds 1,000 pages; increase page size or use Fit on one page.".into(),
+                "This would print more than 1,000 pages. Choose Fit on one page, or a larger paper size.".into(),
             ));
         }
         Ok((0..image[1])
@@ -298,7 +299,7 @@ pub fn encode(pixels: &RgbaImage, options: &Options) -> Result<Vec<u8>> {
         Format::Png => pixels.write_to(&mut bytes, image::ImageFormat::Png)?,
         Format::Jpeg => {
             if !(1..=100).contains(&options.quality) {
-                return Err(Error::Invalid("JPEG quality must be 1–100.".into()));
+                return Err(Error::Invalid("Set Quality between 1 and 100.".into()));
             }
             image::codecs::jpeg::JpegEncoder::new_with_quality(&mut bytes, options.quality)
                 .encode_image(&opaque(pixels, options.background))?;
@@ -335,7 +336,7 @@ pub fn encode_parts_pdf(
     options: &Options,
 ) -> Result<Vec<u8>> {
     if options.format != Format::Pdf {
-        return Err(Error::Invalid("Only PDF joins parts into one file".into()));
+        return Err(Error::Invalid("Only PDF, PowerPoint and Word join parts into one file. Choose one of those, or turn off Include all parts for numbered pictures.".into()));
     }
     let labels = options.redaction_labels;
     vector_pdf::encode_parts(

@@ -202,7 +202,7 @@ impl Document {
     ) -> Result<bool> {
         if !degrees.is_finite() || degrees.abs() > 360. {
             return Err(crate::Error::Invalid(
-                "Choose an angle from -360 to 360 degrees.".into(),
+                "Type an angle from −360° to 360°.".into(),
             ));
         }
         if degrees.rem_euclid(360.) == 0. {

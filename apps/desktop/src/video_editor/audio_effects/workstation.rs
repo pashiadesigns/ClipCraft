@@ -441,7 +441,7 @@ if ui.button("Bypass this effect").clicked(){effect.enabled=false;commit=true;ui
                                 self.video.fx.analysis_open = false;
                                 *commit = true;
                             }
-                            Err(e) => self.video.fx.error = e.to_string(),
+                            Err(e) => self.video.fx.error = crate::guided::friendly(&e.to_string()),
                         }
                         ui.close();
                     }

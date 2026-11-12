@@ -69,6 +69,16 @@ impl Editor {
         self.video.jump.finished = false;
         self.jump_to_object();
     }
+    /// "Review them" on a message: the first moment that needs a look.
+    pub(crate) fn review_first_stop(&mut self) -> bool {
+        match review_stops(&self.session.document).first().copied() {
+            Some(stop) => {
+                self.show_review_stop(stop);
+                true
+            }
+            None => false,
+        }
+    }
     /// Runs what Tracked coverage asked for on the previous frame.
     pub(super) fn run_review_request(&mut self) {
         if let Some(stop) = self.video.jump.go_to.take() {

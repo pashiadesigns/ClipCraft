@@ -95,7 +95,7 @@ impl Editor {
         {
             match store.set_pinned(&entry.id, !entry.organize.pinned) {
                 Ok(()) => self.history.refresh(),
-                Err(e) => self.history.error = e.to_string(),
+                Err(e) => self.history.error = crate::guided::friendly(&e.to_string()),
             }
         }
         if close.clicked()
@@ -103,7 +103,7 @@ impl Editor {
         {
             match store.set_closed(&entry.id, true) {
                 Ok(()) => self.history.refresh(),
-                Err(e) => self.history.error = e.to_string(),
+                Err(e) => self.history.error = crate::guided::friendly(&e.to_string()),
             }
         }
     }

@@ -742,7 +742,7 @@ impl Editor {
                     if count == 1 { "it" } else { "them" }
                 );
             }
-            Err(e) => self.status = e.to_string(),
+            Err(e) => self.fail(e),
         }
     }
     /// File › New › From PDF: Windows' picker filtered to PDF files.
@@ -1053,7 +1053,7 @@ impl Editor {
         let session = match capture_core::Session::unsaved(first) {
             Ok(s) => s,
             Err(e) => {
-                self.status = e.to_string();
+                self.fail(e);
                 return;
             }
         };

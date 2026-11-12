@@ -86,7 +86,7 @@ impl Editor {
             if let Some(root) = self.history.root() {
                 match capture_core::icon_library::Library::open(&root.join("icons")) {
                     Ok(store) => self.icon_library.store = Some(store),
-                    Err(e) => self.icon_library.error = e.to_string(),
+                    Err(e) => self.icon_library.error = crate::guided::friendly(&e.to_string()),
                 }
             } else {
                 self.icon_library.error = "Local storage is unavailable.".into();
@@ -108,7 +108,7 @@ impl Editor {
                         match store.import(&path) {
                             Ok(_) => count += 1,
                             Err(e) => {
-                                self.icon_library.error = e.to_string();
+                                self.icon_library.error = crate::guided::friendly(&e.to_string());
                                 break;
                             }
                         }
@@ -120,7 +120,7 @@ impl Editor {
                 if let Some(store) = &mut self.icon_library.store
                     && let Err(e) = store.0.refresh()
                 {
-                    self.icon_library.error = e.to_string();
+                    self.icon_library.error = crate::guided::friendly(&e.to_string());
                 }
                 self.icon_library.textures.clear();
             }
@@ -263,7 +263,7 @@ impl Editor {
             };
             match result {
                 Ok(payload) => self.arm_icon(ui.ctx(), id, payload),
-                Err(e) => self.icon_library.error = e.to_string(),
+                Err(e) => self.icon_library.error = crate::guided::friendly(&e.to_string()),
             }
         }
     }

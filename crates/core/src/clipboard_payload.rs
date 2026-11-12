@@ -28,13 +28,17 @@ impl ClipboardPayload {
         self.validate()?;
         let bytes = serde_json::to_vec(self)?;
         if bytes.len() > MAX_PAYLOAD_BYTES {
-            return Err(Error::Invalid("Clipboard payload exceeds 160 MB".into()));
+            return Err(Error::Invalid(
+                "What you copied is over 160 MB. Copy less at once.".into(),
+            ));
         }
         Ok(bytes)
     }
     pub fn decode(bytes: &[u8]) -> Result<Self> {
         if bytes.len() > MAX_PAYLOAD_BYTES {
-            return Err(Error::Invalid("Clipboard payload exceeds 160 MB".into()));
+            return Err(Error::Invalid(
+                "What you copied is over 160 MB. Copy less at once.".into(),
+            ));
         }
         let payload: Self = serde_json::from_slice(bytes)?;
         payload.validate()?;
@@ -43,7 +47,8 @@ impl ClipboardPayload {
     pub fn validate(&self) -> Result<()> {
         if self.schema_version != 1 {
             return Err(Error::Invalid(
-                "Unsupported clipboard payload version".into(),
+                "This was copied from a different ClipDesigner version. Copy it again in this one."
+                    .into(),
             ));
         }
         match &self.content {

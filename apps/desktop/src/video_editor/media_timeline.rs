@@ -328,7 +328,7 @@ impl Editor {
                         let mut p = v.clone();
                         match p.separate_audio(index) {
                             Ok(()) => changed = Some(p),
-                            Err(e) => self.status = e.to_string(),
+                            Err(e) => self.fail(e),
                         }
                         ui.close();
                     }
@@ -381,7 +381,7 @@ impl Editor {
                         let mut p = v.clone();
                         match p.split_clip(index, v.cursor) {
                             Ok(()) => changed = Some(p),
-                            Err(e) => self.status = e.to_string(),
+                            Err(e) => self.fail(e),
                         };
                         ui.close();
                     }
@@ -391,7 +391,7 @@ impl Editor {
                         copy.at = c.until();
                         match p.edit_linked(index, copy, true) {
                             Ok(()) => changed = Some(p),
-                            Err(e) => self.status = e.to_string(),
+                            Err(e) => self.fail(e),
                         };
                         ui.close();
                     }
@@ -580,7 +580,7 @@ impl Editor {
                                 Some(clips.iter().map(|s| s.duration()).sum());
                             self.video.drop_clips = clips;
                         }
-                        Err(error) => self.status = error,
+                        Err(error) => self.fail(error),
                     }
                 }
                 if self.video.drop_probe.is_some() {
@@ -734,7 +734,7 @@ impl Editor {
                 a.fade_out = a.fade_out.min(len);
             }
             if let Err(e) = project.edit_linked(d.index, c.clone(), d.duplicate) {
-                self.status = e.to_string();
+                self.fail(e);
                 return;
             }
             let row = project.layer_index(Layer::Media(c.track));

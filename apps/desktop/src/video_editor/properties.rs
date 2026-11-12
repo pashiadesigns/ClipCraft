@@ -1147,7 +1147,7 @@ impl Editor {
                     match linked.edit_linked(i, c, false) {
                         Ok(()) => v = linked,
                         Err(e) => {
-                            self.status = e.to_string();
+                            self.fail(e);
                             return;
                         }
                     }

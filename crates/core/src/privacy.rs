@@ -254,7 +254,7 @@ pub fn detect(words: &[Word], options: &Options, dimensions: [u32; 2]) -> Result
         || options.phrases.iter().any(|p| p.len() > 512)
     {
         return Err(Error::Invalid(
-            "Use at most 100 phrases of up to 512 bytes; scan a smaller page if needed.".into(),
+            "Keep up to 100 names or phrases, each under 512 characters. Remove some chips.".into(),
         ));
     }
     custom::validate_all(&options.custom)?;
@@ -329,7 +329,7 @@ pub fn detect(words: &[Word], options: &Options, dimensions: [u32; 2]) -> Result
         }
         if findings.len() >= 2048 {
             return Err(Error::Invalid(
-                "More than 2048 findings: scan a smaller page.".into(),
+                "Over 2,048 findings. Turn off some types under Look for, or scan one page at a time.".into(),
             ));
         }
     }

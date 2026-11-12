@@ -210,7 +210,7 @@ impl Editor {
         })();
         match result {
             Ok(image) => self.apply_section(Action::InsertImage { after, image }, transform),
-            Err(e) => self.status = e,
+            Err(e) => self.fail(e),
         }
     }
     pub(super) fn show_guide_controls(&mut self, ui: &mut egui::Ui, transform: Transform) {
@@ -433,7 +433,7 @@ impl Editor {
                             self.needs_render = true;
                             ui.ctx().request_repaint();
                         }
-                        Err(error) => self.status = error.to_string(),
+                        Err(error) => self.fail(error),
                     }
                 }
             }

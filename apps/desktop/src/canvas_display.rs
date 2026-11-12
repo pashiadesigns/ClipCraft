@@ -79,7 +79,7 @@ impl Editor {
         if self.texture.is_none() {
             match self.canvas_document().render() {
                 Ok(image) => self.texture = Some(upload(ctx, "canvas-raster", &image)),
-                Err(error) => self.status = error.to_string(),
+                Err(error) => self.fail(error),
             }
         }
         self.texture.as_ref().map(egui::TextureHandle::id)

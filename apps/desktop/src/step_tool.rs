@@ -213,7 +213,7 @@ impl Editor {
                         self.step_placement = Some(step);
                         self.needs_render = true;
                     }
-                    Err(error) => self.status = error.to_string(),
+                    Err(error) => self.fail(error),
                 }
             }
         }
@@ -322,7 +322,7 @@ impl Editor {
             Ok(annotation) => {
                 self.commit_step(annotation, None);
             }
-            Err(error) => self.status = error.to_string(),
+            Err(error) => self.fail(error),
         }
     }
     pub(super) fn step_properties(&mut self, ui: &mut egui::Ui) {

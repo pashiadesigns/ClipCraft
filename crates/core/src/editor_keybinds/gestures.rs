@@ -70,12 +70,12 @@ impl Gestures {
             .any(|g| self.get(g).is_some_and(|v| !(1..=7).contains(&v)))
         {
             return Err(Error::Invalid(
-                "Choose Ctrl, Alt, Shift, or a combination for mouse gestures.".into(),
+                "Pick Ctrl, Alt or Shift (or a combination) for this gesture.".into(),
             ));
         }
         if self.canvas_zoom.is_some() && self.canvas_zoom == self.stroke_size {
             return Err(Error::Invalid(
-                "Canvas zoom and stroke size share the canvas. Choose different modifiers.".into(),
+                "Zoom and stroke size use the same keys. Change the keys for one of them.".into(),
             ));
         }
         Ok(())

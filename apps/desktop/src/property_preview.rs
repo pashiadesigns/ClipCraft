@@ -142,7 +142,7 @@ impl Editor {
         let batch_preview = match batch_preview {
             Ok(values) => values,
             Err(error) => {
-                self.status = error.to_string();
+                self.fail(error);
                 return;
             }
         };
@@ -255,7 +255,7 @@ impl Editor {
         }
         document.promote_features();
         if let Err(error) = document.validate() {
-            self.status = error.to_string();
+            self.fail(error);
             return;
         }
         self.property_preview = Some(PropertyPreview {

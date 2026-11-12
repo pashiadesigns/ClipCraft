@@ -69,7 +69,7 @@ pub fn fullscreen_bounds(
     }
     match target {
         Fullscreen::Ask => Err(Error::Invalid(
-            "Select a monitor in the capture preview.".into(),
+            "Click the monitor you want in the preview.".into(),
         )),
         Fullscreen::All => Ok([
             displays.iter().map(|d| d.bounds[0]).min().unwrap(),
@@ -83,7 +83,7 @@ pub fn fullscreen_bounds(
             .map(|d| d.bounds)
             .ok_or_else(|| {
                 Error::Invalid(
-                    "The selected display is disconnected. Choose another in Fullscreen settings."
+                    "That monitor is disconnected. Choose another one in the Fullscreen settings."
                         .into(),
                 )
             }),
@@ -133,7 +133,7 @@ impl Settings {
         }
         if ![0, 3, 5, 10].contains(&self.delay_seconds) {
             return Err(Error::Invalid(
-                "Capture delay must be 0, 3, 5 or 10 seconds".into(),
+                "Pick a Start delay: 0, 3, 5 or 10 seconds.".into(),
             ));
         }
         Ok(())

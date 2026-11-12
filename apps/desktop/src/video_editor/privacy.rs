@@ -705,9 +705,13 @@ impl Editor {
                     project: p,
                     annotations: doc.annotations,
                 });
-                self.status = format!(
-                    "Tracked {}s added. Review uncertain intervals before export.",
-                    d.cover.noun()
+                // Added, with a reminder that needs doing before export.
+                self.warn(
+                    format!(
+                        "Tracked {}s added. Some stretches are uncertain: review them before export.",
+                        d.cover.noun()
+                    ),
+                    Some(("Review them", crate::guided::Action::ReviewRedactions)),
                 );
                 return;
             }

@@ -328,7 +328,7 @@ pub(crate) fn copy_recording(
     };
     if same(source, path) {
         return Err(
-            "Choose a different output filename to preserve the original recording.".into(),
+            "That name would replace the original recording. Choose another file name.".into(),
         );
     }
     let mut from =
@@ -485,7 +485,7 @@ fn export_frames(
             .eq_ignore_ascii_case(&original.to_string_lossy())
         {
             return Err(
-                "Choose a different output filename to preserve the original recording.".into(),
+                "That name would replace the original recording. Choose another file name.".into(),
             );
         }
     }

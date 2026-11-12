@@ -9,7 +9,7 @@ impl Editor {
         let ids = self.group_preset_ids();
         match Composition::capture(&self.session.document, &ids) {
             Ok(c) => self.presets.reusable.save_payload(Payload::Group(c)),
-            Err(e) => self.status = e.to_string(),
+            Err(e) => self.fail(e),
         }
     }
     /// Objects a saved group captures: the canvas selection, or the objects
@@ -97,7 +97,7 @@ impl Editor {
                 self.status =
                     "Block placed. Drag it to position it; each object remains editable.".into();
             }
-            Err(e) => self.status = e.to_string(),
+            Err(e) => self.fail(e),
         }
     }
 }

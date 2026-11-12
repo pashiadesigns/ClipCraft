@@ -779,7 +779,7 @@ pub(crate) fn type_builder(ctx: &egui::Context, list: &mut Vec<CustomType>) -> b
                 changed = true;
                 cancel = true;
             }
-            Err(e) => b.error = e.to_string(),
+            Err(e) => b.error = crate::guided::friendly(&e.to_string()),
         }
     }
     if delete && let Some(i) = b.index.filter(|i| *i < list.len()) {

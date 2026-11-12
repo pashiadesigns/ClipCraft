@@ -1012,7 +1012,7 @@ pub fn require_review(doc: &crate::Document) -> crate::Result<()> {
             })
         })
     }) {
-        return Err(crate::Error::Invalid("Review the tracked redaction ranges, then mark each as reviewed in its Properties before exporting.".into()));
+        return Err(crate::Error::Invalid("Some tracked redactions need a look before export. Review each one and mark it reviewed in its Properties.ing.".into()));
     }
     Ok(())
 }

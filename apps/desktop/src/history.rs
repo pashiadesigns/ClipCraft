@@ -89,7 +89,7 @@ impl HistoryPanel {
         if let Some(store) = &mut self.store {
             match store.refresh() {
                 Ok(()) => self.error.clear(),
-                Err(e) => self.error = e.to_string(),
+                Err(e) => self.error = crate::guided::friendly(&e.to_string()),
             }
         }
         let ids: std::collections::HashSet<_> = self.entries().into_iter().map(|e| e.id).collect();

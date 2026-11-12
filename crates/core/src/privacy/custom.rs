@@ -61,7 +61,7 @@ impl CustomType {
         let name = self.name.trim();
         if name.is_empty() || name.chars().count() > 60 || name.chars().any(char::is_control) {
             return Err(Error::Invalid(
-                "Name the type with 1 to 60 characters.".into(),
+                "Give the type a name (up to 60 characters).".into(),
             ));
         }
         if self

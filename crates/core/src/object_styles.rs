@@ -350,7 +350,7 @@ impl ObjectStyle {
         if self.kind == Kind::Callout {
             if converted.image.is_some() {
                 return Err(Error::Invalid(
-                    "Convert the image frame to a shape before applying a callout style.".into(),
+                    "Callout styles need a shape. Convert the frame to a shape first.".into(),
                 ));
             }
             let (_, hi) = converted.body_bounds();
@@ -893,7 +893,7 @@ impl Store {
                 items.push(style);
             } else {
                 return Err(Error::Invalid(
-                    "96 custom templates are already saved. Remove one first.".into(),
+                    "You have 96 saved styles. Delete one in Manage presets first.".into(),
                 ));
             }
             Ok(())

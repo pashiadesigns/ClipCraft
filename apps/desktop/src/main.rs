@@ -42,6 +42,7 @@ mod group_presets;
 mod group_transform;
 mod guide_display;
 mod guide_sections;
+mod guided;
 mod history;
 mod hotkey;
 mod icons;
@@ -224,6 +225,8 @@ struct Editor {
     path: Option<PathBuf>,
     last_directory: PathBuf,
     status: String,
+    /// How the message bar shows status (guided errors).
+    notice: guided::Notice,
     selected: Option<u64>,
     extra_selected: std::collections::BTreeSet<u64>,
     selection_order: Vec<u64>,
@@ -426,6 +429,7 @@ impl Editor {
             path: startup_path,
             last_directory,
             status: startup_status,
+            notice: Default::default(),
             selected: None,
             extra_selected: Default::default(),
             selection_order: vec![],
@@ -486,7 +490,7 @@ impl Editor {
         let command = match self.keyframe_command(command) {
             Ok(c) => c,
             Err(e) => {
-                self.status = e.to_string();
+                self.fail(e);
                 return;
             }
         };
@@ -571,7 +575,7 @@ impl Editor {
                     self.select_only(None);
                 }
             }
-            Err(e) => self.status = e.to_string(),
+            Err(e) => self.fail(e),
         }
     }
     fn open(&mut self) {
@@ -661,7 +665,7 @@ impl Editor {
                         );
                     }
                 }
-                Err(e) => self.status = e.to_string(),
+                Err(e) => self.fail(e),
             }
         }
     }
@@ -734,7 +738,7 @@ impl Editor {
                     self.path = Some(path);
                     return true;
                 }
-                Err(e) => self.status = e.to_string(),
+                Err(e) => self.fail(e),
             }
         }
         false
@@ -942,7 +946,7 @@ impl Editor {
                 let session = match result {
                     Ok(session) => session,
                     Err(error) => {
-                        self.status = error.to_string();
+                        self.fail(error);
                         return;
                     }
                 };
@@ -1043,7 +1047,7 @@ impl Editor {
             FileAction::Capture => self.open_clip(),
             FileAction::StartVideo(settings, request) => {
                 if let Err(e) = request.options.validate() {
-                    self.status = e.to_string();
+                    self.fail(e);
                     return;
                 }
                 self.clip.pending_video = Some(request);
@@ -1058,7 +1062,7 @@ impl Editor {
                     self.capture_requested = CAPTURE_ENABLED;
                     ctx.request_repaint_of(egui::ViewportId::ROOT);
                 }
-                Err(e) => self.status = e.to_string(),
+                Err(e) => self.fail(e),
             },
             FileAction::Close => {
                 self.allow_close = true;
@@ -1120,7 +1124,7 @@ impl Editor {
                 self.accept_capture_result(captured, settings, clipboard::copy);
             }
             Ok(None) => self.status = "Capture cancelled. Your project is unchanged.".into(),
-            Err(error) => self.status = error,
+            Err(error) => self.fail(error),
         }
     }
 
@@ -1229,6 +1233,7 @@ impl eframe::App for Editor {
         }
         let file_workspace_visible = self.shell.backstage.is_some();
         self.show_shell(ui);
+        guided::paint(&ctx);
         self.settle_property_preview(&ctx);
         self.sync_tilt_display(&ctx);
         if self.needs_render {

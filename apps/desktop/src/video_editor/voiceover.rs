@@ -72,7 +72,8 @@ impl Editor {
         if state.with_camera && state.camera_device.is_empty() {
             if state.cameras_job.is_none() {
                 state.error =
-                    "Connect a camera, then refresh the camera list or choose Voice only.".into();
+                    "No camera found. Connect one and refresh the list, or choose Voice only."
+                        .into();
             }
             return;
         }

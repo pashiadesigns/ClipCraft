@@ -145,7 +145,7 @@ impl Team {
                 .is_some_and(|f| f.as_os_str().len() > 1024 || !f.is_absolute())
         {
             return Err(Error::Invalid(
-                "Team settings need a name of up to 60 characters and a full folder path.".into(),
+                "Use a name up to 60 characters, and Browse to choose the team folder.".into(),
             ));
         }
         Ok(())
@@ -278,7 +278,9 @@ impl Preferences {
                     .iter()
                     .any(|id| id.len() > 2048 || id.contains('\0'))
                 {
-                    return Err(Error::Invalid("Choose a valid audio output device.".into()));
+                    return Err(Error::Invalid(
+                        "That speaker isn't available. Choose another output.".into(),
+                    ));
                 }
                 self.audio_outputs = value;
             }
@@ -300,7 +302,7 @@ impl Preferences {
             Choice::Workspace(value) => {
                 if !(4..=512).contains(&value.grid_size) {
                     return Err(Error::Invalid(
-                        "Grid size runs from 4 to 512 pixels.".into(),
+                        "Set Grid size between 4 and 512 pixels.".into(),
                     ));
                 }
                 self.workspace = value;
@@ -324,7 +326,7 @@ impl Preferences {
                         .as_ref()
                         .is_some_and(|d| !list.iter().any(|w| &w.name == d))
                 {
-                    return Err(Error::Invalid("Keep up to 32 watermark presets.".into()));
+                    return Err(Error::Invalid("You have 32 watermark presets. Delete some in Manage presets, then try again.".into()));
                 }
                 for w in &list {
                     w.validate()?;

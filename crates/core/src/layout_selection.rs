@@ -223,7 +223,7 @@ impl Document {
                     .any(|(axis, d)| (moved.start[axis] - object.start[axis] - d).abs() > 0.001)
                 {
                     return Err(Error::Invalid(
-                        "This arrangement would move objects outside the image".into(),
+                        "This would push objects off the image. Align to the selection instead, or move the objects in first.".into(),
                     ));
                 }
                 Ok(moved)

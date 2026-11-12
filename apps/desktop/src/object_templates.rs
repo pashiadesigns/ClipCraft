@@ -71,7 +71,7 @@ impl Editor {
     }
     pub(super) fn apply_object_template(&mut self, style: &ObjectStyle, custom: bool) {
         if let Err(error) = style.validate() {
-            self.status = error.to_string();
+            self.fail(error);
             return;
         }
         let objects = self.selected_objects();
@@ -86,7 +86,7 @@ impl Editor {
                     self.needs_render = true;
                 }
                 Err(error) => {
-                    self.status = error.to_string();
+                    self.fail(error);
                     return;
                 }
             }
@@ -94,7 +94,7 @@ impl Editor {
             match style.compatible_command(&objects) {
                 Ok(command) => self.execute(command),
                 Err(error) => {
-                    self.status = error.to_string();
+                    self.fail(error);
                     return;
                 }
             }

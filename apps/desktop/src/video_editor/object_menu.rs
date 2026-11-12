@@ -136,7 +136,7 @@ impl Editor {
                 Action::Seek(_) | Action::Visible(_) | Action::Locked(_)
             )
         {
-            self.status = "Unlock the object before editing it.".into();
+            self.fail("This object is locked. Unlock it to edit it.");
             return;
         }
         self.video.pause();

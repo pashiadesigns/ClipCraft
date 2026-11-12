@@ -360,7 +360,7 @@ impl Editor {
         if !added.is_empty() {
             team.added.retain(|n, _| folder.join(n).is_file());
             if let Err(e) = self.quick_controls.set_team(team) {
-                self.status = e;
+                self.fail(e);
             } else {
                 self.status = format!("Updated from the team folder: {}.", added.join(", "));
             }
@@ -755,7 +755,7 @@ impl Editor {
                         self.status = format!("Saved the kit {}", path.display());
                         return;
                     }
-                    Err(e) => d.error = e.to_string(),
+                    Err(e) => d.error = crate::guided::friendly(&e.to_string()),
                 }
             }
         }
@@ -933,7 +933,7 @@ impl Editor {
                 );
                 self.request_action(crate::FileAction::OpenPath(project), ctx);
             }
-            Err(e) => self.status = e,
+            Err(e) => self.fail(e),
         }
     }
     fn show_sharing_job(&mut self, ctx: &egui::Context) {

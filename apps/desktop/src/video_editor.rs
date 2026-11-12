@@ -550,9 +550,9 @@ impl Editor {
                     Ok(session) => {
                         self.request_action(FileAction::VideoLoaded { session, path }, ctx)
                     }
-                    Err(e) => self.status = e.to_string(),
+                    Err(e) => self.fail(e),
                 },
-                Err(e) => self.status = e,
+                Err(e) => self.fail(e),
             }
         }
         if self.video.loading.is_some() {
@@ -588,7 +588,7 @@ impl Editor {
                             self.status.push_str(&format!(" · {e}"));
                         }
                     }
-                    Err(e) => self.status = e,
+                    Err(e) => self.fail(e),
                 }
             }
             ctx.request_repaint_after(Duration::from_millis(40));
@@ -919,7 +919,7 @@ impl Editor {
             &project,
         );
         if let Err(e) = result {
-            self.status = e.to_string();
+            self.fail(e);
         }
         ui.painter().with_clip_rect(t.viewport).rect_stroke(
             t.image,
@@ -993,7 +993,7 @@ impl Editor {
                     );
                     return true;
                 }
-                Err(e) => self.status = e.to_string(),
+                Err(e) => self.fail(e),
             }
         }
         false

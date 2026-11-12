@@ -412,7 +412,9 @@ impl Document {
             }
         }
         if self.annotations.len() > 10000 {
-            return Err(Error::Invalid("Too many annotations".into()));
+            return Err(Error::Invalid(
+                "This image has too many objects. Flatten or delete some first.".into(),
+            ));
         }
         if self
             .annotations
@@ -768,7 +770,7 @@ impl Document {
         let portable = video::project::portable(self, path)?;
         let bytes = serde_json::to_vec(&portable)?;
         if bytes.len() as u64 > MAX_FILE_BYTES {
-            return Err(Error::Invalid("The editable project exceeds the supported 160 MB file size. Export a flattened PNG instead.".into()));
+            return Err(Error::Invalid("This project is over 160 MB. Use Save As › Pack project, or export a flattened PNG.".into()));
         }
         atomic_write(path, &bytes)
     }
@@ -1385,7 +1387,7 @@ impl Session {
                             .ok_or_else(|| Error::Invalid("Open a video first.".into()))?;
                         let expanded = v.linked_items(&items);
                         if expanded.iter().any(|item| matches!(item, video::editing::Item::Annotation(id) if self.document.object_states.get(id).is_some_and(|s| s.locked))) {
-                            return Err(Error::Invalid("Unlock the selected objects before deleting them.".into()));
+                            return Err(Error::Invalid("These objects are locked. Unlock them to delete them.".into()));
                         }
                         let removed = v.remove_items(&items);
                         self.document
@@ -1417,7 +1419,7 @@ impl Session {
                     Command::VideoDuplicate { id, timing } => {
                         if self.document.object_state(id).locked {
                             return Err(Error::Invalid(
-                                "Unlock the object before duplicating it.".into(),
+                                "This object is locked. Unlock it to duplicate it.".into(),
                             ));
                         }
                         let original = self

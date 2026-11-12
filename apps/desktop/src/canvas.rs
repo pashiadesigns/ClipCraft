@@ -667,7 +667,7 @@ impl Editor {
                                     });
                                     self.needs_render = true;
                                 }
-                                Err(error) => self.status = error.to_string(),
+                                Err(error) => self.fail(error),
                             }
                         }
                     } else if self.tool.is_none() || handle.is_some() || hit.is_some() {
@@ -861,7 +861,7 @@ impl Editor {
                             self.needs_render = true;
                             ui.ctx().request_repaint();
                         }
-                        Err(error) => self.status = error.to_string(),
+                        Err(error) => self.fail(error),
                         _ => {}
                     }
                 }
@@ -943,7 +943,7 @@ impl Editor {
                             self.needs_render = true;
                             ui.ctx().request_repaint();
                         }
-                        Err(error) => self.status = error.to_string(),
+                        Err(error) => self.fail(error),
                         _ => {}
                     }
                 }
@@ -1221,6 +1221,7 @@ pub(crate) mod tests {
             path: None,
             last_directory: std::path::PathBuf::from("."),
             status: String::new(),
+            notice: Default::default(),
             selected: None,
             extra_selected: Default::default(),
             selection_order: vec![],
