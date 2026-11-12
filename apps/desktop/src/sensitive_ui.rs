@@ -278,54 +278,18 @@ fn custom_section(ui: &mut egui::Ui, list: &mut Vec<CustomType>) -> bool {
             Some("Value shapes you define, such as an employee ID: a letter, then five digits."),
         );
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            ui.menu_button("…", |ui| {
-                if crate::controls::menu_action(ui, "Export types…").clicked() {
-                    if let Some(path) = rfd::FileDialog::new()
-                        .add_filter("ClipDesigner sensitive types", &["cdtypes"])
-                        .set_file_name("Sensitive types.cdtypes")
-                        .save_file()
-                        && let Ok(bytes) = serde_json::to_vec_pretty(list)
-                    {
-                        let _ = std::fs::write(&path, &bytes);
-                    }
-                    ui.close();
-                }
-                if crate::controls::menu_action(ui, "Import types…").clicked() {
-                    if let Some(path) = rfd::FileDialog::new()
-                        .add_filter("ClipDesigner sensitive types", &["cdtypes"])
-                        .pick_file()
-                        && let Ok(bytes) = std::fs::read(&path)
-                        && bytes.len() < 1_000_000
-                        && let Ok(found) = serde_json::from_slice::<Vec<CustomType>>(&bytes)
-                    {
-                        let mut merged = list.clone();
-                        for t in found {
-                            if !merged
-                                .iter()
-                                .any(|o| o.name.trim().eq_ignore_ascii_case(t.name.trim()))
-                            {
-                                merged.push(t);
-                            }
-                        }
-                        if custom::validate_all(&merged).is_ok() {
-                            *list = merged;
-                            changed = true;
-                        }
-                    }
-                    ui.close();
-                }
-            });
             if ui
                 .add(
                     egui::Button::new(
-                        egui::RichText::new("+ New type").color(crate::shell::ACCENT),
+                        egui::RichText::new("Manage types\u{2026}").color(crate::shell::ACCENT),
                     )
                     .frame(false),
                 )
-                .tip("Define a value shape to look for")
+                .tip("Manage types \u{b7} Turn types on or off, change them, start from a ready-made type or make a new one.")
                 .clicked()
             {
-                open_builder(ui.ctx(), None, None);
+                let first = (!list.is_empty()).then_some(0);
+                open_builder(ui.ctx(), first, first.map(|i| list[i].clone()));
             }
         });
     });
@@ -359,9 +323,11 @@ fn custom_section(ui: &mut egui::Ui, list: &mut Vec<CustomType>) -> bool {
     }
     if list.is_empty() {
         ui.label(
-            egui::RichText::new("None yet. Right-click a type to edit or delete it.")
-                .size(11.5)
-                .color(egui::Color32::from_rgb(142, 154, 157)),
+            egui::RichText::new(
+                "None yet. Use Manage types to make one or start from a ready-made type.",
+            )
+            .size(11.5)
+            .color(egui::Color32::from_rgb(142, 154, 157)),
         );
     }
     changed
@@ -517,6 +483,9 @@ fn from_pattern(text: &str) -> Option<Vec<Block>> {
 #[derive(Clone)]
 struct Builder {
     index: Option<usize>,
+    /// The type as saved, to tell unsaved changes and to Revert.
+    original: CustomType,
+    query: String,
     draft: CustomType,
     blocks: Vec<Block>,
     as_text: bool,
@@ -528,47 +497,62 @@ struct Builder {
 fn builder_id() -> egui::Id {
     egui::Id::unique("clipdesigner-custom-type-builder")
 }
-/// Opens the custom type builder for a new type or for saved type `index`.
+impl Builder {
+    fn for_type(index: Option<usize>, ty: Option<CustomType>, test: String, query: String) -> Self {
+        let draft = ty.unwrap_or_else(|| CustomType::new("", "[WE]#####"));
+        let blocks = from_pattern(&draft.pattern);
+        Self {
+            index,
+            original: if index.is_some() {
+                draft.clone()
+            } else {
+                CustomType::new("", "")
+            },
+            query,
+            as_text: blocks.is_none(),
+            blocks: blocks.unwrap_or_default(),
+            labels_on: draft.near_label.is_some(),
+            draft,
+            test,
+            error: String::new(),
+            focus: true,
+        }
+    }
+    /// Whether the editor differs from the saved type (always, for a new one
+    /// that has a name).
+    fn dirty(&self) -> bool {
+        if self.index.is_none() {
+            return !self.draft.name.trim().is_empty();
+        }
+        let mut a = self.draft.clone();
+        if a.near_label.as_deref().is_some_and(|l| l.trim().is_empty()) {
+            a.near_label = None;
+        }
+        a.name = a.name.trim().to_owned();
+        a != self.original
+    }
+}
+const SAMPLE: &str =
+    "Reviewed by W74828 and E84839; escalated to X12345 on ticket OPS-2201. Badge AW748281 stays.";
+/// Opens Manage types at saved type `index`, or on a new type.
 pub(crate) fn open_builder(ctx: &egui::Context, index: Option<usize>, ty: Option<CustomType>) {
-    let draft = ty.unwrap_or_else(|| CustomType::new("", "[WE]#####"));
-    let blocks = from_pattern(&draft.pattern);
-    let builder = Builder {
-        index,
-        as_text: blocks.is_none(),
-        blocks: blocks.unwrap_or_default(),
-        labels_on: draft.near_label.is_some(),
-        draft,
-        test: "Reviewed by W74828 and E84839; escalated to X12345 on ticket OPS-2201. Badge AW748281 stays.".into(),
-        error: String::new(),
-        focus: true,
-    };
+    let builder = Builder::for_type(index, ty, SAMPLE.into(), String::new());
     ctx.data_mut(|d| d.insert_temp(builder_id(), builder));
 }
 
-/// The New / Edit custom type dialog. Returns true when `list` changed.
-pub(crate) fn type_builder(ctx: &egui::Context, list: &mut Vec<CustomType>) -> bool {
-    let Some(mut b) = ctx.data(|d| d.get_temp::<Builder>(builder_id())) else {
-        return false;
-    };
-    let mut save = false;
-    let mut cancel = false;
-    let mut delete = false;
-    let response = crate::controls::Modal::new(egui::Id::unique("custom-type-builder")).show(ctx, |ui| {
-        ui.set_width(560_f32.min(ctx.content_rect().width() - 48.));
-        crate::controls::dialog_title(
-            ui,
-            if b.index.is_some() { "Edit custom type" } else { "New custom type" },
-        );
-        crate::controls::dialog_section(ui, "Name", None);
-        let name = ui.add(
-            crate::unicode_input::TextEdit::singleline(&mut b.draft.name)
-                .hint_text("Employee ID")
-                .char_limit(60)
-                .desired_width(f32::INFINITY),
-        );
-        crate::controls::focus_once(&name, &mut b.focus);
-        ui.add_space(6.);
-        ui.horizontal(|ui| {
+/// The editor half of Manage types: name, pattern, options and the live
+/// test. (The type builder of beta 5, unchanged inside.)
+fn type_editor(ui: &mut egui::Ui, b: &mut Builder) {
+    crate::controls::dialog_section(ui, "Name", None);
+    let name = ui.add(
+        crate::unicode_input::TextEdit::singleline(&mut b.draft.name)
+            .hint_text("Employee ID")
+            .char_limit(60)
+            .desired_width(f32::INFINITY),
+    );
+    crate::controls::focus_once(&name, &mut b.focus);
+    ui.add_space(6.);
+    ui.horizontal(|ui| {
             crate::controls::dialog_section_label(ui, "Pattern",Some("# a digit, A a letter, * a letter or digit, [WE] one of, \"INV\" exact text, {5} or {2,4} a count, | between alternatives."));
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 let label = if b.as_text { "Edit as blocks" } else { "Edit as text" };
@@ -587,43 +571,56 @@ pub(crate) fn type_builder(ctx: &egui::Context, list: &mut Vec<CustomType>) -> b
                 }
             });
         });
-        if b.as_text {
-            ui.add(
-                egui::TextEdit::singleline(&mut b.draft.pattern)
-                    .font(egui::TextStyle::Monospace)
-                    .char_limit(400)
-                    .desired_width(f32::INFINITY),
-            );
-        } else {
-            let mut remove = None;
-            ui.horizontal_wrapped(|ui| {
-                for (i, block) in b.blocks.iter_mut().enumerate() {
-                    egui::Frame::new()
-                        .fill(egui::Color32::from_rgb(58, 66, 70))
-                        .stroke(egui::Stroke::new(1., egui::Color32::from_rgb(74, 84, 88)))
-                        .corner_radius(8)
-                        .inner_margin(egui::Margin::symmetric(8, 4))
-                        .show(ui, |ui| {
-                            ui.horizontal(|ui| {
-                                ui.label(egui::RichText::new(block.kind.label()).size(11.5).color(egui::Color32::from_rgb(142, 154, 157)));
-                                if matches!(block.kind, BlockKind::OneOf | BlockKind::Exact) {
-                                    ui.add(egui::TextEdit::singleline(&mut block.value).desired_width(56.).char_limit(40));
+    if b.as_text {
+        ui.add(
+            egui::TextEdit::singleline(&mut b.draft.pattern)
+                .font(egui::TextStyle::Monospace)
+                .char_limit(400)
+                .desired_width(f32::INFINITY),
+        );
+    } else {
+        let mut remove = None;
+        ui.horizontal_wrapped(|ui| {
+            for (i, block) in b.blocks.iter_mut().enumerate() {
+                egui::Frame::new()
+                    .fill(egui::Color32::from_rgb(58, 66, 70))
+                    .stroke(egui::Stroke::new(1., egui::Color32::from_rgb(74, 84, 88)))
+                    .corner_radius(8)
+                    .inner_margin(egui::Margin::symmetric(8, 4))
+                    .show(ui, |ui| {
+                        ui.horizontal(|ui| {
+                            ui.label(
+                                egui::RichText::new(block.kind.label())
+                                    .size(11.5)
+                                    .color(egui::Color32::from_rgb(142, 154, 157)),
+                            );
+                            if matches!(block.kind, BlockKind::OneOf | BlockKind::Exact) {
+                                ui.add(
+                                    egui::TextEdit::singleline(&mut block.value)
+                                        .desired_width(56.)
+                                        .char_limit(40),
+                                );
+                            }
+                            if block.kind != BlockKind::Exact {
+                                ui.label("×");
+                                ui.add(egui::DragValue::new(&mut block.min).range(0..=64));
+                                if block.max != block.min || ui.input(|i| i.modifiers.shift) {
+                                    ui.label("–");
                                 }
-                                if block.kind != BlockKind::Exact {
-                                    ui.label("×");
-                                    ui.add(egui::DragValue::new(&mut block.min).range(0..=64));
-                                    if block.max != block.min || ui.input(|i| i.modifiers.shift) {
-                                        ui.label("–");
-                                    }
-                                    ui.add(egui::DragValue::new(&mut block.max).range(block.min.max(1)..=64));
-                                }
-                                if ui.small_button("✕").tip("Remove this block").clicked() {
-                                    remove = Some(i);
-                                }
-                            });
+                                ui.add(
+                                    egui::DragValue::new(&mut block.max)
+                                        .range(block.min.max(1)..=64),
+                                );
+                            }
+                            if ui.small_button("✕").tip("Remove this block").clicked() {
+                                remove = Some(i);
+                            }
                         });
-                }
-                ui.menu_button(egui::RichText::new("+ Add block").color(crate::shell::ACCENT), |ui| {
+                    });
+            }
+            ui.menu_button(
+                egui::RichText::new("+ Add block").color(crate::shell::ACCENT),
+                |ui| {
                     for (kind, label) in BlockKind::ALL {
                         if crate::controls::menu_action(ui, label).clicked() {
                             let (min, max) = match kind {
@@ -631,133 +628,333 @@ pub(crate) fn type_builder(ctx: &egui::Context, list: &mut Vec<CustomType>) -> b
                                 BlockKind::Digits => (5, 5),
                                 _ => (1, 1),
                             };
-                            b.blocks.push(Block { kind, value: String::new(), min, max });
+                            b.blocks.push(Block {
+                                kind,
+                                value: String::new(),
+                                min,
+                                max,
+                            });
                             ui.close();
                         }
                     }
-                });
-            });
-            if let Some(i) = remove {
-                b.blocks.remove(i);
-            }
-            b.draft.pattern = to_pattern(&b.blocks);
-            ui.label(
-                egui::RichText::new(format!("Shorthand  {}", b.draft.pattern))
-                    .monospace()
-                    .size(11.5)
-                    .color(egui::Color32::from_rgb(142, 154, 157)),
+                },
             );
-        }
-        ui.add_space(4.);
-        ui.horizontal_wrapped(|ui| {
-            crate::controls::toggle(ui, &mut b.draft.ignore_case, "Ignore case");
-            crate::controls::toggle(ui, &mut b.draft.whole_words, "Whole words only");
-            crate::controls::toggle(ui, &mut b.draft.separators, "Allow spaces or dashes")
-                .tip("W-74828 and W 74828 also match.");
-            crate::controls::toggle(ui, &mut b.draft.ocr_tolerant, "Tolerate OCR mix-ups")
-                .tip("O and 0, I and 1, S and 5, B and 8 count as each other in screenshots and video.");
-            crate::controls::toggle(ui, &mut b.labels_on, "Only near a label");
         });
-        if b.labels_on {
-            let mut labels = b.draft.near_label.clone().unwrap_or_default();
-            ui.add(
-                crate::unicode_input::TextEdit::singleline(&mut labels)
-                    .hint_text("Employee ID, Badge")
-                    .char_limit(200)
-                    .desired_width(f32::INFINITY),
-            );
-            b.draft.near_label = Some(labels);
-        } else {
-            b.draft.near_label = None;
+        if let Some(i) = remove {
+            b.blocks.remove(i);
         }
-        crate::controls::dialog_section(ui, "Test", Some("Paste sample text; matches highlight as you edit."));
+        b.draft.pattern = to_pattern(&b.blocks);
+        ui.label(
+            egui::RichText::new(format!("Shorthand  {}", b.draft.pattern))
+                .monospace()
+                .size(11.5)
+                .color(egui::Color32::from_rgb(142, 154, 157)),
+        );
+    }
+    ui.add_space(4.);
+    ui.horizontal_wrapped(|ui| {
+        crate::controls::toggle(ui, &mut b.draft.ignore_case, "Ignore case");
+        crate::controls::toggle(ui, &mut b.draft.whole_words, "Whole words only");
+        crate::controls::toggle(ui, &mut b.draft.separators, "Allow spaces or dashes")
+            .tip("W-74828 and W 74828 also match.");
+        crate::controls::toggle(ui, &mut b.draft.ocr_tolerant, "Tolerate OCR mix-ups").tip(
+            "O and 0, I and 1, S and 5, B and 8 count as each other in screenshots and video.",
+        );
+        crate::controls::toggle(ui, &mut b.labels_on, "Only near a label");
+    });
+    if b.labels_on {
+        let mut labels = b.draft.near_label.clone().unwrap_or_default();
         ui.add(
-            crate::unicode_input::TextEdit::multiline(&mut b.test)
-                .desired_rows(2)
-                .char_limit(4000)
+            crate::unicode_input::TextEdit::singleline(&mut labels)
+                .hint_text("Employee ID, Badge")
+                .char_limit(200)
                 .desired_width(f32::INFINITY),
         );
-        let mut probe = b.draft.clone();
-        if probe.near_label.as_deref().is_some_and(|l| l.trim().is_empty()) {
-            probe.near_label = None;
-        }
-        match probe.find(&b.test) {
-            Ok(found) => {
-                let mut job = egui::text::LayoutJob::default();
-                let mut at = 0;
-                let plain = egui::TextFormat::simple(egui::FontId::proportional(13.), egui::Color32::from_rgb(42, 50, 56));
-                let mark = egui::TextFormat {
-                    background: egui::Color32::from_rgb(255, 224, 138),
-                    ..plain.clone()
-                };
-                for r in &found {
-                    job.append(&b.test[at..r.start], 0., plain.clone());
-                    job.append(&b.test[r.clone()], 0., mark.clone());
-                    at = r.end;
+        b.draft.near_label = Some(labels);
+    } else {
+        b.draft.near_label = None;
+    }
+    crate::controls::dialog_section(
+        ui,
+        "Test",
+        Some("Paste sample text; matches highlight as you edit."),
+    );
+    ui.add(
+        crate::unicode_input::TextEdit::multiline(&mut b.test)
+            .desired_rows(2)
+            .char_limit(4000)
+            .desired_width(f32::INFINITY),
+    );
+    let mut probe = b.draft.clone();
+    if probe
+        .near_label
+        .as_deref()
+        .is_some_and(|l| l.trim().is_empty())
+    {
+        probe.near_label = None;
+    }
+    match probe.find(&b.test) {
+        Ok(found) => {
+            let mut job = egui::text::LayoutJob::default();
+            let mut at = 0;
+            let plain = egui::TextFormat::simple(
+                egui::FontId::proportional(13.),
+                egui::Color32::from_rgb(42, 50, 56),
+            );
+            let mark = egui::TextFormat {
+                background: egui::Color32::from_rgb(255, 224, 138),
+                ..plain.clone()
+            };
+            for r in &found {
+                job.append(&b.test[at..r.start], 0., plain.clone());
+                job.append(&b.test[r.clone()], 0., mark.clone());
+                at = r.end;
+            }
+            job.append(&b.test[at..], 0., plain);
+            job.wrap.max_width = ui.available_width() - 20.;
+            egui::Frame::new()
+                .fill(egui::Color32::WHITE)
+                .corner_radius(6)
+                .inner_margin(10)
+                .show(ui, |ui| {
+                    ui.set_width(ui.available_width());
+                    ui.label(job);
+                });
+            ui.horizontal_wrapped(|ui| {
+                ui.label(
+                    egui::RichText::new(format!(
+                        "{} {}",
+                        found.len(),
+                        if found.len() == 1 { "match" } else { "matches" }
+                    ))
+                    .color(egui::Color32::from_rgb(79, 194, 138)),
+                );
+                for e in probe.examples(3) {
+                    ui.label(egui::RichText::new(e).monospace().size(12.));
                 }
-                job.append(&b.test[at..], 0., plain);
-                job.wrap.max_width = ui.available_width() - 20.;
-                egui::Frame::new()
-                    .fill(egui::Color32::WHITE)
-                    .corner_radius(6)
-                    .inner_margin(10)
-                    .show(ui, |ui| {
-                        ui.set_width(ui.available_width());
-                        ui.label(job);
-                    });
-                ui.horizontal_wrapped(|ui| {
-                    ui.label(
-                        egui::RichText::new(format!("{} {}", found.len(), if found.len() == 1 { "match" } else { "matches" }))
-                            .color(egui::Color32::from_rgb(79, 194, 138)),
-                    );
-                    for e in probe.examples(3) {
-                        ui.label(egui::RichText::new(e).monospace().size(12.));
-                    }
-                });
-            }
-            Err(e) => {
-                ui.colored_label(egui::Color32::from_rgb(233, 166, 64), e.to_string());
-            }
-        }
-        egui::CollapsingHeader::new("Start from a ready-made type")
-            .id_salt("custom-ready-made")
-            .show(ui, |ui| {
-                ui.horizontal_wrapped(|ui| {
-                    for t in custom::ready_made() {
-                        if ui.button(&t.name).tip(&t.pattern).clicked() {
-                            b.blocks = from_pattern(&t.pattern).unwrap_or_default();
-                            b.as_text = from_pattern(&t.pattern).is_none();
-                            b.labels_on = t.near_label.is_some();
-                            b.draft = t;
-                        }
-                    }
-                });
             });
-        if !b.error.is_empty() {
-            ui.colored_label(egui::Color32::LIGHT_RED, &b.error);
         }
+        Err(e) => {
+            ui.colored_label(egui::Color32::from_rgb(233, 166, 64), e.to_string());
+        }
+    }
+}
+
+/// Sensitive types (approved Manage types mockup): your types with their
+/// on/off switches and matches in the test text, ready-made types to copy,
+/// New type, Import and Export on the left; the editor on the right.
+/// Returns true when `list` changed.
+pub(crate) fn type_builder(ctx: &egui::Context, list: &mut Vec<CustomType>) -> bool {
+    let Some(mut b) = ctx.data(|d| d.get_temp::<Builder>(builder_id())) else {
+        return false;
+    };
+    let mut changed = false;
+    let mut close = false;
+    let mut pick: Option<Option<usize>> = None;
+    let mut use_ready: Option<CustomType> = None;
+    let (mut save, mut revert, mut delete, mut duplicate) = (false, false, false, false);
+    let (mut import, mut export) = (false, false);
+    let mut toggled = None;
+    let dirty = b.dirty();
+    let muted = egui::Color32::from_rgb(142, 154, 157);
+    let response = crate::controls::Modal::new(egui::Id::unique("custom-type-builder")).show(ctx, |ui| {
+        let width = 940_f32.min(ctx.content_rect().width() - 96.).max(560.);
+        ui.set_width(width);
+        crate::controls::dialog_title(ui, "Sensitive types");
+        ui.label(
+            egui::RichText::new("Used by Find Sensitive Info in pictures, PDFs and video.")
+                .size(11.5)
+                .color(muted),
+        );
+        ui.add_space(6.);
+        let left = 300_f32.min(width * 0.4);
+        // Both columns scroll inside a fixed height, so the buttons below
+        // always show (approved mockup).
+        let height = (ctx.content_rect().height() - 230.).clamp(260., 560.);
+        ui.horizontal_top(|ui| {
+            ui.vertical(|ui| {
+                ui.set_width(left);
+                egui::ScrollArea::vertical()
+                    .id_salt("manage-types-left")
+                    .max_height(height)
+                    .auto_shrink([false, false])
+                    .show(ui, |ui| {
+                ui.add(
+                    crate::unicode_input::TextEdit::singleline(&mut b.query)
+                        .hint_text("Search types")
+                        .desired_width(left),
+                );
+                let query = b.query.trim().to_lowercase();
+                crate::controls::dialog_section(ui, &format!("Your types \u{b7} {}", list.len()), None);
+                {
+                        for (i, t) in list.iter_mut().enumerate() {
+                            if !query.is_empty() && !t.name.to_lowercase().contains(&query) {
+                                continue;
+                            }
+                            let selected = b.index == Some(i);
+                            let found = t.find(&b.test).map_or(0, |m| m.len());
+                            let frame = egui::Frame::new()
+                                .fill(if selected {
+                                    egui::Color32::from_rgba_unmultiplied(24, 145, 193, 50)
+                                } else {
+                                    egui::Color32::TRANSPARENT
+                                })
+                                .stroke(if selected {
+                                    egui::Stroke::new(1., crate::shell::ACCENT)
+                                } else {
+                                    egui::Stroke::NONE
+                                })
+                                .corner_radius(6)
+                                .inner_margin(egui::Margin::symmetric(6, 4));
+                            let row = frame.show(ui, |ui| {
+                                ui.set_width(left - 12.);
+                                ui.horizontal(|ui| {
+                                    if crate::controls::toggle(ui, &mut t.enabled, "")
+                                        .tip("Use this type in scans")
+                                        .changed()
+                                    {
+                                        toggled = Some(i);
+                                    }
+                                    ui.vertical(|ui| {
+                                        let name = if selected && dirty {
+                                            format!("{} \u{25cf}", t.name)
+                                        } else {
+                                            t.name.clone()
+                                        };
+                                        ui.add(egui::Label::new(egui::RichText::new(name).strong()).truncate().selectable(false));
+                                        ui.add(egui::Label::new(egui::RichText::new(&t.pattern).monospace().size(11.).color(muted)).selectable(false));
+                                    });
+                                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                        ui.add(egui::Label::new(egui::RichText::new(format!("{found} in sample")).size(11.).color(muted)).selectable(false));
+                                    });
+                                });
+                            });
+                            if row.response.interact(egui::Sense::click()).clicked()
+                            {
+                                pick = Some(Some(i));
+                            }
+                        }
+                        if list.is_empty() {
+                            ui.label(egui::RichText::new("None yet. Make one with New type, or Use a ready-made one.").size(11.5).color(muted));
+                        }
+                }
+                ui.add_space(4.);
+                ui.horizontal_wrapped(|ui| {
+                    if ui.add(crate::controls::dialog_button("+ New type", true)).clicked() {
+                        pick = Some(None);
+                    }
+                    if ui.button("Import\u{2026}").tip("Import types from a .cdtypes file.").clicked() {
+                        import = true;
+                    }
+                    if ui.button("Export\u{2026}").tip("Save your types in a .cdtypes file to send.").clicked() {
+                        export = true;
+                    }
+                });
+                crate::controls::dialog_section(ui, "Ready-made", None);
+                for t in custom::ready_made() {
+                    if !query.is_empty() && !t.name.to_lowercase().contains(&query) {
+                        continue;
+                    }
+                    ui.horizontal(|ui| {
+                        ui.add_space(30.);
+                        ui.vertical(|ui| {
+                            ui.label(egui::RichText::new(&t.name).strong());
+                            ui.add(egui::Label::new(egui::RichText::new(&t.pattern).monospace().size(11.).color(muted)).truncate());
+                        });
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            if ui.button("Use").tip("Make your own copy of this type to adjust.").clicked() {
+                                use_ready = Some(t.clone());
+                            }
+                        });
+                    });
+                }
+                    });
+            });
+            // A divider as tall as the columns (a separator would take the
+            // whole window's height and push the buttons out of view).
+            let (line, _) = ui.allocate_exact_size(egui::vec2(9., height), egui::Sense::hover());
+            ui.painter().vline(
+                line.center().x,
+                line.y_range(),
+                egui::Stroke::new(1., egui::Color32::from_rgb(61, 70, 74)),
+            );
+            ui.vertical(|ui| {
+                ui.set_width(ui.available_width());
+                egui::ScrollArea::vertical()
+                    .id_salt("manage-types-editor")
+                    .max_height(height)
+                    .auto_shrink([false, false])
+                    .show(ui, |ui| {
+                type_editor(ui, &mut b);
+                if !b.error.is_empty() {
+                    crate::guided::dialog_message(ui, crate::guided::Kind::Error, &b.error, false);
+                }
+                    });
+            });
+        });
         ui.add_space(8.);
         crate::panel_ui::divider(ui);
         ui.horizontal(|ui| {
-            if b.index.is_some() && ui.add(crate::controls::dialog_button("Delete", false)).clicked() {
-                delete = true;
+            if b.index.is_some() {
+                if ui
+                    .add(egui::Button::new(egui::RichText::new("Delete type").color(crate::guided::RED)).frame(false))
+                    .clicked()
+                {
+                    delete = true;
+                }
+                if ui.button("Duplicate").clicked() {
+                    duplicate = true;
+                }
             }
-            ui.label(
-                egui::RichText::new("Saved types appear under Custom types in image and video scans.")
-                    .size(11.5)
-                    .color(egui::Color32::from_rgb(142, 154, 157)),
-            );
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui.add(crate::controls::dialog_button("Save type", true)).clicked() {
+                if ui.add(crate::controls::dialog_button("Done", false)).clicked() {
+                    close = true;
+                }
+                let label = if b.index.is_some() { "Save changes" } else { "Add type" };
+                if ui
+                    .add_enabled(dirty, crate::controls::dialog_button(label, true))
+                    .clicked()
+                {
                     save = true;
                 }
-                if ui.add(crate::controls::dialog_button("Cancel", false)).clicked() {
-                    cancel = true;
+                if dirty {
+                    if ui.button("Revert").clicked() {
+                        revert = true;
+                    }
+                    ui.label(egui::RichText::new("Unsaved changes").color(crate::guided::AMBER));
                 }
             });
         });
     });
-    let mut changed = false;
+    if let Some(i) = toggled {
+        changed = true;
+        if b.index == Some(i) {
+            b.draft.enabled = list[i].enabled;
+            b.original.enabled = list[i].enabled;
+        }
+    }
+    if let Some(choice) = pick {
+        b = Builder::for_type(
+            choice,
+            choice.and_then(|i| list.get(i).cloned()),
+            b.test,
+            b.query,
+        );
+    }
+    if let Some(t) = use_ready {
+        let mut copy = t;
+        copy.name = unique_name(list, &copy.name);
+        b = Builder::for_type(None, Some(copy), b.test, b.query);
+        b.original = CustomType::new("", "");
+    }
+    if revert {
+        b = Builder::for_type(
+            b.index,
+            b.index.and_then(|i| list.get(i).cloned()),
+            b.test,
+            b.query,
+        );
+    }
     if save {
         let mut draft = b.draft.clone();
         draft.name = draft.name.trim().to_owned();
@@ -769,30 +966,108 @@ pub(crate) fn type_builder(ctx: &egui::Context, list: &mut Vec<CustomType>) -> b
             draft.near_label = None;
         }
         let mut next = list.clone();
-        match b.index {
-            Some(i) if i < next.len() => next[i] = draft,
-            _ => next.push(draft),
-        }
+        let index = match b.index {
+            Some(i) if i < next.len() => {
+                next[i] = draft.clone();
+                i
+            }
+            _ => {
+                next.push(draft.clone());
+                next.len() - 1
+            }
+        };
         match custom::validate_all(&next) {
             Ok(()) => {
                 *list = next;
                 changed = true;
-                cancel = true;
+                b = Builder::for_type(Some(index), Some(draft), b.test, b.query);
             }
             Err(e) => b.error = crate::guided::friendly(&e.to_string()),
+        }
+    }
+    if duplicate && let Some(t) = b.index.and_then(|i| list.get(i).cloned()) {
+        let mut copy = t;
+        copy.name = unique_name(list, &copy.name);
+        let mut next = list.clone();
+        next.push(copy.clone());
+        if custom::validate_all(&next).is_ok() {
+            *list = next;
+            changed = true;
+            b = Builder::for_type(Some(list.len() - 1), Some(copy), b.test, b.query);
         }
     }
     if delete && let Some(i) = b.index.filter(|i| *i < list.len()) {
         list.remove(i);
         changed = true;
-        cancel = true;
+        let next = (!list.is_empty()).then(|| i.min(list.len() - 1));
+        b = Builder::for_type(
+            next,
+            next.and_then(|n| list.get(n).cloned()),
+            b.test,
+            b.query,
+        );
     }
-    if cancel || response.should_close() {
+    if import
+        && let Some(path) = rfd::FileDialog::new()
+            .add_filter("ClipDesigner sensitive types", &["cdtypes"])
+            .pick_file()
+    {
+        match std::fs::read(&path)
+            .ok()
+            .filter(|bytes| bytes.len() < 1_000_000)
+            .and_then(|bytes| serde_json::from_slice::<Vec<CustomType>>(&bytes).ok())
+        {
+            Some(found) => {
+                let mut merged = list.clone();
+                for t in found {
+                    if !merged
+                        .iter()
+                        .any(|o| o.name.trim().eq_ignore_ascii_case(t.name.trim()))
+                    {
+                        merged.push(t);
+                    }
+                }
+                match custom::validate_all(&merged) {
+                    Ok(()) => {
+                        *list = merged;
+                        changed = true;
+                    }
+                    Err(e) => b.error = crate::guided::friendly(&e.to_string()),
+                }
+            }
+            None => b.error = "That file isn't a set of ClipDesigner sensitive types.".into(),
+        }
+    }
+    if export
+        && let Some(path) = rfd::FileDialog::new()
+            .add_filter("ClipDesigner sensitive types", &["cdtypes"])
+            .set_file_name("Sensitive types.cdtypes")
+            .save_file()
+        && let Ok(bytes) = serde_json::to_vec_pretty(list)
+        && let Err(e) = std::fs::write(&path, &bytes)
+    {
+        b.error = format!("Couldn't save the types: {e}");
+    }
+    if close || response.should_close() {
         ctx.data_mut(|d| d.remove::<Builder>(builder_id()));
     } else {
         ctx.data_mut(|d| d.insert_temp(builder_id(), b));
     }
     changed
+}
+/// "Name (2)", "Name (3)"... not yet used in `list`.
+fn unique_name(list: &[CustomType], name: &str) -> String {
+    let base = name.trim();
+    if !list
+        .iter()
+        .any(|t| t.name.trim().eq_ignore_ascii_case(base))
+    {
+        return base.to_owned();
+    }
+    (2..)
+        .map(|n| format!("{base} ({n})"))
+        .find(|c| !list.iter().any(|t| t.name.trim().eq_ignore_ascii_case(c)))
+        .unwrap()
 }
 /// Redact, Blur or Pixelate, and for the last two the preset strength tiles.
 pub(crate) fn cover(ui: &mut egui::Ui, cover: &mut Cover) {
@@ -1114,6 +1389,70 @@ mod tests {
         list.push(b.draft.clone());
         assert!(custom::validate_all(&list).is_ok());
         assert_eq!(list[0].find(sample).unwrap().len(), 2);
+    }
+    /// Approved Manage types: pick a type to edit it, Use a ready-made type,
+    /// Add type, and Delete type, all in one window.
+    #[test]
+    fn manage_types_picks_uses_adds_and_deletes_in_one_window() {
+        let ctx = egui::Context::default();
+        crate::shell::configure(&ctx);
+        crate::text_layout::configure(&ctx);
+        ctx.style_mut_of(egui::Theme::Dark, |style| style.animation_time = 0.);
+        let mut list = vec![
+            CustomType::new("Staff ID", "[WE]#{5}"),
+            CustomType::new("Queue number", "\"Q-\"#{4}"),
+        ];
+        open_builder(&ctx, Some(0), Some(list[0].clone()));
+        let frame = |list: &mut Vec<CustomType>, events: Vec<egui::Event>| {
+            let mut out = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        egui::vec2(1200., 900.),
+                    )),
+                    focused: true,
+                    events,
+                    ..Default::default()
+                },
+                |ui| {
+                    crate::controls::prepare_dialog_keys(ui.ctx());
+                    type_builder(ui.ctx(), list);
+                },
+            );
+            out.textures_delta.clear();
+            out.shapes
+        };
+        let click = |list: &mut Vec<CustomType>, label: &str| {
+            for _ in 0..4 {
+                frame(list, vec![]);
+            }
+            let shapes = frame(list, vec![]);
+            let at = crate::color_widgets::tests::text_rect(&shapes, label)
+                .unwrap_or_else(|| panic!("{label} not shown"))
+                .center();
+            let press = |pressed| egui::Event::PointerButton {
+                pos: at,
+                button: egui::PointerButton::Primary,
+                pressed,
+                modifiers: egui::Modifiers::NONE,
+            };
+            frame(list, vec![egui::Event::PointerMoved(at)]);
+            frame(list, vec![press(true)]);
+            frame(list, vec![press(false)]);
+        };
+        let builder = || ctx.data(|d| d.get_temp::<Builder>(builder_id())).unwrap();
+        frame(&mut list, vec![]);
+        click(&mut list, "Queue number");
+        assert_eq!(builder().index, Some(1), "clicking a type opens it");
+        click(&mut list, "Use");
+        let b = builder();
+        assert_eq!(b.index, None);
+        assert_eq!(b.draft.name, custom::ready_made()[0].name);
+        click(&mut list, "Add type");
+        assert_eq!(list.len(), 3);
+        assert_eq!(builder().index, Some(2), "the new type stays open");
+        click(&mut list, "Delete type");
+        assert_eq!(list.len(), 2);
     }
     #[test]
     fn the_button_names_the_chosen_cover_and_redact_is_the_default() {
