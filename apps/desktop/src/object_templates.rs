@@ -288,7 +288,6 @@ impl Editor {
         };
         let mut apply = None;
         let mut save = None;
-        let mut manage = false;
         let mut menu_choice: Option<(ObjectStyle, crate::preset_menu::Choice)> = None;
         let mut hide: Option<(String, String)> = None;
         let show_hidden_id = egui::Id::unique("style-gallery-show-hidden");
@@ -491,6 +490,7 @@ impl Editor {
             ui.ctx()
                 .data_mut(|d| d.insert_temp(show_hidden_id, show_hidden));
         }
+        let manage = crate::manage_presets::manage_link(ui);
         if let Some((key, name)) = hide {
             self.hide_preset(key, &name);
         }

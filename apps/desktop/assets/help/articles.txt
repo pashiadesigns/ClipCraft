@@ -471,7 +471,7 @@ tip: Select objects of different kinds together and Properties shows what they s
 id: presets
 section: Formatting
 where: Properties › Presets
-controls: Presets, Blocks, Group presets, Save as block, Manage presets…
+controls: Presets, Blocks, Group presets, Save as block, Manage presets
 keywords: style, saved style, reuse, template, group preset
 hero: presets-hero
 ---

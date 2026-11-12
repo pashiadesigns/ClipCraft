@@ -410,7 +410,6 @@ impl Editor {
             .unwrap_or(false);
         let mut remember = None;
         let mut save = None;
-        let mut manage = false;
         egui::ScrollArea::vertical()
             .id_salt("arrow_presets")
             .max_height(214.0)
@@ -562,6 +561,7 @@ impl Editor {
             ui.ctx()
                 .data_mut(|d| d.insert_temp(show_hidden_id, show_hidden));
         }
+        let manage = crate::manage_presets::manage_link(ui);
         if let Some((key, name)) = hide {
             self.hide_preset(key, &name);
         }

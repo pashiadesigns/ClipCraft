@@ -48,6 +48,17 @@ struct Window {
     removing: Option<(String, bool)>,
     error: String,
 }
+/// The "Manage presets…" link under a preset gallery (outside its scroll
+/// area, so the gallery's height and scrollbar don't change). True when clicked.
+pub(crate) fn manage_link(ui: &mut egui::Ui) -> bool {
+    ui.add(
+        egui::Button::new(egui::RichText::new("Manage presets\u{2026}").color(crate::shell::ACCENT))
+            .frame(false),
+    )
+    .tip("Manage presets \u{b7} See every preset you saved, delete or export several at once, and remove a kit you added.")
+    .clicked()
+}
+
 fn window_id() -> egui::Id {
     egui::Id::unique("manage-presets-window")
 }
