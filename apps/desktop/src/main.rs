@@ -1239,6 +1239,7 @@ impl eframe::App for Editor {
         let file_workspace_visible = self.shell.backstage.is_some();
         self.show_shell(ui);
         guided::paint(&ctx);
+        self.part_follow_up(&ctx);
         self.settle_property_preview(&ctx);
         self.sync_tilt_display(&ctx);
         if self.needs_render {

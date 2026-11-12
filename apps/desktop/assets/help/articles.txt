@@ -394,7 +394,7 @@ Turn on Scan after import to look for sensitive information as soon as the guide
 
 A password-protected PDF asks for its password. ClipDesigner doesn't keep the password, and the guide is not protected. A damaged file, or one that isn't a PDF, imports nothing.
 
-One guide holds about 24 Letter pages. A longer PDF comes in as linked parts, such as "Vendor packet · part 1 of 10", grouped in the Library; Part 1 of 10 in the footer moves between them. When you export a part, Include all parts in one file puts every part back together: one PDF, PowerPoint or Word file, or numbered pictures for PNG and JPEG. Find Sensitive Info can scan This part or All parts; with All parts, each part's findings are reviewed in turn, and applying or skipping them opens the next part.
+One guide holds about 24 Letter pages. A longer PDF comes in as linked parts, such as "Vendor packet · part 1 of 10". In the Library they show as one stacked card: click it to see every part with its pages, open a part, Export all parts or Find Sensitive Info in all; selecting the card selects the whole document. Part 1 of 10 in the footer moves between them. When you export a part, Include all parts in one file puts every part back together: one PDF, PowerPoint or Word file, or numbered pictures for PNG and JPEG. Find Sensitive Info can scan This part or All parts; with All parts, each part's findings are reviewed in turn, and applying or skipping them opens the next part.
 
 When you export to PDF, editable pages stay shapes. Where a redaction, blur or pixelation touches a page, only what is under it becomes a picture, and the covered words are removed from the file, not hidden. The project keeps the original pages, so share exports, not projects.
 

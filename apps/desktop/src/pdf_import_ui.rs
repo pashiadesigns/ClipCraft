@@ -543,6 +543,10 @@ impl PdfImport {
                             index: k as u32 + 1,
                             total: total_parts,
                             title: title.clone(),
+                            pages: [
+                                pages.first().map_or(0, |p| *p as u32 + 1),
+                                pages.last().map_or(0, |p| *p as u32 + 1),
+                            ],
                         });
                     }
                     Ok::<_, String>((document, notes, dpi))

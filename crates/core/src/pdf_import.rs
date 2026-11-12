@@ -774,6 +774,13 @@ pub struct PartOf {
     pub total: u32,
     /// The PDF's name, for labels such as "Vendor packet · part 3 of 10".
     pub title: String,
+    /// The first and last PDF page in this part (1-based), for the Library's
+    /// "Pages 33–64" labels. [0, 0] when not known.
+    #[serde(default, skip_serializing_if = "no_pages")]
+    pub pages: [u32; 2],
+}
+fn no_pages(pages: &[u32; 2]) -> bool {
+    *pages == [0, 0]
 }
 impl PartOf {
     pub fn validate(&self) -> Result<()> {
@@ -785,6 +792,8 @@ impl PartOf {
             || self.total > 10_000
             || self.title.chars().count() > 200
             || self.title.chars().any(char::is_control)
+            || self.pages[0] > self.pages[1]
+            || self.pages[1] > 100_000
         {
             return Err(Error::Invalid("Invalid linked part".into()));
         }

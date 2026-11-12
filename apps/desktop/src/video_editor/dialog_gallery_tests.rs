@@ -319,6 +319,7 @@ fn sample_part() -> capture_core::pdf_import::PartOf {
         index: 3,
         total: 10,
         title: "Vendor packet".into(),
+        pages: [65, 96],
     }
 }
 

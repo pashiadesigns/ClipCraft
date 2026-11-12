@@ -474,6 +474,7 @@ fn large_imports_split_into_parts_that_export_as_one_pdf() {
                 index: i as u32 + 1,
                 total: 3,
                 title: "Sample".into(),
+                pages: [i as u32 * 10 + 1, i as u32 * 10 + 10],
             });
             d.validate().unwrap();
             d

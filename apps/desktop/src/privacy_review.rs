@@ -160,6 +160,10 @@ impl Editor {
         self.open_history(&next.id, ctx);
         true
     }
+    /// Find Sensitive Info set to every part (from the Library's stack).
+    pub(crate) fn privacy_review_all_parts(&mut self) {
+        self.privacy_review.all_parts = true;
+    }
     #[cfg(test)]
     pub(crate) fn privacy_review_all_parts_for_test(&mut self) {
         self.privacy_review.all_parts = true;
