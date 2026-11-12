@@ -233,15 +233,30 @@ impl Editor {
         egui::ScrollArea::vertical()
             .max_height(520.0)
             .show(ui, |ui| {
-                ui.label("Right-click to favorite. Drag within the same section.");
+                // The toolbar's own look (user, 2026-11-12): each tool with its
+                // icon in its toolbar color, the current tool marked like
+                // its tile, muted section headings.
+                ui.spacing_mut().item_spacing.y = 2.;
+                ui.label(
+                    egui::RichText::new("Right-click to favorite. Drag within the same section.")
+                        .size(11.5)
+                        .color(crate::panel_ui::MUTED),
+                );
+                let current = self.current_tool().id;
                 let mut last_group = None;
                 for id in order.iter().copied().skip(visible) {
                     let group = self.quick_controls.tool_group(id);
                     if last_group != Some(group) {
                         if last_group.is_some() {
+                            ui.add_space(2.);
                             ui.separator();
                         }
-                        ui.strong(group.label());
+                        ui.add_space(2.);
+                        ui.label(
+                            egui::RichText::new(group.label().to_uppercase())
+                                .size(10.5)
+                                .color(crate::panel_ui::MUTED),
+                        );
                         last_group = Some(group);
                     }
                     let active_id = id;
@@ -250,35 +265,61 @@ impl Editor {
                     let response = ui
                         .push_id(("more-tool", id), |ui| {
                             ui.horizontal(|ui| {
-                                let response = ui.add(
-                                    egui::Button::new("")
-                                        .frame(false)
-                                        .min_size(egui::vec2(170.0, 26.0))
-                                        .sense(egui::Sense::click_and_drag()),
+                                let (rect, response) = ui.allocate_exact_size(
+                                    egui::vec2(200.0, 32.0),
+                                    egui::Sense::click_and_drag(),
                                 );
                                 let label = tool.name;
+                                let selected = id == current;
                                 response.widget_info(|| {
-                                    egui::WidgetInfo::labeled(egui::Role::Button, true, label)
+                                    egui::WidgetInfo::selected(
+                                        egui::Role::Button,
+                                        true,
+                                        selected,
+                                        label,
+                                    )
                                 });
-                                crate::ribbon::draw_icon(
-                                    ui.painter(),
-                                    egui::pos2(
-                                        response.rect.left() + 14.,
-                                        response.rect.center().y,
+                                let p = ui.painter();
+                                if selected || response.hovered() || response.has_focus() {
+                                    p.rect_filled(
+                                        rect,
+                                        4.,
+                                        if selected {
+                                            egui::Color32::from_rgb(65, 74, 78)
+                                        } else {
+                                            ui.visuals().widgets.hovered.weak_bg_fill
+                                        },
+                                    );
+                                }
+                                if selected {
+                                    p.line_segment(
+                                        [
+                                            rect.left_top() + egui::vec2(1., 5.),
+                                            rect.left_bottom() + egui::vec2(1., -5.),
+                                        ],
+                                        egui::Stroke::new(2., crate::shell::ACCENT),
+                                    );
+                                }
+                                crate::icons::draw(
+                                    p,
+                                    egui::Rect::from_center_size(
+                                        egui::pos2(rect.left() + 20., rect.center().y),
+                                        egui::vec2(22., 22.),
                                     ),
                                     tool.name,
-                                    ui.visuals().text_color(),
+                                    crate::shell::tool_color(tool.name),
                                 );
-                                ui.painter().text(
-                                    egui::pos2(
-                                        response.rect.left() + 32.,
-                                        response.rect.center().y,
-                                    ),
+                                p.text(
+                                    egui::pos2(rect.left() + 40., rect.center().y),
                                     egui::Align2::LEFT_CENTER,
                                     label,
                                     egui::FontId::proportional(13.),
-                                    ui.visuals().text_color(),
+                                    egui::Color32::WHITE,
                                 );
+                                #[cfg(test)]
+                                ui.ctx().data_mut(|d| {
+                                    d.insert_temp(egui::Id::unique(("overflow-tool", label)), rect)
+                                });
 
                                 response
                             })
@@ -304,7 +345,7 @@ impl Editor {
                     responses.push((id, response));
                 }
                 ui.separator();
-                if ui.button("Reset toolbar order").clicked() {
+                if crate::controls::menu_action(ui, "Reset toolbar order").clicked() {
                     reorder = Some(Choice::ResetToolbar);
                     ui.close();
                 }

@@ -300,14 +300,17 @@ pub(super) fn tool_button_label(
     label: &str,
     selected: bool,
 ) -> egui::Response {
-    let color = match tool.name {
+    ribbon_tile(ui, tool.name, label, selected, tool_color(tool.name))
+}
+/// A tool's icon color, the same on the toolbar and in its overflow menu.
+pub(super) fn tool_color(name: &str) -> Color32 {
+    match name {
         "Text" => Color32::from_rgb(225, 190, 95),
         "Lines" => Color32::from_rgb(75, 170, 235),
         "Shape" => Color32::from_rgb(81, 190, 165),
         "Steps" => Color32::from_rgb(241, 151, 69),
         _ => Color32::WHITE,
-    };
-    ribbon_tile(ui, tool.name, label, selected, color)
+    }
 }
 
 impl Editor {
