@@ -52,8 +52,9 @@ struct Window {
 /// area, so the gallery's height and scrollbar don't change). True when clicked.
 pub(crate) fn manage_link(ui: &mut egui::Ui) -> bool {
     ui.add(
-        egui::Button::new(egui::RichText::new("Manage presets\u{2026}").color(crate::shell::ACCENT))
-            .frame(false),
+        egui::Label::new(egui::RichText::new("Manage presets\u{2026}").small().color(crate::shell::ACCENT))
+            .selectable(false)
+            .sense(egui::Sense::click()),
     )
     .tip("Manage presets \u{b7} See every preset you saved, delete or export several at once, and remove a kit you added.")
     .clicked()

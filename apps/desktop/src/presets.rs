@@ -410,6 +410,7 @@ impl Editor {
             .unwrap_or(false);
         let mut remember = None;
         let mut save = None;
+        let mut manage = false;
         egui::ScrollArea::vertical()
             .id_salt("arrow_presets")
             .max_height(214.0)
@@ -417,7 +418,21 @@ impl Editor {
                 let saved_columns = crate::style_tile::columns(ui.available_width(), false);
                 // Approved option B: "Save current" always ends the saved presets.
                 {
-                    ui.small("Your styles");
+                    // The arrow pane has no room for another line (a taller
+                    // gallery brings in its scrollbar), so Manage presets
+                    // sits at the right end of the heading row.
+                    let heading = ui.small("Your styles").rect;
+                    let right = ui.max_rect().right();
+                    let link = egui::Rect::from_min_max(
+                        egui::pos2((right - 110.0).max(heading.right() + 6.0), heading.top()),
+                        egui::pos2(right, heading.bottom()),
+                    );
+                    ui.scope_builder(
+                        egui::UiBuilder::new()
+                            .max_rect(link)
+                            .layout(egui::Layout::right_to_left(egui::Align::Center)),
+                        |ui| manage = crate::manage_presets::manage_link(ui),
+                    );
                     egui::Grid::new("saved_arrow_styles")
                         .spacing([5.0, 5.0])
                         .show(ui, |ui| {
@@ -561,7 +576,6 @@ impl Editor {
             ui.ctx()
                 .data_mut(|d| d.insert_temp(show_hidden_id, show_hidden));
         }
-        let manage = crate::manage_presets::manage_link(ui);
         if let Some((key, name)) = hide {
             self.hide_preset(key, &name);
         }
