@@ -47,6 +47,58 @@ enum Stage {
 pub(crate) const WIDTH: f32 = 176.;
 const ROW: f32 = 24.;
 
+const DANGER: egui::Color32 = egui::Color32::from_rgb(142, 58, 52);
+
+/// The red Delete fill, lighter while hovered and darker while pressed, so
+/// the click visibly "goes through" like Keep (BZ2).
+pub(crate) fn danger_fill(r: &egui::Response) -> egui::Color32 {
+    if r.is_pointer_button_down_on() {
+        egui::Color32::from_rgb(116, 40, 36)
+    } else if r.hovered() {
+        egui::Color32::from_rgb(190, 72, 64)
+    } else {
+        DANGER
+    }
+}
+
+/// A red Delete button with hover and pressed states.
+fn danger_button(ui: &mut egui::Ui, label: &str, size: egui::Vec2) -> egui::Response {
+    let (rect, r) = ui.allocate_exact_size(size, egui::Sense::click());
+    r.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, label));
+    let p = ui.painter();
+    p.rect_filled(rect, 4., danger_fill(&r));
+    if r.hovered() {
+        p.rect_stroke(
+            rect,
+            4.,
+            egui::Stroke::new(1., egui::Color32::from_rgb(255, 196, 190)),
+            egui::StrokeKind::Inside,
+        );
+    }
+    p.text(
+        rect.center(),
+        egui::Align2::CENTER_CENTER,
+        label,
+        egui::FontId::proportional(13.),
+        egui::Color32::WHITE,
+    );
+    r
+}
+
+/// An × drawn as two strokes, exactly centered on `center` (a text glyph
+/// sits off center in its circle, BZ2).
+pub(crate) fn paint_cross(p: &egui::Painter, center: egui::Pos2, half: f32, color: egui::Color32) {
+    let s = egui::Stroke::new(1.6, color);
+    p.line_segment(
+        [center + egui::vec2(-half, -half), center + egui::vec2(half, half)],
+        s,
+    );
+    p.line_segment(
+        [center + egui::vec2(-half, half), center + egui::vec2(half, -half)],
+        s,
+    );
+}
+
 /// One compact menu row.
 fn row(ui: &mut egui::Ui, label: &str, enabled: bool, danger: bool) -> egui::Response {
     let (rect, r) = ui.allocate_exact_size(
@@ -143,11 +195,10 @@ pub(crate) fn context_menu(response: &egui::Response, m: &Menu) -> Option<Choice
                         {
                             next = Stage::Menu;
                         }
-                        let delete = ui.add(
-                            egui::Button::new(
-                                egui::RichText::new("Delete").color(egui::Color32::WHITE),
-                            )
-                            .fill(egui::Color32::from_rgb(142, 58, 52)),
+                        let delete = danger_button(
+                            ui,
+                            "Delete",
+                            egui::vec2(82., crate::controls::DIALOG_ACTION_HEIGHT),
                         );
                         #[cfg(test)]
                         ui.ctx().data_mut(|d| {
@@ -288,8 +339,26 @@ pub(crate) fn hover_delete(ui: &mut egui::Ui, rect: egui::Rect, id: egui::Id, na
         let yes_r = ui.interact(yes, id.with("hover-delete-yes"), egui::Sense::click());
         let no_r = ui.interact(no, id.with("hover-delete-no"), egui::Sense::click());
         let p = ui.painter();
-        p.rect_filled(yes, 3., egui::Color32::from_rgb(142, 58, 52));
-        p.rect_filled(no, 3., egui::Color32::from_rgb(74, 84, 88));
+        p.rect_filled(yes, 3., danger_fill(&yes_r));
+        p.rect_filled(
+            no,
+            3.,
+            if no_r.hovered() {
+                egui::Color32::from_rgb(96, 108, 113)
+            } else {
+                egui::Color32::from_rgb(74, 84, 88)
+            },
+        );
+        for (r, rect) in [(&yes_r, yes), (&no_r, no)] {
+            if r.hovered() {
+                p.rect_stroke(
+                    rect,
+                    3.,
+                    egui::Stroke::new(1., egui::Color32::from_gray(225)),
+                    egui::StrokeKind::Inside,
+                );
+            }
+        }
         p.text(
             yes.center(),
             egui::Align2::CENTER_CENTER,
@@ -335,13 +404,7 @@ pub(crate) fn hover_delete(ui: &mut egui::Ui, rect: egui::Rect, id: egui::Id, na
             egui::Color32::from_black_alpha(150)
         },
     );
-    p.text(
-        x.center(),
-        egui::Align2::CENTER_CENTER,
-        "\u{2715}",
-        egui::FontId::proportional(10.),
-        egui::Color32::WHITE,
-    );
+    paint_cross(p, x.center(), 3.5, egui::Color32::WHITE);
     if r.clicked() {
         ui.ctx().data_mut(|d| d.insert_temp(asking_key, true));
     }

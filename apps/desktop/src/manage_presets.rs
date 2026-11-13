@@ -41,8 +41,34 @@ pub(crate) struct Row {
     pub item: Item,
     pub name: String,
     pub kind: String,
+    /// The tool section the filter shows it under ("Rectangle styles",
+    /// "Arrow styles", "Blocks"...). The Presets link opens on its tool's
+    /// section (BZ2).
+    pub section: String,
     pub fingerprint: u64,
     pub preview: Preview,
+}
+
+/// The Manage presets section for a tool's Presets gallery.
+pub(crate) fn section_of(kind: crate::Kind) -> String {
+    use crate::Kind as K;
+    let name = match kind {
+        K::Arrow | K::Line => "Arrow",
+        K::Redact => "Redaction",
+        K::Step => "Step",
+        K::Pen => "Pen",
+        K::Highlighter => "Highlighter",
+        K::Rectangle => "Rectangle",
+        K::Ellipse => "Ellipse",
+        K::Polygon => "Polygon",
+        K::Text => "Text",
+        K::Callout => "Callout",
+        K::Image => "Image",
+        K::Blur => "Blur",
+        K::Pixelate => "Pixelate",
+        K::Eraser => "Eraser",
+    };
+    format!("{name} styles")
 }
 
 /// FNV-1a: a fingerprint that stays the same from run to run.
@@ -105,10 +131,19 @@ fn window_id() -> egui::Id {
 }
 
 impl Editor {
-    /// The Presets header's link was clicked.
-    pub(crate) fn manage_presets_from(&mut self, ctx: &egui::Context) {
+    /// The Presets header's link was clicked: open on that tool's section.
+    pub(crate) fn manage_presets_from(&mut self, ctx: &egui::Context, tool: Option<crate::Kind>) {
         self.presets_ctx = Some(ctx.clone());
-        self.open_manage_presets();
+        let tool = tool.or_else(|| self.selected_annotation().map(|a| a.kind));
+        ctx.data_mut(|d| {
+            d.insert_temp(
+                window_id(),
+                Window {
+                    kind: tool.map(section_of).unwrap_or_default(),
+                    ..Window::default()
+                },
+            )
+        });
     }
     pub(crate) fn open_manage_presets(&mut self) {
         let ctx = self.presets_ctx.clone();
@@ -125,6 +160,7 @@ impl Editor {
                     item: Item::Style(format!("{:?}", s.kind), s.name.clone()),
                     name: s.name.clone(),
                     kind: "Style".into(),
+                    section: section_of(s.kind),
                     fingerprint: fingerprint(s),
                     preview: Preview::Style(Box::new(s.clone())),
                 });
@@ -136,6 +172,7 @@ impl Editor {
                     item: Item::Arrow(s.name.clone()),
                     name: s.name.clone(),
                     kind: "Arrow style".into(),
+                    section: section_of(crate::Kind::Arrow),
                     fingerprint: fingerprint(s),
                     preview: Preview::Style(Box::new(crate::presets::arrow_object_style(s))),
                 });
@@ -147,6 +184,7 @@ impl Editor {
                     item: Item::Entry(e.id),
                     name: e.name.clone(),
                     kind: e.payload.category().to_owned(),
+                    section: e.payload.category().to_owned(),
                     fingerprint: fingerprint(&e.payload),
                     preview: match &e.payload {
                         capture_core::reusable_presets::Payload::Group(c) => {
@@ -163,6 +201,7 @@ impl Editor {
                     item: Item::Palette(palette.name.clone()),
                     name: palette.name.clone(),
                     kind: "Palette".into(),
+                    section: "Palettes".into(),
                     fingerprint: fingerprint(&palette.colors),
                     preview: Preview::Colors(palette.colors.clone()),
                 });
@@ -173,6 +212,7 @@ impl Editor {
                 item: Item::Type(t.name.clone()),
                 name: t.name.clone(),
                 kind: "Sensitive type".into(),
+                section: "Sensitive types".into(),
                 fingerprint: fingerprint(&t),
                 preview: Preview::Text(t.pattern.clone(), [200, 214, 219, 255]),
             });
@@ -182,6 +222,7 @@ impl Editor {
                 item: Item::Watermark(w.name.clone()),
                 name: w.name.clone(),
                 kind: "Watermark".into(),
+                section: "Watermarks".into(),
                 fingerprint: fingerprint(&w),
                 preview: Preview::Text(w.text.clone(), w.color),
             });
@@ -194,6 +235,7 @@ impl Editor {
                     item: Item::Template(e.id.clone()),
                     name: e.label.clone(),
                     kind: "Template".into(),
+                    section: "Templates".into(),
                     fingerprint: fingerprint(&(e.updated_ms, e.created_ms)),
                     preview: Preview::None,
                 });
@@ -647,7 +689,11 @@ impl Editor {
         let mut export = false;
         let mut remove_kit = None;
         let kinds: Vec<String> = {
-            let mut k: Vec<String> = rows.iter().map(|r| r.kind.clone()).collect();
+            let mut k: Vec<String> = rows.iter().map(|r| r.section.clone()).collect();
+            // The tool's own section shows even before anything is saved there.
+            if !w.kind.is_empty() {
+                k.push(w.kind.clone());
+            }
             k.sort();
             k.dedup();
             k
@@ -685,7 +731,7 @@ impl Editor {
                 let shown: Vec<&Row> = rows
                     .iter()
                     .filter(|r| {
-                        (w.kind.is_empty() || r.kind == w.kind)
+                        (w.kind.is_empty() || r.section == w.kind)
                             && (query.is_empty() || r.name.to_lowercase().contains(&query))
                     })
                     .collect();
@@ -723,9 +769,11 @@ impl Editor {
                         }
                         if shown.is_empty() {
                             ui.weak(if rows.is_empty() {
-                                "Nothing saved yet."
+                                "Nothing saved yet.".to_owned()
+                            } else if query.is_empty() && !w.kind.is_empty() {
+                                format!("No saved {} yet.", w.kind.to_lowercase())
                             } else {
-                                "Nothing matches."
+                                "Nothing matches.".to_owned()
                             });
                         }
                     });
@@ -962,6 +1010,67 @@ mod tests {
             .data(|d| d.get_temp(egui::Id::unique(("manage-presets-preview", "Staff ID"))))
             .expect("the custom type shows a preview");
         assert_eq!(pattern.size(), egui::vec2(82., 52.));
+    }
+
+    /// BZ2: the Presets link opens Manage presets on the tool's own section.
+    #[test]
+    fn the_presets_link_opens_on_the_tools_section() {
+        let ctx = egui::Context::default();
+        crate::shell::configure(&ctx);
+        crate::text_layout::configure(&ctx);
+        ctx.style_mut_of(egui::Theme::Dark, |style| style.animation_time = 0.);
+        let dir = tempfile::tempdir().unwrap();
+        let mut e = editor(&ctx, dir.path());
+        e.presets
+            .templates
+            .as_mut()
+            .unwrap()
+            .save(style("Blue box"))
+            .unwrap();
+        e.quick_controls
+            .set_sensitive_types(vec![CustomType::new("Staff ID", "[WE]#{5}")])
+            .unwrap();
+        for (tool, section) in [
+            (crate::Kind::Rectangle, "Rectangle styles"),
+            (crate::Kind::Line, "Arrow styles"),
+            (crate::Kind::Text, "Text styles"),
+        ] {
+            e.manage_presets_from(&ctx, Some(tool));
+            let w: Window = ctx.data(|d| d.get_temp(window_id())).unwrap();
+            assert_eq!(w.kind, section);
+        }
+        e.manage_presets_from(&ctx, Some(crate::Kind::Rectangle));
+        for _ in 0..4 {
+            ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        egui::vec2(1200., 800.),
+                    )),
+                    ..Default::default()
+                },
+                |ui| e.show_manage_presets(ui.ctx()),
+            )
+            .textures_delta
+            .clear();
+        }
+        assert!(
+            ctx.data(|d| d.get_temp::<(egui::Rect, bool, bool)>(egui::Id::unique((
+                "style-tile",
+                "Rectangle",
+                ""
+            ))))
+            .is_some(),
+            "the rectangle style shows"
+        );
+        assert!(
+            ctx.data(|d| d.get_temp::<egui::Rect>(egui::Id::unique((
+                "manage-presets-preview",
+                "Staff ID"
+            ))))
+            .is_none(),
+            "other sections are filtered out"
+        );
     }
 
     /// Adding a kit records what it added; Remove a kit takes those out,

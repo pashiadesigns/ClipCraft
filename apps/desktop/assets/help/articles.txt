@@ -482,7 +482,7 @@ step: Select an object. | title: Select an object | pic: presets-1
 step: Click a tile in Presets to apply that look. | title: Apply a preset | pic: presets-2
 step: Use Save current to keep your own. | title: Save your own | pic: presets-3
 
-Right-click any preset for Apply, Update from selection, Rename, Duplicate and Delete; hover a saved one for its ×. Delete offers Undo in the message bar. Built-in presets and ones from a team kit can be hidden instead; Show hidden brings them back. Manage presets lists everything you've saved, every kind in one place, to delete or export several at once, and removes a kit you added.
+Right-click any preset for Apply, Update from selection, Rename, Duplicate and Delete; hover a saved one for its ×. Delete offers Undo in the message bar. Built-in presets and ones from a team kit can be hidden instead; Show hidden brings them back. Manage presets lists everything you've saved, every kind in one place, to delete or export several at once, and removes a kit you added. The Manage presets link on a Presets heading opens it on that tool's presets; choose All to see the rest.
 
 # Arrange and align
 id: arrange

@@ -89,7 +89,7 @@ impl Editor {
         );
         // BY11: Manage presets on the header row, left of the +.
         if crate::manage_presets::header_link(ui, header, 36.0) {
-            self.manage_presets_from(ui.ctx());
+            self.manage_presets_from(ui.ctx(), tool);
         }
         self.preset_save_button(ui, tool, Some(rect))
     }

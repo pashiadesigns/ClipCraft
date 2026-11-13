@@ -377,7 +377,7 @@ impl Editor {
                     self.object_templates(ui, a.kind);
                 }
             }) {
-                self.manage_presets_from(ui.ctx());
+                self.manage_presets_from(ui.ctx(), Some(a.kind));
             }
             let before = a.clone();
             let mut selection_edit = None;
@@ -447,7 +447,7 @@ impl Editor {
         if presets_group(ui, |ui| {
             self.object_templates(ui, crate::Kind::Text);
         }) {
-            self.manage_presets_from(ui.ctx());
+            self.manage_presets_from(ui.ctx(), Some(crate::Kind::Text));
         }
         let Some(mut a) = self.selected_annotation() else {
             return;
