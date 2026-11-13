@@ -565,28 +565,102 @@ pub(crate) fn dialog_message(ui: &mut egui::Ui, kind: Kind, text: &str, show_me:
     let since = ui
         .ctx()
         .data_mut(|d| *d.get_temp_mut_or_insert_with(key, || now));
+    // The block is measured first and allocated at its exact size, so a
+    // centered footer row centers it on the buttons (BZ4).
+    let (galley, size) = message_layout(ui, kind, text, ui.available_width(), show_me);
+    let (rect, _) = ui.allocate_exact_size(size, egui::Sense::hover());
+    #[cfg(test)]
+    ui.ctx()
+        .data_mut(|d| d.insert_temp(egui::Id::unique("guided-dialog-message"), rect));
+    let text_h = galley.size().y;
+    let lines = text_h + if show_me { LINK_H } else { 0. };
+    let top = rect.top() + (rect.height() - lines) / 2.;
+    // The icon is centered on the first line.
+    let first = galley.rows.first().map_or(text_h, |r| r.height());
+    icon(ui, egui::pos2(rect.left() + 9., top + first / 2.), kind, since);
+    let color = message_color(ui, kind);
+    ui.painter()
+        .galley(egui::pos2(rect.left() + ICON_ROOM, top), galley, color);
     let mut clicked = false;
-    ui.horizontal_top(|ui| {
-        let (r, _) = ui.allocate_exact_size(egui::vec2(18., 18.), egui::Sense::hover());
-        icon(ui, r.center(), kind, since);
-        ui.vertical(|ui| {
-            ui.add(
-                egui::Label::new(egui::RichText::new(text).strong().color(match kind {
-                    Kind::Error => Color32::from_rgb(255, 214, 209),
-                    Kind::Warning => Color32::from_rgb(251, 227, 176),
-                    Kind::Done => Color32::from_rgb(200, 240, 219),
-                    Kind::Plain => ui.visuals().text_color(),
-                }))
-                .wrap(),
-            );
-            if show_me {
-                clicked = ui
-                    .link(egui::RichText::new("Show me").color(Color32::from_rgb(127, 208, 239)))
-                    .clicked();
-            }
-        });
-    });
+    if show_me {
+        let link = egui::Rect::from_min_size(
+            egui::pos2(rect.left() + ICON_ROOM, top + text_h),
+            egui::vec2(rect.width() - ICON_ROOM, LINK_H),
+        );
+        clicked = ui
+            .put(
+                link,
+                egui::Link::new(
+                    egui::RichText::new("Show me").color(Color32::from_rgb(127, 208, 239)),
+                ),
+            )
+            .clicked();
+    }
     clicked
+}
+
+const ICON_ROOM: f32 = 24.;
+const LINK_H: f32 = 18.;
+
+fn message_color(ui: &egui::Ui, kind: Kind) -> Color32 {
+    match kind {
+        Kind::Error => Color32::from_rgb(255, 214, 209),
+        Kind::Warning => Color32::from_rgb(251, 227, 176),
+        Kind::Done => Color32::from_rgb(200, 240, 219),
+        Kind::Plain => ui.visuals().text_color(),
+    }
+}
+
+/// The wrapped message and the whole block's size at `width`.
+fn message_layout(
+    ui: &egui::Ui,
+    kind: Kind,
+    text: &str,
+    width: f32,
+    show_me: bool,
+) -> (std::sync::Arc<egui::Galley>, egui::Vec2) {
+    let galley = egui::WidgetText::from(
+        egui::RichText::new(text)
+            .strong()
+            .color(message_color(ui, kind)),
+    )
+    .into_galley(
+        ui,
+        Some(egui::TextWrapMode::Wrap),
+        (width - ICON_ROOM).max(40.),
+        egui::TextStyle::Body,
+    );
+    let h = galley.size().y + if show_me { LINK_H } else { 0. };
+    let size = egui::vec2(width.max(ICON_ROOM + 40.), h.max(18.));
+    (galley, size)
+}
+
+/// A message beside a dialog's action buttons, vertically centered on the
+/// buttons' row (`center_y`) inside `area` (BZ4: never top-aligned).
+pub(crate) fn footer_message(
+    ui: &mut egui::Ui,
+    area: Rect,
+    center_y: f32,
+    kind: Kind,
+    text: &str,
+    show_me: bool,
+) -> bool {
+    if text.is_empty() {
+        return false;
+    }
+    let (_, size) = message_layout(ui, kind, text, area.width(), show_me);
+    let top = (center_y - size.y / 2.)
+        .min(area.bottom() - size.y)
+        .max(area.top());
+    let block = Rect::from_min_size(egui::pos2(area.left(), top), egui::vec2(area.width(), size.y));
+    // A child that doesn't take room from the footer's own layout.
+    let mut child = ui.new_child(
+        egui::UiBuilder::new()
+            .max_rect(block)
+            .layout(egui::Layout::top_down(egui::Align::Min)),
+    );
+    child.set_clip_rect(area.intersect(ui.clip_rect()));
+    dialog_message(&mut child, kind, text, show_me)
 }
 
 #[cfg(test)]

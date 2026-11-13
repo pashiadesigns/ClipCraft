@@ -477,16 +477,14 @@ impl Editor {
                             bar.min,
                             egui::pos2(bar.right() - 190., bar.bottom()),
                         );
-                        let mut show = false;
-                        fixed_pane(
+                        // Centered on the buttons' row (BZ4).
+                        let show = crate::guided::footer_message(
                             ui,
-                            egui::UiBuilder::new()
-                                .max_rect(message_rect)
-                                .layout(egui::Layout::left_to_right(egui::Align::Center)),
-                            |ui| {
-                                ui.set_clip_rect(message_rect.intersect(ui.clip_rect()));
-                                show = crate::guided::dialog_message(ui, kind, &message, show_me);
-                            },
+                            message_rect,
+                            bar.center().y,
+                            kind,
+                            &message,
+                            show_me,
                         );
                         if show && let Some(g) = d.guidance.clone() {
                             d.tab = g.tab;
@@ -1075,6 +1073,15 @@ mod tests {
             .unwrap();
         assert!(footer.contains_rect(text(&output, &error)));
         assert!(footer.contains_rect(text(&output, "Apply")));
+        // BZ4: the message is centered on the buttons, not top-aligned.
+        let message = ctx
+            .data(|data| data.get_temp::<egui::Rect>(egui::Id::unique("guided-dialog-message")))
+            .unwrap();
+        let apply = text(&output, "Apply");
+        assert!(
+            (message.center().y - apply.center().y).abs() <= 1.5,
+            "{message:?} beside {apply:?}"
+        );
         assert!(footer.bottom() <= 780.);
         assert_eq!(
             pane,

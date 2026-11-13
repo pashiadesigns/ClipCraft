@@ -247,6 +247,18 @@ fn style_choices_match_their_applied_format_and_dialog_geometry_is_stable() {
         }));
     }
     assert!(geometries.windows(2).all(|r| r[0] == r[1]));
+    // BZ4: the footer message is centered on the action buttons.
+    let (message, buttons) = ctx.data(|d| {
+        let get = |n| {
+            d.get_temp::<egui::Rect>(egui::Id::unique(("text-dialog", n)))
+                .unwrap()
+        };
+        (get("message"), get("buttons"))
+    });
+    assert!(
+        (message.center().y - buttons.center().y).abs() <= 1.,
+        "{message:?} beside {buttons:?}"
+    );
     assert_eq!(geometries[0][0].height(), 500.);
     assert_eq!(geometries[0][1].width(), 222.);
     assert!(geometries[0][2].bottom() < 760.);
