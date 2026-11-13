@@ -197,7 +197,7 @@ impl Payload {
                 frame.validate()
             }
             _ => Err(Error::Invalid(
-                "The preset contains invalid settings.".into(),
+                "This preset's settings can't be used. Delete it and save it again.".into(),
             )),
         }
     }
@@ -208,6 +208,13 @@ pub struct Entry {
     pub name: String,
     pub favorite: bool,
     pub payload: Payload,
+    /// When the entry was last inserted or applied (seconds since 1970; 0 =
+    /// never), for the Blocks dialog's Recently used filter.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub used: u64,
+}
+fn is_zero(n: &u64) -> bool {
+    *n == 0
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 struct Pack {
@@ -227,7 +234,7 @@ fn name(value: &str) -> Result<String> {
 fn validate(entries: &[Entry]) -> Result<()> {
     if entries.len() > LIMIT {
         return Err(Error::Invalid(
-            "The preset library holds up to 256 entries. Delete an unused preset first.".into(),
+            "The preset library is full (256). Delete unused ones in Manage presets.".into(),
         ));
     }
     for (i, e) in entries.iter().enumerate() {
@@ -241,7 +248,7 @@ fn validate(entries: &[Entry]) -> Result<()> {
             })
         {
             return Err(Error::Invalid(
-                "Preset identifiers and names must be unique within a category.".into(),
+                "A preset with that name already exists. Choose another name.".into(),
             ));
         }
     }
@@ -336,6 +343,7 @@ impl Store {
                 name: label,
                 favorite: false,
                 payload,
+                used: 0,
             });
             Ok(id)
         })
@@ -372,6 +380,16 @@ impl Store {
                 ));
             }
             e.payload = payload;
+            Ok(())
+        })
+    }
+    /// Records that the entry was just inserted or applied.
+    pub fn mark_used(&mut self, id: u64) -> Result<()> {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(1, |d| d.as_secs().max(1));
+        self.change(|v| {
+            find(v, id)?.used = now;
             Ok(())
         })
     }
@@ -480,6 +498,7 @@ mod tests {
                     name: format!("Chain {id}"),
                     favorite: false,
                     payload: Payload::AudioChain(chain.clone()),
+                    used: 0,
                 });
             }
             Ok(())

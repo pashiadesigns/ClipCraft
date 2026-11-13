@@ -1,6 +1,6 @@
-# Installing ClipDesigner
+﻿# Installing ClipDesigner
 
-Download **1.0.0-beta.4** from the [release page](https://github.com/pashiadesigns/ClipDesigner/releases/tag/v1.0.0-beta.4).
+Download **1.0.0-beta.5** from the [release page](https://github.com/pashiadesigns/ClipDesigner/releases/tag/v1.0.0-beta.5).
 Windows 10/11 x64 is supported. Both downloads are unsigned; Windows may show an
 unknown-publisher or reputation warning.
 
@@ -23,7 +23,7 @@ From 1.0.0-beta.4, releases use the ClipDesigner name:
 
 ## MSI installer
 
-Run `clipdesigner-1.0.0-beta.4-windows-x64.msi`. It installs for the current user under
+Run `clipdesigner-1.0.0-beta.5-windows-x64.msi`. It installs for the current user under
 `%LOCALAPPDATA%\Programs\ClipDesigner` by default and creates one **ClipDesigner** Start
 menu shortcut and an Installed Apps entry. It registers `.iclip` and `.vclip` in
 Open With/Default Apps without modifying Windows' protected default-app choices.

@@ -2,7 +2,7 @@ use super::*;
 use crate::property_layout::tests::{PaintedOutput, dump_meshes};
 use capture_core::video::{links::Layer, zoom::Zoom};
 
-pub(super) fn editor(ctx: &egui::Context) -> Editor {
+pub(crate) fn editor(ctx: &egui::Context) -> Editor {
     crate::shell::configure(ctx);
     crate::text_layout::configure(ctx);
     let mut e = crate::canvas::tests::editor(ctx);

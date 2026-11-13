@@ -56,7 +56,8 @@ impl Store {
             if add && !colors.contains(&color) {
                 if colors.len() == 32 {
                     return Err(Error::Invalid(
-                        "My Colors is full (32 colors). Remove one to add another.".into(),
+                        "My Colors is full. Right-click a color › Remove, then add the new one."
+                            .into(),
                     ));
                 }
                 colors.push(color);

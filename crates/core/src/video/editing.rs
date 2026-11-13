@@ -189,7 +189,7 @@ impl Project {
                 }
                 _ => {
                     return Err(Error::Invalid(
-                        "Use an annotation track for objects and a media track for audio/video."
+                        "Put objects on an object track, and audio or video on a media track."
                             .into(),
                     ));
                 }
@@ -200,7 +200,7 @@ impl Project {
                 let t = &p.objects[&id];
                 if !p.free(t.track, id, t.start, t.end) {
                     return Err(Error::Invalid(
-                        "This range already contains an annotation. Use an empty track or range."
+                        "Another object is already on this track here. Use an empty track or time."
                             .into(),
                     ));
                 }
@@ -294,13 +294,13 @@ impl Project {
             .ok_or_else(|| Error::Invalid("Select a video clip.".into()))?;
         if at <= original.at || at >= original.until() {
             return Err(Error::Invalid(
-                "Move the playhead inside the video clip before generating a still frame.".into(),
+                "Put the playhead over the video clip, then Still frame.".into(),
             ));
         }
         if duration == 0 || self.duration().saturating_add(duration) > 14_400_000 || path.is_empty()
         {
             return Err(Error::Invalid(
-                "Choose a positive hold duration that keeps the project under four hours.".into(),
+                "Choose a hold above zero that keeps the video under four hours.".into(),
             ));
         }
         let mut tracks = BTreeSet::from([original.track]);

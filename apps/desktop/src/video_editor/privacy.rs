@@ -343,6 +343,8 @@ impl Editor {
             return;
         }
         let mut d = std::mem::take(&mut self.video.privacy);
+        d.options.custom = self.quick_controls.sensitive_types();
+        let mut types_changed = false;
         if let Some(job) = &d.job {
             if let Some(p) = job.progress.take() {
                 d.progress = p;
@@ -419,11 +421,12 @@ impl Editor {
                 .max_height((ctx.content_rect().height() - 170.).max(240.))
                 .show(ui, |ui| {
                     ui.add_enabled_ui(d.job.is_none(), |ui| {
-                        crate::sensitive_ui::look_for(ui, &mut d.options, &mut d.phrases);
+                        types_changed |= crate::sensitive_ui::look_for(ui, &mut d.options, &mut d.phrases).1;
                         ui.add_space(4.);
                         ui.horizontal(|ui| {
                             crate::controls::dialog_section_label(ui, "Scan", None);
                             let clip = d.clip.is_some();
+                            crate::controls::segments(ui, |ui| {
                             ui.add_enabled_ui(clip, |ui| {
                                 if ui
                                     .selectable_label(d.scope_clip && clip, "Active clip")
@@ -441,6 +444,7 @@ impl Editor {
                             {
                                 d.scope_clip = false;
                             }
+                            });
                             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                                 let label = if d.result.is_some() { "Scan again" } else { "Scan" };
                                 begin = ui
@@ -576,6 +580,11 @@ impl Editor {
                 false,
             );
         });
+        if types_changed {
+            let _ = self
+                .quick_controls
+                .set_sensitive_types(d.options.custom.clone());
+        }
         if close || crate::text_edit::cancel_on_escape(&modal) {
             return;
         }
@@ -696,9 +705,13 @@ impl Editor {
                     project: p,
                     annotations: doc.annotations,
                 });
-                self.status = format!(
-                    "Tracked {}s added. Review uncertain intervals before export.",
-                    d.cover.noun()
+                // Added, with a reminder that needs doing before export.
+                self.warn(
+                    format!(
+                        "Tracked {}s added. Some stretches are uncertain: review them before export.",
+                        d.cover.noun()
+                    ),
+                    Some(("Review them", crate::guided::Action::ReviewRedactions)),
                 );
                 return;
             }

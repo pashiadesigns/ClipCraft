@@ -31,6 +31,14 @@ pub(crate) const DIALOG_WIDTH: f32 = 520.;
 /// Width of the label column in export dialogs (bj-proposal).
 pub(crate) const LABEL_WIDTH: f32 = 92.;
 /// One labelled row: the label in a fixed column, the controls after it.
+/// A labelled row holding a segmented choice (`controls::segments`).
+pub(crate) fn segment_row<R>(
+    ui: &mut egui::Ui,
+    label: &str,
+    add: impl FnOnce(&mut egui::Ui) -> R,
+) -> R {
+    row(ui, label, |ui| crate::controls::segments(ui, add).inner)
+}
 pub(crate) fn row<R>(ui: &mut egui::Ui, label: &str, add: impl FnOnce(&mut egui::Ui) -> R) -> R {
     ui.horizontal(|ui| {
         ui.allocate_ui_with_layout(
@@ -250,7 +258,7 @@ pub(crate) fn section(
             .ctx()
             .data(|d| d.get_temp::<bool>(kind_id))
             .unwrap_or(false);
-    row(ui, "Type", |ui| {
+    segment_row(ui, "Type", |ui| {
         if ui
             .selectable_label(!logo_mode, "Text")
             .tip("Use words such as CONFIDENTIAL or DRAFT.")
@@ -315,21 +323,23 @@ pub(crate) fn section(
     }
     row(ui, "Placement", |ui| {
         let tiled = w.placement == Placement::Tile;
-        if ui
-            .selectable_label(tiled, "Tile")
-            .tip("Repeat the watermark across the whole output.")
-            .clicked()
-        {
-            w.placement = Placement::Tile;
-        }
-        if ui
-            .selectable_label(!tiled, "Once")
-            .tip("Show the watermark once, in the position chosen on the grid.")
-            .clicked()
-            && tiled
-        {
-            w.placement = Placement::BottomRight;
-        }
+        crate::controls::segments(ui, |ui| {
+            if ui
+                .selectable_label(tiled, "Tile")
+                .tip("Repeat the watermark across the whole output.")
+                .clicked()
+            {
+                w.placement = Placement::Tile;
+            }
+            if ui
+                .selectable_label(!tiled, "Once")
+                .tip("Show the watermark once, in the position chosen on the grid.")
+                .clicked()
+                && tiled
+            {
+                w.placement = Placement::BottomRight;
+            }
+        });
         // 3 × 3 position grid.
         let (rect, _) = ui.allocate_exact_size(egui::vec2(76., 44.), egui::Sense::hover());
         ui.painter()

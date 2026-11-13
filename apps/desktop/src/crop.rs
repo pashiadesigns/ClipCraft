@@ -407,7 +407,7 @@ impl Editor {
                 self.status =
                     "Cropped page. Objects remain editable; red crosshatching marks content excluded from export. Undo restores the crop.".into();
             }
-            Err(e) => self.status = e.to_string(),
+            Err(e) => self.fail(e),
         }
     }
     pub(super) fn crop_canvas(

@@ -126,9 +126,9 @@ pub(super) fn record(
     let parent = request
         .destination
         .parent()
-        .ok_or("Choose a video folder.")?;
+        .ok_or("Choose where recordings are saved in Preferences › General.")?;
     if free_bytes(parent)? < 256 * 1024 * 1024 {
-        return Err("Free at least 256 MB in the selected video folder before recording.".into());
+        return Err("Less than 256 MB is free in the video folder. Free some space, or choose another folder in Preferences › General.".into());
     }
     let temp = tempfile::Builder::new()
         .prefix(".clipdesigner-recording-")

@@ -1,0 +1,46 @@
+{
+  "version": "1.0.0-beta.5",
+  "date": "2026-11-13",
+  "channel": "beta",
+  "title": "ClipDesigner 1.0 beta 5",
+  "summary": "PDF import, PowerPoint and Word export, shared kits and team folders, any-angle rotation and print-size resizing, a reworked Library and presets, and plain-language error messages that point at the fix.",
+  "changes": {
+    "PDF": [
+      "New from PDF opens PDF pages as editable images, with the PDF's own text found exactly for Find Sensitive Info. Long PDFs become linked parts that show as one stacked card in the Library; Export all parts and Find Sensitive Info in all work on the whole document.",
+      "Insert PDF pages into an image or guide, or add PDF pages to a video as picture clips (Insert › Media, or drop a PDF on the timeline).",
+      "Exported PDFs keep searchable text; redacted words are never written."
+    ],
+    "Export and sharing": [
+      "Export step guides and images to PowerPoint and Word. Word follows the guide: title, numbered picture steps and text sections, with redacted text left out.",
+      "Share a kit of presets, palettes, custom sensitive types and watermarks, and add kits from a team folder (Preferences › Team). Manage presets lists everything you saved and removes a kit you added.",
+      "Pack project bundles a project and its media into one file. Projects in a shared folder are locked while someone edits them, and others open them read-only with a banner."
+    ],
+    "Editing": [
+      "Rotate by any angle, with Grow to fit or Keep size and a corner color. Objects turn with the picture and stay editable, and Reset rotation brings back the original at any time.",
+      "Resize by pixels, inches or centimeters with a resolution and resampling choice; objects stay editable.",
+      "Custom sensitive types: build your own patterns (staff IDs, ticket numbers) or start from 12 ready-made ones, and search for exact names or phrases.",
+      "Presets: right-click any preset to apply, update, rename, duplicate, hide or delete it, with Undo. Blocks show as a card grid."
+    ],
+    "Interface": [
+      "File menu with Home, Open, Info, Save and Export pages.",
+      "Errors and checks say what to do in plain words, ring the control to change, and turn green once it is fixed.",
+      "Video Insert has a Media group: Video/audio, Pictures, PDF pages and Record more.",
+      "Library: long PDFs as stacked cards, and the narrow-window More tools menu shows each tool's icon."
+    ],
+    "Fixes": [
+      "The Eraser redraws only what it touches, so long strokes no longer slow the canvas.",
+      "Tool pointers reset when you switch tools; new rotate and bend pointers.",
+      "Hostile or damaged PDF, SVG, image, kit and pack files are refused cleanly instead of crashing."
+    ]
+  },
+  "limitations": [
+    "Unsigned Windows 10/11 x64 beta. Old development project formats are unsupported; back up work before updating.",
+    "Automatic detection and tracking of sensitive information does not guarantee complete coverage. Review every flagged range and the whole video before sharing. Focus and Magnify are emphasis, not privacy tools; blur and pixelation may leave information inferable.",
+    "Shared-folder locks and team kit folders have not yet been tested across two computers.",
+    "PowerPoint and Word files use basic layouts; check them in Office before sending.",
+    "Framed crossfades involving rotation, transparency or different frames can preview less smoothly than they export.",
+    "Scrolling capture is Region-only. By website fills in only when the window title names the site.",
+    "Silent startup on some older Windows 11 laptops is still being investigated.",
+    "No automatic updater."
+  ]
+}

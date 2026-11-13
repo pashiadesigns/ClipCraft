@@ -1023,16 +1023,16 @@ impl Editor {
                                             if !exit {let before=timing.paired;crate::controls::toggle(ui,&mut timing.paired,"Pair with reverse exit");if timing.paired && !before {timing.exit=timing.entrance;timing.exit_ms=timing.entrance_ms;timing.exit_stack=timing.entrance_stack.clone();timing.exit_durations=timing.entrance_durations.clone();}}
                                             if exit && (timing.exit==Animation::Path || timing.exit_stack.contains(&Animation::Path)) {
                                                 ui.label(egui::RichText::new("Retraction direction").weak());
-                                                ui.horizontal_wrapped(|ui| {ui.selectable_value(&mut timing.retract_from_start,true,"First → Last node");ui.selectable_value(&mut timing.retract_from_start,false,"Last → First node");});
+                                                crate::controls::segments_wrapped(ui,|ui|{ui.selectable_value(&mut timing.retract_from_start,true,"First → Last node");ui.selectable_value(&mut timing.retract_from_start,false,"Last → First node");});
                                             }
                                         });
                                         ui.add_space(6.);
                                     }
                                     super::property_design::subgroup(ui,"Motion curve",if timing.smooth{"Smooth"}else{"Linear"},|ui| {
-                                        ui.horizontal(|ui| {ui.selectable_value(&mut timing.smooth,false,"Linear");ui.selectable_value(&mut timing.smooth,true,"Smooth");});
+                                        crate::controls::segments(ui,|ui|{ui.selectable_value(&mut timing.smooth,false,"Linear");ui.selectable_value(&mut timing.smooth,true,"Smooth");});
                                         if (timing.entrance==Animation::Path || timing.exit==Animation::Path || timing.entrance_stack.contains(&Animation::Path) || timing.exit_stack.contains(&Animation::Path)) && (a.is_shape() || a.kind==crate::Kind::Callout || a.highlighter_rect) {
                                             ui.label(egui::RichText::new("Path direction").weak());
-                                            ui.horizontal_wrapped(|ui| {ui.selectable_value(&mut timing.path_reverse,false,"Clockwise");ui.selectable_value(&mut timing.path_reverse,true,"Counterclockwise");});
+                                            crate::controls::segments_wrapped(ui,|ui|{ui.selectable_value(&mut timing.path_reverse,false,"Clockwise");ui.selectable_value(&mut timing.path_reverse,true,"Counterclockwise");});
                                         }
                                     });
                                 });
@@ -1101,7 +1101,7 @@ impl Editor {
                                 }
                             });
                             super::ui::section(ui, "Frame rate");
-                            ui.horizontal(|ui| {
+                            crate::controls::segments(ui, |ui| {
                                 for fps in [15, 30, 60] {
                                     let response =
                                         ui.selectable_value(&mut v.fps, fps, format!("{fps} fps"));
@@ -1147,7 +1147,7 @@ impl Editor {
                     match linked.edit_linked(i, c, false) {
                         Ok(()) => v = linked,
                         Err(e) => {
-                            self.status = e.to_string();
+                            self.fail(e);
                             return;
                         }
                     }
@@ -1169,7 +1169,7 @@ impl Editor {
     }
     fn video_fit_controls(&mut self, ui: &mut egui::Ui, v: &mut Project) {
         ui.label("Frame fit");
-        ui.horizontal(|ui| {
+        crate::controls::segments(ui, |ui| {
             ui.selectable_value(&mut v.fill, false, "Fit");
             ui.selectable_value(&mut v.fill, true, "Fill");
         });
@@ -1305,6 +1305,63 @@ impl Editor {
             }
         });
         self.group_preset_ribbon(ui, _height);
+        crate::ribbon::divider(ui, _height);
+        // Everything that adds media sits here (approved option A), last in
+        // the tab (BZ8), as a compact 2 × 2 so the tab still fits a 1440 px
+        // window.
+        crate::ribbon::group(ui, "Media", 2. * 100. + 4., _height, |ui| {
+            let items = [
+                (
+                    "Add Track",
+                    "Video/audio",
+                    "Add a video, sound or music file at the playhead.",
+                ),
+                (
+                    "Image",
+                    "Pictures",
+                    "Add pictures as clips at the playhead.",
+                ),
+                (
+                    "Open",
+                    "PDF pages",
+                    "Add pages from a PDF as picture clips at the playhead.",
+                ),
+                (
+                    "Capture Video",
+                    "Record more",
+                    "Record another part and add it to this video.",
+                ),
+            ];
+            let mut chosen = None;
+            ui.vertical(|ui| {
+                ui.spacing_mut().item_spacing = egui::vec2(4., 2.);
+                for row in items.chunks(2) {
+                    ui.horizontal(|ui| {
+                        for (glyph, name, tip) in row {
+                            if super::ui::button(ui, glyph, name, 100., false)
+                                .tip_title(*name)
+                                .tip(*tip)
+                                .clicked()
+                            {
+                                chosen = Some(*name);
+                            }
+                        }
+                    });
+                }
+            });
+            if let Some(name) = chosen {
+                let (at, track) = {
+                    let v = self.session.document.video.as_ref().unwrap();
+                    (v.cursor, *v.media_tracks.last().unwrap())
+                };
+                match name {
+                    "Video/audio" => self.pick_timeline_media(at, track),
+                    "Pictures" => self.pick_timeline_pictures(at, track),
+                    "PDF pages" => self.pdf_pages_to_video(),
+                    _ => self.open_video_capture(),
+                }
+            }
+        });
     }
     pub(crate) fn video_export_ribbon(&mut self, ui: &mut egui::Ui, height: f32) {
         ui.set_min_height(height + 14.);

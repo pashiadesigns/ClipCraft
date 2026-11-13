@@ -6,8 +6,10 @@ use crate::display::{
     vector::{Op, record},
 };
 use std::fmt::Write as _;
+mod drawing;
 #[cfg(test)]
 mod tests;
+mod text_layer;
 use vello_cpu::{
     kurbo::{Affine, BezPath, Cap, Join, PathEl, Point, Rect, Stroke},
     peniko::Compose,
@@ -18,6 +20,7 @@ struct Pdf {
     objects: Vec<Vec<u8>>,
     resources: Vec<(String, usize)>,
     states: Vec<(String, usize)>,
+    fonts: Vec<(String, usize)>,
 }
 impl Pdf {
     fn add(&mut self, bytes: Vec<u8>) -> usize {
@@ -38,8 +41,20 @@ impl Pdf {
         Ok(self.add(value))
     }
     fn resources(&self) -> String {
+        let fonts = if self.fonts.is_empty() {
+            String::new()
+        } else {
+            format!(
+                " /Font << {} >>",
+                self.fonts
+                    .iter()
+                    .map(|(n, id)| format!("/{n} {id} 0 R"))
+                    .collect::<Vec<_>>()
+                    .join(" ")
+            )
+        };
         format!(
-            "<< /XObject << {} >> /ExtGState << {} >> >>",
+            "<< /XObject << {} >> /ExtGState << {} >>{fonts} >>",
             self.resources
                 .iter()
                 .map(|(n, id)| format!("/{n} {id} 0 R"))
@@ -274,6 +289,38 @@ fn erase(pixels: &mut RgbaImage, origin: [i32; 2], rects: &[Rect]) {
     }
 }
 pub(super) fn encode(document: &Document, options: &Options) -> Result<Vec<u8>> {
+    encode_parts(std::iter::once(Ok(document.clone())), options)
+}
+/// One PDF from several documents, drawn and written one at a time, so a
+/// set of linked parts never needs all of its pages in memory at once.
+pub(super) fn encode_parts(
+    documents: impl Iterator<Item = Result<Document>>,
+    options: &Options,
+) -> Result<Vec<u8>> {
+    let mut pdf = Pdf::default();
+    pdf.add(b"<< /Type /Catalog /Pages 2 0 R >>".to_vec());
+    pdf.add(vec![]);
+    let mut kids = vec![];
+    for document in documents {
+        add_document(&mut pdf, &mut kids, &document?, options)?;
+    }
+    if kids.is_empty() {
+        return Err(Error::Invalid("Nothing to export".into()));
+    }
+    pdf.objects[1] = format!(
+        "<< /Type /Pages /Count {} /Kids [{}] >>",
+        kids.len(),
+        kids.join(" ")
+    )
+    .into_bytes();
+    super::finish_pdf(pdf.objects)
+}
+fn add_document(
+    pdf_slot: &mut Pdf,
+    kids_slot: &mut Vec<String>,
+    document: &Document,
+    options: &Options,
+) -> Result<()> {
     document.validate()?;
     let mut list = document.display_list()?;
     // Monochrome system cursors can invert their backdrop; retain that exact
@@ -307,9 +354,7 @@ pub(super) fn encode(document: &Document, options: &Options) -> Result<Vec<u8>> 
             }
         }
     }
-    let mut pdf = Pdf::default();
-    pdf.add(b"<< /Type /Catalog /Pages 2 0 R >>".to_vec());
-    pdf.add(vec![]);
+    let mut pdf = std::mem::take(pdf_slot);
     let bleed = document
         .guide
         .as_ref()
@@ -339,6 +384,8 @@ pub(super) fn encode(document: &Document, options: &Options) -> Result<Vec<u8>> 
             _ => None,
         })
         .collect();
+    // Everything a redaction, blur or pixelation covers, for the text layer.
+    let covers = future.clone();
     let mut content = String::new();
     let mut base = list.base;
     erase(&mut base, [0, 0], &future);
@@ -386,6 +433,11 @@ pub(super) fn encode(document: &Document, options: &Options) -> Result<Vec<u8>> 
                 image(&mut pdf, &mut content, &p.pixels, p.origin)?;
             }
             Layer::Vector(a) => {
+                // Drawings stay shapes; only what a later redaction touches
+                // is flattened, with the covered part removed.
+                if drawing::write(&mut pdf, &mut content, &a, &future, bounds)? {
+                    continue;
+                }
                 let (lo, hi) = a.bounds();
                 let reach = a.width as f64 * 4. + 3.;
                 let r = Rect::new(
@@ -449,8 +501,11 @@ pub(super) fn encode(document: &Document, options: &Options) -> Result<Vec<u8>> 
             }
         }
     }
+    if options.searchable_text {
+        text_layer::write(&mut pdf, &mut content, document, &covers)?;
+    }
     let drawing = pdf.form(&content, bounds, false)?;
-    let mut kids = vec![];
+    let mut kids = std::mem::take(kids_slot);
     for (page_index, page) in options
         .page
         .document_pages(document)?
@@ -567,11 +622,7 @@ pub(super) fn encode(document: &Document, options: &Options) -> Result<Vec<u8>> 
         let id=pdf.add(format!("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {} {}]{boxes}{annotations} /Resources {} /Contents {stream} 0 R >>",media[0],media[1],pdf.resources()).into_bytes());
         kids.push(format!("{id} 0 R"));
     }
-    pdf.objects[1] = format!(
-        "<< /Type /Pages /Count {} /Kids [{}] >>",
-        kids.len(),
-        kids.join(" ")
-    )
-    .into_bytes();
-    super::finish_pdf(pdf.objects)
+    *pdf_slot = pdf;
+    *kids_slot = kids;
+    Ok(())
 }

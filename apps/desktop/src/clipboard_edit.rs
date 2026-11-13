@@ -106,7 +106,7 @@ impl Editor {
                     selected.len()
                 );
             }
-            Err(error) => self.status = error,
+            Err(error) => self.fail(error),
         }
     }
     /// Insert > Image from file (EDIT-084): PNG, JPEG, WebP, BMP, GIF, SVG
@@ -176,7 +176,7 @@ impl Editor {
         let bitmap = match bitmap {
             Ok(b) => b,
             Err(e) => {
-                self.status = e;
+                self.fail(e);
                 return;
             }
         };
@@ -231,7 +231,7 @@ impl Editor {
         let payload = match result {
             Ok(p) => p,
             Err(e) => {
-                self.status = e;
+                self.fail(e);
                 return;
             }
         };

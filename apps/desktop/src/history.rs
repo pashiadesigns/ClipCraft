@@ -89,7 +89,7 @@ impl HistoryPanel {
         if let Some(store) = &mut self.store {
             match store.refresh() {
                 Ok(()) => self.error.clear(),
-                Err(e) => self.error = e.to_string(),
+                Err(e) => self.error = crate::guided::friendly(&e.to_string()),
             }
         }
         let ids: std::collections::HashSet<_> = self.entries().into_iter().map(|e| e.id).collect();
@@ -466,6 +466,62 @@ impl Editor {
                 painter.rect_filled(badge_rect, 4, egui::Color32::from_black_alpha(170));
                 painter.galley(
                     badge_rect.center() - text.size() / 2.0,
+                    text,
+                    egui::Color32::WHITE,
+                );
+            }
+            // A linked part shows where it sits in its set (approved beta 6 tab 7).
+            if let Some(part) = &entry.part {
+                let text = painter.layout_no_wrap(
+                    format!("{}/{}", part.index, part.total),
+                    egui::FontId::proportional(10.5),
+                    egui::Color32::WHITE,
+                );
+                let badge_rect = egui::Rect::from_min_size(
+                    rect.left_top() + egui::vec2(6.0, 6.0),
+                    egui::vec2(text.size().x + 10.0, 15.0),
+                );
+                painter.rect_filled(badge_rect, 4, crate::shell::ACCENT);
+                painter.galley(
+                    badge_rect.center() - text.size() / 2.0,
+                    text,
+                    egui::Color32::WHITE,
+                );
+            }
+            // From a shared folder: who is editing it, or Team (approved
+            // beta 6 tab 3).
+            if let Some(shared) = &entry.organize.shared {
+                let holder = self.shared_holder(shared);
+                let label = holder.clone().unwrap_or_else(|| "Team".into());
+                let text = painter.layout_no_wrap(
+                    label,
+                    egui::FontId::proportional(10.5),
+                    if holder.is_some() {
+                        egui::Color32::from_rgb(40, 32, 8)
+                    } else {
+                        egui::Color32::WHITE
+                    },
+                );
+                let room = if holder.is_some() { 14. } else { 0. };
+                let badge_rect = egui::Rect::from_min_size(
+                    rect.right_top() + egui::vec2(-(text.size().x + 10.0 + room) - 6.0, 6.0),
+                    egui::vec2(text.size().x + 10.0 + room, 15.0),
+                );
+                let fill = if holder.is_some() {
+                    egui::Color32::from_rgb(242, 201, 76)
+                } else {
+                    egui::Color32::from_rgb(58, 92, 104)
+                };
+                painter.rect_filled(badge_rect, 4, fill);
+                if holder.is_some() {
+                    let icon = egui::Rect::from_center_size(
+                        badge_rect.left_center() + egui::vec2(9., 0.),
+                        egui::vec2(8., 9.),
+                    );
+                    crate::sharing::paint_lock(painter, icon, egui::Color32::from_rgb(40, 32, 8));
+                }
+                painter.galley(
+                    badge_rect.center() + egui::vec2(room / 2., 0.) - text.size() / 2.0,
                     text,
                     egui::Color32::WHITE,
                 );

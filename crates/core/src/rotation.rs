@@ -198,7 +198,8 @@ impl crate::Annotation {
     pub fn with_rotation(&self, degrees: f32) -> Result<Self> {
         if !self.can_rotate() {
             return Err(Error::Invalid(
-                "Rotation of raster-effect regions is not implemented yet".into(),
+                "Blur, Pixelate and Eraser areas can't turn. Redraw them at the angle you need."
+                    .into(),
             ));
         }
         let rotation = Rotation::new(self.rotation().center, degrees)?;

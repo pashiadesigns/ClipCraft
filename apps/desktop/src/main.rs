@@ -4,7 +4,7 @@ use eframe::egui;
 use std::path::PathBuf;
 use std::sync::mpsc::{Receiver, TryRecvError};
 
-mod backstage;
+pub(crate) mod backstage;
 mod blank_dialog;
 mod brand;
 mod canvas;
@@ -42,6 +42,7 @@ mod group_presets;
 mod group_transform;
 mod guide_display;
 mod guide_sections;
+mod guided;
 mod history;
 mod hotkey;
 mod icons;
@@ -52,6 +53,7 @@ mod launch;
 mod legacy_name;
 mod lifecycle;
 mod line_properties;
+mod manage_presets;
 mod mixed_selection;
 mod motion;
 mod move_tool;
@@ -67,12 +69,16 @@ mod options;
 mod page_setup;
 mod page_setup_fields;
 mod panel_ui;
+mod pdf_import_ui;
 mod pixel_grid;
 mod preferences;
+mod preset_menu;
 mod privacy_review;
 mod project_sessions;
 mod rich_text;
+mod rotate_image;
 mod sensitive_ui;
+mod sharing;
 mod single_instance;
 mod spelling;
 mod startup;
@@ -192,6 +198,7 @@ struct Editor {
     step_placement: Option<Annotation>,
     snapping_guides: [Option<f32>; 2],
     new_image: Option<new_image::NewImage>,
+    pdf_import: Option<pdf_import_ui::PdfImport>,
     template_picker: Option<template_picker::Picker>,
     resize_image: Option<resize_image::ResizeImage>,
     resize_canvas: Option<resize_canvas::ResizeCanvas>,
@@ -199,6 +206,8 @@ struct Editor {
     export_preferences: export_ui::Preferences,
     icon_library: icon_library::Panel,
     image_transform: Option<capture_core::ImageTransform>,
+    rotate_image: Option<rotate_image::RotateImage>,
+    sharing: sharing::Sharing,
     crop: Option<crop::Crop>,
     cut_out: Option<cut_out::CutOut>,
 
@@ -218,6 +227,10 @@ struct Editor {
     path: Option<PathBuf>,
     last_directory: PathBuf,
     status: String,
+    /// How the message bar shows status (guided errors).
+    notice: guided::Notice,
+    /// The window's context, for preset stores that redraw palettes.
+    presets_ctx: Option<egui::Context>,
     selected: Option<u64>,
     extra_selected: std::collections::BTreeSet<u64>,
     selection_order: Vec<u64>,
@@ -246,6 +259,16 @@ enum FileAction {
     New,
     CreateCanvas(new_image::CanvasSpec),
     FromClipboard(Session),
+    /// New from PDF: the guide, its Library label, a one-time note about
+    /// pages that came in as pictures, and the scan to run after import.
+    FromPdf {
+        session: Session,
+        label: String,
+        note: Option<String>,
+        scan: Option<(capture_core::privacy::Options, String, sensitive_ui::Cover)>,
+        /// Further linked parts, saved straight to the Library.
+        more: Vec<(Document, String)>,
+    },
     Template {
         session: Session,
         title: String,
@@ -381,6 +404,7 @@ impl Editor {
             step_placement: None,
             snapping_guides: [None; 2],
             new_image: None,
+            pdf_import: None,
             template_picker: None,
             resize_image: None,
             resize_canvas: None,
@@ -388,6 +412,8 @@ impl Editor {
             export_preferences: Default::default(),
             icon_library: Default::default(),
             image_transform: None,
+            rotate_image: None,
+            sharing: Default::default(),
             crop: None,
 
             cut_out: None,
@@ -407,6 +433,8 @@ impl Editor {
             path: startup_path,
             last_directory,
             status: startup_status,
+            notice: Default::default(),
+            presets_ctx: None,
             selected: None,
             extra_selected: Default::default(),
             selection_order: vec![],
@@ -467,7 +495,7 @@ impl Editor {
         let command = match self.keyframe_command(command) {
             Ok(c) => c,
             Err(e) => {
-                self.status = e.to_string();
+                self.fail(e);
                 return;
             }
         };
@@ -552,7 +580,7 @@ impl Editor {
                     self.select_only(None);
                 }
             }
-            Err(e) => self.status = e.to_string(),
+            Err(e) => self.fail(e),
         }
     }
     fn open(&mut self) {
@@ -560,10 +588,15 @@ impl Editor {
         if let Some(path) = rfd::FileDialog::new()
             .set_directory(self.dialog_directory())
             .add_filter(
-                "Images, videos and ClipDesigner projects",
-                &["iclip", "vclip", "mp4", "png", "jpg", "jpeg"],
+                "Images, videos, PDFs and ClipDesigner projects",
+                &[
+                    "iclip", "vclip", "mp4", "png", "jpg", "jpeg", "pdf", "cdpack", "cdkit",
+                ],
             )
+            .add_filter("PDF documents", &["pdf"])
             .add_filter("Image clips", &["iclip"])
+            .add_filter("Packed projects", &[capture_core::pack::EXTENSION])
+            .add_filter("Kits", &[capture_core::kit::EXTENSION])
             .add_filter("JSON project source", &["json"])
             .pick_file()
         {
@@ -571,6 +604,21 @@ impl Editor {
         }
     }
     fn open_path(&mut self, path: PathBuf) {
+        let extension = path
+            .extension()
+            .map(|e| e.to_string_lossy().to_ascii_lowercase());
+        if extension.as_deref() == Some(capture_core::kit::EXTENSION) {
+            self.open_kit(&path);
+            return;
+        }
+        if extension.as_deref() == Some(capture_core::pack::EXTENSION) {
+            self.open_pack(path);
+            return;
+        }
+        if pdf_import_ui::is_pdf_path(&path) {
+            self.pdf_import = Some(pdf_import_ui::PdfImport::new(path));
+            return;
+        }
         if video_editor::supported(&path) {
             self.open_video(path);
             return;
@@ -586,6 +634,9 @@ impl Editor {
             }) {
                 Ok(session) => {
                     self.switch_session(session, None, Some(&path));
+                    if is_project {
+                        self.lock_opened_project(&path);
+                    }
                     self.reset_document_tools();
                     self.remember_dialog_folder(
                         capture_core::quick_preferences::Folder::Open,
@@ -619,7 +670,7 @@ impl Editor {
                         );
                     }
                 }
-                Err(e) => self.status = e.to_string(),
+                Err(e) => self.fail(e),
             }
         }
     }
@@ -630,6 +681,10 @@ impl Editor {
         if !self.commit_text() {
             return false;
         }
+        if !save_as && self.refuse_locked_save() {
+            return false;
+        }
+        let mut pack = None;
         let path = self
             .path
             .clone()
@@ -657,12 +712,27 @@ impl Editor {
                             })
                             .unwrap_or_else(|| "capture.iclip".into()),
                     )
-                    .add_filter("ClipDesigner image clip", &["iclip"]);
-                dialog
-                    .save_file()
-                    .map(|p| capture_core::project_file::image_path(&p))
+                    .add_filter("ClipDesigner image clip", &["iclip"])
+                    .add_filter(
+                        "Pack project (one file with all media)",
+                        &[capture_core::pack::EXTENSION],
+                    );
+                let chosen = dialog.save_file()?;
+                if sharing::is_pack(&chosen) {
+                    pack = Some(chosen);
+                    return None;
+                }
+                Some(capture_core::project_file::image_path(&chosen))
             });
+        if let Some(out) = pack {
+            self.pack_project(out);
+            return false;
+        }
         if let Some(path) = path {
+            if self.locked_by_other().is_some() && self.path.as_ref() == Some(&path) {
+                self.refuse_locked_save();
+                return false;
+            }
             match self.session.save(&path) {
                 Ok(()) => {
                     self.status = format!("Saved {}", path.display());
@@ -673,7 +743,7 @@ impl Editor {
                     self.path = Some(path);
                     return true;
                 }
-                Err(e) => self.status = e.to_string(),
+                Err(e) => self.fail(e),
             }
         }
         false
@@ -749,6 +819,8 @@ impl Editor {
             && self.autosave.action.is_none()
             && self.template_picker.is_none()
             && self.new_image.is_none()
+            && self.pdf_import.is_none()
+            && self.rotate_image.is_none()
             && self.resize_image.is_none()
             && self.resize_canvas.is_none()
             && self.image_transform.is_none()
@@ -839,6 +911,8 @@ impl Editor {
             && !self.view.panning
             && self.template_picker.is_none()
             && self.new_image.is_none()
+            && self.pdf_import.is_none()
+            && self.rotate_image.is_none()
             && self.resize_image.is_none()
             && self.resize_canvas.is_none()
             && self.image_transform.is_none()
@@ -859,7 +933,13 @@ impl Editor {
 
     fn perform_action(&mut self, action: FileAction, ctx: &egui::Context) {
         match action {
-            FileAction::VideoLoaded { session, path } => self.accept_video(session, path),
+            FileAction::VideoLoaded { session, path } => {
+                let project = capture_core::project_file::is_video_project(&path);
+                self.accept_video(session, path.clone());
+                if project {
+                    self.lock_opened_project(&path);
+                }
+            }
             FileAction::New => {
                 self.new_image = Some(new_image::NewImage::remembered(
                     self.quick_controls.blank_defaults(),
@@ -871,7 +951,7 @@ impl Editor {
                 let session = match result {
                     Ok(session) => session,
                     Err(error) => {
-                        self.status = error.to_string();
+                        self.fail(error);
                         return;
                     }
                 };
@@ -907,6 +987,39 @@ impl Editor {
                 self.status = "Template created. All objects and settings remain editable.".into();
                 self.record_history(&title, capture_core::history::Origin::Canvas);
             }
+            FileAction::FromPdf {
+                session,
+                label,
+                note,
+                scan,
+                more,
+            } => {
+                // The other parts go straight into the Library, in order.
+                if let Some(store) = &mut self.history.store {
+                    for (document, label) in &more {
+                        if let Err(e) =
+                            store.create(document, label, capture_core::history::Origin::Canvas)
+                        {
+                            self.status = format!("A part couldn't be saved to the Library: {e}");
+                        }
+                    }
+                }
+                self.switch_session(session, None, None);
+                self.reset_document_tools();
+                self.view = canvas_view::CanvasView::default();
+                self.path = None;
+                self.select_only(None);
+                self.drag_start = None;
+                self.needs_render = true;
+                self.shell.return_to_editor();
+                self.status = note.unwrap_or_else(|| {
+                    "PDF pages imported. Annotate, redact and export like any image.".into()
+                });
+                self.record_history(&label, capture_core::history::Origin::Canvas);
+                if let Some((options, phrases, cover)) = scan {
+                    self.scan_after_import(ctx, options, phrases, cover);
+                }
+            }
             FileAction::FromClipboard(session) => {
                 self.switch_session(session, None, None);
                 self.reset_document_tools();
@@ -939,7 +1052,7 @@ impl Editor {
             FileAction::Capture => self.open_clip(),
             FileAction::StartVideo(settings, request) => {
                 if let Err(e) = request.options.validate() {
-                    self.status = e.to_string();
+                    self.fail(e);
                     return;
                 }
                 self.clip.pending_video = Some(request);
@@ -954,7 +1067,7 @@ impl Editor {
                     self.capture_requested = CAPTURE_ENABLED;
                     ctx.request_repaint_of(egui::ViewportId::ROOT);
                 }
-                Err(e) => self.status = e.to_string(),
+                Err(e) => self.fail(e),
             },
             FileAction::Close => {
                 self.allow_close = true;
@@ -1016,7 +1129,7 @@ impl Editor {
                 self.accept_capture_result(captured, settings, clipboard::copy);
             }
             Ok(None) => self.status = "Capture cancelled. Your project is unchanged.".into(),
-            Err(error) => self.status = error,
+            Err(error) => self.fail(error),
         }
     }
 
@@ -1114,6 +1227,7 @@ impl eframe::App for Editor {
         self.prepare_property_input(&ctx);
         self.process_keybind_input(&ctx);
         self.preferences_shortcut(&ctx);
+        self.sharing_tick(&ctx);
         if self.capture_result.is_some() {
             ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
             ctx.request_repaint_after(std::time::Duration::from_millis(100));
@@ -1124,12 +1238,17 @@ impl eframe::App for Editor {
         }
         let file_workspace_visible = self.shell.backstage.is_some();
         self.show_shell(ui);
+        guided::paint(&ctx);
+        self.part_follow_up(&ctx);
         self.settle_property_preview(&ctx);
         self.sync_tilt_display(&ctx);
         if self.needs_render {
             self.refresh_canvas_display(&ctx);
         }
         if !file_workspace_visible {
+            if !self.shell.library {
+                self.show_lock_banner(ui);
+            }
             egui::CentralPanel::default()
                 .frame(
                     egui::Frame::new()
@@ -1151,6 +1270,8 @@ impl eframe::App for Editor {
                 )
                 .show(ui, |ui| self.show_workspace(ui));
         }
+        self.take_dropped_pdf(&ctx);
+        self.show_pdf_import(&ctx);
         self.show_template_picker(&ctx);
         self.show_template_management(&ctx);
         self.show_library_recovery(&ctx);
@@ -1169,6 +1290,8 @@ impl eframe::App for Editor {
         self.show_voiceover_recorder(&ctx);
         self.show_page_setup(&ctx);
         self.show_image_transform(&ctx);
+        self.show_rotate_image(&ctx);
+        self.show_sharing(&ctx);
         self.editor_keybind_input(&ctx);
 
         self.shared_format_shortcuts(&ctx);
@@ -1182,7 +1305,8 @@ impl eframe::App for Editor {
                     egui::Key::S,
                 )
             }) {
-                self.save(true);
+                // Ctrl+Shift+S is Save a copy (approved File menu).
+                self.save_copy();
             } else if ctx.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::S)) {
                 self.save(false);
             }
@@ -1221,6 +1345,8 @@ impl eframe::App for Editor {
                 && (!self.shell.annotations_hidden || self.is_video())
                 && self.template_picker.is_none()
                 && self.new_image.is_none()
+                && self.pdf_import.is_none()
+                && self.rotate_image.is_none()
                 && self.text_draft.is_none()
                 && !self.capture_requested
                 && self.capture_result.is_none()
@@ -1300,6 +1426,26 @@ impl eframe::App for Editor {
         self.poll_library_import();
         self.show_history_dialog(&ctx);
         self.presets.reusable.show(&ctx);
+        // Deleted from a Blocks card or the preset library: offer Undo.
+        let deleted = std::mem::take(&mut self.presets.reusable.deleted);
+        if !deleted.is_empty() {
+            let n = deleted.len();
+            let what = if n == 1 {
+                format!("\u{201c}{}\u{201d}", deleted[0].0)
+            } else {
+                format!("{n} presets")
+            };
+            let undo = deleted
+                .into_iter()
+                .map(|(name, payload)| guided::Restore::Entry(name, payload))
+                .collect();
+            self.done_with(
+                format!("Deleted {what}."),
+                "Undo",
+                guided::Action::Restore(undo),
+            );
+        }
+        self.show_manage_presets(&ctx);
         self.place_group_preset();
         #[cfg(windows)]
         brand::sync_window_icons(self.hotkey_owner);

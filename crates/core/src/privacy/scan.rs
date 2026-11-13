@@ -1258,6 +1258,7 @@ mod tests {
             payment_cards: false,
             us_ssns: false,
             ip_addresses: false,
+            custom: Vec::new(),
         }
     }
     #[test]

@@ -2,6 +2,7 @@
 //! that an image is free of sensitive information. No image or text is sent out.
 use crate::{Annotation, Command, Document, Error, Kind, Result};
 use std::ops::Range;
+pub mod custom;
 mod identifiers;
 pub mod scan;
 #[cfg(test)]
@@ -25,6 +26,8 @@ pub enum Category {
     PaymentCard,
     UsSsn,
     IpAddress,
+    /// A saved custom type, by its index in `Options::custom`.
+    Custom(u8),
 }
 impl Category {
     pub fn label(self) -> &'static str {
@@ -37,6 +40,7 @@ impl Category {
             Self::PaymentCard => "Payment card (checksum valid)",
             Self::UsSsn => "US Social Security number",
             Self::IpAddress => "IPv4 address",
+            Self::Custom(_) => "Custom type",
         }
     }
 }
@@ -56,6 +60,8 @@ pub struct Options {
     pub payment_cards: bool,
     pub us_ssns: bool,
     pub ip_addresses: bool,
+    /// Custom types to look for (approved beta 5 tab 3); disabled ones are skipped.
+    pub custom: Vec<custom::CustomType>,
 }
 impl Default for Options {
     fn default() -> Self {
@@ -68,6 +74,7 @@ impl Default for Options {
             payment_cards: true,
             us_ssns: true,
             ip_addresses: false,
+            custom: Vec::new(),
         }
     }
 }
@@ -232,6 +239,11 @@ fn matches(text: &str, options: &Options) -> Vec<(Category, Range<usize>)> {
             out.push((Category::Phrase, map[i].0..map[i + phrase.len() - 1].1));
         }
     }
+    for (i, t) in options.custom.iter().enumerate().filter(|(_, t)| t.enabled) {
+        if let Ok(found) = t.find(text) {
+            out.extend(found.into_iter().map(|r| (Category::Custom(i as u8), r)));
+        }
+    }
     out.sort_by_key(|(_, r)| (r.start, r.end));
     out.dedup_by(|a, b| a.1 == b.1);
     out
@@ -242,9 +254,10 @@ pub fn detect(words: &[Word], options: &Options, dimensions: [u32; 2]) -> Result
         || options.phrases.iter().any(|p| p.len() > 512)
     {
         return Err(Error::Invalid(
-            "Use at most 100 phrases of up to 512 bytes; scan a smaller page if needed.".into(),
+            "Keep up to 100 names or phrases, each under 512 characters. Remove some chips.".into(),
         ));
     }
+    custom::validate_all(&options.custom)?;
     let mut text = String::new();
     let mut ranges = Vec::new();
     let mut previous = None;
@@ -316,7 +329,7 @@ pub fn detect(words: &[Word], options: &Options, dimensions: [u32; 2]) -> Result
         }
         if findings.len() >= 2048 {
             return Err(Error::Invalid(
-                "More than 2048 findings: scan a smaller page.".into(),
+                "Over 2,048 findings. Turn off some types under Look for, or scan one page at a time.".into(),
             ));
         }
     }
@@ -438,6 +451,54 @@ mod tests {
                 [72, 20]
             )
             .is_err()
+        );
+    }
+}
+
+#[cfg(test)]
+mod custom_detect_tests {
+    use super::*;
+    #[test]
+    fn custom_types_are_found_in_recognized_words_and_disabled_ones_are_not() {
+        let word = |text: &str, x: f32| Word {
+            text: text.into(),
+            line: 0,
+            bounds: [x, 10., 60., 14.],
+        };
+        let words = vec![
+            word("Reviewed", 0.),
+            word("by", 70.),
+            word("W74828", 100.),
+            word("and", 170.),
+            word("X12345", 200.),
+        ];
+        let mut options = Options {
+            custom: vec![custom::CustomType::new("Employee ID", "[WE]#####")],
+            ..Default::default()
+        };
+        let found = detect(&words, &options, [400, 60]).unwrap();
+        let custom: Vec<_> = found
+            .iter()
+            .filter(|f| f.category == Category::Custom(0))
+            .collect();
+        assert_eq!(custom.len(), 1);
+        assert_eq!(custom[0].text, "W74828");
+        assert_eq!(custom[0].bounds.len(), 1);
+        assert!(
+            custom[0].bounds[0][0] <= 100.
+                && custom[0].bounds[0][0] + custom[0].bounds[0][2] >= 160.
+        );
+        options.custom[0].enabled = false;
+        assert!(
+            detect(&words, &options, [400, 60])
+                .unwrap()
+                .iter()
+                .all(|f| f.category != Category::Custom(0))
+        );
+        options.custom[0].pattern = "[WE".into();
+        assert!(
+            detect(&words, &options, [400, 60]).is_err(),
+            "a broken saved type is reported"
         );
     }
 }

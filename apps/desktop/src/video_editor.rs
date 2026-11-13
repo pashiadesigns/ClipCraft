@@ -27,7 +27,7 @@ mod hide_tracks;
 pub(crate) use hide_tracks::{TrackType, track_kind};
 mod gif_audition;
 mod gif_studio;
-mod imports;
+pub(crate) mod imports;
 mod jump;
 #[cfg(test)]
 mod keyframe_tests;
@@ -52,7 +52,7 @@ mod public_beta_tests;
 #[cfg(test)]
 mod recording_repair_tests;
 #[cfg(test)]
-mod repair_tests;
+pub(crate) mod repair_tests;
 mod selection;
 mod still_frame;
 #[cfg(test)]
@@ -249,6 +249,8 @@ pub(super) struct State {
     pub export_after: [bool; 2],
     /// Save the recording as captured instead of rendering the edits.
     pub export_original: bool,
+    /// Put the exported MP4 on a PowerPoint slide (approved beta 6 tab 2).
+    pub export_slide: bool,
     /// None follows the quality the project was recorded at.
     pub export_quality: Option<capture_core::video::Quality>,
     pub drag: Option<timeline::Drag>,
@@ -349,6 +351,7 @@ impl Default for State {
             copy_preview: None,
             export_after: [false, false],
             export_original: false,
+            export_slide: false,
             export_quality: None,
             drag: None,
             active_track: None,
@@ -547,9 +550,9 @@ impl Editor {
                     Ok(session) => {
                         self.request_action(FileAction::VideoLoaded { session, path }, ctx)
                     }
-                    Err(e) => self.status = e.to_string(),
+                    Err(e) => self.fail(e),
                 },
-                Err(e) => self.status = e,
+                Err(e) => self.fail(e),
             }
         }
         if self.video.loading.is_some() {
@@ -585,7 +588,7 @@ impl Editor {
                             self.status.push_str(&format!(" · {e}"));
                         }
                     }
-                    Err(e) => self.status = e,
+                    Err(e) => self.fail(e),
                 }
             }
             ctx.request_repaint_after(Duration::from_millis(40));
@@ -916,7 +919,7 @@ impl Editor {
             &project,
         );
         if let Err(e) = result {
-            self.status = e.to_string();
+            self.fail(e);
         }
         ui.painter().with_clip_rect(t.viewport).rect_stroke(
             t.image,
@@ -933,6 +936,10 @@ impl Editor {
             return false;
         }
         self.video.pause();
+        if !save_as && self.refuse_locked_save() {
+            return false;
+        }
+        let mut pack = None;
         let path = self
             .path
             .clone()
@@ -950,13 +957,29 @@ impl Editor {
                             .map_or_else(|| "Video clip.vclip".into(), |n| format!("{n}.vclip")),
                     )
                     .add_filter("ClipDesigner video clip", &["vclip"])
+                    .add_filter(
+                        "Pack project (one file with all media)",
+                        &[capture_core::pack::EXTENSION],
+                    )
                     .save_file()
-                    .map(|mut p| {
+                    .and_then(|mut p| {
+                        if crate::sharing::is_pack(&p) {
+                            pack = Some(p);
+                            return None;
+                        }
                         p.set_extension("vclip");
-                        p
+                        Some(p)
                     })
             });
+        if let Some(out) = pack {
+            self.pack_project(out);
+            return false;
+        }
         if let Some(path) = path {
+            if self.locked_by_other().is_some() && self.path.as_ref() == Some(&path) {
+                self.refuse_locked_save();
+                return false;
+            }
             match self.session.save(&path) {
                 Ok(()) => {
                     self.remember_dialog_folder(
@@ -970,7 +993,7 @@ impl Editor {
                     );
                     return true;
                 }
-                Err(e) => self.status = e.to_string(),
+                Err(e) => self.fail(e),
             }
         }
         false
@@ -1174,13 +1197,23 @@ impl Editor {
                         .unwrap_or_default()
                         .megabytes(v.fps, v.duration()),
                 );
-                ui.weak(match (self.video.export_quality, v.recorded_quality) {
+                let estimate = match (self.video.export_quality, v.recorded_quality) {
                     (None, Some(quality)) => {
                         format!("Recorded at {}. About {size} for this video.", quality.label())
                     }
                     _ => format!("About {size} for this video."),
+                };
+                // The slide switch shares the estimate's line, so the dialog
+                // keeps its height on small screens.
+                let slide = &mut self.video.export_slide;
+                ui.horizontal(|ui| {
+                    ui.weak(estimate);
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        crate::controls::toggle(ui, slide, "On a PowerPoint slide")
+                            .tip("On a PowerPoint slide · Saves a .pptx with the video on a slide, its first frame as the poster. Click the video on the slide to play it.");
+                    });
                 });
-                if self.can_copy_for_export() {
+                if self.can_copy_for_export() && !self.video.export_slide {
                     ui.weak("No edits to render, so this saves straight away.");
                 }
             }
@@ -1435,6 +1468,32 @@ impl Editor {
         if confirm {
             self.video.export_dialog = false;
             self.suspend_global_capture();
+            let slide = self.video.export_slide && !self.video.export_original;
+            if slide {
+                if let Some(mut path) = rfd::FileDialog::new()
+                    .set_directory(
+                        self.dialog_folder(capture_core::quick_preferences::Folder::Export),
+                    )
+                    .set_file_name("Video.pptx")
+                    .add_filter("PowerPoint", &["pptx"])
+                    .save_file()
+                {
+                    path.set_extension("pptx");
+                    self.remember_dialog_folder(
+                        capture_core::quick_preferences::Folder::Export,
+                        &path,
+                    );
+                    self.video.export_progress = 0.;
+                    self.video.export = Some(workers::export_slide(
+                        self.session.document.clone(),
+                        path,
+                        self.export_preferences.options.watermark.clone(),
+                        self.export_bitrate(),
+                        self.export_preferences.office.slides.size,
+                    ));
+                }
+                return;
+            }
             let copy = (self.video.export_original || self.can_copy_for_export())
                 .then(|| self.recording_file())
                 .flatten();

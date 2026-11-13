@@ -248,7 +248,7 @@ impl Editor {
             .any(|a| self.session.document.object_state(a.id).locked)
         {
             return Err(capture_core::Error::Invalid(
-                "Unlock the selected object before editing its animation.".into(),
+                "This object is locked. Unlock it to animate it.".into(),
             ));
         }
         let mut doc = self.session.document.clone();
@@ -722,9 +722,11 @@ impl Editor {
                     [62., 22.],
                     egui::Label::new(egui::RichText::new("Transition").weak()),
                 );
-                for curve in [Curve::Smooth, Curve::Linear, Curve::Hold] {
-                    ui.selectable_value(&mut c.curve, curve, format!("{curve:?}"));
-                }
+                crate::controls::segments(ui, |ui| {
+                    for curve in [Curve::Smooth, Curve::Linear, Curve::Hold] {
+                        ui.selectable_value(&mut c.curve, curve, format!("{curve:?}"));
+                    }
+                });
             });
         }
         ui.horizontal(|ui| {

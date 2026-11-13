@@ -43,7 +43,7 @@ impl Document {
             || y.checked_add(height).is_none_or(|n| n > size[1])
         {
             return Err(Error::Invalid(
-                "Keep the crop rectangle inside the selected page.".into(),
+                "Drag the crop so it stays inside this page.".into(),
             ));
         }
         if rect == [0, 0, size[0], size[1]] {

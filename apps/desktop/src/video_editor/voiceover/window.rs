@@ -34,7 +34,7 @@ impl Editor {
             ui.separator();
             ui.add_enabled_ui(!busy&&!review,|ui|{
                 let before=self.video.voiceover.with_camera;
-                ui.horizontal(|ui|{ui.selectable_value(&mut self.video.voiceover.with_camera,false,"Voice only");ui.selectable_value(&mut self.video.voiceover.with_camera,true,"Voice + Camera");});
+                crate::controls::segments(ui,|ui|{ui.selectable_value(&mut self.video.voiceover.with_camera,false,"Voice only");ui.selectable_value(&mut self.video.voiceover.with_camera,true,"Voice + Camera");});
                 if before!=self.video.voiceover.with_camera {self.video.voiceover.capture=None;self.video.voiceover.ready=false;self.video.voiceover.camera_texture=None;self.video.voiceover.error.clear();self.video.voiceover.rearm_at=Some(Instant::now()+Duration::from_millis(150));}
             });
             ui.add_enabled_ui(!busy&&!review,|ui|{
@@ -102,7 +102,7 @@ impl Editor {
                 }
             });
             if !review {
-                ui.horizontal(|ui| { ui.label("Input channels"); ui.selectable_value(&mut self.video.voiceover.mono,false,"Stereo"); ui.selectable_value(&mut self.video.voiceover.mono,true,"Mono").tip("Combine input channels for both recording and headphone monitoring"); });
+                ui.horizontal(|ui| { ui.label("Input channels"); crate::controls::segments(ui,|ui|{ ui.selectable_value(&mut self.video.voiceover.mono,false,"Stereo"); ui.selectable_value(&mut self.video.voiceover.mono,true,"Mono").tip("Combine input channels for both recording and headphone monitoring"); }); });
                 if let Some(c)=&self.video.voiceover.capture {c.mono.store(self.video.voiceover.mono,Ordering::Relaxed);}
                 crate::controls::toggle(ui,&mut self.video.voiceover.monitor,"Monitor through headphones");
                 self.audio_output_controls(ui,true);

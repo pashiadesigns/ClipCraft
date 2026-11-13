@@ -18,6 +18,18 @@ impl Editor {
             self.import_timeline_media(paths, at, track);
         }
     }
+    /// Insert › Media › Pictures: picture files only.
+    pub(super) fn pick_timeline_pictures(&mut self, at: u64, track: u64) {
+        self.video.pause();
+        self.suspend_global_capture();
+        if let Some(paths) = rfd::FileDialog::new()
+            .set_title("Add pictures to timeline")
+            .add_filter("Pictures", &["png", "jpg", "jpeg", "webp"])
+            .pick_files()
+        {
+            self.import_timeline_media(paths, at, track);
+        }
+    }
     pub(super) fn import_timeline_media(&mut self, paths: Vec<PathBuf>, at: u64, track: u64) {
         if self.video.importing.is_some() {
             self.status = "Wait for the current media import to finish.".into();
@@ -45,7 +57,7 @@ impl Editor {
         if let Some(result) = result {
             self.video.importing = None;
             match result {
-                Err(e) => self.status = e,
+                Err(e) => self.fail(e),
                 Ok(clips) => {
                     self.append_media_clips(clips, self.video.import_at, self.video.import_track);
                 }
@@ -152,7 +164,7 @@ impl Editor {
         let mut added = match added {
             Ok(a) => a,
             Err(e) => {
-                self.status = e.to_string();
+                self.fail(e);
                 return;
             }
         };
@@ -180,7 +192,7 @@ impl Editor {
             }
         }
         if let Err(e) = capture_core::groups::freshen(&mut added, &self.session.document) {
-            self.status = e.to_string();
+            self.fail(e);
             return;
         }
         let mut annotations = self.session.document.annotations.clone();
@@ -234,7 +246,7 @@ impl Editor {
         self.set_timeline_expanded(true);
     }
 }
-pub(super) fn import_files(paths: &[PathBuf]) -> Result<Vec<Segment>, String> {
+pub(crate) fn import_files(paths: &[PathBuf]) -> Result<Vec<Segment>, String> {
     if paths.is_empty() || paths.len() > 64 {
         return Err("Import between 1 and 64 media files at a time.".into());
     }
@@ -321,7 +333,7 @@ pub(super) fn import_files(paths: &[PathBuf]) -> Result<Vec<Segment>, String> {
     Ok(clips)
 }
 
-pub(super) fn plan_import(original: &Project, clips: &[Segment], at: u64, track: u64) -> Project {
+pub(crate) fn plan_import(original: &Project, clips: &[Segment], at: u64, track: u64) -> Project {
     let mut p = original.clone();
     let mut cursor = at;
     for mut clip in clips.iter().cloned() {

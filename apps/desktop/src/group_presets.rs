@@ -9,7 +9,7 @@ impl Editor {
         let ids = self.group_preset_ids();
         match Composition::capture(&self.session.document, &ids) {
             Ok(c) => self.presets.reusable.save_payload(Payload::Group(c)),
-            Err(e) => self.status = e.to_string(),
+            Err(e) => self.fail(e),
         }
     }
     /// Objects a saved group captures: the canvas selection, or the objects
@@ -41,7 +41,12 @@ impl Editor {
             )
             .clicked()
             {
-                self.presets.reusable.open_groups();
+                let ids = self.group_preset_ids();
+                let current = (!ids.is_empty())
+                    .then(|| Composition::capture(&self.session.document, &ids).ok())
+                    .flatten()
+                    .map(Payload::Group);
+                self.presets.reusable.open_groups(current);
             }
             if crate::ribbon::command_tile(
                 ui,
@@ -92,7 +97,7 @@ impl Editor {
                 self.status =
                     "Block placed. Drag it to position it; each object remains editable.".into();
             }
-            Err(e) => self.status = e.to_string(),
+            Err(e) => self.fail(e),
         }
     }
 }

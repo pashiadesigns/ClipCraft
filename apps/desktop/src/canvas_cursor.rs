@@ -1,4 +1,5 @@
 //! Canvas-only feedback. Tool marks are UI paint, never document annotations.
+use crate::native_cursor::Grip;
 use crate::{Editor, Kind, canvas_view::Transform, egui};
 use capture_core::selection::Handle;
 
@@ -6,9 +7,9 @@ use capture_core::selection::Handle;
 pub(super) struct Feedback {
     pub icon: egui::CursorIcon,
     pub tool: Option<&'static str>,
-    /// Open (false) or closed (true) hand: rotation handles and the middle
-    /// curve node only.
-    pub hand: Option<bool>,
+    /// Grip cursor and whether its handle is held: rotation handles and the
+    /// middle curve node only.
+    pub grip: Option<(Grip, bool)>,
 }
 
 impl Feedback {
@@ -16,12 +17,12 @@ impl Feedback {
         Self {
             icon,
             tool: None,
-            hand: None,
+            grip: None,
         }
     }
-    fn hand(closed: bool) -> Self {
+    fn grip(grip: Grip, held: bool) -> Self {
         Self {
-            hand: Some(closed),
+            grip: Some((grip, held)),
             ..Self::interaction(egui::CursorIcon::Default)
         }
     }
@@ -33,14 +34,14 @@ impl Feedback {
                 egui::CursorIcon::Crosshair
             },
             tool: Some(name),
-            hand: None,
+            grip: None,
         }
     }
 }
 
 fn handle_feedback(handle: Handle) -> Feedback {
     if handle == Handle::Bend {
-        Feedback::hand(false)
+        Feedback::grip(Grip::Bend, false)
     } else if handle.is_radius() {
         Feedback::tool("Round corners")
     } else {
@@ -151,17 +152,17 @@ impl Editor {
             return Feedback::interaction(Cursor::Copy);
         }
         if self.rotation_drag.is_some() {
-            return Feedback::hand(true);
+            return Feedback::grip(Grip::Rotate, true);
         }
         if !space && let Some(cursor) = self.group_transform_cursor(pos, transform) {
             return match cursor {
-                Cursor::Grab => Feedback::hand(false),
-                Cursor::Grabbing if self.group_rotating() => Feedback::hand(true),
+                Cursor::Grab => Feedback::grip(Grip::Rotate, false),
+                Cursor::Grabbing if self.group_rotating() => Feedback::grip(Grip::Rotate, true),
                 cursor => Feedback::interaction(cursor),
             };
         }
         if self.rotation_hit(pos, transform) {
-            return Feedback::hand(false);
+            return Feedback::grip(Grip::Rotate, false);
         }
         if self.group_drag.as_ref().is_some_and(|d| d.duplicate) {
             return Feedback::interaction(Cursor::Copy);
@@ -170,9 +171,9 @@ impl Editor {
             return Feedback::interaction(Cursor::Grabbing);
         }
         if let Some(drag) = &self.edit_drag {
-            // The middle curve handle closes the hand while it bends the line.
+            // The middle curve handle fills the pointing finger while it bends the line.
             return match drag.handle {
-                Some(Handle::Bend) => Feedback::hand(true),
+                Some(Handle::Bend) => Feedback::grip(Grip::Bend, true),
                 handle => handle.map_or(Feedback::interaction(Cursor::Grabbing), handle_feedback),
             };
         }
@@ -197,7 +198,7 @@ impl Editor {
             return Feedback {
                 icon: cut.cursor(),
                 tool: (cut.cursor() != Cursor::Default).then_some("Cut Out"),
-                hand: None,
+                grip: None,
             };
         }
         let near_handle = self
@@ -294,8 +295,8 @@ impl Editor {
             feedback = Feedback::interaction(egui::CursorIcon::Default);
         }
         ui.ctx().set_cursor_icon(feedback.icon);
-        if let Some(closed) = feedback.hand {
-            crate::native_cursor::request_hand(ui.ctx(), closed);
+        if let Some((grip, held)) = feedback.grip {
+            crate::native_cursor::request_grip(ui.ctx(), grip, held);
         }
         if let Some(name) = feedback.tool.filter(|_| transform.viewport.contains(pos)) {
             // The OS cursor moves independently of app frames. Paint the hotspot

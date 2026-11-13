@@ -174,14 +174,14 @@ impl Editor {
         if let Selection::Recording(i) = self.video.selected {
             match v.split_clip(i, at) {
                 Ok(()) => self.commit_video(v),
-                Err(e) => self.status = e.to_string(),
+                Err(e) => self.fail(e),
             }
             return;
         }
         if let Some(id) = self.video.zoom_selected {
             match capture_core::video::split::split_zoom(&mut v, id, at) {
                 Ok(_) => self.commit_video(v),
-                Err(e) => self.status = e.to_string(),
+                Err(e) => self.fail(e),
             }
             return;
         }
@@ -200,7 +200,7 @@ impl Editor {
             let mut doc = self.session.document.clone();
             for id in objects {
                 if let Err(e) = capture_core::video::split::split_object(&mut doc, id, at) {
-                    self.status = e.to_string();
+                    self.fail(e);
                     return;
                 }
             }
@@ -211,12 +211,12 @@ impl Editor {
             return;
         }
         if self.selected.is_some() {
-            self.status = "Move the playhead inside the selected object before splitting.".into();
+            self.fail("Put the playhead over the selected object, then Split.");
             return;
         }
         match v.split(at) {
             Ok(()) => self.commit_video(v),
-            Err(e) => self.status = e.to_string(),
+            Err(e) => self.fail(e),
         }
     }
     fn video_rename_dialog(&mut self, ctx: &egui::Context) {
@@ -400,13 +400,8 @@ impl Editor {
                         if jump.clicked() {
                             self.jump_to_object();
                         }
-                        if super::ui::button(ui, "Add Track", "Import…", 82., false)
-                            .tip("Import audio, image or video at the playhead")
-                            .clicked()
-                        {
-                            let v = self.session.document.video.as_ref().unwrap();
-                            self.pick_timeline_media(v.cursor, *v.media_tracks.last().unwrap());
-                        }
+                        // Import… and PDF pages… moved to Insert › Media (approved
+                        // option A, artifacts/by-proposal/library-and-import.html).
                         self.keyframe_toggle(ui);
                         self.hide_tracks_menu(ui);
                         ui.add_space((ui.available_width() - 164.).max(0.));

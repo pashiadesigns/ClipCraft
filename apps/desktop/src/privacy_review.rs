@@ -35,6 +35,11 @@ pub(super) struct State {
     cover: crate::sensitive_ui::Cover,
     /// What the review picture currently shows.
     shown: Option<(Vec<bool>, crate::sensitive_ui::Cover)>,
+    /// A linked part: scan every part, reviewed part by part (approved
+    /// beta 6 tab 7).
+    all_parts: bool,
+    /// The part being opened next, scanned once it has loaded.
+    waiting_for: Option<u32>,
 }
 fn fingerprint(document: &capture_core::Document) -> Result<u64, String> {
     let bytes = serde_json::to_vec(document).map_err(|e| e.to_string())?;
@@ -59,9 +64,31 @@ impl Editor {
         self.privacy_review.texture = None;
         self.privacy_review.error.clear();
     }
+    /// Scan for sensitive info right after New from PDF, with the dialog's choices.
+    pub(super) fn scan_after_import(
+        &mut self,
+        ctx: &egui::Context,
+        options: Options,
+        phrases: String,
+        cover: crate::sensitive_ui::Cover,
+    ) {
+        self.open_privacy_review();
+        self.privacy_review.options = options;
+        self.privacy_review.phrases = phrases;
+        self.privacy_review.cover = cover;
+        // A PDF that came in as linked parts is reviewed part by part.
+        self.privacy_review.all_parts = self
+            .session
+            .document
+            .part
+            .as_ref()
+            .is_some_and(|p| p.total > 1);
+        self.scan_sensitive(ctx);
+    }
     fn scan_sensitive(&mut self, ctx: &egui::Context) {
         if self.is_video() {
-            self.privacy_review.error = "Find Sensitive Info scans still images only. Automatic video tracking is not available.".into();
+            self.privacy_review.error =
+                "For video, use Privacy › Track on the timeline instead.".into();
             return;
         }
         if SCANNING.swap(true, std::sync::atomic::Ordering::AcqRel) {
@@ -91,7 +118,7 @@ impl Editor {
             let result = (|| {
                 let fingerprint = fingerprint(&document)?;
                 let pixels = document.render().map_err(|e| e.to_string())?;
-                let findings = scan_tiles(&pixels, &options)?;
+                let findings = scan_document(&document, &pixels, &options)?;
                 Ok(Scan {
                     findings,
                     pixels,
@@ -103,10 +130,64 @@ impl Editor {
             ctx.request_repaint();
         });
     }
+    /// All parts: opens the part after this one; its scan starts once it
+    /// has loaded. False when this is the last part.
+    fn review_next_part(&mut self, ctx: &egui::Context) -> bool {
+        let Some(part) = self.session.document.part.clone() else {
+            return false;
+        };
+        if part.index >= part.total {
+            return false;
+        }
+        let next = self
+            .part_siblings(&part)
+            .into_iter()
+            .find(|e| e.part.as_ref().is_some_and(|p| p.index == part.index + 1));
+        let Some(next) = next else {
+            self.privacy_review.error = format!(
+                "Part {} of {} isn't in the Library, so the review stops here.",
+                part.index + 1,
+                part.total
+            );
+            return false;
+        };
+        let state = &mut self.privacy_review;
+        state.result = None;
+        state.checked.clear();
+        state.texture = None;
+        state.shown = None;
+        state.waiting_for = Some(part.index + 1);
+        self.open_history(&next.id, ctx);
+        true
+    }
+    /// Find Sensitive Info set to every part (from the Library's stack).
+    pub(crate) fn privacy_review_all_parts(&mut self) {
+        self.privacy_review.all_parts = true;
+    }
+    #[cfg(test)]
+    pub(crate) fn privacy_review_all_parts_for_test(&mut self) {
+        self.privacy_review.all_parts = true;
+    }
+    #[cfg(test)]
+    pub(crate) fn review_next_part_for_test(&mut self, ctx: &egui::Context) -> bool {
+        self.review_next_part(ctx)
+    }
     pub(super) fn show_privacy_review(&mut self, ctx: &egui::Context) {
         if !self.privacy_review.open {
             return;
         }
+        if let Some(index) = self.privacy_review.waiting_for
+            && self.session.document.part.as_ref().map(|p| p.index) == Some(index)
+        {
+            self.privacy_review.waiting_for = None;
+            self.scan_sensitive(ctx);
+        }
+        let part = self
+            .session
+            .document
+            .part
+            .clone()
+            .filter(|p| p.total > 1 && !self.is_video());
         if let Some(result) =
             self.privacy_review
                 .pending
@@ -130,11 +211,16 @@ impl Editor {
             }
         }
         let video = self.is_video();
+        // Saved custom types are the one source of truth (beta 5 tab 3).
+        self.privacy_review.options.custom = self.quick_controls.sensitive_types();
+        let mut types_changed = false;
         let state = &mut self.privacy_review;
-        let busy = state.pending.is_some();
+        let busy = state.pending.is_some() || state.waiting_for.is_some();
         let mut scan = false;
         let mut apply = false;
         let mut close = false;
+        let mut skip = false;
+        let more_parts = state.all_parts && part.as_ref().is_some_and(|p| p.index < p.total);
         if let Some(result) = &state.result
             && state
                 .shown
@@ -162,7 +248,13 @@ impl Editor {
         let modal =
             crate::controls::Modal::new(egui::Id::unique("sensitive-review")).show(ctx, |ui| {
                 ui.set_width(820_f32.min((ctx.content_rect().width() - 48.).max(340.)));
-                crate::controls::dialog_title(ui, "Find Sensitive Info");
+                match &part {
+                    Some(p) if state.all_parts => crate::controls::dialog_title(
+                        ui,
+                        &format!("Find Sensitive Info · part {} of {}", p.index, p.total),
+                    ),
+                    _ => crate::controls::dialog_title(ui, "Find Sensitive Info"),
+                }
                 if video {
                     ui.label(VIDEO_LIMITATION);
                     close = ui
@@ -171,10 +263,23 @@ impl Editor {
                     return;
                 }
                 ui.add_enabled_ui(!busy, |ui| {
-                    let field =
+                    let (field, changed) =
                         crate::sensitive_ui::look_for(ui, &mut state.options, &mut state.phrases);
+                    types_changed |= changed;
                     crate::controls::focus_once(&field, &mut state.focus);
                 });
+                if let Some(p) = &part {
+                    use crate::tips::Tip as _;
+                    let all = format!("All {} parts", p.total);
+                    ui.add_enabled_ui(!busy, |ui| {
+                        crate::watermark_ui::segment_row(ui, "Scan", |ui| {
+                            ui.selectable_value(&mut state.all_parts, false, "This part")
+                                .tip("This part · Scan only the part that is open.");
+                            ui.selectable_value(&mut state.all_parts, true, all.as_str())
+                                .tip("All parts · Scan every part of this PDF. Each part's findings are reviewed in turn: apply or skip them, and the next part opens.");
+                        });
+                    });
+                }
                 ui.add_space(4.);
                 let row = egui::vec2(ui.available_width(), 28.);
                 ui.allocate_ui_with_layout(
@@ -194,7 +299,17 @@ impl Editor {
                             .clicked();
                         if busy {
                             ui.spinner();
-                            ui.label("Scanning visible text…");
+                            ui.label(if state.waiting_for.is_some() {
+                                "Opening the next part…"
+                            } else {
+                                "Scanning visible text…"
+                            });
+                        } else if more_parts && state.result.is_some() {
+                            use crate::tips::Tip as _;
+                            skip = ui
+                                .button("Skip to next part")
+                                .tip("Skip to next part · Leave this part as it is and scan the next one.")
+                                .clicked();
                         }
                     },
                 );
@@ -234,7 +349,17 @@ impl Editor {
                                         ui.add(
                                             egui::Label::new(format!(
                                                 "{} · {sample}",
-                                                f.category.label()
+                                                match f.category {
+                                                    capture_core::privacy::Category::Custom(n) =>
+                                                        state
+                                                            .options
+                                                            .custom
+                                                            .get(n as usize)
+                                                            .map_or("Custom type", |t| t
+                                                                .name
+                                                                .as_str()),
+                                                    other => other.label(),
+                                                }
                                             ))
                                             .truncate(),
                                         );
@@ -265,11 +390,25 @@ impl Editor {
                     false,
                 );
             });
+        if types_changed
+            && let Err(e) = self
+                .quick_controls
+                .set_sensitive_types(self.privacy_review.options.custom.clone())
+        {
+            self.privacy_review.error = e;
+        }
         if scan {
             self.scan_sensitive(ctx);
         }
         if apply {
             close = self.apply_sensitive_findings();
+        }
+        // All parts: after this part's findings are applied or skipped, the
+        // next part opens and is scanned with the same choices.
+        if (skip || (apply && close)) && more_parts && self.review_next_part(ctx) {
+            close = false;
+        } else if apply && close && self.privacy_review.all_parts && part.is_some() {
+            self.status = "Reviewed every part.".into();
         }
         if close || crate::text_edit::cancel_on_escape(&modal) {
             // Options carry over; the cover goes back to Redact.
@@ -293,7 +432,7 @@ impl Editor {
         };
         if fingerprint(&self.session.document).ok() != Some(result.fingerprint) {
             self.privacy_review.error =
-                "The image changed. Scan again before applying redactions.".into();
+                "The image changed since the scan. Scan again to update the findings.".into();
             false
         } else {
             let findings = result
@@ -324,6 +463,10 @@ impl Editor {
 }
 
 /// The dialog with sample findings, for the dialog audit.
+#[cfg(test)]
+pub(crate) fn seed_phrases(e: &mut Editor, text: &str) {
+    crate::sensitive_ui::add_phrases(&mut e.privacy_review.phrases, text);
+}
 #[cfg(test)]
 pub(crate) fn seed_results(e: &mut Editor) {
     let pixels = e.session.document.render().unwrap();
@@ -370,7 +513,7 @@ mod tests {
         e.open_privacy_review();
         e.scan_sensitive(&ctx);
         assert!(e.privacy_review.pending.is_none());
-        assert!(e.privacy_review.error.contains("still images only"));
+        assert!(e.privacy_review.error.contains("Privacy › Track"));
         assert!(!e.apply_sensitive_findings());
         assert_eq!(serde_json::to_value(&e.session.document).unwrap(), before);
     }
@@ -441,6 +584,71 @@ mod tests {
 }
 
 /// Overlapping full-resolution tiles preserve small text on long scroll captures.
+/// PDF pages carry their own words (approved pdf-text-detection): those are
+/// matched exactly, and only the rest of the picture is read with OCR, with
+/// the PDF pages blanked so nothing is found twice.
+fn scan_document(
+    document: &capture_core::Document,
+    pixels: &image::RgbaImage,
+    options: &Options,
+) -> Result<Vec<Finding>, String> {
+    let (words, regions) = capture_core::pdf_import::document_words(document);
+    let mut findings = if words.is_empty() {
+        vec![]
+    } else {
+        privacy::detect(&words, options, [document.width, document.height])
+            .map_err(|e| e.to_string())?
+    };
+    if regions.is_empty() {
+        findings.extend(scan_tiles(pixels, options)?);
+        return Ok(findings);
+    }
+    let mut rest = pixels.clone();
+    for r in &regions {
+        let x0 = r[0].max(0.) as u32;
+        let y0 = r[1].max(0.) as u32;
+        let x1 = ((r[0] + r[2]).ceil().max(0.) as u32).min(rest.width());
+        let y1 = ((r[1] + r[3]).ceil().max(0.) as u32).min(rest.height());
+        for y in y0..y1 {
+            for x in x0..x1 {
+                rest.put_pixel(x, y, image::Rgba([255; 4]));
+            }
+        }
+    }
+    // Objects drawn on top of a PDF page (callouts, text) are still read.
+    if let Some(overlay) = capture_core::pdf_import::without_pdf_pages(document)
+        .and_then(|d| d.render().ok())
+        .filter(|o| o.dimensions() == rest.dimensions())
+    {
+        for r in &regions {
+            let x0 = r[0].max(0.) as u32;
+            let y0 = r[1].max(0.) as u32;
+            let x1 = ((r[0] + r[2]).ceil().max(0.) as u32).min(rest.width());
+            let y1 = ((r[1] + r[3]).ceil().max(0.) as u32).min(rest.height());
+            for y in y0..y1 {
+                for x in x0..x1 {
+                    let p = overlay.get_pixel(x, y);
+                    if p[3] > 0 {
+                        rest.put_pixel(x, y, *p);
+                    }
+                }
+            }
+        }
+    }
+    if rest.pixels().any(|p| p.0 != [255; 4]) {
+        findings.extend(scan_tiles(&rest, options)?);
+    }
+    Ok(findings)
+}
+/// The whole scan of a document, for tests that drive real OCR.
+#[cfg(test)]
+pub(crate) fn scan_document_for_test(
+    document: &capture_core::Document,
+    options: &Options,
+) -> Result<Vec<Finding>, String> {
+    let pixels = document.render().map_err(|e| e.to_string())?;
+    scan_document(document, &pixels, options)
+}
 /// A failed tile fails the scan; never present an incomplete scan as complete.
 fn scan_tiles(pixels: &image::RgbaImage, options: &Options) -> Result<Vec<Finding>, String> {
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(90);
@@ -512,7 +720,7 @@ fn scan_with(
                     findings.push(f);
                 }
                 if findings.len() > 2048 {
-                    return Err("More than 2048 findings: scan a smaller image.".into());
+                    return Err("Over 2,048 findings. Turn off some types under Look for, or scan one page at a time.".into());
                 }
             }
             if x + 2048 >= pixels.width() {

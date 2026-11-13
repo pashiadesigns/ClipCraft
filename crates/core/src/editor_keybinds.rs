@@ -286,8 +286,7 @@ impl Keybinds {
                 || (b.chord.modifiers & 3 == 0 && matches!(b.chord.key, 0x20..=0x28 | 0x2c))
             {
                 return Err(Error::Invalid(
-                    "This combination is reserved for navigation or Windows. Choose another key."
-                        .into(),
+                    "Windows or ClipDesigner keeps this key. Choose another.".into(),
                 ));
             }
             if self.bindings[..i]

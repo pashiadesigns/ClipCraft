@@ -408,7 +408,7 @@ impl Editor {
                     ui.ctx().set_cursor_icon(egui::CursorIcon::Grabbing);
                 }
                 Err(e) => {
-                    self.status = e.to_string();
+                    self.fail(e);
                     ui.ctx().set_cursor_icon(egui::CursorIcon::NotAllowed);
                 }
             }
@@ -469,7 +469,7 @@ impl Editor {
             let mut p = self.session.document.video.clone().unwrap();
             match p.link_items(&self.video.selection) {
                 Ok(()) => self.commit_video(p),
-                Err(e) => self.status = e.to_string(),
+                Err(e) => self.fail(e),
             };
             ui.close();
         }

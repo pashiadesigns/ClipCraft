@@ -187,7 +187,12 @@ fn invalid_overlap_and_remote_media_rejected_before_editing() {
         c.at = id * 100;
         v.segments.push(c);
     }
-    assert!(d.validate().unwrap_err().to_string().contains("two clips"));
+    assert!(
+        d.validate()
+            .unwrap_err()
+            .to_string()
+            .contains("Three clips overlap")
+    );
     let v = d.video.as_mut().unwrap();
     v.segments.pop();
     v.segments[1].source = Some(Source {
@@ -204,7 +209,7 @@ fn invalid_overlap_and_remote_media_rejected_before_editing() {
         d.validate()
             .unwrap_err()
             .to_string()
-            .contains("separate media tracks")
+            .contains("need their own tracks")
     );
     let v = d.video.as_mut().unwrap();
     v.segments[1].track = v.add_media_track();

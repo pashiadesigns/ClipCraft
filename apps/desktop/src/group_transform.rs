@@ -144,7 +144,7 @@ impl Editor {
                     self.needs_render = true;
                     ui.ctx().request_repaint();
                 }
-                Err(error) => self.status = error.to_string(),
+                Err(error) => self.fail(error),
                 _ => {}
             }
         }

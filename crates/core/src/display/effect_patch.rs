@@ -288,6 +288,72 @@ impl Plan {
             backdrop: crate::focus::Backdrop::new(all),
         })
     }
+    /// Canvas-aligned tiles of `size` pixels inside `output` that `effect` can
+    /// change. An eraser changes only the pixels along its stroke, so a display
+    /// renders and replaces just these tiles instead of the stroke's whole
+    /// bounding box (beta 4: long eraser strokes made the canvas lag). Effects
+    /// that read beyond their output, and every other kind, use one cell.
+    pub fn changed_tiles(&self, effect: &Annotation, size: u32) -> Vec<[u32; 4]> {
+        let [ox, oy, ow, oh] = self.output;
+        // Erasers and redactions read only the pixels they cover, so a tile of
+        // their stack renders exactly; blur, pixelation and Focus read around
+        // themselves and keep the whole patch.
+        let pointwise = self.objects.iter().all(|a| {
+            !needs_pixels(a) || (a.focus.is_none() && matches!(a.kind, Kind::Eraser | Kind::Redact))
+        });
+        if effect.kind != Kind::Eraser || effect.points.len() < 2 || !pointwise || size == 0 {
+            return vec![self.output];
+        }
+        let reach = crate::line_style::stroke_reach(effect) + 2.0;
+        let clamp_x = |v: f32| (v.floor().max(ox as f32) as u32).min(ox + ow);
+        let clamp_y = |v: f32| (v.floor().max(oy as f32) as u32).min(oy + oh);
+        let mut cells = std::collections::BTreeSet::new();
+        for pair in effect.points.windows(2) {
+            let [a, b] = [pair[0], pair[1]];
+            let (x0, x1) = (
+                clamp_x(a[0].min(b[0]) - reach),
+                clamp_x(a[0].max(b[0]) + reach + 1.0),
+            );
+            let (y0, y1) = (
+                clamp_y(a[1].min(b[1]) - reach),
+                clamp_y(a[1].max(b[1]) + reach + 1.0),
+            );
+            if x1 <= x0 || y1 <= y0 {
+                continue;
+            }
+            for ty in y0 / size..=(y1 - 1) / size {
+                for tx in x0 / size..=(x1 - 1) / size {
+                    cells.insert((ty, tx));
+                }
+            }
+        }
+        let tiles: Vec<_> = cells
+            .into_iter()
+            .filter_map(|(ty, tx)| {
+                let lo = [(tx * size).max(ox), (ty * size).max(oy)];
+                let hi = [
+                    ((tx + 1) * size).min(ox + ow),
+                    ((ty + 1) * size).min(oy + oh),
+                ];
+                (hi[0] > lo[0] && hi[1] > lo[1])
+                    .then(|| [lo[0], lo[1], hi[0] - lo[0], hi[1] - lo[1]])
+            })
+            .collect();
+        if tiles.is_empty() {
+            vec![self.output]
+        } else {
+            tiles
+        }
+    }
+    /// This plan restricted to one cell of `changed_tiles`, keeping only the
+    /// objects that reach it.
+    pub fn tile(&self, cell: [u32; 4], canvas: [u32; 2]) -> Option<Self> {
+        let mut tile = self.clone().clipped(cell)?;
+        let work = tile.work;
+        tile.objects
+            .retain(|a| visible_bounds(a, canvas).is_some_and(|b| intersects(b, work)));
+        Some(tile)
+    }
     /// The backdrop this plan shares when `new` was given only part of the page.
     pub fn with_backdrop(mut self, backdrop: crate::focus::Backdrop) -> Self {
         self.backdrop = backdrop;

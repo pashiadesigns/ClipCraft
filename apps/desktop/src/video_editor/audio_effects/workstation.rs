@@ -53,7 +53,7 @@ if super::super::ui::button(ui,"Close","",28.,false).clicked(){close=true;}});
    #[cfg(not(test))]let _=heading;
    ui.separator();ui.horizontal_wrapped(|ui|{
     let scope=self.video.fx.track_scope;
-    ui.label("Apply to");ui.selectable_value(&mut self.video.fx.track_scope,false,"Clip");ui.selectable_value(&mut self.video.fx.track_scope,true,"Track");
+    ui.label("Apply to");crate::controls::segments(ui,|ui|{ui.selectable_value(&mut self.video.fx.track_scope,false,"Clip");ui.selectable_value(&mut self.video.fx.track_scope,true,"Track");});
     if scope!=self.video.fx.track_scope {self.follow_effects_clip(self.video.fx.clip);chain=p.effect_chain(self.video.fx.target(&p)).cloned().unwrap_or_default();}
     let old=self.video.fx.clip;egui::ComboBox::from_id_salt("effects-track").width(170.).selected_text(track_label(&p,old)).show_ui(ui,|ui|{for clip in p.segments.iter().filter(|c|!c.audio.is_empty()){ui.selectable_value(&mut self.video.fx.clip,clip.id,&clip.label);}});
 if old!=self.video.fx.clip{self.select_only(None);self.video.selected=Selection::Recording(p.segments.iter().position(|c|c.id==self.video.fx.clip).unwrap());if let Some(tx)=&self.video.audio_updates{let _=tx.send(p.clone());}self.video.fx.original=false;self.video.fx.draft=None;self.video.fx.report=None;self.video.fx.proposal=None;self.video.fx.analysis=None;self.video.fx.analysis_open=false;self.video.fx.auditioning=false;chain=p.effect_chain(self.video.fx.target(&p)).cloned().unwrap_or_default();self.video.fx.selected=chain.effects.first().map(|e|e.id).unwrap_or(0);}
@@ -441,7 +441,7 @@ if ui.button("Bypass this effect").clicked(){effect.enabled=false;commit=true;ui
                                 self.video.fx.analysis_open = false;
                                 *commit = true;
                             }
-                            Err(e) => self.video.fx.error = e.to_string(),
+                            Err(e) => self.video.fx.error = crate::guided::friendly(&e.to_string()),
                         }
                         ui.close();
                     }

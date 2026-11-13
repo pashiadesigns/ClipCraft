@@ -66,17 +66,21 @@ pub mod cut_out;
 mod flatten_pages;
 #[cfg(test)]
 mod flatten_tests;
+pub mod kit;
 pub mod layout_selection;
 pub mod line_style;
+pub mod lock;
 pub mod multi_selection;
 pub mod object_state;
 pub mod object_styles;
+pub mod pack;
 pub mod palettes;
+pub mod pdf_import;
 pub mod polygon;
 pub mod quick_preferences;
 #[cfg(test)]
 mod redaction_tests;
-mod resize;
+pub mod resize;
 pub mod resize_modifiers;
 #[cfg(test)]
 mod resize_tests;
@@ -101,6 +105,7 @@ pub mod tilt;
 pub mod toolbar;
 pub mod vector_import;
 pub mod watermark;
+pub mod zip;
 const MAX_FILE_BYTES: u64 = 160_000_000;
 
 #[derive(Debug, thiserror::Error)]
@@ -212,6 +217,18 @@ pub struct Document {
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
     pub object_states: object_state::ObjectStates,
     pub annotations: Vec<Annotation>,
+    /// One of several linked guides made from one large PDF (approved beta 6
+    /// tab 7); export can put the parts back into one file.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub part: Option<pdf_import::PartOf>,
+}
+
+/// Runs third-party parsing or drawing of untrusted input so that a panic
+/// inside it becomes an ordinary error instead of ending the program
+/// (ENG-009 hostile-file testing found such panics in resvg).
+pub(crate) fn guarded<T>(message: &str, job: impl FnOnce() -> Result<T>) -> Result<T> {
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(job))
+        .unwrap_or_else(|_| Err(Error::Invalid(message.to_owned())))
 }
 
 pub fn validate_dimensions(width: u32, height: u32) -> Result<()> {
@@ -244,6 +261,7 @@ impl Document {
             guide: None,
             object_states: Default::default(),
             annotations: vec![],
+            part: None,
         })
     }
 
@@ -264,6 +282,7 @@ impl Document {
             guide: None,
             object_states: Default::default(),
             annotations: vec![],
+            part: None,
         })
     }
 
@@ -368,6 +387,9 @@ impl Document {
         if let Some(guide) = &self.guide {
             guide.validate(self)?;
         }
+        if let Some(part) = &self.part {
+            part.validate()?;
+        }
         if let Some([width, height]) = self.source_size {
             validate_dimensions(width, height)?;
         }
@@ -390,7 +412,9 @@ impl Document {
             }
         }
         if self.annotations.len() > 10000 {
-            return Err(Error::Invalid("Too many annotations".into()));
+            return Err(Error::Invalid(
+                "This image has too many objects. Flatten or delete some first.".into(),
+            ));
         }
         if self
             .annotations
@@ -615,8 +639,9 @@ impl Document {
 
     pub fn base_image(&self) -> Result<RgbaImage> {
         self.validate()?;
+        let mode = self.canvas_behavior.resampling;
         if let Some(raster) = &self.raster {
-            return raster.render(self.width, self.height);
+            return raster.render_with(self.width, self.height, mode);
         }
         if self.source_png.is_empty() {
             return Ok(RgbaImage::from_pixel(
@@ -638,7 +663,12 @@ impl Document {
         if dimensions == (self.width, self.height) {
             Ok(original)
         } else {
-            Ok(resize::resample(original, self.width, self.height))
+            Ok(resize::resample_with(
+                original,
+                self.width,
+                self.height,
+                mode,
+            ))
         }
     }
 
@@ -740,7 +770,7 @@ impl Document {
         let portable = video::project::portable(self, path)?;
         let bytes = serde_json::to_vec(&portable)?;
         if bytes.len() as u64 > MAX_FILE_BYTES {
-            return Err(Error::Invalid("The editable project exceeds the supported 160 MB file size. Export a flattened PNG instead.".into()));
+            return Err(Error::Invalid("This project is over 160 MB. Use Save As › Pack project, or export a flattened PNG.".into()));
         }
         atomic_write(path, &bytes)
     }
@@ -919,6 +949,13 @@ pub enum Command {
     Guide {
         action: guide_sections::Action,
     },
+    /// Insert › PDF pages into the open guide before page `at` (approved
+    /// beta 6 tab 6), as one Undo step.
+    InsertPdfPages {
+        pages: Vec<(std::sync::Arc<bitmap::Bitmap>, [f64; 2])>,
+        at: usize,
+        fit: bool,
+    },
     SetObjectsVisible {
         ids: Vec<u64>,
         visible: bool,
@@ -1041,6 +1078,23 @@ pub enum Command {
         width: u32,
         height: u32,
     },
+    /// Resize Image with a chosen resampling method (EDIT-028).
+    ResizeImageResampled {
+        width: u32,
+        height: u32,
+        resampling: resize::Resampling,
+    },
+    /// Rotate the whole picture by any angle (EDIT-038); objects rotate with
+    /// it and stay editable. `grow` enlarges the canvas so nothing is cut off;
+    /// `corners` fills the new corners (None is transparent).
+    RotateImage {
+        degrees: f32,
+        grow: bool,
+        corners: Option<[u8; 4]>,
+    },
+    /// Bring back the picture as it was before Rotate by angle, with every
+    /// object turned back (BY3).
+    ResetRotation,
     /// Flatten at the current size and resize in one reversible operation.
     ResizeImageFlattened {
         width: u32,
@@ -1283,6 +1337,9 @@ impl Session {
                     | Command::SetFinish { .. }
                     | Command::CropImage { .. }
                     | Command::ResizeImage { .. }
+                    | Command::ResizeImageResampled { .. }
+                    | Command::RotateImage { .. }
+                    | Command::ResetRotation
                     | Command::ResizeImageFlattened { .. }
                     | Command::ResizeCanvas { .. }
             )
@@ -1334,7 +1391,7 @@ impl Session {
                             .ok_or_else(|| Error::Invalid("Open a video first.".into()))?;
                         let expanded = v.linked_items(&items);
                         if expanded.iter().any(|item| matches!(item, video::editing::Item::Annotation(id) if self.document.object_states.get(id).is_some_and(|s| s.locked))) {
-                            return Err(Error::Invalid("Unlock the selected objects before deleting them.".into()));
+                            return Err(Error::Invalid("These objects are locked. Unlock them to delete them.".into()));
                         }
                         let removed = v.remove_items(&items);
                         self.document
@@ -1366,7 +1423,7 @@ impl Session {
                     Command::VideoDuplicate { id, timing } => {
                         if self.document.object_state(id).locked {
                             return Err(Error::Invalid(
-                                "Unlock the object before duplicating it.".into(),
+                                "This object is locked. Unlock it to duplicate it.".into(),
                             ));
                         }
                         let original = self
@@ -1551,29 +1608,45 @@ impl Session {
                         }
                         self.document.resize_canvas(width, height, placement)?;
                     }
+                    Command::InsertPdfPages { pages, at, fit } => {
+                        let pages: Vec<_> =
+                            pages.iter().map(|(b, p)| ((**b).clone(), *p)).collect();
+                        self.document = pdf_import::insert_pages(&self.document, &pages, at, fit)?;
+                    }
+                    Command::RotateImage {
+                        degrees,
+                        grow,
+                        corners,
+                    } => {
+                        if !self.document.rotate_image(degrees, grow, corners)? {
+                            return Ok(());
+                        }
+                    }
+                    Command::ResetRotation => {
+                        if !self.document.reset_rotation()? {
+                            return Ok(());
+                        }
+                    }
+                    Command::ResizeImageResampled {
+                        width,
+                        height,
+                        resampling,
+                    } => {
+                        let same_size =
+                            (width, height) == (self.document.width, self.document.height);
+                        if same_size && self.document.canvas_behavior.resampling == resampling {
+                            return Ok(());
+                        }
+                        self.document.canvas_behavior.resampling = resampling;
+                        if !same_size {
+                            self.document.resize_image_to(width, height)?;
+                        }
+                    }
                     Command::ResizeImage { width, height } => {
                         if (width, height) == (self.document.width, self.document.height) {
                             return Ok(());
                         }
-                        let annotations = self.document.resized_annotations(width, height)?;
-                        if let Some(guide) = &mut self.document.guide {
-                            let scale = height as f32 / self.document.height as f32;
-                            guide.top *= scale;
-                            for section in &mut guide.sections {
-                                section.height *= scale;
-                            }
-                        }
-                        let original_size = self
-                            .document
-                            .source_size
-                            .unwrap_or([self.document.width, self.document.height]);
-                        self.document.source_size = ([width, height] != original_size
-                            || self.document.raster.is_some())
-                        .then_some(original_size);
-                        self.document.width = width;
-                        self.document.height = height;
-                        self.document.annotations = annotations;
-                        self.document.auto_canvas_base = None;
+                        self.document.resize_image_to(width, height)?;
                     }
                     Command::ResizeImageFlattened { width, height } => {
                         validate_dimensions(width, height)?;

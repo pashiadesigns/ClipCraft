@@ -109,7 +109,6 @@ pub struct Shell {
     pub raster_preview: bool,
     pub redaction_labels: bool,
     pub resize_anchor: Option<egui::Rect>,
-    pub resize_advanced: bool,
     pub canvas_relative: bool,
     pub(super) properties: bool,
     pub(super) property_tab: PropertyTab,
@@ -147,7 +146,6 @@ impl Default for Shell {
             raster_preview: false,
             redaction_labels: true,
             resize_anchor: None,
-            resize_advanced: false,
             canvas_relative: false,
             properties: true,
             property_tab: PropertyTab::Tool,
@@ -302,14 +300,17 @@ pub(super) fn tool_button_label(
     label: &str,
     selected: bool,
 ) -> egui::Response {
-    let color = match tool.name {
+    ribbon_tile(ui, tool.name, label, selected, tool_color(tool.name))
+}
+/// A tool's icon color, the same on the toolbar and in its overflow menu.
+pub(super) fn tool_color(name: &str) -> Color32 {
+    match name {
         "Text" => Color32::from_rgb(225, 190, 95),
         "Lines" => Color32::from_rgb(75, 170, 235),
         "Shape" => Color32::from_rgb(81, 190, 165),
         "Steps" => Color32::from_rgb(241, 151, 69),
         _ => Color32::WHITE,
-    };
-    ribbon_tile(ui, tool.name, label, selected, color)
+    }
 }
 
 impl Editor {
@@ -762,7 +763,7 @@ impl Editor {
             Some(Kind::Rectangle | Kind::Ellipse | Kind::Polygon)
         ) {
             let mut kind = self.tool;
-            ui.horizontal(|ui| {
+            crate::controls::segments(ui, |ui| {
                 ui.selectable_value(&mut kind, Some(Kind::Rectangle), "Rectangle");
                 ui.selectable_value(&mut kind, Some(Kind::Ellipse), "Ellipse");
                 ui.selectable_value(&mut kind, Some(Kind::Polygon), "Polygon");
@@ -823,7 +824,9 @@ impl Editor {
                     self.show_history(ui, false);
                 });
             if let Some(active) = self.shell.library_tab_rect {
-                // A separate screen-clipped layer bridges the two panels.
+                // A separate screen-clipped layer bridges the two panels. It
+                // stops at the Library's blue border, like the ribbon tabs do
+                // (user, 2026-11-12: it ran over the border).
                 // ui.painter().with_clip_rect cannot widen the panel's clip.
                 ui.ctx()
                     .layer_painter(egui::LayerId::new(
@@ -833,7 +836,7 @@ impl Editor {
                     .rect_filled(
                         egui::Rect::from_min_max(
                             egui::pos2(active.left(), active.bottom() - 4.),
-                            egui::pos2(active.right(), frame.response.rect.top() + 2.),
+                            egui::pos2(active.right(), frame.response.rect.top()),
                         ),
                         0.,
                         crate::tabs::ACTIVE_BLUE,

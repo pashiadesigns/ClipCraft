@@ -258,6 +258,8 @@ step: In videos, covers follow the text as it moves. Check any stretch flagged N
 
 Before a video export, every tracked redaction must be reviewed. Export video lists them with any Needs review ranges; Mark all as reviewed approves them in one step after you have checked them, and Undo takes it back.
 
+Manage types… opens your custom types: turn each on or off for scans, click one to change it, start from a ready-made type with Use, or make a new one, and test it on sample text as you go.
+
 Detection helps you review; it can miss things. Check every part before you share.
 
 # Focus
@@ -371,6 +373,37 @@ art: svg | The same SVG at two sizes. Both are sharp.
 
 EPS files are PostScript. If Ghostscript is installed, ClipDesigner uses it to draw the EPS in high resolution. Without it, ClipDesigner uses the small preview stored in the file and tells you.
 
+When you export to PDF, SVG drawings stay shapes. Only the parts under a redaction, blur or pixelation become pictures, with the covered area removed from the file.
+
+# New from PDF
+id: new-from-pdf
+section: Images
+where: File › Home › From PDF
+controls: From PDF, New from PDF, Change file…, Editable pages, Pictures, Scan after import, Include all parts, Previous part, Next part, PDF pages…, Insert PDF pages, Searchable text, This part, All parts, Skip to next part
+keywords: pdf, document, pages, import, open pdf, redact pdf, guide, acrobat
+---
+New from PDF turns the pages of a PDF into a guide, one PDF page per guide page, sized to the PDF. Every image tool works on them as usual: Steps, Focus, Magnify, Obfuscate, Blocks and the rest.
+
+step: Open File › Home and choose From PDF, or drop a PDF on the window. | title: Choose a PDF
+step: Click pages to include or leave them out, or type a range such as 1-3, 6. The arrow keys step through the preview. | title: Pick pages
+step: Choose Editable pages or Pictures, then Create guide. | title: Create the guide
+
+Editable pages stay sharp at any zoom and keep the PDF's own words, so Find Sensitive Info matches the real text exactly. A page that can't be rebuilt faithfully, such as a scan, comes in as a picture, and ClipDesigner tells you once which pages did. Pictures turns every page into one image at the resolution you choose; its text is read with OCR.
+
+Turn on Scan after import to look for sensitive information as soon as the guide is ready. Findings open in the usual review, and nothing is covered until you choose.
+
+A password-protected PDF asks for its password. ClipDesigner doesn't keep the password, and the guide is not protected. A damaged file, or one that isn't a PDF, imports nothing.
+
+One guide holds about 24 Letter pages. A longer PDF comes in as linked parts, such as "Vendor packet · part 1 of 10". In the Library they show as one stacked card: click it to see every part with its pages, open a part, Export all parts or Find Sensitive Info in all; selecting the card selects the whole document. Part 1 of 10 in the footer moves between them. When you export a part, Include all parts in one file puts every part back together: one PDF, PowerPoint or Word file, or numbered pictures for PNG and JPEG. Find Sensitive Info can scan This part or All parts; with All parts, each part's findings are reviewed in turn, and applying or skipping them opens the next part.
+
+When you export to PDF, editable pages stay shapes. Where a redaction, blur or pixelation touches a page, only what is under it becomes a picture, and the covered words are removed from the file, not hidden. The project keeps the original pages, so share exports, not projects.
+
+To add pages to a guide you already have, open the Insert tab's Paste menu and choose PDF pages…. Pick the pages, then choose where they go and whether they keep their PDF size or take the size of the guide's pages. It's one Undo step.
+
+PDF export keeps the words of PDF pages searchable, so they can be found and copied in a PDF viewer. Words under a redaction, blur or pixelation are always removed. Turn off Searchable text in Export to leave it out.
+
+ClipDesigner doesn't edit the PDF's own text, fill forms, sign, or keep bookmarks, links and PDF comments. Edit text in a PDF editor first, and sign last, after exporting from ClipDesigner.
+
 # Image objects
 id: image-objects
 section: Images
@@ -438,7 +471,7 @@ tip: Select objects of different kinds together and Properties shows what they s
 id: presets
 section: Formatting
 where: Properties › Presets
-controls: Presets, Blocks, Group presets, Save as block
+controls: Presets, Blocks, Group presets, Save as block, Manage presets
 keywords: style, saved style, reuse, template, group preset
 hero: presets-hero
 ---
@@ -448,6 +481,8 @@ Presets apply a saved look in one click; the active preset has a border. Blocks 
 step: Select an object. | title: Select an object | pic: presets-1
 step: Click a tile in Presets to apply that look. | title: Apply a preset | pic: presets-2
 step: Use Save current to keep your own. | title: Save your own | pic: presets-3
+
+Right-click any preset for Apply, Update from selection, Rename, Duplicate and Delete; hover a saved one for its ×. Delete offers Undo in the message bar. Built-in presets and ones from a team kit can be hidden instead; Show hidden brings them back. Manage presets lists everything you've saved, every kind in one place, to delete or export several at once, and removes a kit you added. The Manage presets link on a Presets heading opens it on that tool's presets; choose All to see the rest.
 
 # Arrange and align
 id: arrange
@@ -483,16 +518,16 @@ step: Undo reverses it. | title: Undo if needed
 id: resize
 section: Formatting
 where: Formatting › Size, Formatting › Rotate & flip
-controls: Resize image, Resize canvas, Rotate, Flip horizontal, Flip vertical, Rotate clockwise, Rotate counterclockwise, Flip horizontally, Flip vertically, Rotate 180 degrees, Page Setup
+controls: Resize image, Resize canvas, Rotate, Flip horizontal, Flip vertical, Rotate clockwise, Rotate counterclockwise, Flip horizontally, Flip vertically, Rotate 180 degrees, Page Setup, Rotate by angle, Rotate Image, Reset rotation
 keywords: scale, size, dimensions, rotate, flip, canvas size
 hero: resize-hero
 ---
-Resize image changes the output size and keeps objects editable. Resize canvas adds or removes space around the image. Rotate and flip turn the whole image.
+Resize image changes the output size and keeps objects editable. Choose pixels or percent, or inches or centimeters with a resolution to size the image for print; Resampling picks how pixels are blended. Resize canvas adds or removes space around the image. Rotate and flip turn the whole image; Rotate by angle turns it any amount, growing the canvas to fit or keeping its size. Reset rotation brings back the picture as it was before you turned it, however many turns you made; objects turn back with it.
 
 
 step: On the Formatting tab, click Resize image. | title: Open Resize image | pic: resize-1
-step: Enter the new size and click Apply. | title: Enter the size | pic: resize-2
-step: Use Rotate & flip for the other changes. | title: Rotate or flip
+step: Enter the new size and click Resize. | title: Enter the size | pic: resize-2
+step: Use Rotate & flip for the other changes, or Rotate by angle for any angle. | title: Rotate or flip
 
 # Snapping and the pixel grid
 id: snapping
@@ -536,6 +571,44 @@ Export saves a finished picture: PNG keeps transparency, JPEG is smaller, PDF su
 step: Open Export and choose the format. | title: Choose the format | icon: Save As | pic: export-1
 step: Set quality, paper or watermark if you need them. | title: Set the options | pic: export-2
 step: Click Save and choose where. | title: Save
+
+# PowerPoint and Word
+id: office-export
+section: Export
+where: Export › PowerPoint or Word
+controls: PowerPoint, Word, Slide size, Each slide, Objects, Editable shapes, Pictures only, Put step text in the speaker notes, Page size, Layout, Start with a title and contents, On a PowerPoint slide
+keywords: pptx, docx, slides, deck, presentation, office, document, word processor, speaker notes
+---
+PowerPoint makes one slide for each guide page, or for each step section. Rectangles, ellipses, lines, arrows, Steps and text become real PowerPoint shapes and text boxes, so you can move and retype them there. Anything PowerPoint can't draw the same way, such as Focus, Magnify, blur or a picture, stays in the slide's picture. Pictures only puts each page in as one picture, so the deck looks exactly like ClipDesigner.
+
+Word makes a step-by-step document: each step's picture with its text, in Word's own Title and Heading styles, so a company template restyles it. Start with a title and contents adds the guide's name and a table of contents; in Word, right-click the contents and choose Update Field to fill it in.
+
+Redactions are always flattened, with what they cover removed, and a shape under a redaction goes into the picture with it. For a PDF split into parts, Include all parts puts every part in one file.
+
+For a video, turn on On a PowerPoint slide in Export video: the MP4 goes on a slide with its first frame as the poster.
+
+step: Open Export and choose PowerPoint or Word. | title: Choose the format
+step: Choose the slide size and what each slide shows, or the page size and layout. | title: Set the options
+step: Click Save and choose where. | title: Save
+
+# Share with your team
+id: sharing
+section: Export
+where: File › Export › Share a kit, File › Open › Add a kit, Preferences › Team
+controls: Share a kit…, Add a kit…, Kit name, Save kit…, Same names, Keep both, Replace mine, Team, Browse…, Clear, Lock projects I open from shared folders, Show my name as, Open a copy, Pack project
+keywords: kit, cdkit, team, share presets, styles, collaborate, lock, shared drive, google drive, onedrive, sharepoint, pack, cdpack, send project
+---
+A kit is one .cdkit file with your presets, Blocks, color palettes, custom sensitive types, and if you like your watermarks and templates. Send it any way you like. Whoever opens it sees what it adds and chooses; nothing changes until they click Add. When a name is already used, Keep both adds a numbered copy and Replace mine replaces it.
+
+Preferences › Team can point at a shared folder of kits, such as a Google Drive, network, Teams or SharePoint folder. Kits there are added automatically, and again whenever someone updates one. ClipDesigner never changes the folder; to change a team kit, share a new one.
+
+A project opened from a shared folder gets a small lock file, so others see who has it and since when, and it opens read-only for them. Open a copy makes your own copy in the Library. The lock clears when you close ClipDesigner, or after 12 hours if a PC went offline.
+
+To hand a project to someone, choose Pack project on File › Save: the project and all its media go in one .cdpack file. Opening it unpacks a normal project into a new folder beside it.
+
+step: On the File › Export page, click Share a kit…, choose what to include and save it. | title: Share a kit
+step: Open the .cdkit, or use File › Open › Add a kit…, then choose what to add. | title: Add a kit
+step: For a team, set the team kit folder in Preferences › Team. | title: Team folder
 
 # Watermark
 id: watermark
@@ -603,14 +676,14 @@ Rename on File › Info renames the file, its Library entry and the window title
 # Templates
 id: templates
 section: Files
-where: File › New › Templates
+where: File › Home › Templates
 controls: Templates, Save as Template, Apply image template
 keywords: template, guide, steps, how-to, issue report, bug report, release notes, slide, social card, checklist, faq, annotated, zoom, shortcuts, process, flow, do and don't, showcase
 hero: templates-hero
 ---
 Templates start a guide with ready-made sections. Steps asks how many steps you want (2 to 8) and whether to stack them or lay them out in a grid. Others include Annotated screen, Zoom detail, Shortcut sheet, Process flow, Do / Don't, Window showcase, Troubleshooting Q&A, Release notes, a 16:9 Tutorial slide and a square Social card. Filter by Guides, Support or Announce & share. Your captures fill the image frames and everything stays editable.
 
-step: Open File › New. | title: Open New | pic: templates-1
+step: Open File › Home. | title: Open Home | pic: templates-1
 step: Choose a template from the gallery. | title: Choose a template | pic: templates-2
 step: Your captures fill the image frames, and everything stays editable. | title: Fill the frames
 
@@ -636,13 +709,15 @@ Library storage and recovery sets how much space history uses and can bring back
 id: video-editor
 section: Video
 where: Video timeline
-controls: Timeline, Split, Trim, Play / Pause, Play, Pause, Hide track, Add Track, Drag to reorder track, Timeline snapping, Fit preview, Zoom preview in, Zoom preview out, Zoom timeline in, Zoom timeline out, Next, Previous, Follow playhead, Video setup, Video Setup
+controls: Timeline, Split, Trim, Play / Pause, Play, Pause, Hide track, Add Track, Drag to reorder track, Timeline snapping, Fit preview, Zoom preview in, Zoom preview out, Zoom timeline in, Zoom timeline out, Next, Previous, Follow playhead, Video setup, Video Setup, Media, Video/audio, Pictures, PDF pages, Record more
 keywords: video, timeline, clips, tracks, cut, split, edit video, playhead
 hero: video-editor-hero
 ---
 Recordings open in the video editor. The timeline shows the recording, objects, zooms and audio on separate tracks. Drag object edges to set when they appear.
 
 Space plays and pauses. Select a clip and Split cuts it at the playhead.
+
+To add media, use the Media group on the Insert tab: Video/audio, Pictures, PDF pages, or Record more to add another recording. Each goes in at the playhead. You can also drop files onto a timeline row: a blue outline shows where they will land, and a PDF opens PDF pages at that spot.
 
 # Jump to Object
 id: jump

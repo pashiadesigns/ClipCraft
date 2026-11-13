@@ -31,6 +31,10 @@ impl Default for Presets {
     }
 }
 impl Presets {
+    /// Saved arrow styles, for kits.
+    pub(crate) fn arrow_store(&mut self) -> Option<&mut Store> {
+        self.store.as_mut()
+    }
     pub(crate) fn new() -> Self {
         let root =
             crate::storage_locations::configured(capture_core::quick_preferences::Folder::Presets)
@@ -83,6 +87,10 @@ impl Editor {
             header.right_center() - egui::vec2(16.0, 0.0),
             egui::vec2(24.0, 24.0),
         );
+        // BY11: Manage presets on the header row, left of the +.
+        if crate::manage_presets::header_link(ui, header, 36.0) {
+            self.manage_presets_from(ui.ctx(), tool);
+        }
         self.preset_save_button(ui, tool, Some(rect))
     }
     /// The "+" that saves the selected object's formatting as a preset. The
@@ -274,7 +282,7 @@ impl Editor {
                 true
             }
             Err(error) => {
-                self.presets.error = error.to_string();
+                self.presets.error = crate::guided::friendly(&error.to_string());
                 false
             }
         }
@@ -309,7 +317,7 @@ impl Editor {
     }
     pub(crate) fn apply_arrow_style(&mut self, style: &ArrowStyle) {
         if let Err(e) = style.validate() {
-            self.status = e.to_string();
+            self.fail(e);
             return;
         }
         if let Some(a) = self.selected_annotation() {
@@ -355,7 +363,7 @@ impl Editor {
                         "Updated {name} from the selection. Existing arrows are unchanged."
                     );
                 }
-                Err(e) => self.presets.error = e.to_string(),
+                Err(e) => self.presets.error = crate::guided::friendly(&e.to_string()),
             }
         }
     }
@@ -371,12 +379,16 @@ impl Editor {
                 capture_core::styles::curved_presets(),
             ),
         ];
-        let saved = self
+        let hidden = self.quick_controls.preset_records().hidden;
+        let saved: Vec<ArrowStyle> = self
             .presets
             .store
             .as_ref()
             .map(|s| s.entries().to_vec())
-            .unwrap_or_default();
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|s| !hidden.contains(&format!("arrow-saved:{}", s.name)))
+            .collect();
         let current = self.arrow_style(String::new());
         let objects = self.selected_objects();
         let enabled = objects.iter().all(|a| a.kind == Kind::Arrow);
@@ -393,8 +405,13 @@ impl Editor {
                 })
         };
         let mut chosen = None;
-        let mut removed = None;
-        let mut updated = None;
+        let mut menu_choice: Option<(ArrowStyle, crate::preset_menu::Choice)> = None;
+        let mut hide: Option<(String, String)> = None;
+        let show_hidden_id = egui::Id::unique("arrow-gallery-show-hidden");
+        let mut show_hidden = ui
+            .ctx()
+            .data(|d| d.get_temp::<bool>(show_hidden_id))
+            .unwrap_or(false);
         let mut remember = None;
         let mut save = None;
         egui::ScrollArea::vertical()
@@ -417,28 +434,37 @@ impl Editor {
                                 if response.clicked() {
                                     chosen = Some(style.clone());
                                 }
-                                response.context_menu(|ui| {
-                                    if ui
-                                        .add_enabled_ui(
-                                            objects.len() == 1 && objects[0].kind == Kind::Arrow,
-                                            |ui| {
-                                                crate::controls::menu_action(
-                                                    ui,
-                                                    "Update from selection",
-                                                )
-                                            },
-                                        )
-                                        .inner
-                                        .clicked()
-                                    {
-                                        updated = Some(style.name.clone());
-                                        ui.close();
-                                    }
-                                    if crate::controls::menu_action(ui, "Delete style").clicked() {
-                                        removed = Some(style.name.clone());
-                                        ui.close();
-                                    }
-                                });
+                                // Approved removing presets: the shared menu and
+                                // an × on hover.
+                                let kit = self.kit_of("Arrow style", &style.name);
+                                let menu = crate::preset_menu::Menu {
+                                    apply: true,
+                                    update: Some((
+                                        "Update from selection",
+                                        objects.len() == 1 && objects[0].kind == Kind::Arrow,
+                                    )),
+                                    rename: true,
+                                    duplicate: true,
+                                    hide: kit.is_some(),
+                                    delete: true,
+                                    kit: kit.as_deref(),
+                                    name: &style.name,
+                                    ..Default::default()
+                                };
+                                if let Some(choice) =
+                                    crate::preset_menu::context_menu(&response, &menu)
+                                {
+                                    menu_choice = Some((style.clone(), choice));
+                                }
+                                if crate::preset_menu::hover_delete(
+                                    ui,
+                                    response.rect,
+                                    response.id,
+                                    &style.name,
+                                ) {
+                                    menu_choice =
+                                        Some((style.clone(), crate::preset_menu::Choice::Delete));
+                                }
                                 if (i + 1) % saved_columns == 0 {
                                     ui.end_row();
                                 }
@@ -455,6 +481,9 @@ impl Editor {
                 }
                 ui.horizontal_top(|ui| {
                     for (key, title, styles) in &families {
+                        if !show_hidden && hidden.contains(&format!("arrow:{key}")) {
+                            continue;
+                        }
                         let remembered = styles
                             .iter()
                             .find(|s| {
@@ -471,6 +500,22 @@ impl Editor {
                                 );
                                 if main.clicked() {
                                     chosen = Some(remembered.clone());
+                                }
+                                let hide_key = format!("arrow:{key}");
+                                let menu = crate::preset_menu::Menu {
+                                    apply: true,
+                                    hide: !hidden.contains(&hide_key),
+                                    name: title,
+                                    ..Default::default()
+                                };
+                                match crate::preset_menu::context_menu(&main, &menu) {
+                                    Some(crate::preset_menu::Choice::Apply) => {
+                                        chosen = Some(remembered.clone())
+                                    }
+                                    Some(crate::preset_menu::Choice::Hide) => {
+                                        hide = Some((hide_key, title.to_string()))
+                                    }
+                                    _ => {}
                                 }
                                 crate::split_button::dropdown_for(
                                     ui,
@@ -505,6 +550,24 @@ impl Editor {
                     }
                 });
             });
+        let hidden_total = families
+            .iter()
+            .filter(|(key, _, _)| hidden.contains(&format!("arrow:{key}")))
+            .count();
+        if hidden_total > 0
+            && crate::controls::toggle(
+                ui,
+                &mut show_hidden,
+                &format!("Show hidden ({hidden_total})"),
+            )
+            .changed()
+        {
+            ui.ctx()
+                .data_mut(|d| d.insert_temp(show_hidden_id, show_hidden));
+        }
+        if let Some((key, name)) = hide {
+            self.hide_preset(key, &name);
+        }
         if let Some(save) = save {
             self.preset_save_popup(ui, &save, Some(Kind::Arrow));
         }
@@ -514,18 +577,45 @@ impl Editor {
                 self.quick_controls.remember_style(key, &style.name);
             }
         }
-        if let Some(name) = updated {
-            self.update_saved_arrow(&name);
-        }
-        if let Some(name) = removed
-            && let Some(store) = &mut self.presets.store
-        {
-            match store.remove(&name) {
-                Ok(()) => {
-                    self.presets.error.clear();
-                    self.status = format!("Deleted {name}. Existing arrows are unchanged.");
+        if let Some((style, choice)) = menu_choice {
+            use crate::preset_menu::Choice;
+            match choice {
+                Choice::Apply => self.apply_arrow_style(&style),
+                Choice::Update => self.update_saved_arrow(&style.name),
+                Choice::Rename(name) => {
+                    if let Some(store) = &mut self.presets.store {
+                        let mut renamed = style.clone();
+                        renamed.name = name.clone();
+                        match store.save(renamed).and_then(|()| store.remove(&style.name)) {
+                            Ok(()) => self.status = format!("Renamed to {name}."),
+                            Err(e) => self.fail(e),
+                        }
+                    }
                 }
-                Err(e) => self.presets.error = e.to_string(),
+                Choice::Duplicate => {
+                    if let Some(store) = &mut self.presets.store {
+                        let mut copy = style.clone();
+                        copy.name = crate::preset_menu::copy_name(&style.name, |n| {
+                            store
+                                .entries()
+                                .iter()
+                                .any(|s| s.name.eq_ignore_ascii_case(n))
+                        });
+                        let name = copy.name.clone();
+                        match store.save(copy) {
+                            Ok(()) => self.status = format!("Duplicated as {name}."),
+                            Err(e) => self.fail(e),
+                        }
+                    }
+                }
+                Choice::Hide => {
+                    self.hide_preset(format!("arrow-saved:{}", style.name), &style.name)
+                }
+                Choice::Delete => self.delete_presets(
+                    &[crate::manage_presets::Item::Arrow(style.name.clone())],
+                    &format!("\u{201c}{}\u{201d}", style.name),
+                ),
+                Choice::Favorite(_) => {}
             }
         }
         if !self.presets.error.is_empty() {
@@ -537,7 +627,7 @@ impl Editor {
 fn arrow_tile(ui: &mut egui::Ui, arrow: &ArrowStyle, label: &str, active: bool) -> egui::Response {
     crate::style_tile::tile(ui, &arrow_object_style(arrow), label, active)
 }
-fn arrow_object_style(arrow: &ArrowStyle) -> capture_core::object_styles::ObjectStyle {
+pub(crate) fn arrow_object_style(arrow: &ArrowStyle) -> capture_core::object_styles::ObjectStyle {
     let mut style = capture_core::object_styles::presets(Kind::Arrow).remove(0);
     style.name = arrow.name.clone();
     style.color = arrow.color;

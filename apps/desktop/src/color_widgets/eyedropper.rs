@@ -156,7 +156,7 @@ impl Editor {
                     pick.owner = Some(owner);
                 }
                 Err(error) => {
-                    self.status = error.to_string();
+                    self.fail(error);
                     cancel(ctx);
                     return true;
                 }

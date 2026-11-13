@@ -19,6 +19,16 @@ pub struct CanvasBehavior {
     /// Filters, border and edge for the whole picture.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub finish: Option<crate::picture_finish::Finish>,
+    /// How the picture is resampled after Resize Image (EDIT-028).
+    #[serde(
+        default,
+        skip_serializing_if = "crate::resize::Resampling::is_automatic"
+    )]
+    pub resampling: crate::resize::Resampling,
+    /// The picture before its first Rotate by angle and each turn since, so
+    /// Reset rotation can bring the original back (BY3).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub turned: Option<crate::image_transform::Turned>,
 }
 impl Default for CanvasBehavior {
     fn default() -> Self {
@@ -29,6 +39,8 @@ impl Default for CanvasBehavior {
             page_owners: BTreeMap::new(),
             perspective: None,
             finish: None,
+            resampling: Default::default(),
+            turned: None,
         }
     }
 }
@@ -109,6 +121,24 @@ impl Document {
                 }
             }
         }
+    }
+    /// The document without some objects, with every record that names them
+    /// cleared: page ownership, the pasteboard, guide sections and groups left
+    /// with one member. Pages and sections keep their size and place, so a
+    /// picture of what's left lines up with the original (BX2: PowerPoint's
+    /// page picture failed on a guide with sections).
+    pub(crate) fn without_objects(&self, ids: &[u64]) -> Self {
+        let mut next = self.clone();
+        next.annotations.retain(|a| !ids.contains(&a.id));
+        if let Some(guide) = &mut next.guide {
+            for s in &mut guide.sections {
+                s.objects.retain(|id| !ids.contains(id));
+                s.marker = s.marker.filter(|id| !ids.contains(id));
+            }
+        }
+        next.prune_canvas_behavior();
+        next.prune_groups();
+        next
     }
     pub(crate) fn prune_canvas_behavior(&mut self) {
         self.canvas_behavior

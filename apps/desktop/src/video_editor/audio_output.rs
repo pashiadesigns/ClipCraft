@@ -59,7 +59,7 @@ impl Editor {
                                     d.get_temp::<bool>(key).unwrap_or(current.use_headphones)
                                 });
                             if !monitor_only {
-                                ui.horizontal(|ui| {
+                                crate::controls::segments(ui, |ui| {
                                     ui.selectable_value(&mut headphones, false, "Speakers");
                                     ui.selectable_value(&mut headphones, true, "Headphones");
                                 });

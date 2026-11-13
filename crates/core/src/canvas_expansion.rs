@@ -67,7 +67,11 @@ impl Document {
         Ok(())
     }
 
-    fn plan_object_bounds(&self, moved: &[Annotation], duplicate: bool) -> Result<MovePlan> {
+    pub(crate) fn plan_object_bounds(
+        &self,
+        moved: &[Annotation],
+        duplicate: bool,
+    ) -> Result<MovePlan> {
         self.validate()?;
         let base = self
             .auto_canvas_base
@@ -214,6 +218,7 @@ impl MovePlan {
             return Err(Error::Invalid("Canvas changed during the move".into()));
         }
         let mut result = document.clone();
+        let turned = document.can_reset_rotation();
         if self.dimensions != self.original_dimensions || self.offset != [0, 0] {
             result.raster = Some(Arc::new(RasterImage::from_image(
                 &self.padded_base(document)?,
@@ -236,6 +241,10 @@ impl MovePlan {
         }
         if let Some(v) = &mut result.video {
             v.sync(&result.annotations);
+        }
+        if turned && let Some(mut record) = result.canvas_behavior.turned.take() {
+            record.follow_canvas(self.offset, &result);
+            result.canvas_behavior.turned = Some(record);
         }
         result.validate()?;
         Ok(result)

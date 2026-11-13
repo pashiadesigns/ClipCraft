@@ -42,7 +42,7 @@ impl ResizeCanvas {
             let pixels = if self.relative {
                 value
                     .checked_add(self.original[i] as i64)
-                    .ok_or("Dimensions are too large.")?
+                    .ok_or("Set Width and Height to 32,768 pixels or less.")?
             } else {
                 value
             };
@@ -203,7 +203,7 @@ impl Editor {
                         "Canvas resized to {width} × {height} px. Original pixels are retained for Revert."
                     );
                 }
-                Err(error) => self.status = error.to_string(),
+                Err(error) => self.fail(error),
             }
         }
     }

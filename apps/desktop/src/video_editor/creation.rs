@@ -16,16 +16,14 @@ impl Draft {
         };
         let [w, h] = [read(&self.width, "Width")?, read(&self.height, "Height")?];
         if w < 64 || h < 64 || w.max(h) > 1920 || w.min(h) > 1080 {
-            return Err(
-                "Video sizes run from 64 px up to 1920 × 1080, landscape or portrait.".into(),
-            );
+            return Err("Set Width and Height between 64 and 1920 × 1080 pixels.".into());
         }
         Ok([w / 2 * 2, h / 2 * 2])
     }
     fn duration(&self) -> Result<u32, String> {
         match self.seconds.trim().parse::<u32>() {
             Ok(s) if (1..=3600).contains(&s) => Ok(s),
-            _ => Err("Duration must be 1 to 3600 seconds.".into()),
+            _ => Err("Set Duration between 1 and 3,600 seconds.".into()),
         }
     }
 }
@@ -178,7 +176,7 @@ impl Editor {
                     ctx,
                 );
             }
-            Err(e) => self.status = e,
+            Err(e) => self.fail(e),
         }
     }
     fn images_document(&self, paths: &[PathBuf], color: [u8; 4]) -> Result<Session, String> {
@@ -197,7 +195,7 @@ impl Editor {
         let folder = self
             .history
             .root()
-            .ok_or("Set a project folder in Settings first.")?
+            .ok_or("Choose a Project folder in Preferences › General first.")?
             .join("backgrounds");
         std::fs::create_dir_all(&folder).map_err(|e| e.to_string())?;
         let stamp = std::time::SystemTime::now()
@@ -325,7 +323,7 @@ impl Editor {
                         ui.label("seconds");
                         ui.end_row();
                         ui.label("Frame rate");
-                        ui.horizontal(|ui| {
+                        crate::controls::segments(ui, |ui| {
                             for fps in [15, 30, 60] {
                                 ui.selectable_value(&mut d.fps, fps, fps.to_string());
                             }
@@ -403,7 +401,7 @@ impl Editor {
                 let folder = self
                     .history
                     .root()
-                    .ok_or("Set a project folder in Settings first.")?
+                    .ok_or("Choose a Project folder in Preferences › General first.")?
                     .join("backgrounds");
                 std::fs::create_dir_all(&folder).map_err(|e| e.to_string())?;
                 let stamp = std::time::SystemTime::now()

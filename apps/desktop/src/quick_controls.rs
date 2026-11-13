@@ -86,6 +86,53 @@ impl QuickControls {
         Ok(())
     }
 
+    /// Find Sensitive Info custom types saved in Preferences (beta 5 tab 3).
+    pub(crate) fn sensitive_types(&self) -> Vec<capture_core::privacy::custom::CustomType> {
+        self.prefs.sensitive_types.clone()
+    }
+    /// Saves the custom types; an invalid list is refused with the reason.
+    pub(crate) fn set_sensitive_types(
+        &mut self,
+        list: Vec<capture_core::privacy::custom::CustomType>,
+    ) -> Result<(), String> {
+        capture_core::privacy::custom::validate_all(&list).map_err(|e| e.to_string())?;
+        if self.prefs.sensitive_types != list {
+            self.remember(Choice::SensitiveTypes(list));
+        }
+        self.warning.clone().map_or(Ok(()), Err)
+    }
+    /// Preferences › Team (approved beta 6 tab 3).
+    pub(crate) fn team(&self) -> capture_core::quick_preferences::Team {
+        self.prefs.team.clone()
+    }
+    pub(crate) fn set_team(
+        &mut self,
+        team: capture_core::quick_preferences::Team,
+    ) -> Result<(), String> {
+        if self.prefs.team != team {
+            self.remember(Choice::Team(team));
+        }
+        self.warning.clone().map_or(Ok(()), Err)
+    }
+    /// Tests: saved settings in their own folder.
+    #[cfg(test)]
+    pub(crate) fn use_store_for_test(&mut self, dir: &std::path::Path) {
+        let store = Store::open(dir).unwrap();
+        self.prefs = store.read().unwrap();
+        self.store = Some(store);
+    }
+    pub(crate) fn preset_records(&self) -> capture_core::quick_preferences::PresetRecords {
+        self.prefs.presets.clone()
+    }
+    pub(crate) fn set_preset_records(
+        &mut self,
+        records: capture_core::quick_preferences::PresetRecords,
+    ) -> Result<(), String> {
+        if self.prefs.presets != records {
+            self.remember(Choice::Presets(records));
+        }
+        self.warning.clone().map_or(Ok(()), Err)
+    }
     pub(super) fn thumbnail_details(&self) -> bool {
         self.prefs.thumbnail_details
     }
@@ -322,6 +369,7 @@ impl QuickControls {
             Choice::CanvasSnapping(d.canvas_snapping),
             Choice::Video(video),
             Choice::Workspace(d.workspace),
+            Choice::Team(d.team.clone()),
         ] {
             self.remember(choice);
         }
@@ -795,7 +843,7 @@ impl Editor {
                 }
                 .into();
             }
-            Err(error) => self.status = error.to_string(),
+            Err(error) => self.fail(error),
         }
     }
 
@@ -894,7 +942,7 @@ impl Editor {
                     "Formatting copied. Undo restores all target objects."
                 }.into();
             }
-            Err(error) => self.status = error.to_string(),
+            Err(error) => self.fail(error),
             _ => {}
         }
     }
@@ -1073,7 +1121,7 @@ impl Editor {
                     draft.preview = preview;
                     self.needs_render = true;
                 }
-                Err(error) => self.status = error.to_string(),
+                Err(error) => self.fail(error),
             }
         } else {
             let several = self.selected_objects().len() > 1;
@@ -1092,7 +1140,7 @@ impl Editor {
                 .collect();
             match annotations {
                 Ok(annotations) => self.execute(Command::UpdateMany { annotations }),
-                Err(error) => self.status = error.to_string(),
+                Err(error) => self.fail(error),
             }
         }
     }
@@ -1120,7 +1168,7 @@ impl Editor {
             .collect::<capture_core::Result<Vec<_>>>();
         match annotations {
             Ok(annotations) => self.preview_property_batch(annotations),
-            Err(error) => self.status = error.to_string(),
+            Err(error) => self.fail(error),
         }
     }
     pub(super) fn show_layout_grid(
@@ -1742,7 +1790,7 @@ mod tests {
         e.apply_quick_text(TextAction::SetSize(144.0));
         assert_eq!(e.session.document.annotations, before);
         assert!(!e.session.can_undo());
-        assert!(e.status.contains("larger canvas"));
+        assert!(e.status.contains("enlarge the image"));
     }
 
     #[test]

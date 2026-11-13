@@ -280,14 +280,14 @@ impl Editor {
             let state = &mut self.rich_text;
             let style = state.working.clone();
             match style.validate() {
-                Err(e) => state.error = e.to_string(),
+                Err(e) => state.error = crate::guided::friendly(&e.to_string()),
                 Ok(()) => {
                     let mut a = state.target.clone().unwrap();
                     a.text = Some(style);
                     match a
                         .fit_text_shape([self.session.document.width, self.session.document.height])
                     {
-                        Err(e) => state.error = e.to_string(),
+                        Err(e) => state.error = crate::guided::friendly(&e.to_string()),
                         Ok(a) => {
                             if let Some(d) = &mut self.text_draft {
                                 if self.rich_text.range.is_empty() {

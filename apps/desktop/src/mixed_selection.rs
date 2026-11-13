@@ -128,7 +128,7 @@ impl Editor {
             .collect();
         match batch {
             Ok(batch) => self.preview_property_batch(batch),
-            Err(error) => self.status = error.to_string(),
+            Err(error) => self.fail(error),
         }
     }
     pub(crate) fn mixed_style_groups(&mut self, ui: &mut egui::Ui) {

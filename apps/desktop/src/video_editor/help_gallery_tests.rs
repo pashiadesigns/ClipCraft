@@ -1043,7 +1043,7 @@ fn shots() -> Vec<Shot> {
         C::Ribbon,
         &[R::T("Size")],
     );
-    dlg(&mut v, "resize-2", "resize-image", &[R::T("Apply")]);
+    dlg(&mut v, "resize-2", "resize-image", &[R::T("Resize")]);
     dlg(&mut v, "resize-hero", "resize-image", &[]);
     image(
         &mut v,
@@ -1157,9 +1157,9 @@ fn shots() -> Vec<Shot> {
     page(&mut v, "projects-1", Page::Info, &[R::T("Info")]);
     page(&mut v, "projects-2", Page::Info, &[R::T("Rename")]);
     page(&mut v, "projects-hero", Page::Info, &[]);
-    page(&mut v, "templates-1", Page::New, &[R::T("New")]);
-    page(&mut v, "templates-2", Page::New, &[R::T("Templates")]);
-    page(&mut v, "templates-hero", Page::New, &[]);
+    page(&mut v, "templates-1", Page::Home, &[R::T("Home")]);
+    page(&mut v, "templates-2", Page::Home, &[R::T("Templates")]);
+    page(&mut v, "templates-hero", Page::Home, &[]);
     let library = || -> Setup {
         let base = image_setup(Insert, O::None, None, false);
         Box::new(move |c, e| {

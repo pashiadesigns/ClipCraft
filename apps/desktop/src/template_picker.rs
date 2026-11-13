@@ -83,6 +83,10 @@ fn bitmap(path: &std::path::Path) -> Result<Arc<Bitmap>, String> {
     .map(Arc::new)
     .map_err(|e| e.to_string())
 }
+/// Template lists are built again next time, after a kit added templates.
+pub(crate) fn forget_catalog(ctx: &egui::Context) {
+    ctx.data_mut(|d| d.remove::<Catalog>(egui::Id::unique("template-catalog")));
+}
 impl Editor {
     fn template_catalog(&self, ctx: &egui::Context) -> Catalog {
         let key = egui::Id::unique("template-catalog");
@@ -100,7 +104,7 @@ impl Editor {
                     id: Some(t.id),
                     document: Arc::new(doc),
                 }),
-                Err(e) => c.error = e.to_string(),
+                Err(e) => c.error = crate::guided::friendly(&e.to_string()),
             }
         }
         if let Some(root) = self.template_root() {
@@ -117,11 +121,11 @@ impl Editor {
                                 id: None,
                                 document: Arc::new(doc),
                             }),
-                            Err(e) => c.error = e.to_string(),
+                            Err(e) => c.error = crate::guided::friendly(&e.to_string()),
                         }
                     }
                 }
-                Err(e) => c.error = e.to_string(),
+                Err(e) => c.error = crate::guided::friendly(&e.to_string()),
             }
         }
         for choice in &c.choices {
@@ -139,7 +143,7 @@ impl Editor {
                     egui::TextureOptions::LINEAR,
                 )),
                 Err(e) => {
-                    c.error = e.to_string();
+                    c.error = crate::guided::friendly(&e.to_string());
                     break;
                 }
             }
@@ -256,8 +260,7 @@ impl Editor {
         }
         if !video {
             // Template groups (bi-proposal 2): All, Guides, Support, Announce & share.
-            ui.horizontal_wrapped(|ui| {
-                ui.spacing_mut().item_spacing = egui::vec2(4., 4.);
+            crate::controls::segments(ui, |ui| {
                 for (i, name) in std::iter::once("All").chain(templates::GROUPS).enumerate() {
                     if ui
                         .selectable_label(group == i, name)
@@ -305,10 +308,12 @@ impl Editor {
                         }
                     });
                     ui.horizontal(|ui| {
-                        ui.selectable_value(grid, false, "Stacked")
-                            .tip("One step per row, with notes beside each screenshot");
-                        ui.selectable_value(grid, true, "Grid")
-                            .tip("Two steps per row");
+                        crate::controls::segments(ui, |ui| {
+                            ui.selectable_value(grid, false, "Stacked")
+                                .tip("One step per row, with notes beside each screenshot");
+                            ui.selectable_value(grid, true, "Grid")
+                                .tip("Two steps per row");
+                        });
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                             if ui.button("Cancel").clicked() {
                                 create_steps = Some(None);
@@ -378,7 +383,7 @@ impl Editor {
                     },
                     &ctx,
                 ),
-                Err(e) => self.status = e.to_string(),
+                Err(e) => self.fail(e),
             }
         } else if create_steps.is_some() {
             steps = None;
@@ -417,7 +422,7 @@ impl Editor {
                         },
                         &ctx,
                     ),
-                    Err(e) => self.status = e.to_string(),
+                    Err(e) => self.fail(e),
                 }
             }
             Some(Pick::Video(t)) => self.new_video(t),
@@ -431,7 +436,7 @@ impl Editor {
                         },
                         &ctx,
                     ),
-                    Err(e) => self.status = e.to_string(),
+                    Err(e) => self.fail(e),
                 }
             }
             None => {}
@@ -515,7 +520,7 @@ impl Editor {
             match self.replace_frame_image_from_path(id, &path) {
                 Ok(()) => self
                     .remember_dialog_folder(capture_core::quick_preferences::Folder::Open, &path),
-                Err(e) => self.status = e,
+                Err(e) => self.fail(e),
             }
         }
     }

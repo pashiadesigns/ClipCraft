@@ -30,6 +30,7 @@ fn drawing_shift(ui: &egui::Ui) -> bool {
 
 impl Editor {
     pub(super) fn cancel_gesture(&mut self) {
+        crate::native_cursor::reset();
         self.icon_library.cancel_drag();
         self.marquee = None;
         self.quick_controls.format_source = None;
@@ -162,6 +163,8 @@ impl Editor {
             && self.video.still_frame.is_none()
             && self.pending.is_none()
             && self.new_image.is_none()
+            && self.pdf_import.is_none()
+            && self.rotate_image.is_none()
             && self.resize_image.is_none()
             && self.resize_canvas.is_none()
             && self.image_transform.is_none()
@@ -664,7 +667,7 @@ impl Editor {
                                     });
                                     self.needs_render = true;
                                 }
-                                Err(error) => self.status = error.to_string(),
+                                Err(error) => self.fail(error),
                             }
                         }
                     } else if self.tool.is_none() || handle.is_some() || hit.is_some() {
@@ -858,7 +861,7 @@ impl Editor {
                             self.needs_render = true;
                             ui.ctx().request_repaint();
                         }
-                        Err(error) => self.status = error.to_string(),
+                        Err(error) => self.fail(error),
                         _ => {}
                     }
                 }
@@ -940,7 +943,7 @@ impl Editor {
                             self.needs_render = true;
                             ui.ctx().request_repaint();
                         }
-                        Err(error) => self.status = error.to_string(),
+                        Err(error) => self.fail(error),
                         _ => {}
                     }
                 }
@@ -1189,6 +1192,7 @@ pub(crate) mod tests {
             step_placement: None,
             snapping_guides: [None; 2],
             new_image: None,
+            pdf_import: None,
             template_picker: None,
             resize_image: None,
             resize_canvas: None,
@@ -1196,6 +1200,8 @@ pub(crate) mod tests {
             export_preferences: Default::default(),
             icon_library: Default::default(),
             image_transform: None,
+            rotate_image: None,
+            sharing: Default::default(),
             crop: None,
 
             cut_out: None,
@@ -1215,6 +1221,8 @@ pub(crate) mod tests {
             path: None,
             last_directory: std::path::PathBuf::from("."),
             status: String::new(),
+            notice: Default::default(),
+            presets_ctx: None,
             selected: None,
             extra_selected: Default::default(),
             selection_order: vec![],

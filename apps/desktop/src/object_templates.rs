@@ -71,7 +71,7 @@ impl Editor {
     }
     pub(super) fn apply_object_template(&mut self, style: &ObjectStyle, custom: bool) {
         if let Err(error) = style.validate() {
-            self.status = error.to_string();
+            self.fail(error);
             return;
         }
         let objects = self.selected_objects();
@@ -86,7 +86,7 @@ impl Editor {
                     self.needs_render = true;
                 }
                 Err(error) => {
-                    self.status = error.to_string();
+                    self.fail(error);
                     return;
                 }
             }
@@ -94,7 +94,7 @@ impl Editor {
             match style.compatible_command(&objects) {
                 Ok(command) => self.execute(command),
                 Err(error) => {
-                    self.status = error.to_string();
+                    self.fail(error);
                     return;
                 }
             }
@@ -209,6 +209,52 @@ impl Editor {
             }
         }
     }
+    /// The preset menu's choice on a saved style (approved removing presets).
+    fn style_menu_choice(&mut self, style: ObjectStyle, choice: crate::preset_menu::Choice) {
+        use crate::preset_menu::Choice;
+        match choice {
+            Choice::Apply => self.apply_object_template(&style, true),
+            Choice::Update => self.update_saved_template(style.kind, &style.name),
+            Choice::Rename(_) | Choice::Duplicate if self.presets.templates.is_none() => {}
+            Choice::Rename(name) => {
+                let store = self.presets.templates.as_mut().unwrap();
+                let mut renamed = style.clone();
+                renamed.name = name.clone();
+                match store
+                    .save(renamed)
+                    .and_then(|()| store.remove(style.kind, &style.name))
+                {
+                    Ok(()) => self.status = format!("Renamed to {name}."),
+                    Err(e) => self.fail(e),
+                }
+            }
+            Choice::Duplicate => {
+                let store = self.presets.templates.as_mut().unwrap();
+                let taken = |n: &str| {
+                    store
+                        .entries()
+                        .iter()
+                        .any(|s| s.kind == style.kind && s.name.eq_ignore_ascii_case(n))
+                };
+                let mut copy = style.clone();
+                copy.name = crate::preset_menu::copy_name(&style.name, taken);
+                let name = copy.name.clone();
+                match store.save(copy) {
+                    Ok(()) => self.status = format!("Duplicated as {name}."),
+                    Err(e) => self.fail(e),
+                }
+            }
+            Choice::Hide => self.hide_preset(format!("style-saved:{}", style.name), &style.name),
+            Choice::Delete => self.delete_presets(
+                &[crate::manage_presets::Item::Style(
+                    format!("{:?}", style.kind),
+                    style.name.clone(),
+                )],
+                &format!("\u{201c}{}\u{201d}", style.name),
+            ),
+            Choice::Favorite(_) => {}
+        }
+    }
     pub(super) fn object_templates(&mut self, ui: &mut egui::Ui, kind: Kind) {
         let objects = self.selected_objects();
         let display_objects = self
@@ -241,9 +287,27 @@ impl Editor {
                     )]))
         };
         let mut apply = None;
-        let mut remove = None;
-        let mut update = None;
         let mut save = None;
+        let mut menu_choice: Option<(ObjectStyle, crate::preset_menu::Choice)> = None;
+        let mut hide: Option<(String, String)> = None;
+        let show_hidden_id = egui::Id::unique("style-gallery-show-hidden");
+        let mut show_hidden = ui
+            .ctx()
+            .data(|d| d.get_temp::<bool>(show_hidden_id))
+            .unwrap_or(false);
+        let hidden_keys = self.quick_controls.preset_records().hidden;
+        let hidden_saved = saved
+            .iter()
+            .filter(|s| hidden_keys.contains(&format!("style-saved:{}", s.name)))
+            .count();
+        let saved: Vec<_> = saved
+            .into_iter()
+            .filter(|s| show_hidden || !hidden_keys.contains(&format!("style-saved:{}", s.name)))
+            .collect();
+        let kits: Vec<(String, String)> = saved
+            .iter()
+            .filter_map(|s| self.kit_of("Style", &s.name).map(|k| (s.name.clone(), k)))
+            .collect();
         egui::ScrollArea::vertical()
             .id_salt("object_templates")
             .max_height(214.0)
@@ -261,34 +325,51 @@ impl Editor {
                                 let active = is_active(style);
                                 let response = ui
                                     .add_enabled_ui(enabled, |ui| {
-                                        crate::style_tile::tile(ui, style, &style.name, active)
+                                        crate::style_tile::tile_with_menu(
+                                            ui,
+                                            style,
+                                            &style.name,
+                                            active,
+                                        )
                                     })
                                     .inner;
                                 if response.clicked() {
                                     apply = Some((style.clone(), true, None));
                                 }
-                                response.context_menu(|ui| {
-                                    if ui
-                                        .add_enabled_ui(
-                                            objects.len() == 1 && objects[0].kind == style.kind,
-                                            |ui| {
-                                                crate::controls::menu_action(
-                                                    ui,
-                                                    "Update from selection",
-                                                )
-                                            },
-                                        )
-                                        .inner
-                                        .clicked()
-                                    {
-                                        update = Some((style.kind, style.name.clone()));
-                                        ui.close();
-                                    }
-                                    if crate::controls::menu_action(ui, "Delete style").clicked() {
-                                        remove = Some((style.kind, style.name.clone()));
-                                        ui.close();
-                                    }
-                                });
+                                // Approved removing presets: the shared menu and
+                                // an × on hover.
+                                let kit = kits
+                                    .iter()
+                                    .find(|(n, _)| *n == style.name)
+                                    .map(|(_, k)| k.as_str());
+                                let menu = crate::preset_menu::Menu {
+                                    apply: true,
+                                    update: Some((
+                                        "Update from selection",
+                                        objects.len() == 1 && objects[0].kind == style.kind,
+                                    )),
+                                    rename: true,
+                                    duplicate: true,
+                                    hide: kit.is_some(),
+                                    delete: true,
+                                    kit,
+                                    name: &style.name,
+                                    ..Default::default()
+                                };
+                                if let Some(choice) =
+                                    crate::preset_menu::context_menu(&response, &menu)
+                                {
+                                    menu_choice = Some((style.clone(), choice));
+                                }
+                                if crate::preset_menu::hover_delete(
+                                    ui,
+                                    response.rect,
+                                    response.id,
+                                    &style.name,
+                                ) {
+                                    menu_choice =
+                                        Some((style.clone(), crate::preset_menu::Choice::Delete));
+                                }
                                 if (index + 1) % saved_columns == 0 {
                                     ui.end_row();
                                 }
@@ -302,7 +383,12 @@ impl Editor {
                         });
                     ui.separator();
                 }
-                for row in groups.chunks(columns) {
+                // Built-ins can be hidden; Show hidden brings them back.
+                let visible: Vec<_> = groups
+                    .iter()
+                    .filter(|g| show_hidden || !hidden_keys.contains(&format!("style:{}", g.id)))
+                    .collect();
+                for row in visible.chunks(columns) {
                     ui.horizontal_top(|ui| {
                         ui.spacing_mut().item_spacing.x = 5.0;
                         for group in row {
@@ -328,6 +414,24 @@ impl Editor {
                                     ));
                                     if response.clicked() {
                                         apply = Some((remembered.clone(), false, Some(group.id)));
+                                    }
+                                    let key = format!("style:{}", group.id);
+                                    let hidden = hidden_keys.contains(&key);
+                                    let menu = crate::preset_menu::Menu {
+                                        apply: true,
+                                        hide: !hidden,
+                                        name: group.label,
+                                        ..Default::default()
+                                    };
+                                    match crate::preset_menu::context_menu(&response, &menu) {
+                                        Some(crate::preset_menu::Choice::Apply) => {
+                                            apply =
+                                                Some((remembered.clone(), false, Some(group.id)));
+                                        }
+                                        Some(crate::preset_menu::Choice::Hide) => {
+                                            hide = Some((key, group.label.to_owned()));
+                                        }
+                                        _ => {}
                                     }
                                     crate::split_button::dropdown_for(
                                         ui,
@@ -370,6 +474,28 @@ impl Editor {
                     });
                 }
             });
+        let hidden_total = hidden_saved
+            + groups
+                .iter()
+                .filter(|g| hidden_keys.contains(&format!("style:{}", g.id)))
+                .count();
+        if hidden_total > 0
+            && crate::controls::toggle(
+                ui,
+                &mut show_hidden,
+                &format!("Show hidden ({hidden_total})"),
+            )
+            .changed()
+        {
+            ui.ctx()
+                .data_mut(|d| d.insert_temp(show_hidden_id, show_hidden));
+        }
+        if let Some((key, name)) = hide {
+            self.hide_preset(key, &name);
+        }
+        if let Some((style, choice)) = menu_choice {
+            self.style_menu_choice(style, choice);
+        }
         if let Some(save) = save {
             self.preset_save_popup(ui, &save, Some(kind));
         }
@@ -377,20 +503,6 @@ impl Editor {
             self.apply_object_template(&style, custom);
             if let Some(category) = category {
                 self.quick_controls.remember_style(category, &style.name);
-            }
-        }
-        if let Some((kind, name)) = update {
-            self.update_saved_template(kind, &name);
-        }
-        if let Some((kind, name)) = remove
-            && let Some(store) = &mut self.presets.templates
-        {
-            match store.remove(kind, &name) {
-                Ok(()) => {
-                    self.presets.template_error.clear();
-                    self.status = format!("Deleted {name}. Existing objects are unchanged.");
-                }
-                Err(e) => self.presets.template_error = e.to_string(),
             }
         }
         if !self.presets.template_error.is_empty() {

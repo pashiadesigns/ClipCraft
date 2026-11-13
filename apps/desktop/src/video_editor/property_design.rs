@@ -46,6 +46,28 @@ pub(crate) fn heading(ui: &mut egui::Ui, glyph: &str, title: &str) {
     });
     ui.add_space(4.);
 }
+/// The Presets heading with Manage presets at the right end of its row
+/// (BY11). True when the link was clicked.
+pub(crate) fn presets_heading(ui: &mut egui::Ui) -> bool {
+    ui.add_space(10.);
+    let row = ui
+        .horizontal(|ui| {
+            let (r, _) = ui.allocate_exact_size(egui::vec2(17., 22.), Sense::hover());
+            super::ui::icon(ui.painter(), r, "Presets", Color32::from_rgb(169, 196, 207));
+            ui.add_space(3.);
+            ui.label(crate::panel_ui::title("Presets", 13.));
+        })
+        .response
+        .rect;
+    ui.add_space(4.);
+    let row = Rect::from_min_max(row.min, egui::pos2(ui.max_rect().right(), row.max.y));
+    crate::manage_presets::header_link(ui, row, 0.)
+}
+/// The collapsible Presets group with Manage presets on its header row,
+/// left of the chevron (BY11). True when the link was clicked.
+pub(crate) fn presets_group(ui: &mut egui::Ui, body: impl FnOnce(&mut egui::Ui)) -> bool {
+    group_with_link(ui, "Presets", "Presets", "", false, true, body).1
+}
 pub(crate) fn end(ui: &mut egui::Ui) {
     ui.add_space(8.);
     crate::panel_ui::divider(ui);
@@ -147,6 +169,17 @@ pub(super) fn group_forced(
     force: bool,
     body: impl FnOnce(&mut egui::Ui),
 ) -> bool {
+    group_with_link(ui, glyph, title, summary, force, false, body).0
+}
+fn group_with_link(
+    ui: &mut egui::Ui,
+    glyph: &str,
+    title: &str,
+    summary: &str,
+    force: bool,
+    link: bool,
+    body: impl FnOnce(&mut egui::Ui),
+) -> (bool, bool) {
     let id = ui.make_persistent_id(("property-group", title));
     let (mut manual, automatic, height) = ui.ctx().data(|d| {
         (
@@ -212,6 +245,7 @@ pub(super) fn group_forced(
         if open { "Down" } else { "Expand section" },
         Color32::LIGHT_GRAY,
     );
+    let clicked = link && crate::manage_presets::header_link(ui, r, 24.);
     if open {
         let top = ui.next_widget_position().y;
         ui.push_id(id, |ui| body(ui));
@@ -227,7 +261,7 @@ pub(super) fn group_forced(
         });
     }
     crate::panel_ui::divider(ui);
-    open
+    (open, clicked)
 }
 pub(super) fn percent(ui: &mut egui::Ui, label: &str, value: &mut f32, max: f32) {
     ui.label(label);
@@ -336,13 +370,15 @@ impl Editor {
             return;
         }
         if a.kind != crate::Kind::Text {
-            group(ui, "Presets", "Presets", "", |ui| {
+            if presets_group(ui, |ui| {
                 if matches!(a.kind, crate::Kind::Arrow | crate::Kind::Line) {
                     self.arrow_styles(ui);
                 } else {
                     self.object_templates(ui, a.kind);
                 }
-            });
+            }) {
+                self.manage_presets_from(ui.ctx(), Some(a.kind));
+            }
             let before = a.clone();
             let mut selection_edit = None;
             let canvas = [self.session.document.width, self.session.document.height];
@@ -408,9 +444,11 @@ impl Editor {
         }
         // Text objects follow the same order: Presets, Appearance, Text,
         // Text fitting, Position & size (properties audit).
-        group(ui, "Presets", "Presets", "", |ui| {
+        if presets_group(ui, |ui| {
             self.object_templates(ui, crate::Kind::Text);
-        });
+        }) {
+            self.manage_presets_from(ui.ctx(), Some(crate::Kind::Text));
+        }
         let Some(mut a) = self.selected_annotation() else {
             return;
         };

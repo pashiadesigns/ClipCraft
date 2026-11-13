@@ -534,11 +534,35 @@ impl Visuals {
             self.videos
                 .retain(|(id, _), _| active.iter().any(|c| c.id == *id));
         }
+        // Pictures that start within the next two seconds are decoded now,
+        // so a crossfade into them has both pictures from its first frame
+        // (BW15).
+        let upcoming: Vec<&String> = p
+            .segments
+            .iter()
+            .filter(|c| {
+                c.kind() == MediaKind::Image
+                    && !c.hidden
+                    && c.at > time
+                    && c.at <= time.saturating_add(2000)
+            })
+            .filter_map(|c| c.source.as_ref().map(|s| &s.path))
+            .collect();
         self.images.retain(|path, _| {
-            active
-                .iter()
-                .any(|c| c.source.as_ref().map_or(&p.source, |s| &s.path) == path)
+            upcoming.contains(&path)
+                || active
+                    .iter()
+                    .any(|c| c.source.as_ref().map_or(&p.source, |s| &s.path) == path)
         });
+        for path in upcoming {
+            if !self.images.contains_key(path)
+                && let Ok(pixels) =
+                    capture_core::Document::open_image(Path::new(path)).and_then(|d| d.render())
+            {
+                self.images
+                    .insert(path.clone(), std::sync::Arc::new(pixels));
+            }
+        }
         active
             .into_iter()
             .map(|c| {

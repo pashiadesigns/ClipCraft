@@ -270,8 +270,10 @@ impl Editor {
         let scope = self.video.fx.track_scope;
         ui.horizontal(|ui| {
             ui.label("Effects on");
-            ui.selectable_value(&mut self.video.fx.track_scope, false, "Clip");
-            ui.selectable_value(&mut self.video.fx.track_scope, true, "Track");
+            crate::controls::segments(ui, |ui| {
+                ui.selectable_value(&mut self.video.fx.track_scope, false, "Clip");
+                ui.selectable_value(&mut self.video.fx.track_scope, true, "Track");
+            });
         });
         if scope != self.video.fx.track_scope {
             self.follow_effects_clip(track);
@@ -287,11 +289,13 @@ impl Editor {
         let mut routing = false;
         ui.horizontal(|ui| {
             ui.label("Channels");
-            routing |= ui.selectable_value(&mut mono, false, "Stereo").changed();
-            routing |= ui
-                .selectable_value(&mut mono, true, "Mono")
-                .tip("Merge left and right input into both speakers")
-                .changed();
+            crate::controls::segments(ui, |ui| {
+                routing |= ui.selectable_value(&mut mono, false, "Stereo").changed();
+                routing |= ui
+                    .selectable_value(&mut mono, true, "Mono")
+                    .tip("Merge left and right input into both speakers")
+                    .changed();
+            });
         });
         if routing {
             let mut next = p.clone();
@@ -444,7 +448,7 @@ impl Editor {
                 }
                 Err(e) => {
                     fx.proposal = None;
-                    fx.error = e.to_string();
+                    fx.error = crate::guided::friendly(&e.to_string());
                 }
             }
         }

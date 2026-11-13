@@ -83,7 +83,7 @@ impl Editor {
                         gesture,
                     })
                 }
-                Err(error) => self.status = error.to_string(),
+                Err(error) => self.fail(error),
             }
         }
         let Some(drag) = &mut self.rotation_drag else {
@@ -98,7 +98,7 @@ impl Editor {
                         ui.ctx().request_repaint();
                     }
                 }
-                Err(error) => self.status = error.to_string(),
+                Err(error) => self.fail(error),
             }
         }
         if released {
@@ -150,7 +150,11 @@ impl Editor {
             .input(|i| i.pointer.hover_pos())
             .is_some_and(|p| p.distance(pos) <= 9.0);
         if self.rotation_drag.is_some() || hover {
-            crate::native_cursor::request_hand(ui.ctx(), self.rotation_drag.is_some());
+            crate::native_cursor::request_grip(
+                ui.ctx(),
+                crate::native_cursor::Grip::Rotate,
+                self.rotation_drag.is_some(),
+            );
             painter.text(
                 pos + egui::vec2(13.0, 0.0),
                 egui::Align2::LEFT_CENTER,

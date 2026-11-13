@@ -809,6 +809,25 @@ pub fn source_objects(
                 }
             }
             super::links::Layer::Media(track) => {
+                // A clip whose picture hasn't arrived from the decoder yet is
+                // left out of the weights, so the picture already showing
+                // holds instead of fading toward the background and jumping
+                // back when the new one lands (BW15).
+                let has_source = |id: u64| sources.iter().any(|(s, _)| *s == id);
+                let held;
+                let p =
+                    if p.segments.iter().any(|c| {
+                        c.track == track && c.active(time) && !c.hidden && !has_source(c.id)
+                    }) {
+                        let mut only = p.clone();
+                        only.segments.retain(|c| {
+                            c.track != track || !c.active(time) || c.hidden || has_source(c.id)
+                        });
+                        held = only;
+                        &held
+                    } else {
+                        p
+                    };
                 let clips: Vec<_> = p
                     .segments
                     .iter()
@@ -1318,6 +1337,97 @@ mod tests {
             );
             assert!(pixel[3] >= 254);
             assert!((pixel[0] as i16 + pixel[2] as i16 - 240).abs() <= 1);
+        }
+    }
+    /// BW15: PDF pages added to a video are picture clips of different page
+    /// sizes, fitted, overlapping 600 ms. Steps through the crossfade as the
+    /// live canvas draws it and prints the middle pixel.
+    #[test]
+    fn pdf_page_clips_crossfade_steadily() {
+        use super::super::editor::{MediaKind, Source};
+        let mut d = crate::Document::blank(1280, 720).unwrap();
+        let mut p = super::super::editor::Project::new("bg.png".into(), [1280, 720], 9000, 30);
+        let page = |id: u64, at: u64, size: [u32; 2]| {
+            let mut c = p.segments[0].clone();
+            c.id = id;
+            c.track = 7;
+            c.at = at;
+            c.start = 0;
+            c.end = 4000;
+            c.source = Some(Source {
+                path: format!("page-{id}.png"),
+                size,
+                duration: 3_600_000,
+                kind: MediaKind::Image,
+            });
+            c.frame = Some(Frame {
+                fill: false,
+                radius: 0.,
+                ..Default::default()
+            });
+            c
+        };
+        let first = page(11, 0, [1190, 1684]);
+        let second = page(12, 3400, [1224, 1584]);
+        p.media_tracks.insert(0, 7);
+        p.segments.push(first);
+        p.segments.push(second);
+        p.layer_order = vec![];
+        p.layer_order = p.layers();
+        d.video = Some(p);
+        let picture = |size: [u32; 2], color: [u8; 4]| {
+            Arc::new(
+                Bitmap::transient(Arc::new(image::RgbaImage::from_pixel(
+                    size[0],
+                    size[1],
+                    image::Rgba(color),
+                )))
+                .unwrap(),
+            )
+        };
+        let sources = vec![
+            (11, picture([1190, 1684], [240, 0, 0, 255])),
+            (12, picture([1224, 1584], [0, 0, 240, 255])),
+        ];
+        let mut trace = vec![];
+        for time in (3300..=4100).step_by(25) {
+            let mut out = image::RgbaImage::from_pixel(1280, 720, image::Rgba([0, 0, 0, 255]));
+            for a in source_objects(&d, &sources, time, false) {
+                crate::render_annotation(&mut out, &a);
+            }
+            let px = out.get_pixel(640, 360);
+            trace.push((time, px[0], px[2]));
+        }
+        // Plain page frames dissolve on the GPU: no dip in the middle.
+        assert!(texture_dissolve_sources(
+            d.video.as_ref().unwrap(),
+            [1280, 720],
+            3700,
+            7,
+            &sources
+        ));
+        for w in trace.windows(2) {
+            let ((t0, r0, b0), (t1, r1, b1)) = (w[0], w[1]);
+            assert!(
+                r1 <= r0 + 1 && b1 + 1 >= b0,
+                "{t0}->{t1}: red {r0}->{r1}, blue {b0}->{b1}"
+            );
+        }
+        for (time, r, b) in &trace {
+            assert!(
+                (i16::from(*r) + i16::from(*b) - 240).abs() <= 2,
+                "{time}: {r}+{b}"
+            );
+        }
+        // The next page's picture still decoding: the first page holds
+        // instead of fading toward the background.
+        let only_first = &sources[..1];
+        for time in [3450, 3600, 3900] {
+            let mut out = image::RgbaImage::from_pixel(1280, 720, image::Rgba([0, 0, 0, 255]));
+            for a in source_objects(&d, only_first, time, false) {
+                crate::render_annotation(&mut out, &a);
+            }
+            assert_eq!(out.get_pixel(640, 360)[0], 240, "{time}");
         }
     }
     #[test]

@@ -500,3 +500,121 @@ fn ctrl_wheel_zooms_tiles_without_reloading_cached_master_or_scrolling() {
         texture
     );
 }
+
+/// Approved option A (artifacts/by-proposal/library-and-import.html): a long
+/// PDF's parts show as one stacked card; clicking it opens a band with each
+/// part and its pages; selecting the stack selects every part.
+#[test]
+fn a_long_pdf_shows_as_one_stack_that_opens_into_its_parts() {
+    let root = tempfile::tempdir().unwrap();
+    let ctx = egui::Context::default();
+    crate::shell::configure(&ctx);
+    ctx.style_mut_of(egui::Theme::Dark, |style| style.animation_time = 0.);
+    let mut e = crate::canvas::tests::editor(&ctx);
+    e.shell.library = true;
+    e.history = HistoryPanel::isolated(root.path());
+    let set = capture_core::pdf_import::new_set_id();
+    let store = e.history.store.as_mut().unwrap();
+    for i in 0..3u32 {
+        let mut d = capture_core::Document::canvas(80, 100, [240, 240, 240, 255]).unwrap();
+        d.part = Some(capture_core::pdf_import::PartOf {
+            set: set.clone(),
+            index: i + 1,
+            total: 3,
+            title: "Manual".into(),
+            pages: [i * 30 + 1, i * 30 + 30],
+        });
+        store
+            .create(&d, &format!("Manual · part {} of 3", i + 1), Origin::Canvas)
+            .unwrap();
+    }
+    store
+        .create(
+            &capture_core::Document::canvas(80, 50, [40, 130, 170, 255]).unwrap(),
+            "Onboarding",
+            Origin::Canvas,
+        )
+        .unwrap();
+    e.history.refresh();
+    let frame = |e: &mut Editor, events: Vec<egui::Event>| {
+        PaintedOutput(ctx.run_ui(
+            egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    egui::vec2(1200., 800.),
+                )),
+                events,
+                ..Default::default()
+            },
+            |ui| e.show_library(ui),
+        ))
+    };
+    frame(&mut e, vec![]);
+    let output = frame(&mut e, vec![]);
+    let cards: Vec<(String, egui::Rect)> = ctx
+        .data(|d| d.get_temp(egui::Id::unique("library-cards")))
+        .unwrap();
+    assert_eq!(cards.len(), 2, "one stack and one capture");
+    let texts = all_texts(&output.shapes);
+    // BZ7: the mockup's badge text.
+    assert!(texts.iter().any(|t| t == "3 parts · 90 pp"), "{texts:?}");
+    assert!(texts.iter().any(|t| t == "3 parts · 90 pages"), "{texts:?}");
+    assert!(texts.iter().any(|t| t == "Manual"), "{texts:?}");
+    let parts: Vec<String> = e
+        .history
+        .entries()
+        .iter()
+        .filter(|x| x.part.is_some())
+        .map(|x| x.id.clone())
+        .collect();
+    // BZ7: page edges stacked up and to the right behind the cover (5 and
+    // 10 px, as in the mockup), the badge over the cover's top-left.
+    let (cover, edges, badge): (egui::Rect, [egui::Rect; 2], egui::Rect) = parts
+        .iter()
+        .find_map(|id| {
+            ctx.data(|d| d.get_temp(egui::Id::unique(("library-stack-look", id.as_str()))))
+        })
+        .expect("the stack's look");
+    for (edge, reach, spread) in [(edges[0], 10., 2.), (edges[1], 5., 1.)] {
+        assert_eq!(
+            edge.left(),
+            cover.left() + reach + spread,
+            "{edge:?} {cover:?}"
+        );
+        assert_eq!(
+            edge.top(),
+            cover.top() - reach + spread,
+            "{edge:?} {cover:?}"
+        );
+    }
+    assert!(cover.contains_rect(badge));
+    assert!(badge.left() - cover.left() < 8. && badge.top() - cover.top() < 8.);
+    let stack = cards
+        .iter()
+        .find(|(id, _)| parts.contains(id))
+        .expect("the stack's card")
+        .1;
+    let click = |pressed| egui::Event::PointerButton {
+        pos: stack.center(),
+        button: egui::PointerButton::Primary,
+        pressed,
+        modifiers: egui::Modifiers::NONE,
+    };
+    frame(&mut e, vec![egui::Event::PointerMoved(stack.center())]);
+    frame(&mut e, vec![click(true)]);
+    frame(&mut e, vec![click(false)]);
+    frame(&mut e, vec![]);
+    let output = frame(&mut e, vec![]);
+    let texts = all_texts(&output.shapes);
+    for pages in ["Pages 1–30", "Pages 31–60", "Pages 61–90"] {
+        assert!(texts.iter().any(|t| t == pages), "{pages}: {texts:?}");
+    }
+    assert!(texts.iter().any(|t| t == "Export all parts…"));
+    assert!(texts.iter().any(|t| t == "Find Sensitive Info in all"));
+    for id in &parts {
+        assert!(
+            e.history.library.selected.contains(id),
+            "the whole document is selected"
+        );
+    }
+}

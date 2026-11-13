@@ -95,7 +95,7 @@ impl Editor {
                     self.session.document.width, self.session.document.height
                 );
             }
-            Err(error) => self.status = error.to_string(),
+            Err(error) => crate::guided::set_error(&mut self.status, &mut self.notice, error),
         }
         if let Some(cut) = self.cut_out.as_mut() {
             cut.reset();
@@ -112,7 +112,7 @@ impl Editor {
             return;
         };
         let previous = cut.axis;
-        ui.horizontal(|ui| {
+        crate::controls::segments(ui, |ui| {
             ui.selectable_value(&mut cut.axis, CutAxis::Horizontal, "Horizontal");
             ui.selectable_value(&mut cut.axis, CutAxis::Vertical, "Vertical");
         });
@@ -234,7 +234,7 @@ impl Editor {
                             Ok(())
                         };
                         if let Err(error) = validation {
-                            self.status = error.to_string();
+                            crate::guided::set_error(&mut self.status, &mut self.notice, error);
                             cut.reset();
                         } else {
                             cut.review = !document.annotations.is_empty();

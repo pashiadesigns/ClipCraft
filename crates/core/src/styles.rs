@@ -198,7 +198,7 @@ impl Store {
                 items.push(style);
             } else {
                 return Err(Error::Invalid(
-                    "24 custom styles are already saved. Remove a style first.".into(),
+                    "You have 24 arrow styles. Delete one in Manage presets first.".into(),
                 ));
             }
             Ok(())

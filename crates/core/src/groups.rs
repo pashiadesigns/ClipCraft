@@ -102,7 +102,7 @@ impl Document {
         let ids: BTreeSet<_> = self.expand_groups(ids).into_iter().collect();
         if ids.iter().any(|id| !self.object_editable(*id)) {
             return Err(Error::Invalid(
-                "Show and unlock group members before editing the group".into(),
+                "Some objects in this group are hidden or locked. Show and unlock them, then try again.".into(),
             ));
         }
         let current: Vec<_> = self
@@ -116,7 +116,9 @@ impl Document {
             }
         } else {
             if current.len() < 2 {
-                return Err(Error::Invalid("Select two or more objects to group".into()));
+                return Err(Error::Invalid(
+                    "Shift-click or drag to select two or more objects, then Group.".into(),
+                ));
             }
             if current[0].group.is_some() && current.iter().all(|a| a.group == current[0].group) {
                 return Ok(false);
@@ -248,7 +250,7 @@ pub fn rotated(objects: &[Annotation], center: [f32; 2], degrees: f32) -> Result
     let r = crate::rotation::Rotation::new(center, degrees)?;
     if objects.iter().any(|a| !a.can_rotate()) {
         return Err(Error::Invalid(
-            "Groups containing Blur, Pixelate or Eraser regions cannot rotate yet".into(),
+            "Blur, Pixelate and Eraser areas can't turn. Ungroup them first, or rotate the other objects only.".into(),
         ));
     }
     objects

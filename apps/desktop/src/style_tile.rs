@@ -16,7 +16,7 @@ pub(super) fn tile(
     label: &str,
     active: bool,
 ) -> egui::Response {
-    paint_tile(ui, style, label, active, false)
+    paint_tile(ui, style, label, active, false, false)
 }
 pub(super) fn split_tile(
     ui: &mut egui::Ui,
@@ -24,7 +24,12 @@ pub(super) fn split_tile(
     label: &str,
     active: bool,
 ) -> egui::Response {
-    paint_tile(ui, style, label, active, true)
+    paint_tile(ui, style, label, active, true, false)
+}
+/// The same drawing as a gallery tile, without a name, click or tooltip: the
+/// preview beside each row in Manage presets (BY11).
+pub(crate) fn preview(ui: &mut egui::Ui, style: &ObjectStyle) -> egui::Response {
+    paint_tile(ui, style, "", false, false, true)
 }
 fn paint_tile(
     ui: &mut egui::Ui,
@@ -32,8 +37,16 @@ fn paint_tile(
     label: &str,
     active: bool,
     enclosed: bool,
+    passive: bool,
 ) -> egui::Response {
-    let (rect, response) = ui.allocate_exact_size(egui::vec2(82.0, 52.0), egui::Sense::click());
+    let (rect, response) = ui.allocate_exact_size(
+        egui::vec2(82.0, 52.0),
+        if passive {
+            egui::Sense::hover()
+        } else {
+            egui::Sense::click()
+        },
+    );
     #[cfg(test)]
     ui.ctx().data_mut(|d| {
         d.insert_temp(
@@ -59,8 +72,12 @@ fn paint_tile(
     );
     let c = |v: [u8; 4]| egui::Color32::from_rgba_unmultiplied(v[0], v[1], v[2], v[3]);
     let color = c(style.color).gamma_multiply(if ui.is_enabled() { 1.0 } else { 0.4 });
-    let r =
-        egui::Rect::from_center_size(rect.center() - egui::vec2(0.0, 8.0), egui::vec2(34.0, 24.0));
+    // Without a name below, the drawing sits in the middle.
+    let lift = if passive { 0.0 } else { 8.0 };
+    let r = egui::Rect::from_center_size(
+        rect.center() - egui::vec2(0.0, lift),
+        egui::vec2(34.0, 24.0),
+    );
     let stroke = egui::Stroke::new((style.width as f32 * 0.55).clamp(1.0, 4.5), color);
     let fill = style.fill.map(c).unwrap_or(egui::Color32::TRANSPARENT);
     let p = ui.painter();
@@ -288,9 +305,15 @@ fn paint_tile(
                 r.center(),
                 egui::Align2::CENTER_CENTER,
                 "Aa",
+                // A preset in a computer font loads that font the first time
+                // it's drawn (BY10: it showed two boxes until the pane was
+                // reopened); until then the tile uses the built-in face.
                 egui::FontId::new(
                     22.0,
-                    crate::text_layout::family(&style.text_style().unwrap_or_default()),
+                    crate::text_layout::available_family(
+                        ui.ctx(),
+                        &style.text_style().unwrap_or_default(),
+                    ),
                 ),
                 color,
             );
@@ -345,9 +368,34 @@ fn paint_tile(
             egui::StrokeKind::Inside,
         );
     }
+    if passive {
+        return response;
+    }
+    let more = if ui
+        .ctx()
+        .data(|d| d.get_temp::<bool>(egui::Id::unique("style-tile-menu")))
+        .unwrap_or(false)
+    {
+        " Right-click for more."
+    } else {
+        ""
+    };
     response.tip(format!(
-        "{label}\nClick to apply to the selection and use for new objects."
+        "{label}\nClick to apply to the selection and use for new objects.{more}"
     ))
+}
+/// A tile that has the preset right-click menu: its tooltip says so.
+pub(crate) fn tile_with_menu(
+    ui: &mut egui::Ui,
+    style: &capture_core::object_styles::ObjectStyle,
+    label: &str,
+    active: bool,
+) -> egui::Response {
+    let key = egui::Id::unique("style-tile-menu");
+    ui.ctx().data_mut(|d| d.insert_temp(key, true));
+    let r = tile(ui, style, label, active);
+    ui.ctx().data_mut(|d| d.insert_temp(key, false));
+    r
 }
 
 // Use the production callout renderer, including its triangular tail and rounding.
@@ -603,6 +651,37 @@ mod tests {
                 "{kind:?} above the squiggle"
             );
         }
+    }
+    /// BY10: a saved Text preset in a computer font drew two boxes until the
+    /// pane was reopened. Drawing its tile loads the font for the next frame.
+    #[test]
+    fn text_tiles_load_their_computer_font() {
+        let Some(font) = capture_core::text::system_fonts::choices().next() else {
+            return; // no computer fonts on this machine
+        };
+        let ctx = egui::Context::default();
+        crate::shell::configure(&ctx);
+        crate::text_layout::configure(&ctx);
+        let style = capture_core::object_styles::presets(Kind::Text)
+            .into_iter()
+            .next()
+            .unwrap();
+        let mut value = serde_json::to_value(&style).unwrap();
+        value["text"]["font"] = serde_json::to_value(font).unwrap();
+        let style: ObjectStyle = serde_json::from_value(value).unwrap();
+        let family = crate::text_layout::family(&style.text_style().unwrap());
+        ctx.run_ui(Default::default(), |_| {})
+            .textures_delta
+            .clear();
+        assert!(!ctx.fonts(|f| f.definitions().families.contains_key(&family)));
+        for _ in 0..2 {
+            ctx.run_ui(Default::default(), |ui| {
+                tile(ui, &style, "Saved", false);
+            })
+            .textures_delta
+            .clear();
+        }
+        assert!(ctx.fonts(|f| f.definitions().families.contains_key(&family)));
     }
     #[test]
     fn callout_previews_render_valid_callouts_and_reuse_textures() {

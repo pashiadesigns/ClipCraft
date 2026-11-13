@@ -328,7 +328,7 @@ impl Editor {
                         let mut p = v.clone();
                         match p.separate_audio(index) {
                             Ok(()) => changed = Some(p),
-                            Err(e) => self.status = e.to_string(),
+                            Err(e) => self.fail(e),
                         }
                         ui.close();
                     }
@@ -381,7 +381,7 @@ impl Editor {
                         let mut p = v.clone();
                         match p.split_clip(index, v.cursor) {
                             Ok(()) => changed = Some(p),
-                            Err(e) => self.status = e.to_string(),
+                            Err(e) => self.fail(e),
                         };
                         ui.close();
                     }
@@ -391,7 +391,7 @@ impl Editor {
                         copy.at = c.until();
                         match p.edit_linked(index, copy, true) {
                             Ok(()) => changed = Some(p),
-                            Err(e) => self.status = e.to_string(),
+                            Err(e) => self.fail(e),
                         };
                         ui.close();
                     }
@@ -550,14 +550,25 @@ impl Editor {
         if let Some(pos) = hover {
             let files = ui.input(|i| i.raw.hovered_files.len());
             if files > 0 {
-                let paths = ui.input(|i| {
+                let hovered = ui.input(|i| {
                     i.raw
                         .hovered_files
                         .iter()
                         .filter_map(|f| f.path.clone())
                         .collect::<Vec<_>>()
                 });
-                if paths != self.video.drop_paths {
+                // A PDF dropped here opens PDF pages at that spot (approved
+                // option A); other files come in as clips.
+                let pdf = hovered.iter().any(|p| crate::pdf_import_ui::is_pdf_path(p));
+                let paths: Vec<_> = hovered
+                    .into_iter()
+                    .filter(|p| !crate::pdf_import_ui::is_pdf_path(p))
+                    .collect();
+                if paths.is_empty() {
+                    self.video.drop_paths.clear();
+                    self.video.drop_clips.clear();
+                    self.video.drop_probe = None;
+                } else if paths != self.video.drop_paths {
                     self.video.drop_paths = paths.clone();
                     self.video.drop_duration = None;
                     self.video.drop_clips.clear();
@@ -580,7 +591,7 @@ impl Editor {
                                 Some(clips.iter().map(|s| s.duration()).sum());
                             self.video.drop_clips = clips;
                         }
-                        Err(error) => self.status = error,
+                        Err(error) => self.fail(error),
                     }
                 }
                 if self.video.drop_probe.is_some() {
@@ -598,7 +609,11 @@ impl Editor {
                         v.layer_index(Layer::Media(target)),
                         at,
                         5000,
-                        "Reading media…".to_owned(),
+                        if pdf && self.video.drop_paths.is_empty() {
+                            "Drop to add PDF pages here".to_owned()
+                        } else {
+                            "Reading media…".to_owned()
+                        },
                     )]
                 } else {
                     plan.segments[v.segments.len()..]
@@ -652,13 +667,20 @@ impl Editor {
                 .into_iter()
                 .map(|f| f.path().to_path_buf())
                 .collect::<Vec<_>>();
+            let (pdfs, paths): (Vec<_>, Vec<_>) = paths
+                .into_iter()
+                .partition(|p| crate::pdf_import_ui::is_pdf_path(p));
+            let at = ((pos.x - left) / scale).max(0.) as u64;
+            if let Some(pdf) = pdfs.into_iter().next() {
+                self.pdf_pages_to_video_from(pdf, Some(at));
+            }
             if !paths.is_empty() {
                 let row = super::keyframes::row_at(top, pos.y, self.video.keyframes.rows);
                 let track = match v.layers().get(row) {
                     Some(Layer::Media(id)) => *id,
                     _ => *v.media_tracks.last().unwrap(),
                 };
-                self.import_timeline_media(paths, ((pos.x - left) / scale).max(0.) as u64, track);
+                self.import_timeline_media(paths, at, track);
             }
         }
         if let Some(d) = &self.video.record_drag
@@ -734,7 +756,7 @@ impl Editor {
                 a.fade_out = a.fade_out.min(len);
             }
             if let Err(e) = project.edit_linked(d.index, c.clone(), d.duplicate) {
-                self.status = e.to_string();
+                self.fail(e);
                 return;
             }
             let row = project.layer_index(Layer::Media(c.track));

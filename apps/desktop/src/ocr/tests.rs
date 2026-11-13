@@ -138,6 +138,97 @@ fn result_modal_preserves_lines_and_copies_text_without_canvas_clipboard_or_docu
 
 #[cfg(windows)]
 #[test]
+fn tilted_word_boxes_turn_back_about_the_center() {
+    // Upright text needs nothing.
+    assert_eq!(
+        untilted([10., 20., 30., 8.], 0., [100., 100.]),
+        [10., 20., 30., 8.]
+    );
+    // A quarter turn clockwise sends a box right of the center below it.
+    let [x, y, w, h] = untilted([70., 48., 20., 4.], 90., [100., 100.]);
+    assert!((x - 48.).abs() < 0.01 && (y - 70.).abs() < 0.01, "{x} {y}");
+    assert!((w - 4.).abs() < 0.01 && (h - 20.).abs() < 0.01);
+    // A small tilt grows the box a little so the whole word is covered.
+    let [_, _, w, h] = untilted([300., 336., 119., 27.], 7.7, [1000., 700.]);
+    assert!(w > 119. && h > 27. && h < 50.);
+}
+
+/// BW13: a page tilted by several degrees keeps its word positions, and an
+/// email on it is found where the ink is.
+#[test]
+#[ignore = "Opt-in local Windows OCR model; synthetic pixels only, no desktop or clipboard"]
+fn native_ocr_finds_words_on_a_tilted_page() {
+    use capture_core::{Annotation, Document, Kind, text::TextStyle};
+    let mut d = Document::blank(1200, 800).unwrap();
+    d.annotations.push(Annotation {
+        id: 1,
+        kind: Kind::Text,
+        start: [150., 300.],
+        end: [1050., 420.],
+        color: [20, 20, 20, 255],
+        width: 1,
+        corner_radius: 0.,
+        fill: None,
+        points: vec![],
+        image: None,
+        step_outline: None,
+        line_style: None,
+        shadow: None,
+        focus: None,
+        highlighter_rect: false,
+        hard_edge: false,
+        group: None,
+        rotation_degrees: 0.,
+        mirror_x: false,
+        callout: None,
+        text: Some(TextStyle {
+            content: "Contact dana.reyes@example.com today".into(),
+            size_points: 40.,
+            ..Default::default()
+        }),
+    });
+    d.promote_features();
+    let upright = d.render().unwrap();
+    for degrees in [6f32, -9.] {
+        let page =
+            capture_core::image_transform::rotate_preview(&upright, degrees, false, [255; 4]);
+        let result = recognize(&page).unwrap();
+        let email = result
+            .words
+            .iter()
+            .find(|w| w.text.contains("@example"))
+            .unwrap_or_else(|| panic!("{degrees}°: {:?}", result.words));
+        // The box covers dark ink of the tilted email.
+        let [x, y, w, h] = email.bounds;
+        let mut ink = 0;
+        for py in y as u32..(y + h) as u32 {
+            for px in x as u32..(x + w) as u32 {
+                if page.get_pixel(px.min(page.width() - 1), py.min(page.height() - 1))[0] < 100 {
+                    ink += 1;
+                }
+            }
+        }
+        assert!(
+            ink > 200,
+            "{degrees}°: {:?} covers {ink} ink pixels",
+            email.bounds
+        );
+        let found = capture_core::privacy::detect(
+            &result.words,
+            &capture_core::privacy::Options::default(),
+            [page.width(), page.height()],
+        )
+        .unwrap();
+        assert!(
+            found
+                .iter()
+                .any(|f| f.text.contains("dana.reyes@example.com")),
+            "{degrees}°: {found:?}"
+        );
+    }
+}
+
+#[test]
 #[ignore = "Opt-in local Windows OCR model; synthetic pixels only, no desktop or clipboard"]
 fn native_ocr_recognizes_generated_fixture() {
     use capture_core::{Annotation, Document, Kind, text::TextStyle};

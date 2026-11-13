@@ -907,7 +907,7 @@ impl Project {
                 || concurrent.iter().map(|c| c.audio.len()).sum::<usize>() > 16
             {
                 return Err(Error::Invalid(
-                    "Keep at most 8 picture clips and 16 audio sources playing at the same time."
+                    "Too many clips play at once here (8 picture and 16 audio at most). Shorten or move some clips."
                         .into(),
                 ));
             }
@@ -957,7 +957,7 @@ impl Project {
                     && (o.kind() == MediaKind::Audio) != (s.kind() == MediaKind::Audio)
             }) {
                 return Err(Error::Invalid(
-                    "Move audio and picture clips onto separate media tracks.".into(),
+                    "Audio and picture clips need their own tracks. Drag one of them to another track.".into(),
                 ));
             }
             if self
@@ -967,7 +967,9 @@ impl Project {
                 .count()
                 > 2
             {
-                return Err(Error::Invalid("Only two clips may overlap on a media track. Move the third clip to another track.".into()));
+                return Err(Error::Invalid(
+                    "Three clips overlap here. Drag one of them to another track.".into(),
+                ));
             }
             for a in &s.audio {
                 if a.label.len() > 120
@@ -1057,14 +1059,12 @@ impl Project {
             .segments
             .iter()
             .position(|s| s.at < time && time < s.until())
-            .ok_or_else(|| {
-                Error::Invalid("Move the playhead inside a clip before splitting.".into())
-            })?;
+            .ok_or_else(|| Error::Invalid("Put the playhead over the clip, then Split.".into()))?;
         self.split_clip(i, time)
     }
     pub fn speed(&mut self, index: usize, speed: f64) -> Result<()> {
         if !speed.is_finite() || !(0.25..=4.).contains(&speed) {
-            return Err(Error::Invalid("Choose a speed from 0.25× to 4×.".into()));
+            return Err(Error::Invalid("Set Speed between 0.25× and 4×.".into()));
         }
         let s = self
             .segments

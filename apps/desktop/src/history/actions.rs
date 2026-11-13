@@ -236,7 +236,7 @@ impl Editor {
                     .ok_or_else(|| "This project has no single recording file to show.".to_owned())
             });
         if let Err(e) = path.and_then(|p| crate::export_ui::show_in_explorer(&p)) {
-            self.status = e;
+            self.fail(e);
         }
     }
     fn history_action(&mut self, entry: &Entry, action: Action, ctx: &egui::Context) {

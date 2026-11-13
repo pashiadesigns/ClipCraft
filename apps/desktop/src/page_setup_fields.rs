@@ -5,7 +5,7 @@ use crate::tips::Tip as _;
 use capture_core::guide_sections::{Alignment, NumberStyle};
 
 fn row<R>(ui: &mut egui::Ui, label: &str, f: impl FnOnce(&mut egui::Ui) -> R) -> R {
-    ui.horizontal(|ui| {
+    let row = ui.horizontal(|ui| {
         let (label_rect, _) = ui.allocate_exact_size(egui::vec2(132., 28.), egui::Sense::hover());
         ui.painter().text(
             label_rect.left_center(),
@@ -21,8 +21,10 @@ fn row<R>(ui: &mut egui::Ui, label: &str, f: impl FnOnce(&mut egui::Ui) -> R) ->
             f,
         )
         .inner
-    })
-    .inner
+    });
+    // Every row can be ringed by a guided error ("page-setup:<label>").
+    crate::guided::mark(ui, &format!("page-setup:{label}"), row.response.rect);
+    row.inner
 }
 fn section(ui: &mut egui::Ui, title: &str) {
     ui.add_space(4.);

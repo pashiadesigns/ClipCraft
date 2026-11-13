@@ -362,7 +362,9 @@ impl Editor {
             self.move_functions(ui);
             return;
         };
-        design::heading(ui, "Presets", "Presets");
+        if design::presets_heading(ui) {
+            self.manage_presets_from(ui.ctx(), Some(kind));
+        }
         if matches!(kind, Kind::Arrow | Kind::Line) {
             self.arrow_styles(ui);
         } else {
@@ -410,7 +412,9 @@ impl Editor {
             self.frame_style_choices(ui);
             design::end(ui);
         } else if a.kind != Kind::Image {
-            design::heading(ui, "Presets", "Presets");
+            if design::presets_heading(ui) {
+                self.manage_presets_from(ui.ctx(), Some(a.kind));
+            }
             {
                 if matches!(a.kind, Kind::Arrow | Kind::Line) {
                     self.arrow_styles(ui)

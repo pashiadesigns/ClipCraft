@@ -4,6 +4,9 @@ use crate::{Annotation, Document, Kind, canvas_view::Transform, egui};
 use capture_core::display::effect_patch::{self, Plan};
 use capture_core::display::{Viewport, render_annotation_preview};
 use std::{collections::HashMap, sync::Arc};
+
+/// Side of the canvas tiles an eraser patch is split into (`Plan::changed_tiles`).
+const ERASER_TILE: u32 = 128;
 #[cfg(test)]
 #[path = "guide_display_effect_tests.rs"]
 mod effect_tests;
@@ -26,6 +29,9 @@ struct Effect {
     plan: Plan,
     offset: [i32; 2],
     tiles: Vec<([u32; 4], egui::TextureHandle)>,
+    /// For a tiled eraser, the sub-plan behind each entry of `tiles`, so a
+    /// change elsewhere on the page redraws only the tiles it reaches.
+    parts: Vec<Plan>,
     clear: Option<Vec<([u32; 4], egui::TextureHandle)>>,
     density: f32,
     detail: Option<([u32; 4], focus::Tiles)>,
@@ -259,10 +265,27 @@ impl Scene {
                     t.screen_point([x as f32, y as f32]),
                     t.screen_point([(x + w) as f32, (y + h) as f32]),
                 );
-                rect.intersects(t.viewport).then_some((i, a.id, rect, plan))
+                // An eraser replaces only the tiles its stroke touches; the rest
+                // of its bounding box stays the normal retained display.
+                let cells = if a.focus.is_none() {
+                    plan.changed_tiles(a, ERASER_TILE)
+                } else {
+                    vec![plan.output]
+                };
+                let holes = cells
+                    .iter()
+                    .map(|[x, y, w, h]| {
+                        egui::Rect::from_min_max(
+                            t.screen_point([*x as f32, *y as f32]),
+                            t.screen_point([(x + w) as f32, (y + h) as f32]),
+                        )
+                    })
+                    .collect::<Vec<_>>();
+                rect.intersects(t.viewport)
+                    .then_some((i, a.id, rect, plan, cells, holes))
             })
             .collect();
-        let mut all_holes: Vec<_> = plans.iter().map(|p| p.2).collect();
+        let mut all_holes: Vec<_> = plans.iter().flat_map(|p| p.5.iter().copied()).collect();
         if d.canvas_behavior.allow_overflow
             && let Some(g) = &d.guide
         {
@@ -345,7 +368,7 @@ impl Scene {
                 p.rect_filled(rect, 0., egui::Color32::WHITE);
             });
         }
-        for (_, id, _, plan) in &plans {
+        for (_, id, _, plan, cells, _) in &plans {
             let surfaces = plan.focus_surfaces();
             let density = if surfaces.is_some() {
                 self.video_density.unwrap_or(1.)
@@ -359,14 +382,69 @@ impl Scene {
                 .is_none_or(|e| e.plan != *key || e.offset != offset || e.density != density)
             {
                 let base = &self.background.as_ref().unwrap().pixels;
+                let limit = (ui.input(|i| i.max_texture_side) as u32).clamp(1, 1024);
+                let mut tiles = Vec::new();
+                if surfaces.is_none() && cells.as_slice() != [plan.output] {
+                    let [ox, oy, _, _] = plan.output;
+                    // Reuse every tile whose own sub-plan is unchanged.
+                    let previous = self
+                        .effects
+                        .remove(id)
+                        .filter(|e| e.offset == offset && e.parts.len() == e.tiles.len())
+                        .map(|e| {
+                            let [px, py, _, _] = e.plan.output;
+                            e.tiles
+                                .into_iter()
+                                .zip(e.parts)
+                                .map(|((r, texture), part)| {
+                                    ([r[0] + px, r[1] + py, r[2], r[3]], (part, texture))
+                                })
+                                .collect::<HashMap<_, _>>()
+                        })
+                        .unwrap_or_default();
+                    let mut parts = Vec::new();
+                    for cell in cells {
+                        let Some(part) = plan.tile(*cell, [d.width, d.height]) else {
+                            continue;
+                        };
+                        let texture = match previous.get(cell) {
+                            Some((old, texture)) if *old == part => texture.clone(),
+                            _ => {
+                                let pixels = part.render(base, offset)?;
+                                ui.ctx().load_texture(
+                                    "effect-region",
+                                    egui::ColorImage::from_rgba_unmultiplied(
+                                        [cell[2] as usize, cell[3] as usize],
+                                        pixels.as_raw(),
+                                    ),
+                                    egui::TextureOptions::LINEAR,
+                                )
+                            }
+                        };
+                        tiles.push(([cell[0] - ox, cell[1] - oy, cell[2], cell[3]], texture));
+                        parts.push(part);
+                    }
+                    self.effects.insert(
+                        *id,
+                        Effect {
+                            plan: key.clone(),
+                            offset,
+                            tiles,
+                            parts,
+                            clear: None,
+                            density,
+                            detail: None,
+                            member_detail: HashMap::new(),
+                        },
+                    );
+                    continue;
+                }
                 let (clear, pixels) = if surfaces.is_some() {
                     let (clear, affected) = plan.render_focus_surfaces(base, offset, density)?;
                     (Some(clear), affected)
                 } else {
                     (None, key.render(base, offset)?)
                 };
-                let limit = (ui.input(|i| i.max_texture_side) as u32).clamp(1, 1024);
-                let mut tiles = Vec::new();
                 for y in (0..pixels.height()).step_by(limit as usize) {
                     for x in (0..pixels.width()).step_by(limit as usize) {
                         let w = limit.min(pixels.width() - x);
@@ -391,6 +469,7 @@ impl Scene {
                         plan: key.clone(),
                         offset,
                         tiles,
+                        parts: Vec::new(),
                         clear: clear.map(|pixels| focus::textures(ui, &pixels, limit)),
                         density,
                         detail: None,
@@ -445,7 +524,11 @@ impl Scene {
         let ppp = ui.ctx().pixels_per_point();
         for (index, a) in objects.iter().enumerate() {
             let mut outline;
-            let mut holes: Vec<_> = plans.iter().filter(|p| p.0 > index).map(|p| p.2).collect();
+            let mut holes: Vec<_> = plans
+                .iter()
+                .filter(|p| p.0 > index)
+                .flat_map(|p| p.5.iter().copied())
+                .collect();
             if !d.canvas_behavior.page_owners.is_empty()
                 && let Some(g) = &d.guide
             {
@@ -635,7 +718,11 @@ impl Scene {
                 let (lo, hi) = a.body_bounds();
                 // A border, edge or filter is part of the texture, so moving the
                 // object only moves the texture (the finish is cached).
-                let pixels = b.display_pixels([hi[0] - lo[0], hi[1] - lo[1]])?;
+                // Drawings are redrawn at the zoomed size, so PDF text stays sharp.
+                let pixels = b.display_pixels_at(
+                    [hi[0] - lo[0], hi[1] - lo[1]],
+                    t.scale * ui.ctx().pixels_per_point(),
+                )?;
                 let pixels = &pixels;
                 let key = Arc::as_ptr(pixels) as usize;
                 retained.push(key);

@@ -137,18 +137,34 @@ pub(super) fn show(ctx: &egui::Context, state: &mut State) -> (bool, bool) {
                     egui::pos2(buttons.left() - 12., footer.bottom() - 8.),
                 )
             };
-            pane(ui, message_rect, "text-message", |ui| {
-                ui.add(
-                    egui::Label::new(egui::RichText::new(message).size(12.).color(
-                        if validation.is_err() {
-                            egui::Color32::LIGHT_RED
-                        } else {
-                            MUTED
-                        },
-                    ))
-                    .wrap(),
-                );
-            });
+            // Beside the buttons the message is centered on them (BZ4);
+            // above them (narrow) it is centered in the room left.
+            let galley = ui.painter().layout(
+                message.to_owned(),
+                egui::FontId::proportional(12.),
+                if validation.is_err() {
+                    egui::Color32::LIGHT_RED
+                } else {
+                    MUTED
+                },
+                message_rect.width(),
+            );
+            let center_y = if width < 500. {
+                message_rect.center().y
+            } else {
+                buttons.center().y
+            };
+            let at = egui::pos2(
+                message_rect.left(),
+                (center_y - galley.size().y / 2.)
+                    .min(message_rect.bottom() - galley.size().y)
+                    .max(message_rect.top()),
+            );
+            #[cfg(test)]
+            record_rect(ctx, "message", egui::Rect::from_min_size(at, galley.size()));
+            ui.painter()
+                .with_clip_rect(message_rect)
+                .galley(at, galley, MUTED);
             pane(ui, buttons, "text-actions", |ui| {
                 ui.horizontal(|ui| {
                     ui.spacing_mut().item_spacing.x = 6.;
@@ -167,6 +183,7 @@ pub(super) fn show(ctx: &egui::Context, state: &mut State) -> (bool, bool) {
             {
                 record_rect(ctx, "body", body);
                 record_rect(ctx, "footer", footer);
+                record_rect(ctx, "buttons", buttons);
             }
         });
     (apply, cancel || crate::text_edit::cancel_on_escape(&modal))
@@ -447,7 +464,7 @@ fn font_fields(ui: &mut egui::Ui, state: &mut State) {
                             state.range = range.start..range.start + count;
                             state.refresh_fields();
                         }
-                        Err(e) => state.error = e.to_string(),
+                        Err(e) => state.error = crate::guided::friendly(&e.to_string()),
                     };
                     ui.close();
                 }
@@ -604,7 +621,7 @@ fn changed_text(state: &mut State, result: capture_core::Result<String>) {
             state.pending = None;
             state.error = message;
         }
-        Err(e) => state.error = e.to_string(),
+        Err(e) => state.error = crate::guided::friendly(&e.to_string()),
     }
 }
 fn spelling_fields(ui: &mut egui::Ui, state: &mut State) {

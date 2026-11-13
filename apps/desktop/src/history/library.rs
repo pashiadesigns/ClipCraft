@@ -243,6 +243,53 @@ pub(super) struct View {
     apps_open: bool,
     sites_open: bool,
     positions: std::collections::HashMap<String, (crate::motion::Tween, crate::motion::Tween)>,
+    /// The long PDF whose parts are shown under its stacked card.
+    pub(super) open_set: Option<String>,
+    /// Export or scan every part once the first part has opened, and when it
+    /// was asked for (it lapses if the part never opens).
+    pub(crate) after_open: Option<(String, PartFollow, f64)>,
+}
+/// What to do once the first part of a long PDF opens from the Library.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum PartFollow {
+    Export,
+    Scan,
+}
+/// Long PDFs (linked parts) show as one stacked card (approved
+/// rtifacts/by-proposal/library-and-import.html option A). Returns the
+/// list with one card per set (its first part) and every set's parts in order.
+pub(super) fn stack_parts(
+    visible: Vec<Entry>,
+) -> (Vec<Entry>, std::collections::BTreeMap<String, Vec<Entry>>) {
+    let mut sets: std::collections::BTreeMap<String, Vec<Entry>> = Default::default();
+    for e in &visible {
+        if let Some(p) = &e.part {
+            sets.entry(p.set.clone()).or_default().push(e.clone());
+        }
+    }
+    for parts in sets.values_mut() {
+        parts.sort_by_key(|e| e.part.as_ref().map_or(0, |p| p.index));
+    }
+    let mut shown = std::collections::BTreeSet::new();
+    let list = visible
+        .into_iter()
+        .filter(|e| match &e.part {
+            Some(p) => shown.insert(p.set.clone()),
+            None => true,
+        })
+        .map(|e| match &e.part {
+            // The stack is drawn with its first part.
+            Some(p) => sets[&p.set][0].clone(),
+            None => e,
+        })
+        .collect();
+    (list, sets)
+}
+/// "312 pages" when the parts know their pages.
+fn stack_pages(parts: &[Entry]) -> Option<u32> {
+    let first = parts.first()?.part.as_ref()?.pages[0];
+    let last = parts.last()?.part.as_ref()?.pages[1];
+    (first > 0 && last >= first).then(|| last - first + 1)
 }
 impl Default for View {
     fn default() -> Self {
@@ -264,6 +311,8 @@ impl Default for View {
             apps_open: false,
             sites_open: false,
             positions: Default::default(),
+            open_set: None,
+            after_open: None,
         }
     }
 }
@@ -463,6 +512,30 @@ impl Editor {
                     .library
                     .selected
                     .retain(|id| visible.iter().any(|e| &e.id == id));
+                let (visible, sets) = stack_parts(visible);
+                // A stack is selected as a whole: its first part stands for
+                // every part, so Delete, Pin and folders act on the document.
+                for parts in sets.values() {
+                    let lib = &mut self.history.library;
+                    let whole = lib.selected.contains(&parts[0].id);
+                    for p in &parts[1..] {
+                        if whole {
+                            lib.selected.insert(p.id.clone());
+                        } else {
+                            lib.selected.remove(&p.id);
+                        }
+                    }
+                }
+                if self
+                    .history
+                    .library
+                    .open_set
+                    .as_ref()
+                    .is_some_and(|set| !sets.contains_key(set))
+                {
+                    self.history.library.open_set = None;
+                }
+                let mut follow = None;
                 if ui.rect_contains_pointer(ui.available_rect_before_wrap())
                     && !ui.ctx().egui_wants_keyboard_input()
                 {
@@ -488,9 +561,20 @@ impl Editor {
                         let card_height = size.y + 46.;
                         let row_height = card_height + 16.;
                         let rows = visible.len().div_ceil(columns);
+                        // The open stack's parts show in a band under its row.
+                        let part_size = size * 0.8;
+                        let band_height = part_size.y + 104.;
+                        let band_row = self.history.library.open_set.as_ref().and_then(|set| {
+                            visible
+                                .iter()
+                                .position(|e| e.part.as_ref().is_some_and(|p| &p.set == set))
+                                .map(|i| i / columns)
+                        });
+                        let full_width = ui.available_width();
                         ui.allocate_space(egui::vec2(
-                            ui.available_width(),
-                            rows as f32 * row_height,
+                            full_width,
+                            rows as f32 * row_height
+                                + if band_row.is_some() { band_height } else { 0. },
                         ));
                         self.history
                             .library
@@ -498,7 +582,17 @@ impl Editor {
                             .retain(|id, _| entries.iter().any(|e| &e.id == id));
                         for (index, entry) in visible.iter().enumerate() {
                             let x = (index % columns) as f32 * (size.x + 12.);
-                            let y = (index / columns) as f32 * row_height;
+                            let y = (index / columns) as f32 * row_height
+                                + if band_row.is_some_and(|r| index / columns > r) {
+                                    band_height
+                                } else {
+                                    0.
+                                };
+                            let stack = entry
+                                .part
+                                .as_ref()
+                                .and_then(|p| sets.get(&p.set))
+                                .filter(|parts| parts.len() > 1);
                             let motion = self
                                 .history
                                 .library
@@ -525,10 +619,25 @@ impl Editor {
                                 |ui| {
                                     ui.set_width(size.x);
                                     ui.set_max_width(size.x);
-                                    self.history_card(ui, entry, size);
-                                    ui.add(egui::Label::new(&entry.label).truncate())
-                                        .tip(&entry.label);
+                                    if let Some(parts) = stack {
+                                        stacked_card(self, ui, entry, parts, size);
+                                    } else {
+                                        self.history_card(ui, entry, size);
+                                    }
+                                    let label = match (stack, &entry.part) {
+                                        (Some(_), Some(p)) => p.title.clone(),
+                                        _ => entry.label.clone(),
+                                    };
+                                    ui.add(egui::Label::new(&label).truncate()).tip(&label);
                                     let mut line = short_date(entry, this_year);
+                                    if let Some(parts) = stack {
+                                        line = format!(
+                                            "{} parts{}",
+                                            parts.len(),
+                                            stack_pages(parts)
+                                                .map_or(String::new(), |n| format!(" · {n} pages"))
+                                        );
+                                    }
                                     if self.quick_controls.thumbnail_details() {
                                         line += &format!(
                                             " · {} × {} · {}",
@@ -563,6 +672,15 @@ impl Editor {
                             if response.double_clicked() && self.history.available(&entry.id) {
                                 open = Some(entry.id.clone());
                             } else if response.clicked() {
+                                // Clicking a stack opens its parts below it.
+                                if let Some(p) = stack.and(entry.part.as_ref()) {
+                                    let lib = &mut self.history.library;
+                                    lib.open_set = if lib.open_set.as_ref() == Some(&p.set) {
+                                        None
+                                    } else {
+                                        Some(p.set.clone())
+                                    };
+                                }
                                 self.history.library.select(
                                     &entry.id,
                                     &visible,
@@ -583,6 +701,31 @@ impl Editor {
                             let available = self.history.available(&entry.id);
                             self.history_context(&response, entry, available);
                             cards.push((entry.id.clone(), card.response.rect));
+                        }
+                        if let (Some(row), Some(parts)) = (
+                            band_row,
+                            self.history
+                                .library
+                                .open_set
+                                .as_ref()
+                                .and_then(|set| sets.get(set)),
+                        ) {
+                            let band = egui::Rect::from_min_size(
+                                origin + egui::vec2(0., (row + 1) as f32 * row_height - 8.),
+                                egui::vec2(full_width, band_height - 8.),
+                            );
+                            let (opened, follow_up, close) =
+                                parts_band(self, ui, band, parts, part_size);
+                            if let Some(id) = opened {
+                                open = Some(id);
+                            }
+                            if let Some(f) = follow_up {
+                                follow = Some((parts[0].clone(), f));
+                            }
+                            if close {
+                                self.history.library.open_set = None;
+                            }
+                            cards.push((String::new(), band));
                         }
                         let (pressed, released, down, pos, modifiers) = ui.input(|i| {
                             (
@@ -679,11 +822,215 @@ impl Editor {
                         ui.ctx()
                             .data_mut(|d| d.insert_temp(egui::Id::unique("library-cards"), cards));
                     });
+                if let Some((first, f)) = follow
+                    && let Some(p) = &first.part
+                {
+                    self.history.library.after_open = Some((p.set.clone(), f, now));
+                    open = Some(first.id.clone());
+                }
                 if let Some(id) = open {
                     self.open_history(&id, &ui.ctx().clone());
                 }
             });
     }
+    /// After a stack's Export all parts or Find Sensitive Info in all: once
+    /// its first part is open, start that for every part. Runs every frame.
+    pub(crate) fn part_follow_up(&mut self, ctx: &egui::Context) {
+        let Some((set, follow, asked)) = self.history.library.after_open.clone() else {
+            return;
+        };
+        if ctx.input(|i| i.time) - asked > 20. {
+            self.history.library.after_open = None;
+            return;
+        }
+        if self.shell.library
+            || self
+                .session
+                .document
+                .part
+                .as_ref()
+                .is_none_or(|p| p.set != set)
+        {
+            return;
+        }
+        self.history.library.after_open = None;
+        match follow {
+            PartFollow::Export => self.begin_export(false),
+            PartFollow::Scan => {
+                self.open_privacy_review();
+                self.privacy_review_all_parts();
+            }
+        }
+    }
+}
+
+/// How far the stacked page edges reach up and to the right (approved mockup:
+/// `box-shadow: 5px -5px 0 -1px #c9d1d4, 10px -10px 0 -2px #9aa6ab` with a
+/// 10 px margin above and to the right of the cover).
+const STACK_REACH: f32 = 10.;
+
+/// The cover and its two page edges for a stack whose card cell starts at
+/// `top` (BZ7: exactly the mockup's look).
+fn stack_geometry(top: egui::Pos2, size: egui::Vec2) -> (egui::Rect, [egui::Rect; 2]) {
+    let cover = egui::Rect::from_min_size(
+        top + egui::vec2(0., STACK_REACH),
+        size - egui::vec2(STACK_REACH, STACK_REACH),
+    );
+    // Each edge is the cover moved up and right, shrunk by its spread.
+    let edge =
+        |offset: f32, spread: f32| cover.translate(egui::vec2(offset, -offset)).shrink(spread);
+    (cover, [edge(10., 2.), edge(5., 1.)])
+}
+
+/// "10 parts · 312 pp" (or "10 parts" when the pages aren't known).
+fn stack_badge(parts: &[Entry]) -> String {
+    format!(
+        "{} parts{}",
+        parts.len(),
+        stack_pages(parts).map_or(String::new(), |n| format!(" \u{b7} {n} pp"))
+    )
+}
+
+/// A stack: page edges stacked up and to the right behind the first part's
+/// card, and a "N parts · P pp" badge over the top-left of the cover.
+fn stacked_card(
+    e: &mut Editor,
+    ui: &mut egui::Ui,
+    entry: &Entry,
+    parts: &[Entry],
+    size: egui::Vec2,
+) {
+    let (cover, edges) = stack_geometry(ui.cursor().min, size);
+    let p = ui.painter();
+    // Farthest (darker) first, then the nearer light one.
+    for (rect, color) in edges.iter().zip([
+        egui::Color32::from_rgb(0x9a, 0xa6, 0xab),
+        egui::Color32::from_rgb(0xc9, 0xd1, 0xd4),
+    ]) {
+        p.rect_filled(*rect, 4, color);
+    }
+    ui.add_space(STACK_REACH);
+    let card = e.history_card(ui, entry, cover.size());
+    let galley = ui.painter().layout_no_wrap(
+        stack_badge(parts),
+        egui::FontId::proportional(11.),
+        egui::Color32::WHITE,
+    );
+    let badge = egui::Rect::from_min_size(
+        card.rect.left_top() + egui::vec2(4., 4.),
+        egui::vec2(galley.size().x + 14., 18.),
+    );
+    ui.painter()
+        .rect_filled(badge, 9, egui::Color32::from_black_alpha(166));
+    ui.painter().galley(
+        badge.center() - galley.size() / 2.,
+        galley,
+        egui::Color32::WHITE,
+    );
+    #[cfg(test)]
+    ui.ctx().data_mut(|d| {
+        d.insert_temp(
+            egui::Id::unique(("library-stack", entry.id.as_str())),
+            parts.len(),
+        );
+        d.insert_temp(
+            egui::Id::unique(("library-stack-look", entry.id.as_str())),
+            (card.rect, edges, badge),
+        );
+    });
+}
+
+/// The band under an open stack: its title, Export all parts, Find
+/// Sensitive Info in all, Close, and each part with its pages. Returns a
+/// part to open, a follow-up and whether Close was clicked.
+fn parts_band(
+    e: &mut Editor,
+    ui: &mut egui::Ui,
+    band: egui::Rect,
+    parts: &[Entry],
+    part_size: egui::Vec2,
+) -> (Option<String>, Option<PartFollow>, bool) {
+    let (mut opened, mut follow, mut close) = (None, None, false);
+    ui.painter()
+        .rect_filled(band, 8., egui::Color32::from_rgb(43, 51, 54));
+    ui.painter().rect_stroke(
+        band,
+        8.,
+        egui::Stroke::new(1., crate::shell::ACCENT),
+        egui::StrokeKind::Inside,
+    );
+    let title = parts[0]
+        .part
+        .as_ref()
+        .map_or(String::new(), |p| p.title.clone());
+    ui.scope_builder(
+        egui::UiBuilder::new()
+            .max_rect(band.shrink2(egui::vec2(12., 10.)))
+            .layout(egui::Layout::top_down(egui::Align::Min)),
+        |ui| {
+            ui.horizontal(|ui| {
+                let pages = stack_pages(parts)
+                    .map_or(String::new(), |n| format!(" · {n} pages"));
+                ui.label(
+                    egui::RichText::new(format!("{title}{pages} in {} parts", parts.len()))
+                        .strong(),
+                );
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    use crate::tips::Tip as _;
+                    if ui
+                        .add(crate::controls::dialog_button("Close", false))
+                        .clicked()
+                    {
+                        close = true;
+                    }
+                    if ui
+                        .add(crate::controls::dialog_button("Find Sensitive Info in all", false))
+                        .tip("Find Sensitive Info in all · Scan every part of this PDF, one part after another.")
+                        .clicked()
+                    {
+                        follow = Some(PartFollow::Scan);
+                    }
+                    if ui
+                        .add(crate::controls::dialog_button("Export all parts\u{2026}", true))
+                        .tip("Export all parts · Every part of this PDF, in order, in one file.")
+                        .clicked()
+                    {
+                        follow = Some(PartFollow::Export);
+                    }
+                });
+            });
+            ui.add_space(6.);
+            egui::ScrollArea::horizontal()
+                .id_salt(("library-parts", title.as_str()))
+                .show(ui, |ui| {
+                    ui.horizontal(|ui| {
+                        for part in parts {
+                            ui.vertical(|ui| {
+                                ui.set_width(part_size.x);
+                                let r = e.history_card_action(
+                                    ui,
+                                    part,
+                                    part_size,
+                                    Some("Open this part."),
+                                );
+                                let label = part.part.as_ref().map_or(String::new(), |p| {
+                                    if p.pages[0] > 0 {
+                                        format!("Pages {}\u{2013}{}", p.pages[0], p.pages[1])
+                                    } else {
+                                        format!("Part {} of {}", p.index, p.total)
+                                    }
+                                });
+                                ui.label(egui::RichText::new(label).size(11.5));
+                                if r.clicked() && e.history.available(&part.id) {
+                                    opened = Some(part.id.clone());
+                                }
+                            });
+                        }
+                    });
+                });
+        },
+    );
+    (opened, follow, close)
 }
 
 #[cfg(test)]
@@ -695,6 +1042,7 @@ mod tests {
             kind: Default::default(),
             tags: vec![],
             organize: Default::default(),
+            part: None,
             id: id.into(),
             label: label.into(),
             origin: Origin::Project,
@@ -775,7 +1123,7 @@ impl Editor {
                 self.history.error.clear();
                 self.history.refresh();
             }
-            Err(e) => self.history.error = e.to_string(),
+            Err(e) => self.history.error = crate::guided::friendly(&e.to_string()),
         }
     }
     /// Search, Sort, size, Details, Import and Refresh in one bar.
@@ -1181,7 +1529,7 @@ impl Editor {
                     self.history.refresh();
                     return;
                 }
-                Err(e) => naming.error = e.to_string(),
+                Err(e) => naming.error = crate::guided::friendly(&e.to_string()),
             }
         }
         self.history.library.naming = Some(naming);

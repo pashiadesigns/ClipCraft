@@ -106,6 +106,22 @@ impl Shelf {
         }
     }
 }
+/// The palettes on disk, for kits; `None` in tests and when there's no
+/// preferences folder.
+pub(crate) fn palette_store() -> Option<Store> {
+    #[cfg(test)]
+    {
+        None
+    }
+    #[cfg(not(test))]
+    {
+        Shelf::load().store
+    }
+}
+/// Every color picker rereads its palettes, after a kit added some.
+pub(crate) fn reload(ctx: &egui::Context) {
+    ctx.data_mut(|d| d.remove::<Shelf>(key()));
+}
 fn with_shelf<R>(ctx: &egui::Context, f: impl FnOnce(&mut Shelf) -> R) -> R {
     let mut shelf = ctx
         .data_mut(|d| d.get_temp::<Shelf>(key()))

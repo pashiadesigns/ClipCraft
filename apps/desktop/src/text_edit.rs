@@ -147,7 +147,7 @@ impl Editor {
         {
             Ok(annotation) => annotation,
             Err(error) => {
-                self.status = error.to_string();
+                crate::guided::set_error(&mut self.status, &mut self.notice, error);
                 return false;
             }
         };
@@ -272,7 +272,7 @@ impl Editor {
             }
         }
         if let Err(error) = crate::text_clipboard::events(&ctx, draft) {
-            self.status = error;
+            crate::guided::set_error(&mut self.status, &mut self.notice, error);
         }
         let navigating = self.view.panning
             || ui.input(|i| i.pointer.button_released(egui::PointerButton::Middle));
@@ -286,7 +286,7 @@ impl Editor {
             .fit_text_shape([self.session.document.width, self.session.document.height])
         {
             Ok(fitted) => draft.preview = fitted,
-            Err(error) => self.status = error.to_string(),
+            Err(error) => crate::guided::set_error(&mut self.status, &mut self.notice, error),
         }
         let (min, max) = capture_core::text::content_bounds(&draft.preview);
         let rect =
@@ -424,7 +424,7 @@ impl Editor {
             .fit_text_shape([self.session.document.width, self.session.document.height])
         {
             Ok(fitted) => draft.preview = fitted,
-            Err(error) => self.status = error.to_string(),
+            Err(error) => crate::guided::set_error(&mut self.status, &mut self.notice, error),
         }
         if draft.preview != before {
             self.needs_render = true;

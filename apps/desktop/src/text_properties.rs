@@ -167,7 +167,7 @@ impl Editor {
                     draft.preview = edited;
                     self.needs_render = true;
                 }
-                Err(error) => self.status = error.to_string(),
+                Err(error) => self.fail(error),
             }
         } else {
             self.preview_property_edit_with_rotation(edited, rotation_requested);

@@ -44,12 +44,41 @@ fn options() -> usvg::Options<'static> {
     };
     opt
 }
+/// PDF pages rebuilt as drawings may carry their pictures inline, so they get
+/// a larger allowance than imported SVG files.
+pub const MAX_PDF_PAGE_SVG_BYTES: usize = 48 * 1024 * 1024;
 fn parse(text: &str) -> Result<usvg::Tree> {
     if text.len() > MAX_SVG_BYTES {
         return Err(Error::Invalid("SVG files must be under 8 MB.".into()));
     }
-    usvg::Tree::from_str(text, &options())
-        .map_err(|e| Error::Invalid(format!("This SVG can't be read: {e}")))
+    parse_unchecked(text)
+}
+fn parse_unchecked(text: &str) -> Result<usvg::Tree> {
+    crate::guarded("This SVG can't be read.", || {
+        usvg::Tree::from_str(text, &options())
+            .map_err(|e| Error::Invalid(format!("This SVG can't be read: {e}")))
+    })
+}
+/// Parses a PDF page drawing (see [`MAX_PDF_PAGE_SVG_BYTES`]).
+pub(crate) fn parse_pdf_page(text: &str) -> Result<usvg::Tree> {
+    if text.len() > MAX_PDF_PAGE_SVG_BYTES {
+        return Err(Error::Invalid(
+            "This PDF page is too large to import.".into(),
+        ));
+    }
+    parse_unchecked(text)
+}
+/// Parses a drawing for PDF export, with the allowance its kind has.
+pub(crate) fn parse_for_export(text: &str, pdf_page: bool) -> Result<usvg::Tree> {
+    if pdf_page {
+        parse_pdf_page(text)
+    } else {
+        parse(text)
+    }
+}
+/// Draws a PDF page drawing at `size` pixels.
+pub(crate) fn render_pdf_page(text: &str, size: [u32; 2]) -> Result<RgbaImage> {
+    draw_tree(&parse_pdf_page(text)?, size, None)
 }
 /// The drawing's own size in pixels, kept within sensible bounds.
 pub fn svg_size(text: &str) -> Result<[u32; 2]> {
@@ -66,7 +95,13 @@ pub fn svg_size(text: &str) -> Result<[u32; 2]> {
 }
 /// Draws an SVG at `size` pixels, optionally in one color (`tint`).
 pub fn render_svg(text: &str, size: [u32; 2], tint: Option<[u8; 4]>) -> Result<RgbaImage> {
-    let tree = parse(text)?;
+    draw_tree(&parse(text)?, size, tint)
+}
+pub(crate) fn draw_tree(
+    tree: &usvg::Tree,
+    size: [u32; 2],
+    tint: Option<[u8; 4]>,
+) -> Result<RgbaImage> {
     let [w, h] = size.map(|v| v.clamp(1, MAX_SIDE));
     let mut pixmap = tiny_skia::Pixmap::new(w, h)
         .ok_or_else(|| Error::Invalid("SVG size is out of range.".into()))?;
@@ -75,7 +110,11 @@ pub fn render_svg(text: &str, size: [u32; 2], tint: Option<[u8; 4]>) -> Result<R
         w as f32 / s.width().max(1e-3),
         h as f32 / s.height().max(1e-3),
     );
-    resvg::render(&tree, transform, &mut pixmap.as_mut());
+    // A drawing the renderer can't handle fails like a bad file (ENG-009).
+    crate::guarded("This drawing can't be drawn.", || {
+        resvg::render(tree, transform, &mut pixmap.as_mut());
+        Ok(())
+    })?;
     let mut out = RgbaImage::new(w, h);
     for (p, c) in out.pixels_mut().zip(pixmap.pixels()) {
         let c = c.demultiply();

@@ -99,6 +99,95 @@ pub struct Preferences {
     pub blank: BlankDefaults,
     #[serde(default)]
     pub workspace: Workspace,
+    /// Find Sensitive Info custom types (approved beta 5 tab 3).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub sensitive_types: Vec<crate::privacy::custom::CustomType>,
+    /// Preferences › Team (approved beta 6 tab 3).
+    #[serde(default)]
+    pub team: Team,
+    /// Hidden built-in presets and what each kit added (approved removing
+    /// presets mockup).
+    #[serde(default, skip_serializing_if = "PresetRecords::is_empty")]
+    pub presets: PresetRecords,
+}
+/// Built-in presets hidden from the galleries, as "<gallery>:<name>", and
+/// the items each kit added, so a kit can be removed again.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct PresetRecords {
+    pub hidden: Vec<String>,
+    pub kits: std::collections::BTreeMap<String, Vec<KitItem>>,
+}
+/// One item a kit added: its kind (a kit category label), its name, and a
+/// fingerprint of it as added, to tell whether it was changed since.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct KitItem {
+    pub kind: String,
+    pub name: String,
+    pub fingerprint: u64,
+}
+impl PresetRecords {
+    pub fn is_empty(&self) -> bool {
+        self.hidden.is_empty() && self.kits.is_empty()
+    }
+    pub fn validate(&self) -> Result<()> {
+        if self.hidden.len() > 512
+            || self.kits.len() > 256
+            || self.kits.values().any(|v| v.len() > 4096)
+            || self.hidden.iter().any(|h| h.len() > 200)
+        {
+            return Err(Error::Invalid(
+                "Too many hidden presets or kit records. Show some presets again, or remove a kit."
+                    .into(),
+            ));
+        }
+        Ok(())
+    }
+}
+/// Preferences › Team: a shared folder of kits, and locks for projects
+/// opened from shared folders.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Team {
+    /// Kits here load automatically and update when the folder does.
+    pub folder: Option<PathBuf>,
+    /// Kits in the folder that are turned off, by file name.
+    pub off: Vec<String>,
+    /// Each kit file added, with the modified time it was added at, so a
+    /// kit is added again only when it changes.
+    pub added: std::collections::BTreeMap<String, u64>,
+    pub lock_shared: bool,
+    /// Shown to others on a lock; empty uses the Windows user name.
+    pub display_name: String,
+}
+impl Default for Team {
+    fn default() -> Self {
+        Self {
+            folder: None,
+            off: vec![],
+            added: Default::default(),
+            lock_shared: true,
+            display_name: String::new(),
+        }
+    }
+}
+impl Team {
+    pub fn validate(&self) -> Result<()> {
+        if self.display_name.chars().count() > 60
+            || self.display_name.chars().any(char::is_control)
+            || self.off.len() > 256
+            || self.added.len() > 256
+            || self
+                .folder
+                .as_ref()
+                .is_some_and(|f| f.as_os_str().len() > 1024 || !f.is_absolute())
+        {
+            return Err(Error::Invalid(
+                "Use a name up to 60 characters, and Browse to choose the team folder.".into(),
+            ));
+        }
+        Ok(())
+    }
 }
 /// The key that turns snapping off for one drag.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -202,6 +291,9 @@ impl Default for Preferences {
             default_watermark: None,
             blank: BlankDefaults::default(),
             workspace: Workspace::default(),
+            sensitive_types: Vec::new(),
+            team: Team::default(),
+            presets: PresetRecords::default(),
         }
     }
 }
@@ -225,7 +317,9 @@ impl Preferences {
                     .iter()
                     .any(|id| id.len() > 2048 || id.contains('\0'))
                 {
-                    return Err(Error::Invalid("Choose a valid audio output device.".into()));
+                    return Err(Error::Invalid(
+                        "That speaker isn't available. Choose another output.".into(),
+                    ));
                 }
                 self.audio_outputs = value;
             }
@@ -247,7 +341,7 @@ impl Preferences {
             Choice::Workspace(value) => {
                 if !(4..=512).contains(&value.grid_size) {
                     return Err(Error::Invalid(
-                        "Grid size runs from 4 to 512 pixels.".into(),
+                        "Set Grid size between 4 and 512 pixels.".into(),
                     ));
                 }
                 self.workspace = value;
@@ -257,13 +351,25 @@ impl Preferences {
                 self.favorite_tools = favorites;
             }
             Choice::RestoreFolders(folders) => self.folders = folders,
+            Choice::SensitiveTypes(list) => {
+                crate::privacy::custom::validate_all(&list)?;
+                self.sensitive_types = list;
+            }
+            Choice::Team(team) => {
+                team.validate()?;
+                self.team = team;
+            }
+            Choice::Presets(records) => {
+                records.validate()?;
+                self.presets = records;
+            }
             Choice::Watermarks(list, default) => {
                 if list.len() > 32
                     || default
                         .as_ref()
                         .is_some_and(|d| !list.iter().any(|w| &w.name == d))
                 {
-                    return Err(Error::Invalid("Keep up to 32 watermark presets.".into()));
+                    return Err(Error::Invalid("You have 32 watermark presets. Delete some in Manage presets, then try again.".into()));
                 }
                 for w in &list {
                     w.validate()?;
@@ -430,6 +536,9 @@ pub enum Choice {
     RestoreFolders(std::collections::BTreeMap<Folder, PathBuf>),
     /// Watermark presets and the default preset's name.
     Watermarks(Vec<crate::watermark::Watermark>, Option<String>),
+    SensitiveTypes(Vec<crate::privacy::custom::CustomType>),
+    Team(Team),
+    Presets(PresetRecords),
     Keybinds(crate::keybinds::Keybinds),
     Capture(crate::capture_options::Settings),
     Video(crate::video::Options),
@@ -474,6 +583,10 @@ impl AudioOutputs {
     }
 }
 
+/// Saved settings hold custom sensitive types and watermarks, a logo each
+/// (BW6: a kit with those passed the old 16 KB cap, so adding it failed).
+const MAX_FILE_BYTES: u64 = 16 * 1024 * 1024;
+
 pub struct Store {
     root: PathBuf,
 }
@@ -493,7 +606,7 @@ impl Store {
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Preferences::default()),
             Err(e) => return Err(e.into()),
         };
-        if metadata.len() > 16384 {
+        if metadata.len() > MAX_FILE_BYTES {
             return Err(Error::Invalid(
                 "Quick control preferences are too large; file preserved".into(),
             ));
@@ -516,9 +629,9 @@ impl Store {
         next.choose(choice)?;
         next.validate()?;
         let bytes = serde_json::to_vec_pretty(&next)?;
-        if bytes.len() > 16384 {
+        if bytes.len() as u64 > MAX_FILE_BYTES {
             return Err(Error::Invalid(
-                "Quick control preferences exceed storage limit".into(),
+                "Your saved settings would pass 16 MB. Remove some saved watermarks or custom sensitive types, then try again.".into(),
             ));
         }
         atomic_write(&self.root.join("quick-controls-v2.json"), &bytes)?;
@@ -683,6 +796,26 @@ mod tests {
         for bytes in [b"{broken".to_vec(),vec![b'x';16385],br#"{"version":99,"alignment":"left","distribution":"horizontal_gaps","justification":"center_middle"}"#.to_vec()] {
             fs::write(&path,&bytes).unwrap();assert!(Store::open(temp.path()).is_err());assert_eq!(fs::read(&path).unwrap(),bytes);
         }
+    }
+    /// BW6: settings past the old 16 KB cap (kits add custom types and
+    /// watermarks here) are saved and read back.
+    #[test]
+    fn settings_past_sixteen_kilobytes_save_and_load() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = Store::open(temp.path()).unwrap();
+        let mut team = store.read().unwrap().team;
+        for i in 0..200 {
+            team.added
+                .insert(format!("{i:03} {}", "kit name ".repeat(12)), i);
+        }
+        store.remember(Choice::Team(team.clone())).unwrap();
+        assert!(
+            fs::metadata(temp.path().join("quick-controls-v2.json"))
+                .unwrap()
+                .len()
+                > 16384
+        );
+        assert_eq!(Store::open(temp.path()).unwrap().read().unwrap().team, team);
     }
     #[test]
     fn automatic_tool_switching_defaults_off_but_explicit_on_survives_restart() {

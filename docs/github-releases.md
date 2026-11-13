@@ -1,6 +1,6 @@
 # Release verification
 
-The 1.0.0-beta.4 release provides an unsigned Windows x64 **MSI installer**, a
+The 1.0.0-beta.5 release provides an unsigned Windows x64 **MSI installer**, a
 **portable ZIP**, and a source archive for the exact release commit. It replaces
 the previous development downloads; old project formats are not supported.
 
@@ -13,8 +13,8 @@ on a GitHub-hosted Windows runner from the exact release commit. It does not
 claim a build attestation or an Authenticode signature.
 
 ```powershell
-Get-FileHash ./clipdesigner-1.0.0-beta.4-windows-x64.msi -Algorithm SHA256
-Get-FileHash ./clipdesigner-1.0.0-beta.4-windows-x64.zip -Algorithm SHA256
+Get-FileHash ./clipdesigner-1.0.0-beta.5-windows-x64.msi -Algorithm SHA256
+Get-FileHash ./clipdesigner-1.0.0-beta.5-windows-x64.zip -Algorithm SHA256
 ```
 
 The SPDX inventory covers the resolved Windows build/test dependency graph and

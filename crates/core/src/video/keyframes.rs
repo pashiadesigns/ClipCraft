@@ -817,8 +817,7 @@ pub fn edit_annotations(doc: &mut crate::Document, edits: &[Annotation], auto: b
         };
         if auto && !t.active(p.cursor) {
             return Err(Error::Invalid(
-                "Move the playhead inside the selected object's duration before adding a keyframe."
-                    .into(),
+                "Put the playhead inside the object’s bar, then add the keyframe.".into(),
             ));
         }
         let Some(base) = doc.annotations.iter_mut().find(|a| a.id == edited.id) else {

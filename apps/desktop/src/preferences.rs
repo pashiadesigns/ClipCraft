@@ -19,15 +19,17 @@ pub(crate) enum Section {
     Library,
     Shortcuts,
     Toolbar,
+    Team,
 }
 impl Section {
-    const ALL: [Self; 6] = [
+    const ALL: [Self; 7] = [
         Self::General,
         Self::Editor,
         Self::Capture,
         Self::Library,
         Self::Shortcuts,
         Self::Toolbar,
+        Self::Team,
     ];
     fn label(self) -> &'static str {
         match self {
@@ -37,6 +39,7 @@ impl Section {
             Self::Library => "Library",
             Self::Shortcuts => "Shortcuts",
             Self::Toolbar => "Toolbar",
+            Self::Team => "Team",
         }
     }
 }
@@ -179,6 +182,26 @@ impl Editor {
                     self.preferences_library(ui, &mut open.draft.workspace.keep_versions)
                 }
                 Section::Toolbar => self.toolbar_section(ui),
+                Section::Team => {
+                    crate::sharing::team_section(ui, &mut open.draft.team);
+                    // Remove a kit (approved removing presets mockup).
+                    ui.add_space(10.);
+                    crate::panel_ui::heading(ui, "Presets", "Kits you added");
+                    let key = egui::Id::unique("preferences-removing-kit");
+                    let mut removing = ui
+                        .ctx()
+                        .data(|d| d.get_temp::<Option<(String, bool)>>(key))
+                        .flatten();
+                    if let Some((kit, keep)) = self.kit_list(ui, &mut removing) {
+                        self.remove_kit(&kit, keep);
+                        removing = None;
+                    }
+                    ui.ctx().data_mut(|d| d.insert_temp(key, removing));
+                    if ui.button("Manage presets\u{2026}").clicked() {
+                        self.presets_ctx = Some(ui.ctx().clone());
+                        self.open_manage_presets();
+                    }
+                }
                 Section::Shortcuts => {}
             });
     }
@@ -275,15 +298,18 @@ impl Editor {
             }
             Section::Library => d.workspace.keep_versions = true,
             Section::Toolbar => self.apply_toolbar_choice(Choice::ResetToolbar),
+            Section::Team => d.team = defaults.team.clone(),
             Section::Shortcuts => {}
         }
     }
     fn apply_preferences(&mut self, ctx: &egui::Context, open: &Open) {
         self.quick_controls.apply_preferences(&open.draft);
         if let Err(e) = crate::windows_startup::set(open.start_with_windows) {
-            self.status = e;
+            self.fail(e);
         }
         self.save_library_capacity(ctx);
+        // A new team folder or a kit turned back on is added straight away.
+        self.sync_team_kits(ctx);
         if self.options.draft.is_some() {
             self.apply_shortcut_draft(ctx);
         }

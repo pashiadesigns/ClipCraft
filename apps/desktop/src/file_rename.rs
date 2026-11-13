@@ -82,7 +82,7 @@ impl Editor {
                     copy.display()
                 );
             }
-            Err(e) => self.status = e.to_string(),
+            Err(e) => self.fail(e),
         }
     }
     /// Palette menu > New from image colors: the open image's main colors.
@@ -122,128 +122,165 @@ impl Editor {
             self.begin_rename();
         }
     }
+    /// File › Info (approved File menu): one details card, with Rename,
+    /// Duplicate and Show in File Explorer as cards beside it.
     pub(crate) fn file_info(&mut self, ui: &mut egui::Ui) {
         let video = self.is_video();
-        ui.heading(if video {
-            "Video project"
-        } else {
-            "Image project"
-        });
-        ui.add_space(14.0);
-        egui::Frame::new()
-            .fill(egui::Color32::from_rgb(36, 43, 46))
-            .corner_radius(8)
-            .inner_margin(12)
-            .show(ui, |ui| {
-                ui.set_max_width(640.);
-                let mut apply = None;
-                let mut cancel = false;
-                if let Some((draft, error)) = self.shell.rename.as_mut() {
-                    ui.horizontal(|ui| {
-                        let field = ui.add(
-                            egui::TextEdit::singleline(draft)
-                                .id(egui::Id::unique("project_rename"))
-                                .desired_width(260.),
-                        );
-                        if !field.has_focus() && error.is_empty() && !field.lost_focus() {
-                            field.request_focus();
-                        }
-                        let ext = self
-                            .path
-                            .as_ref()
-                            .and_then(|p| p.extension())
-                            .map(|e| format!(".{}", e.to_string_lossy()))
-                            .unwrap_or_default();
-                        ui.label(RichText::new(ext).weak());
-                        let enter =
-                            field.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
-                        if ui
-                            .button("Rename")
-                            .tip("Rename the project file, its Library entry and the window title.")
-                            .clicked()
-                            || enter
-                        {
-                            apply = Some(draft.clone());
-                        }
-                        if ui.button("Cancel").tip("Keep the current name.").clicked()
-                            || ui.input(|i| i.key_pressed(egui::Key::Escape))
-                        {
-                            cancel = true;
-                        }
+        crate::backstage::heading(ui, "General", "Info", None);
+        ui.add_space(10.);
+        let width = ui.available_width().min(1000.);
+        let side = (width * 0.38).clamp(200., 320.);
+        ui.horizontal_top(|ui| {
+            ui.vertical(|ui| {
+                ui.set_width(width - side - 16.);
+                egui::Frame::new()
+                    .fill(egui::Color32::from_rgb(36, 43, 46))
+                    .stroke(egui::Stroke::new(1., egui::Color32::from_rgb(52, 61, 64)))
+                    .corner_radius(9)
+                    .inner_margin(egui::Margin::symmetric(16, 14))
+                    .show(ui, |ui| {
+                        ui.set_width(ui.available_width());
+                        self.info_name(ui);
+                        ui.add_space(8.);
+                        let d = &self.session.document;
+                        let kept = match &self.path {
+                            Some(p) => p.display().to_string(),
+                            None => "Library (not saved as a file yet)".into(),
+                        };
+                        let kind = if video {
+                            "Video project".to_owned()
+                        } else if let Some(g) = d.guide.as_ref().filter(|g| g.pages.is_some()) {
+                            format!("Image project · guide, {} pages", g.page_count())
+                        } else {
+                            "Image project".to_owned()
+                        };
+                        let shared = match self.locked_by_other() {
+                            Some(lock) => format!("{} is editing", lock.name),
+                            None => "No one else is editing".into(),
+                        };
+                        let (saved, _) = self.autosave_summary();
+                        egui::Grid::new("file-info-details")
+                            .num_columns(2)
+                            .spacing([16., 6.])
+                            .show(ui, |ui| {
+                                for (label, value) in [
+                                    ("Type", kind),
+                                    ("Kept in", kept),
+                                    ("Size", format!("{} × {} px", d.width, d.height)),
+                                    ("Objects", format!("{} editable objects", d.annotations.len())),
+                                    ("Last saved", saved.to_owned()),
+                                    ("Shared", shared),
+                                ] {
+                                    ui.label(RichText::new(label).color(egui::Color32::from_gray(150)));
+                                    ui.add(egui::Label::new(value).wrap());
+                                    ui.end_row();
+                                }
+                            });
                     });
-                    if !error.is_empty() {
-                        ui.colored_label(egui::Color32::from_rgb(228, 135, 127), error.as_str());
+                ui.add_space(8.);
+                ui.label(
+                    RichText::new(if video {
+                        "A video project keeps its media in the .vclip-media folder beside it. Rename moves both together."
+                    } else {
+                        "Editable projects keep the original picture and every object separate. Exports combine them into one file."
+                    })
+                    .color(egui::Color32::from_gray(150)),
+                );
+            });
+            ui.add_space(16.);
+            ui.vertical(|ui| {
+                ui.set_width(side);
+                let explorer = if video {
+                    self.recording_file()
+                } else {
+                    self.path.clone()
+                };
+                let show_detail = if explorer.is_some() {
+                    if video {
+                        "The original recording"
+                    } else {
+                        "The project file"
                     }
                 } else {
-                    ui.label(RichText::new(self.project_name()).size(16.).strong());
-                }
-                ui.label(
-                    RichText::new(
-                        self.path
-                            .as_ref()
-                            .map(|p| p.display().to_string())
-                            .unwrap_or_else(|| "Not saved yet".into()),
-                    )
-                    .weak()
-                    .monospace(),
-                );
-                if let Some(name) = apply {
-                    match self.rename_project(&name) {
-                        Ok(()) => self.shell.rename = None,
-                        Err(e) => {
-                            if let Some((_, error)) = self.shell.rename.as_mut() {
-                                *error = e;
-                            }
+                    "Available once saved as a file"
+                };
+                match crate::backstage::cards(
+                    ui,
+                    &[
+                        ("Text", "Rename", "F2, or double-click the title", false),
+                        ("Duplicate", "Duplicate", "A copy named \u{201c}(copy)\u{201d}", false),
+                        ("Folder", "Show in File Explorer", show_detail, false),
+                    ],
+                ) {
+                    Some(0) => self.begin_rename(),
+                    Some(1) => self.duplicate_project(),
+                    Some(_) => {
+                        if let Some(path) = explorer
+                            && let Err(e) = crate::export_ui::show_in_explorer(&path)
+                        {
+                            self.fail(e);
                         }
                     }
-                }
-                if cancel {
-                    self.shell.rename = None;
+                    None => {}
                 }
             });
-        ui.add_space(10.);
-        ui.horizontal(|ui| {
-            if ui
-                .add_enabled(self.shell.rename.is_none(), egui::Button::new("Rename"))
-                .tip("Rename the project. Shortcut: F2, or double-click the name in the title bar.")
-                .clicked()
-            {
-                self.begin_rename();
-            }
-            if ui
-                .button("Duplicate")
-                .tip("Save a copy named \"(copy)\" next to this project and open it.")
-                .clicked()
-            {
-                self.duplicate_project();
-            }
-            if video
-                && let Some(path) = self.recording_file()
-                && ui
-                    .button("Show recording file")
-                    .tip("Open File Explorer with the original recording selected.")
+        });
+    }
+    /// The project's name, or the rename field while renaming.
+    fn info_name(&mut self, ui: &mut egui::Ui) {
+        let mut apply = None;
+        let mut cancel = false;
+        if let Some((draft, error)) = self.shell.rename.as_mut() {
+            ui.horizontal(|ui| {
+                let field = ui.add(
+                    egui::TextEdit::singleline(draft)
+                        .id(egui::Id::unique("project_rename"))
+                        .desired_width(260.),
+                );
+                if !field.has_focus() && error.is_empty() && !field.lost_focus() {
+                    field.request_focus();
+                }
+                let ext = self
+                    .path
+                    .as_ref()
+                    .and_then(|p| p.extension())
+                    .map(|e| format!(".{}", e.to_string_lossy()))
+                    .unwrap_or_default();
+                ui.label(RichText::new(ext).weak());
+                let enter = field.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+                if ui
+                    .button("Rename")
+                    .tip("Rename the project file, its Library entry and the window title.")
                     .clicked()
-                && let Err(e) = crate::export_ui::show_in_explorer(&path)
-            {
-                self.status = e;
+                    || enter
+                {
+                    apply = Some(draft.clone());
+                }
+                if ui.button("Cancel").tip("Keep the current name.").clicked()
+                    || ui.input(|i| i.key_pressed(egui::Key::Escape))
+                {
+                    cancel = true;
+                }
+            });
+            if !error.is_empty() {
+                crate::guided::dialog_message(ui, crate::guided::Kind::Error, error, false);
             }
-        });
-        ui.add_space(18.0);
-        ui.label(format!(
-            "{} × {} pixels",
-            self.session.document.width, self.session.document.height
-        ));
-        ui.label(format!(
-            "{} editable objects",
-            self.session.document.annotations.len()
-        ));
-        ui.add_space(16.0);
-        self.autosave_status(ui);
-        ui.label(if video {
-            "A video project keeps its media in the .vclip-media folder beside it. Rename moves both together."
         } else {
-            "Editable projects retain the original image and separate annotations. PNG exports combine them into one image."
-        });
+            ui.label(RichText::new(self.project_name()).size(17.).strong());
+        }
+        if let Some(name) = apply {
+            match self.rename_project(&name) {
+                Ok(()) => self.shell.rename = None,
+                Err(e) => {
+                    if let Some((_, error)) = self.shell.rename.as_mut() {
+                        *error = e;
+                    }
+                }
+            }
+        }
+        if cancel {
+            self.shell.rename = None;
+        }
     }
 }
 

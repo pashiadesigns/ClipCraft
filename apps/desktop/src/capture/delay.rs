@@ -14,7 +14,7 @@ pub(super) struct Countdown {
 impl Countdown {
     pub(super) fn new(seconds: u32, now: Instant) -> Result<Self, String> {
         if ![0, 3, 5, 10].contains(&seconds) {
-            return Err("Capture delay must be 0, 3, 5 or 10 seconds.".into());
+            return Err("Pick a Start delay: 0, 3, 5 or 10 seconds.".into());
         }
         Ok(Self {
             deadline: now + Duration::from_secs(u64::from(seconds)),

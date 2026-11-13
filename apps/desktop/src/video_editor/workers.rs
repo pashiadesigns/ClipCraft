@@ -328,7 +328,7 @@ pub(crate) fn copy_recording(
     };
     if same(source, path) {
         return Err(
-            "Choose a different output filename to preserve the original recording.".into(),
+            "That name would replace the original recording. Choose another file name.".into(),
         );
     }
     let mut from =
@@ -392,6 +392,56 @@ pub(crate) fn export_sync(
 ) -> Result<(), String> {
     export_marked(doc, path, stop, None, 8_000_000, progress)
 }
+/// Exports the video as an MP4 and puts it on a PowerPoint slide, with its
+/// first frame as the poster (approved beta 6 tab 2).
+pub(crate) fn export_slide(
+    doc: Document,
+    path: PathBuf,
+    watermark: Option<capture_core::watermark::Watermark>,
+    bitrate: u32,
+    size: capture_core::export::office::SlideSize,
+) -> Export {
+    let cancel = Arc::new(AtomicBool::new(false));
+    let stop = cancel.clone();
+    let (progress_tx, progress) = mpsc::channel();
+    let (tx, result) = mpsc::channel();
+    std::thread::spawn(move || {
+        let output = (|| {
+            let folder = path.parent().unwrap_or(Path::new("."));
+            let movie = tempfile::Builder::new()
+                .prefix(".clipdesigner-slide-")
+                .suffix(".mp4")
+                .tempfile_in(folder)
+                .map_err(|e| e.to_string())?
+                .into_temp_path();
+            let mut poster = None;
+            export_frames(
+                &doc,
+                &movie,
+                &stop,
+                watermark.as_ref(),
+                bitrate,
+                &mut poster,
+                |p| {
+                    let _ = progress_tx.send(p * 0.95);
+                },
+            )?;
+            let poster = poster.ok_or("The video has no frames to show.")?;
+            let bytes = std::fs::read(&movie).map_err(|e| e.to_string())?;
+            let slide = capture_core::export::office::pptx_movie(&bytes, false, &poster, size)
+                .map_err(|e| e.to_string())?;
+            capture_core::export::write(&path, &slide).map_err(|e| e.to_string())?;
+            let _ = progress_tx.send(1.);
+            Ok(path)
+        })();
+        let _ = tx.send(output);
+    });
+    Export {
+        cancel,
+        progress,
+        result,
+    }
+}
 /// Video export with the export watermark laid over every frame (FX-003).
 pub(crate) fn export_marked(
     doc: &Document,
@@ -399,6 +449,19 @@ pub(crate) fn export_marked(
     stop: &AtomicBool,
     watermark: Option<&capture_core::watermark::Watermark>,
     bitrate: u32,
+    progress: impl Fn(f32),
+) -> Result<(), String> {
+    export_frames(doc, path, stop, watermark, bitrate, &mut None, progress)
+}
+/// The export itself; `first` receives the first finished frame when it
+/// is asked for.
+fn export_frames(
+    doc: &Document,
+    path: &Path,
+    stop: &AtomicBool,
+    watermark: Option<&capture_core::watermark::Watermark>,
+    bitrate: u32,
+    first: &mut Option<image::RgbaImage>,
     progress: impl Fn(f32),
 ) -> Result<(), String> {
     let layer = watermark
@@ -422,7 +485,7 @@ pub(crate) fn export_marked(
             .eq_ignore_ascii_case(&original.to_string_lossy())
         {
             return Err(
-                "Choose a different output filename to preserve the original recording.".into(),
+                "That name would replace the original recording. Choose another file name.".into(),
             );
         }
     }
@@ -470,6 +533,9 @@ pub(crate) fn export_marked(
                 .map_err(|e| e.to_string())?;
             if let Some(layer) = &layer {
                 capture_core::watermark::blend(&mut pixels, layer);
+            }
+            if i == 0 && first.is_none() {
+                *first = Some(pixels.clone());
             }
             #[cfg(test)]
             {

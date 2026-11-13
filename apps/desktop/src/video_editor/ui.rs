@@ -500,7 +500,7 @@ pub(crate) fn icon(p: &egui::Painter, rect: Rect, name: &str, color: Color32) {
         "Palette" => "palette",
         "Image" => "image",
         "Restart" => "rotate-ccw",
-        "Open" => "file",
+        "Open" | "PDF" => "file",
         "Save As" => "save",
         "Position" => "move",
         "Selection" => "mouse-pointer-2",

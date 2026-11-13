@@ -453,3 +453,84 @@ fn focused_button_keyboard_order_and_reset_keep_tool_and_document_unchanged() {
     editor.apply_toolbar_choice(Choice::ResetToolbar);
     assert_eq!(editor.quick_controls.toolbar_order(), favorite_order());
 }
+
+/// User, 2026-11-12: the narrow-window tool menu shows each tool with its
+/// icon in the toolbar's own colors, like the tiles.
+#[test]
+fn overflow_menu_rows_draw_each_tools_icon() {
+    let ctx = egui::Context::default();
+    crate::shell::configure(&ctx);
+    let mut e = grouped_editor(&ctx);
+    let output = crate::property_layout::tests::PaintedOutput(ctx.run_ui(
+        egui::RawInput {
+            screen_rect: Some(egui::Rect::from_min_size(
+                Pos2::ZERO,
+                egui::vec2(600., 900.),
+            )),
+            ..Default::default()
+        },
+        |ui| {
+            e.draggable_tools_menu(ui, 2);
+        },
+    ));
+    let order = e.quick_controls.toolbar_order().to_vec();
+    let mut checked = 0;
+    for id in order.iter().skip(2) {
+        let tool = TOOLS.iter().find(|t| t.id == *id).unwrap();
+        let row: egui::Rect = ctx
+            .data(|d| d.get_temp(egui::Id::unique(("overflow-tool", tool.name))))
+            .unwrap_or_else(|| panic!("{} row", tool.name));
+        let icon = egui::Rect::from_center_size(
+            egui::pos2(row.left() + 20., row.center().y),
+            egui::vec2(22., 22.),
+        );
+        // Something drawn inside the icon square (the label starts after it).
+        let drawn = output.0.shapes.iter().any(|s| {
+            let b = s.shape.visual_bounding_rect();
+            b.is_positive() && icon.expand(4.).contains_rect(b)
+        });
+        assert!(drawn, "{} has no icon", tool.name);
+        checked += 1;
+    }
+    assert!(checked > 3);
+}
+
+/// The More tools menu is only as wide as its longest name needs, with no
+/// hint line at the top (user, 2026-11-13).
+#[test]
+fn overflow_menu_is_narrow_without_a_hint_line() {
+    let ctx = egui::Context::default();
+    crate::shell::configure(&ctx);
+    let mut e = grouped_editor(&ctx);
+    let mut used = egui::Rect::NOTHING;
+    let output = crate::property_layout::tests::PaintedOutput(ctx.run_ui(
+        egui::RawInput {
+            screen_rect: Some(egui::Rect::from_min_size(
+                Pos2::ZERO,
+                egui::vec2(600., 900.),
+            )),
+            ..Default::default()
+        },
+        |ui| {
+            egui::Area::new(egui::Id::unique("menu-test")).show(ui.ctx(), |ui| {
+                e.draggable_tools_menu(ui, 2);
+                used = ui.min_rect();
+            });
+        },
+    ));
+    let width: f32 = ctx
+        .data(|d| d.get_temp(egui::Id::unique("overflow-tool-width")))
+        .unwrap();
+    assert!(width <= 180., "rows {width}");
+    assert!(
+        used.width() <= width + 16.,
+        "menu {used:?} for rows {width}"
+    );
+    assert!(
+        crate::color_widgets::tests::text_rect(
+            &output.0.shapes,
+            "Right-click to favorite. Drag within the same section."
+        )
+        .is_none()
+    );
+}

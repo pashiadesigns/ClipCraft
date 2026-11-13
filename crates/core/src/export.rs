@@ -1,6 +1,7 @@
 //! Shared flattened output and page geometry. Export never edits the document.
 use crate::{Document, Error, Result};
 use image::{RgbImage, RgbaImage};
+pub mod office;
 mod vector_pdf;
 use std::{
     io::{Cursor, Write},
@@ -208,7 +209,8 @@ impl PageSettings {
             || self.size.iter().any(|n| *n <= self.margin * 2.)
         {
             return Err(Error::Invalid(
-                "Page size and margins leave no printable area.".into(),
+                "The margins cover the whole page. Reduce the margins or make the page larger."
+                    .into(),
             ));
         }
         let area = self.size.map(|n| n - self.margin * 2.);
@@ -225,7 +227,7 @@ impl PageSettings {
         let count = image[1].div_ceil(rows);
         if count > 1000 {
             return Err(Error::Invalid(
-                "Output exceeds 1,000 pages; increase page size or use Fit on one page.".into(),
+                "This would print more than 1,000 pages. Choose Fit on one page, or a larger paper size.".into(),
             ));
         }
         Ok((0..image[1])
@@ -262,6 +264,10 @@ pub struct Options {
     pub page: PageSettings,
     /// Laid over the output on export, copy and print (FX-003).
     pub watermark: Option<crate::watermark::Watermark>,
+    /// PDF export keeps PDF pages' words selectable and searchable in an
+    /// invisible text layer; covered words are never written (approved beta
+    /// 6 tab 6).
+    pub searchable_text: bool,
 }
 impl Default for Options {
     fn default() -> Self {
@@ -272,6 +278,7 @@ impl Default for Options {
             background: [255; 3],
             page: PageSettings::default(),
             watermark: None,
+            searchable_text: true,
         }
     }
 }
@@ -292,7 +299,7 @@ pub fn encode(pixels: &RgbaImage, options: &Options) -> Result<Vec<u8>> {
         Format::Png => pixels.write_to(&mut bytes, image::ImageFormat::Png)?,
         Format::Jpeg => {
             if !(1..=100).contains(&options.quality) {
-                return Err(Error::Invalid("JPEG quality must be 1–100.".into()));
+                return Err(Error::Invalid("Set Quality between 1 and 100.".into()));
             }
             image::codecs::jpeg::JpegEncoder::new_with_quality(&mut bytes, options.quality)
                 .encode_image(&opaque(pixels, options.background))?;
@@ -320,6 +327,42 @@ pub fn encode_document(document: &Document, options: &Options) -> Result<Vec<u8>
         crate::watermark::apply(&mut pixels, options.watermark.as_ref())?;
         encode(&pixels, options)
     }
+}
+/// One PDF from linked parts (approved beta 6 tab 7), in order. Each part is
+/// prepared, drawn and written before the next is loaded, so memory stays at
+/// about one part however long the set is.
+pub fn encode_parts_pdf(
+    parts: impl Iterator<Item = Result<Document>>,
+    options: &Options,
+) -> Result<Vec<u8>> {
+    if options.format != Format::Pdf {
+        return Err(Error::Invalid("Only PDF, PowerPoint and Word join parts into one file. Choose one of those, or turn off Include all parts for numbered pictures.".into()));
+    }
+    let labels = options.redaction_labels;
+    vector_pdf::encode_parts(
+        parts.map(|part| {
+            let part = crate::redaction_labels::decorate(part?, labels)?;
+            if part.canvas_behavior.perspective.is_some()
+                || part.canvas_behavior.finish.is_some()
+                || options.watermark.is_some()
+            {
+                // Pictures with whole-picture effects become one picture per
+                // part; flatten them the way single exports do.
+                let mut pixels = part.render()?;
+                crate::watermark::apply(&mut pixels, options.watermark.as_ref())?;
+                let mut flat = Document::from_image(pixels)?;
+                // Keep the pages; the flattened picture has no sections.
+                if let Some(mut guide) = part.guide.clone() {
+                    guide.sections.clear();
+                    flat.guide = Some(guide);
+                }
+                Ok(flat)
+            } else {
+                Ok(part)
+            }
+        }),
+        options,
+    )
 }
 pub fn write(path: &Path, bytes: &[u8]) -> Result<()> {
     crate::atomic_write(path, bytes)

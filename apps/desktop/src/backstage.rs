@@ -7,9 +7,9 @@ use std::sync::Arc;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum Page {
     Home,
-    New,
     Open,
     Info,
+    Save,
     Export,
 }
 
@@ -25,6 +25,7 @@ impl Editor {
     pub(super) fn show_backstage(&mut self, ui: &mut egui::Ui) {
         let ctx = ui.ctx().clone();
         if self.new_image.is_none()
+            && self.pdf_import.is_none()
             && self.pending.is_none()
             && self.template_picker.is_none()
             && !egui::Popup::is_any_open(&ctx)
@@ -48,11 +49,8 @@ impl Editor {
                     self.shell.backstage = None;
                 }
                 ui.add_space(10.0);
-                for (target, label) in [
-                    (Page::Home, "Home"),
-                    (Page::New, "New"),
-                    (Page::Open, "Open"),
-                ] {
+                // Approved File menu: one Home (it holds New), one Save page.
+                for (target, label) in [(Page::Home, "Home"), (Page::Open, "Open")] {
                     if nav(ui, label, page == target).clicked() {
                         self.shell.backstage = Some(target);
                     }
@@ -60,17 +58,14 @@ impl Editor {
                 ui.add_space(6.0);
                 ui.separator();
                 ui.add_space(6.0);
-                if nav(ui, "Info", page == Page::Info).clicked() {
-                    self.shell.backstage = Some(Page::Info);
-                }
-                if nav(ui, "Save", false).clicked() {
-                    self.save(false);
-                }
-                if nav(ui, "Save As", false).clicked() {
-                    self.save(true);
-                }
-                if nav(ui, "Export", page == Page::Export).clicked() {
-                    self.shell.backstage = Some(Page::Export);
+                for (target, label) in [
+                    (Page::Info, "Info"),
+                    (Page::Save, "Save"),
+                    (Page::Export, "Export"),
+                ] {
+                    if nav(ui, label, page == target).clicked() {
+                        self.shell.backstage = Some(target);
+                    }
                 }
                 if nav(ui, "Library", false).clicked() && self.commit_text() {
                     self.shell.backstage = None;
@@ -91,7 +86,7 @@ impl Editor {
                     ui.separator();
                 });
             });
-        if matches!(page, Page::Home | Page::New) {
+        if page == Page::Home {
             egui::Panel::right("file_templates")
                 .exact_size(TEMPLATES_W)
                 .resizable(false)
@@ -114,11 +109,7 @@ impl Editor {
                     .fill(Color32::from_rgb(50, 50, 50))
                     .inner_margin(egui::Margin {
                         left: 40,
-                        right: if matches!(page, Page::Home | Page::New) {
-                            22
-                        } else {
-                            6
-                        },
+                        right: if page == Page::Home { 22 } else { 6 },
                         top: 24,
                         bottom: 16,
                     }),
@@ -137,68 +128,11 @@ impl Editor {
                         });
                         ui.add_space(22.0);
                         match page {
-                            Page::Home | Page::New => self.file_new_page(ui, &ctx),
-                            Page::Open => {
-                                ui.heading("Open");
-                                ui.add_space(16.0);
-                                if ui
-                                    .add_sized(
-                                        [220.0, 36.0],
-                                        egui::Button::new("Browse images and projects…"),
-                                    )
-                                    .clicked()
-                                {
-                                    self.request_action(FileAction::Open, &ctx);
-                                }
-                                ui.label("Open an image or an editable ClipDesigner project.");
-                                ui.add_space(30.0);
-                                self.backstage_recent(ui);
-                            }
+                            Page::Home => self.file_new_page(ui, &ctx),
+                            Page::Open => self.file_open_page(ui, &ctx),
                             Page::Info => self.file_info(ui),
-                            Page::Export => {
-                                ui.heading("Export");
-                                ui.add_space(18.0);
-                                if ui
-                                    .add_sized(
-                                        [220.0, 38.0],
-                                        egui::Button::new("Export PNG / JPEG / PDF…"),
-                                    )
-                                    .clicked()
-                                {
-                                    self.export();
-                                }
-                                ui.label("Save a flattened image to a location you choose.");
-                                ui.add_space(16.0);
-                                if ui
-                                    .add_sized(
-                                        [220.0, 38.0],
-                                        egui::Button::new("Save editable project…"),
-                                    )
-                                    .clicked()
-                                {
-                                    self.save(true);
-                                }
-                                ui.label(
-                                    "Keep the original image, annotations and formatting editable.",
-                                );
-                                ui.add_space(16.0);
-                                if ui
-                                    .add_sized(
-                                        [220.0, 38.0],
-                                        egui::Button::new("Copy complete image"),
-                                    )
-                                    .clicked()
-                                {
-                                    self.copy_all();
-                                }
-                                ui.add_space(20.0);
-                                if ui
-                                    .add_sized([220.0, 38.0], egui::Button::new("Print preview…"))
-                                    .clicked()
-                                {
-                                    self.begin_export(true);
-                                }
-                            }
+                            Page::Save => self.file_save_page(ui),
+                            Page::Export => self.file_export_page(ui),
                         }
                     });
             });
@@ -214,6 +148,7 @@ impl Editor {
                 ("Capture", "Capture Clip", "Current capture settings", true),
                 ("Blank page", "Blank image", "Color or transparent", false),
                 ("New clipboard", "From clipboard", "Paste an image", false),
+                ("PDF", "From PDF", "Pages into a guide", false),
             ],
         ) {
             Some(0) => self.request_action(FileAction::Capture, ctx),
@@ -222,7 +157,8 @@ impl Editor {
                     self.quick_controls.blank_defaults(),
                 ));
             }
-            Some(_) => self.new_from_clipboard(ctx),
+            Some(2) => self.new_from_clipboard(ctx),
+            Some(_) => self.new_from_pdf(),
             None => {}
         }
         ui.add_space(18.);
@@ -257,12 +193,21 @@ impl Editor {
         let columns = (((width + GAP) / (RECENT_MIN + GAP)).floor() as usize).clamp(1, 6);
         let shown = columns.min(entries.len());
         let count = format!("· {shown} of {}", entries.len());
-        heading(
-            ui,
-            "",
-            "Recent",
-            (!entries.is_empty()).then_some(count.as_str()),
-        );
+        ui.horizontal(|ui| {
+            heading(
+                ui,
+                "",
+                "Recent",
+                (!entries.is_empty()).then_some(count.as_str()),
+            );
+            if entries.len() > shown
+                && ui
+                    .link(RichText::new("All in Open").color(ICON_HI))
+                    .clicked()
+            {
+                self.shell.backstage = Some(Page::Open);
+            }
+        });
         ui.add_space(10.);
         if entries.is_empty() {
             ui.label(
@@ -295,54 +240,87 @@ impl Editor {
             self.open_history(&id, &ui.ctx().clone());
         }
     }
+    /// Open's Recent (approved File menu): count, search, All / Images /
+    /// Videos, and a grid of cards like Home's.
     fn backstage_recent(&mut self, ui: &mut egui::Ui) {
-        ui.heading("Recent");
-        if ui
-            .add(
-                crate::unicode_input::TextEdit::singleline(&mut self.shell.recent_query)
-                    .hint_text("Search for an image")
-                    .desired_width(240.),
-            )
-            .changed()
-        {
-            self.shell.recent_limit = 10;
-        }
-        ui.add_space(10.0);
+        let kind_id = egui::Id::unique("open-recent-kind");
+        let mut kind = ui.ctx().data(|d| d.get_temp::<u8>(kind_id)).unwrap_or(0);
         let mut entries = self.history.entries();
+        let total = entries.len();
         entries.retain(|e| e.matches_query(&self.shell.recent_query));
+        entries.retain(|e| match kind {
+            1 => e.kind != capture_core::history::MediaKind::Video,
+            2 => e.kind == capture_core::history::MediaKind::Video,
+            _ => true,
+        });
         entries.sort_by_key(|e| std::cmp::Reverse(e.updated_ms.unwrap_or(e.created_ms)));
-        if entries.is_empty() {
-            ui.label(
-                "Your library images appear here. Use Open to browse for an image or project.",
-            );
-        }
-        let visible = self.shell.recent_limit.min(entries.len());
-        let mut open = None;
-        egui::ScrollArea::horizontal()
-            .id_salt("file_recent_thumbnails")
-            .show(ui, |ui| {
-                for row in entries[..visible].chunks(10) {
-                    ui.horizontal(|ui| {
-                        ui.spacing_mut().item_spacing.x = 8.;
-                        for entry in row {
-                            ui.vertical(|ui| {
-                                ui.set_width(80.);
-                                let response = self.history_card(ui, entry, egui::vec2(80., 48.));
-                                let available = self.history.available(&entry.id);
-                                self.history_context(&response, entry, available);
-                                if response.clicked() && available {
-                                    open = Some(entry.id.clone());
-                                }
-                                ui.add(egui::Label::new(&entry.label).truncate())
-                                    .tip(&entry.label);
-                            });
-                        }
-                    });
-                    ui.add_space(10.);
+        let count = format!("· {total}");
+        ui.horizontal(|ui| {
+            heading(ui, "", "Recent", (total > 0).then_some(count.as_str()));
+            ui.add_space(12.);
+            if ui
+                .add(
+                    crate::unicode_input::TextEdit::singleline(&mut self.shell.recent_query)
+                        .hint_text("Search names and tags")
+                        .desired_width(240.),
+                )
+                .changed()
+            {
+                self.shell.recent_limit = 12;
+            }
+            ui.add_space(8.);
+            crate::controls::segments(ui, |ui| {
+                for (value, label) in [(0u8, "All"), (1, "Images"), (2, "Videos")] {
+                    if ui
+                        .add(egui::Button::selectable(kind == value, label))
+                        .clicked()
+                    {
+                        kind = value;
+                    }
                 }
             });
+        });
+        ui.ctx().data_mut(|d| d.insert_temp(kind_id, kind));
+        ui.add_space(10.);
+        if entries.is_empty() {
+            ui.label(
+                RichText::new(if total == 0 {
+                    "Your Library items appear here. Use Browse to open an image or project."
+                } else {
+                    "Nothing matches."
+                })
+                .color(MUTED),
+            );
+            return;
+        }
+        let width = ui.available_width();
+        let columns = (((width + GAP) / (RECENT_MIN + GAP)).floor() as usize).clamp(1, 8);
+        let card = (width - GAP * (columns as f32 - 1.)) / columns as f32;
+        let visible = self.shell.recent_limit.max(12).min(entries.len());
+        let mut open = None;
+        for row in entries[..visible].chunks(columns) {
+            ui.horizontal(|ui| {
+                ui.spacing_mut().item_spacing.x = GAP;
+                for entry in row {
+                    ui.vertical(|ui| {
+                        ui.set_width(card);
+                        let response = self.history_card(ui, entry, egui::vec2(card, 78.));
+                        let available = self.history.available(&entry.id);
+                        self.history_context(&response, entry, available);
+                        if response.clicked() && available {
+                            open = Some(entry.id.clone());
+                        }
+                        ui.add(
+                            egui::Label::new(RichText::new(&entry.label).color(MUTED)).truncate(),
+                        )
+                        .tip(&entry.label);
+                    });
+                }
+            });
+            ui.add_space(GAP);
+        }
         if visible < entries.len() && ui.button("Show more").clicked() {
-            self.shell.recent_limit += 10;
+            self.shell.recent_limit = visible + 12;
         }
         if let Some(id) = open {
             self.open_history(&id, &ui.ctx().clone());
@@ -350,6 +328,275 @@ impl Editor {
     }
     pub(crate) fn open_keyboard_shortcuts(&mut self) {
         self.open_preferences(crate::preferences::Section::Shortcuts);
+    }
+}
+
+// ------------------------------------------------ approved File menu pages
+
+impl Editor {
+    /// File › Open (approved mockup): ways to open as cards, then Recent with
+    /// search and an Images / Videos filter.
+    fn file_open_page(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
+        heading(ui, "Open", "Open", None);
+        ui.add_space(10.);
+        match cards(
+            ui,
+            &[
+                ("Open", "Browse…", "Images, projects, PDFs, packs", true),
+                (
+                    "Library",
+                    "From the Library",
+                    "Everything you captured",
+                    false,
+                ),
+                (
+                    "Presets",
+                    "Add a kit…",
+                    "Styles and Blocks someone shared",
+                    false,
+                ),
+                (
+                    "Folder",
+                    "Open a pack…",
+                    "A project and its media in one file",
+                    false,
+                ),
+            ],
+        ) {
+            Some(0) => self.request_action(FileAction::Open, ctx),
+            Some(1) => {
+                if self.commit_text() {
+                    self.shell.backstage = None;
+                    self.shell.library = true;
+                    self.history.refresh();
+                }
+            }
+            Some(2) => self.choose_kit_to_add(),
+            Some(_) => {
+                self.suspend_global_capture();
+                if let Some(path) = rfd::FileDialog::new()
+                    .set_directory(
+                        self.dialog_folder(capture_core::quick_preferences::Folder::Open),
+                    )
+                    .add_filter("ClipDesigner pack", &[capture_core::pack::EXTENSION])
+                    .pick_file()
+                {
+                    self.shell.backstage = None;
+                    self.open_pack(path);
+                }
+            }
+            None => {}
+        }
+        ui.add_space(22.);
+        self.backstage_recent(ui);
+    }
+    /// File › Save (approved mockup): where the project is kept, then Save
+    /// (or Save as a file for one kept only in the Library), Save a copy and
+    /// Pack project.
+    fn file_save_page(&mut self, ui: &mut egui::Ui) {
+        heading(ui, "Save As", "Save", None);
+        ui.add_space(10.);
+        let (summary, color) = self.autosave_summary();
+        let file = self.path.clone().filter(|p| {
+            p.extension()
+                .is_some_and(|e| e.eq_ignore_ascii_case("iclip") || e.eq_ignore_ascii_case("vclip"))
+        });
+        egui::Frame::new()
+            .fill(CARD)
+            .stroke(egui::Stroke::new(1., LINE))
+            .corner_radius(9)
+            .inner_margin(egui::Margin::symmetric(16, 12))
+            .show(ui, |ui| {
+                ui.set_max_width(760.);
+                ui.horizontal(|ui| {
+                    let (r, _) = ui.allocate_exact_size(egui::vec2(10., 10.), egui::Sense::hover());
+                    ui.painter().circle_filled(r.center(), 4.5, color);
+                    ui.label(RichText::new(match &file {
+                        Some(_) => "Saved as a project file",
+                        None => summary,
+                    }).strong());
+                    ui.label(RichText::new(self.project_name()).color(MUTED));
+                });
+                ui.label(
+                    RichText::new(match &file {
+                        Some(p) => format!("{}. Changes are also kept in the Library as you work.", p.display()),
+                        None => "Everything you change is kept in the Library as you work. Save it as a file to keep it in a folder of your own or send it to someone.".into(),
+                    })
+                    .color(MUTED),
+                );
+            });
+        ui.add_space(12.);
+        let first = if file.is_some() {
+            ("Save As", "Save", "Ctrl+S · to the same file", true)
+        } else {
+            (
+                "Save As",
+                "Save as a file…",
+                "A project in a folder you choose",
+                true,
+            )
+        };
+        match cards(
+            ui,
+            &[
+                first,
+                (
+                    "Duplicate",
+                    "Save a copy…",
+                    "A separate project; you keep working here",
+                    false,
+                ),
+                (
+                    "Folder",
+                    "Pack project…",
+                    "One .cdpack with all its media",
+                    false,
+                ),
+            ],
+        ) {
+            Some(0) => {
+                if self.save(false) {
+                    self.shell.backstage = None;
+                }
+            }
+            Some(1) => {
+                if self.save_copy() {
+                    self.shell.backstage = None;
+                }
+            }
+            Some(_) => self.pack_with_dialog(),
+            None => {}
+        }
+        ui.add_space(8.);
+        ui.label(
+            RichText::new("Ctrl+S saves straight away. Ctrl+Shift+S is Save a copy.").color(MUTED),
+        );
+    }
+    /// File › Export (approved mockup): what to make, as cards that open
+    /// Export with that format chosen, then a Share group.
+    fn file_export_page(&mut self, ui: &mut egui::Ui) {
+        heading(ui, "Export", "Export", None);
+        ui.add_space(10.);
+        let video = self.is_video();
+        let first = if video {
+            ("Video file", "Video", "MP4 or GIF", true)
+        } else {
+            ("Image", "Picture", "PNG, JPEG or PDF", true)
+        };
+        match cards(
+            ui,
+            &[
+                first,
+                (
+                    "Template overview",
+                    "PowerPoint",
+                    "Slides you can still edit",
+                    false,
+                ),
+                (
+                    "Template document",
+                    "Word",
+                    "A step-by-step document",
+                    false,
+                ),
+                ("Save As", "Print…", "Choose a printer", false),
+                (
+                    "Clipboard",
+                    "Copy picture",
+                    "The whole image to the clipboard",
+                    false,
+                ),
+            ],
+        ) {
+            Some(0) => {
+                self.shell.backstage = None;
+                self.export();
+            }
+            Some(i @ (1 | 2)) => {
+                self.shell.backstage = None;
+                self.begin_office_export(if i == 1 {
+                    crate::export_ui::Office::PowerPoint
+                } else {
+                    crate::export_ui::Office::Word
+                });
+            }
+            Some(3) => {
+                self.shell.backstage = None;
+                self.begin_export(true);
+            }
+            Some(_) => self.copy_all(),
+            None => {}
+        }
+        ui.add_space(18.);
+        heading(ui, "Presets", "Share", None);
+        ui.add_space(10.);
+        match cards(
+            ui,
+            &[
+                (
+                    "Presets",
+                    "Share a kit…",
+                    "Your styles and Blocks in one file",
+                    false,
+                ),
+                (
+                    "Folder",
+                    "Pack project…",
+                    "Send the project with its media",
+                    false,
+                ),
+            ],
+        ) {
+            Some(0) => self.open_share_kit(),
+            Some(_) => self.pack_with_dialog(),
+            None => {}
+        }
+        ui.add_space(8.);
+        ui.label(
+            RichText::new("Each card opens Export with that format already chosen.").color(MUTED),
+        );
+    }
+    /// Pack project with a Save dialog for the .cdpack file.
+    pub(crate) fn pack_with_dialog(&mut self) {
+        self.suspend_global_capture();
+        if let Some(mut path) = rfd::FileDialog::new()
+            .set_directory(self.dialog_folder(capture_core::quick_preferences::Folder::Project))
+            .set_file_name(format!(
+                "{}.{}",
+                self.project_name(),
+                capture_core::pack::EXTENSION
+            ))
+            .add_filter(
+                "Pack project (one file with all media)",
+                &[capture_core::pack::EXTENSION],
+            )
+            .save_file()
+        {
+            if path.extension().is_none() {
+                path.set_extension(capture_core::pack::EXTENSION);
+            }
+            self.shell.backstage = None;
+            self.pack_project(path);
+        }
+    }
+    /// Save a copy: writes a separate project and keeps working in this one
+    /// (Ctrl+Shift+S).
+    pub(crate) fn save_copy(&mut self) -> bool {
+        let path = self.path.clone();
+        let untitled = self.shell.untitled_name.clone();
+        let saved = self.save(true);
+        if saved && path.is_some() {
+            let copy = self.path.clone();
+            self.path = path;
+            self.shell.untitled_name = untitled;
+            if let Some(copy) = copy {
+                self.status = format!(
+                    "Saved a copy as {}. You're still working in the original.",
+                    copy.display()
+                );
+            }
+        }
+        saved
     }
 }
 
@@ -424,7 +671,7 @@ const MUTED: Color32 = Color32::from_gray(150);
 const ICON_HI: Color32 = Color32::from_rgb(125, 214, 237);
 
 /// A group heading with an optional icon and a muted count.
-pub(super) fn heading(ui: &mut egui::Ui, icon: &str, title: &str, count: Option<&str>) {
+pub(crate) fn heading(ui: &mut egui::Ui, icon: &str, title: &str, count: Option<&str>) {
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 8.;
         if !icon.is_empty() {
@@ -459,9 +706,10 @@ fn one_line(ui: &egui::Ui, text: &str, size: f32, color: Color32, width: f32) ->
 }
 
 /// A row-wrapping grid of quick-start icon cards. Returns the clicked index.
-fn cards(ui: &mut egui::Ui, items: &[(&str, &str, &str, bool)]) -> Option<usize> {
+pub(crate) fn cards(ui: &mut egui::Ui, items: &[(&str, &str, &str, bool)]) -> Option<usize> {
     let width = ui.available_width();
-    let columns = (((width + GAP) / (CARD_MIN + GAP)).floor() as usize).max(1);
+    // At most four across, so a short row of cards keeps readable widths.
+    let columns = (((width + GAP) / (CARD_MIN + GAP)).floor() as usize).clamp(1, 4);
     let card = (width - GAP * (columns as f32 - 1.)) / columns as f32;
     let mut clicked = None;
     for (row, chunk) in items.chunks(columns).enumerate() {
@@ -544,10 +792,9 @@ pub(super) fn segmented_choice(
 ) -> Option<usize> {
     let (r, _) =
         ui.allocate_exact_size(egui::vec2(ui.available_width(), 30.), egui::Sense::hover());
+    // The approved mockups' segmented style: dark track, blue chosen pill.
     ui.painter()
-        .rect_filled(r, 7., Color32::from_rgb(30, 38, 41));
-    ui.painter()
-        .rect_stroke(r, 7., egui::Stroke::new(1., LINE), egui::StrokeKind::Inside);
+        .rect_filled(r, 6., crate::controls::SEGMENT_TRACK);
     let mut chosen = None;
     let part = r.width() / labels.len() as f32;
     for (i, label) in labels.iter().copied().enumerate() {
@@ -555,7 +802,7 @@ pub(super) fn segmented_choice(
             r.min + egui::vec2(i as f32 * part, 0.),
             egui::vec2(part, r.height()),
         )
-        .shrink(3.);
+        .shrink(2.);
         let on = i == selected;
         let response = ui.interact(
             half,
@@ -563,11 +810,10 @@ pub(super) fn segmented_choice(
             egui::Sense::click(),
         );
         if on {
-            ui.painter()
-                .rect_filled(half, 5., Color32::from_rgb(35, 65, 74));
+            ui.painter().rect_filled(half, 5., crate::shell::ACCENT);
         } else if response.hovered() {
             ui.painter()
-                .rect_filled(half, 5., Color32::from_rgb(44, 52, 56));
+                .rect_filled(half, 5., Color32::from_rgb(48, 57, 61));
         }
         ui.painter().text(
             half.center(),
@@ -577,7 +823,7 @@ pub(super) fn segmented_choice(
             if on {
                 Color32::WHITE
             } else {
-                Color32::from_gray(175)
+                Color32::from_rgb(170, 182, 186)
             },
         );
         response.widget_info(|| egui::WidgetInfo::selected(egui::Role::Button, true, on, label));
@@ -664,6 +910,11 @@ pub(super) fn template_tile(
         egui::StrokeKind::Inside,
     );
     response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, name));
+    if name == "From PDF" {
+        return response.tip(
+            "From PDF\nPages into a guide: choose pages, then annotate, redact and export like any image.",
+        );
+    }
     response.tip(format!("{name}\n{description}"))
 }
 
@@ -770,7 +1021,7 @@ mod tests {
         );
     }
     #[test]
-    fn file_recent_shows_ten_small_thumbnails_and_expands_in_batches() {
+    fn open_recent_is_a_card_grid_that_expands_in_batches() {
         let root = tempfile::tempdir().unwrap();
         let mut history = capture_core::history::History::open(root.path()).unwrap();
         for n in 0..23 {
@@ -802,18 +1053,16 @@ mod tests {
         };
         let first = frame(&ctx, &mut e, 1280., vec![]);
         let output = frame(&ctx, &mut e, 1280., vec![]);
-        let row = overlays(&output);
-        assert_eq!(row.len(), 10);
-        assert!(row.iter().all(|p| p.y == row[0].y));
-        assert!(row.windows(2).all(|p| (p[1].x - p[0].x - 88.).abs() < 0.1));
+        // Approved File menu: Recent is a grid of cards, 12 at first.
+        let cards = overlays(&output);
+        assert_eq!(cards.len(), 12);
+        let first_row: Vec<_> = cards.iter().filter(|p| p.y == cards[0].y).collect();
+        assert!(first_row.len() >= 4, "cards share rows");
         let show = text_rect(&output, "Show more");
         if let Ok(dir) = std::env::var("CLIPDESIGNER_HEADLESS_FILE_DIR") {
-            dump_meshes(&ctx, &dir, "recent-ten", first, output);
+            dump_meshes(&ctx, &dir, "recent-grid", first, output);
         }
         click(&ctx, &mut e, show);
-        let output = frame(&ctx, &mut e, 1280., vec![]);
-        assert_eq!(overlays(&output).len(), 20);
-        click(&ctx, &mut e, text_rect(&output, "Show more"));
         let output = frame(&ctx, &mut e, 1280., vec![]);
         assert_eq!(overlays(&output).len(), 23);
         assert!(crate::color_widgets::tests::text_rect(&output.shapes, "Show more").is_none());
@@ -918,8 +1167,9 @@ mod tests {
         for (label, page) in [
             ("Open", Page::Open),
             ("Info", Page::Info),
+            ("Save", Page::Save),
             ("Export", Page::Export),
-            ("New", Page::New),
+            ("Home", Page::Home),
         ] {
             let output = frame(&ctx, &mut e, 1280.0, vec![]);
             click(&ctx, &mut e, text_rect(&output, label));
@@ -956,7 +1206,7 @@ mod tests {
     #[test]
     fn full_window_file_pages_render_at_compact_and_wide_sizes() {
         for width in [900.0, 1280.0] {
-            for page in [Page::Home, Page::New, Page::Open, Page::Info, Page::Export] {
+            for page in [Page::Home, Page::Open, Page::Info, Page::Save, Page::Export] {
                 let ctx = egui::Context::default();
                 crate::shell::configure(&ctx);
                 let mut e = crate::canvas::tests::editor(&ctx);

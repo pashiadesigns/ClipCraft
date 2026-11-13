@@ -157,7 +157,7 @@ impl Layout {
                 page += 1;
                 used = 0.;
                 if page >= 128 {
-                    return Err(Error::Invalid("Guides support up to 128 pages".into()));
+                    return Err(Error::Invalid("A guide holds up to 128 pages. Delete a page, or start a new guide for the rest.".into()));
                 }
                 let p = self.pages.as_mut().unwrap();
                 if page >= p.count {
@@ -326,7 +326,9 @@ impl Document {
             Action::DeletePage { page } => {
                 check_page(page)?;
                 if count == 1 {
-                    return Err(Error::Invalid("Keep at least one page".into()));
+                    return Err(Error::Invalid(
+                        "A guide needs one page. Add a page before deleting this one.".into(),
+                    ));
                 }
                 let removed: BTreeSet<_> = layout
                     .sections
@@ -390,7 +392,7 @@ impl Document {
             } => {
                 if !(128..=32768).contains(&width) || !(128..=32768).contains(&height) {
                     return Err(Error::Invalid(
-                        "Page dimensions must be between 128 and 32768 pixels".into(),
+                        "Set Width and Height between 128 and 32,768 pixels.".into(),
                     ));
                 }
                 let scale = width as f32 / old_layout.page_width(self.width) as f32;
