@@ -90,11 +90,17 @@ fn danger_button(ui: &mut egui::Ui, label: &str, size: egui::Vec2) -> egui::Resp
 pub(crate) fn paint_cross(p: &egui::Painter, center: egui::Pos2, half: f32, color: egui::Color32) {
     let s = egui::Stroke::new(1.6, color);
     p.line_segment(
-        [center + egui::vec2(-half, -half), center + egui::vec2(half, half)],
+        [
+            center + egui::vec2(-half, -half),
+            center + egui::vec2(half, half),
+        ],
         s,
     );
     p.line_segment(
-        [center + egui::vec2(-half, half), center + egui::vec2(half, -half)],
+        [
+            center + egui::vec2(-half, half),
+            center + egui::vec2(half, -half),
+        ],
         s,
     );
 }

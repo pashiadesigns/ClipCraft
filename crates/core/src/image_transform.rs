@@ -53,7 +53,10 @@ impl Turned {
             last.offset[0] += offset[0] as f32;
             last.offset[1] += offset[1] as f32;
         }
-        self.after = fingerprint(document.raster.as_deref(), [document.width, document.height]);
+        self.after = fingerprint(
+            document.raster.as_deref(),
+            [document.width, document.height],
+        );
     }
 }
 
@@ -381,8 +384,7 @@ impl Document {
             if self.video.is_none() && self.canvas_behavior.dynamic_expansion {
                 let plan = self.plan_object_bounds(&[], false)?;
                 *self = plan.apply(self)?;
-                self.canvas_behavior.allow_overflow =
-                    turned.allow_overflow || outside(self, false);
+                self.canvas_behavior.allow_overflow = turned.allow_overflow || outside(self, false);
             }
         }
         Ok(true)
@@ -513,15 +515,15 @@ mod tests {
                 corners: None,
             })
             .unwrap();
-            assert!(s.document.can_reset_rotation(), "grow {grow}: after the turn");
+            assert!(
+                s.document.can_reset_rotation(),
+                "grow {grow}: after the turn"
+            );
             // Drag the edge shape well past the left edge, then back.
             for delta in [[-260., -40.], [260., 40.]] {
                 let shape = s.document.annotations.iter().find(|a| a.id == 2).unwrap();
-                let moved = crate::canvas_expansion::translated(
-                    std::slice::from_ref(shape),
-                    delta,
-                )
-                .unwrap();
+                let moved = crate::canvas_expansion::translated(std::slice::from_ref(shape), delta)
+                    .unwrap();
                 s.execute(Command::MoveAndExpand {
                     annotations: moved,
                     duplicate: false,

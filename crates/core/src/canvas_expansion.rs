@@ -67,7 +67,11 @@ impl Document {
         Ok(())
     }
 
-    pub(crate) fn plan_object_bounds(&self, moved: &[Annotation], duplicate: bool) -> Result<MovePlan> {
+    pub(crate) fn plan_object_bounds(
+        &self,
+        moved: &[Annotation],
+        duplicate: bool,
+    ) -> Result<MovePlan> {
         self.validate()?;
         let base = self
             .auto_canvas_base

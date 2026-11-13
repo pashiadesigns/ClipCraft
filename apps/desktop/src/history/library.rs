@@ -877,11 +877,8 @@ fn stack_geometry(top: egui::Pos2, size: egui::Vec2) -> (egui::Rect, [egui::Rect
         size - egui::vec2(STACK_REACH, STACK_REACH),
     );
     // Each edge is the cover moved up and right, shrunk by its spread.
-    let edge = |offset: f32, spread: f32| {
-        cover
-            .translate(egui::vec2(offset, -offset))
-            .shrink(spread)
-    };
+    let edge =
+        |offset: f32, spread: f32| cover.translate(egui::vec2(offset, -offset)).shrink(spread);
     (cover, [edge(10., 2.), edge(5., 1.)])
 }
 

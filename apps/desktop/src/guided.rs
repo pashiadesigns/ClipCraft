@@ -577,7 +577,12 @@ pub(crate) fn dialog_message(ui: &mut egui::Ui, kind: Kind, text: &str, show_me:
     let top = rect.top() + (rect.height() - lines) / 2.;
     // The icon is centered on the first line.
     let first = galley.rows.first().map_or(text_h, |r| r.height());
-    icon(ui, egui::pos2(rect.left() + 9., top + first / 2.), kind, since);
+    icon(
+        ui,
+        egui::pos2(rect.left() + 9., top + first / 2.),
+        kind,
+        since,
+    );
     let color = message_color(ui, kind);
     ui.painter()
         .galley(egui::pos2(rect.left() + ICON_ROOM, top), galley, color);
@@ -652,7 +657,10 @@ pub(crate) fn footer_message(
     let top = (center_y - size.y / 2.)
         .min(area.bottom() - size.y)
         .max(area.top());
-    let block = Rect::from_min_size(egui::pos2(area.left(), top), egui::vec2(area.width(), size.y));
+    let block = Rect::from_min_size(
+        egui::pos2(area.left(), top),
+        egui::vec2(area.width(), size.y),
+    );
     // A child that doesn't take room from the footer's own layout.
     let mut child = ui.new_child(
         egui::UiBuilder::new()

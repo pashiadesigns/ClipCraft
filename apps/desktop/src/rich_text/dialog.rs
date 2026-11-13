@@ -161,11 +161,7 @@ pub(super) fn show(ctx: &egui::Context, state: &mut State) -> (bool, bool) {
                     .max(message_rect.top()),
             );
             #[cfg(test)]
-            record_rect(
-                ctx,
-                "message",
-                egui::Rect::from_min_size(at, galley.size()),
-            );
+            record_rect(ctx, "message", egui::Rect::from_min_size(at, galley.size()));
             ui.painter()
                 .with_clip_rect(message_rect)
                 .galley(at, galley, MUTED);

@@ -576,8 +576,16 @@ fn a_long_pdf_shows_as_one_stack_that_opens_into_its_parts() {
         })
         .expect("the stack's look");
     for (edge, reach, spread) in [(edges[0], 10., 2.), (edges[1], 5., 1.)] {
-        assert_eq!(edge.left(), cover.left() + reach + spread, "{edge:?} {cover:?}");
-        assert_eq!(edge.top(), cover.top() - reach + spread, "{edge:?} {cover:?}");
+        assert_eq!(
+            edge.left(),
+            cover.left() + reach + spread,
+            "{edge:?} {cover:?}"
+        );
+        assert_eq!(
+            edge.top(),
+            cover.top() - reach + spread,
+            "{edge:?} {cover:?}"
+        );
     }
     assert!(cover.contains_rect(badge));
     assert!(badge.left() - cover.left() < 8. && badge.top() - cover.top() < 8.);

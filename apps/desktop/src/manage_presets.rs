@@ -1055,20 +1055,20 @@ mod tests {
             .clear();
         }
         assert!(
-            ctx.data(|d| d.get_temp::<(egui::Rect, bool, bool)>(egui::Id::unique((
-                "style-tile",
-                "Rectangle",
-                ""
-            ))))
+            ctx.data(
+                |d| d.get_temp::<(egui::Rect, bool, bool)>(egui::Id::unique((
+                    "style-tile",
+                    "Rectangle",
+                    ""
+                )))
+            )
             .is_some(),
             "the rectangle style shows"
         );
         assert!(
-            ctx.data(|d| d.get_temp::<egui::Rect>(egui::Id::unique((
-                "manage-presets-preview",
-                "Staff ID"
-            ))))
-            .is_none(),
+            ctx.data(|d| d
+                .get_temp::<egui::Rect>(egui::Id::unique(("manage-presets-preview", "Staff ID"))))
+                .is_none(),
             "other sections are filtered out"
         );
     }
