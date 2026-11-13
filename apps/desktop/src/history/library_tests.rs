@@ -556,7 +556,8 @@ fn a_long_pdf_shows_as_one_stack_that_opens_into_its_parts() {
         .unwrap();
     assert_eq!(cards.len(), 2, "one stack and one capture");
     let texts = all_texts(&output.shapes);
-    assert!(texts.iter().any(|t| t == "3 parts"), "{texts:?}");
+    // BZ7: the mockup's badge text.
+    assert!(texts.iter().any(|t| t == "3 parts · 90 pp"), "{texts:?}");
     assert!(texts.iter().any(|t| t == "3 parts · 90 pages"), "{texts:?}");
     assert!(texts.iter().any(|t| t == "Manual"), "{texts:?}");
     let parts: Vec<String> = e
@@ -566,6 +567,20 @@ fn a_long_pdf_shows_as_one_stack_that_opens_into_its_parts() {
         .filter(|x| x.part.is_some())
         .map(|x| x.id.clone())
         .collect();
+    // BZ7: page edges stacked up and to the right behind the cover (5 and
+    // 10 px, as in the mockup), the badge over the cover's top-left.
+    let (cover, edges, badge): (egui::Rect, [egui::Rect; 2], egui::Rect) = parts
+        .iter()
+        .find_map(|id| {
+            ctx.data(|d| d.get_temp(egui::Id::unique(("library-stack-look", id.as_str()))))
+        })
+        .expect("the stack's look");
+    for (edge, reach, spread) in [(edges[0], 10., 2.), (edges[1], 5., 1.)] {
+        assert_eq!(edge.left(), cover.left() + reach + spread, "{edge:?} {cover:?}");
+        assert_eq!(edge.top(), cover.top() - reach + spread, "{edge:?} {cover:?}");
+    }
+    assert!(cover.contains_rect(badge));
+    assert!(badge.left() - cover.left() < 8. && badge.top() - cover.top() < 8.);
     let stack = cards
         .iter()
         .find(|(id, _)| parts.contains(id))

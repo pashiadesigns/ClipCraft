@@ -864,8 +864,38 @@ impl Editor {
     }
 }
 
-/// A stack: two page edges behind the first part's card and a badge with
-/// the number of parts.
+/// How far the stacked page edges reach up and to the right (approved mockup:
+/// `box-shadow: 5px -5px 0 -1px #c9d1d4, 10px -10px 0 -2px #9aa6ab` with a
+/// 10 px margin above and to the right of the cover).
+const STACK_REACH: f32 = 10.;
+
+/// The cover and its two page edges for a stack whose card cell starts at
+/// `top` (BZ7: exactly the mockup's look).
+fn stack_geometry(top: egui::Pos2, size: egui::Vec2) -> (egui::Rect, [egui::Rect; 2]) {
+    let cover = egui::Rect::from_min_size(
+        top + egui::vec2(0., STACK_REACH),
+        size - egui::vec2(STACK_REACH, STACK_REACH),
+    );
+    // Each edge is the cover moved up and right, shrunk by its spread.
+    let edge = |offset: f32, spread: f32| {
+        cover
+            .translate(egui::vec2(offset, -offset))
+            .shrink(spread)
+    };
+    (cover, [edge(10., 2.), edge(5., 1.)])
+}
+
+/// "10 parts · 312 pp" (or "10 parts" when the pages aren't known).
+fn stack_badge(parts: &[Entry]) -> String {
+    format!(
+        "{} parts{}",
+        parts.len(),
+        stack_pages(parts).map_or(String::new(), |n| format!(" \u{b7} {n} pp"))
+    )
+}
+
+/// A stack: page edges stacked up and to the right behind the first part's
+/// card, and a "N parts · P pp" badge over the top-left of the cover.
 fn stacked_card(
     e: &mut Editor,
     ui: &mut egui::Ui,
@@ -873,30 +903,28 @@ fn stacked_card(
     parts: &[Entry],
     size: egui::Vec2,
 ) {
-    let edge = 6.;
-    let top = ui.cursor().min;
+    let (cover, edges) = stack_geometry(ui.cursor().min, size);
     let p = ui.painter();
-    for (k, shade) in [(2., 70), (1., 95)] {
-        p.rect_filled(
-            egui::Rect::from_min_size(
-                top + egui::vec2(edge * k, 0.),
-                size - egui::vec2(edge * 2., edge * 2.),
-            ),
-            4,
-            egui::Color32::from_gray(shade),
-        );
+    // Farthest (darker) first, then the nearer light one.
+    for (rect, color) in edges.iter().zip([
+        egui::Color32::from_rgb(0x9a, 0xa6, 0xab),
+        egui::Color32::from_rgb(0xc9, 0xd1, 0xd4),
+    ]) {
+        p.rect_filled(*rect, 4, color);
     }
-    ui.add_space(edge * 2.);
-    let card = e.history_card(ui, entry, size - egui::vec2(edge * 2., edge * 2.));
-    let text = format!("{} parts", parts.len());
-    let galley =
-        ui.painter()
-            .layout_no_wrap(text, egui::FontId::proportional(10.5), egui::Color32::WHITE);
-    let badge = egui::Rect::from_min_size(
-        card.rect.left_top() + egui::vec2(6., 6.),
-        egui::vec2(galley.size().x + 12., 15.),
+    ui.add_space(STACK_REACH);
+    let card = e.history_card(ui, entry, cover.size());
+    let galley = ui.painter().layout_no_wrap(
+        stack_badge(parts),
+        egui::FontId::proportional(11.),
+        egui::Color32::WHITE,
     );
-    ui.painter().rect_filled(badge, 4, crate::shell::ACCENT);
+    let badge = egui::Rect::from_min_size(
+        card.rect.left_top() + egui::vec2(4., 4.),
+        egui::vec2(galley.size().x + 14., 18.),
+    );
+    ui.painter()
+        .rect_filled(badge, 9, egui::Color32::from_black_alpha(166));
     ui.painter().galley(
         badge.center() - galley.size() / 2.,
         galley,
@@ -907,7 +935,11 @@ fn stacked_card(
         d.insert_temp(
             egui::Id::unique(("library-stack", entry.id.as_str())),
             parts.len(),
-        )
+        );
+        d.insert_temp(
+            egui::Id::unique(("library-stack-look", entry.id.as_str())),
+            (card.rect, edges, badge),
+        );
     });
 }
 

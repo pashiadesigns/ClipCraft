@@ -562,4 +562,11 @@ fn the_media_group_labels_fit_their_buttons() {
             .unwrap_or_else(|| panic!("{label}"));
         assert!(r.width() + 25. <= 100., "{label}: {r:?}");
     }
+    // BZ8: Media is the last group, after Audio and Presets.
+    let at = |label| {
+        crate::color_widgets::tests::text_rect(&output.0.shapes, label)
+            .unwrap_or_else(|| panic!("{label}"))
+    };
+    assert!(at("Pictures").left() > at("Blocks").right());
+    assert!(at("Pictures").left() > at("Narration").right());
 }
