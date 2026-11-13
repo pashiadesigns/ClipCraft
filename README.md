@@ -7,7 +7,7 @@ local Windows workspace. Capture your screen, point out what matters, add narrat
 and share a polished image, PDF, GIF or video. Everything stays on your PC, and no
 ClipDesigner account is required.
 
-**[Download 1.0.0-beta.4](https://github.com/pashiadesigns/ClipDesigner/releases/tag/v1.0.0-beta.4)**
+**[Download 1.0.0-beta.5](https://github.com/pashiadesigns/ClipDesigner/releases/tag/v1.0.0-beta.5)**
 · [Install & storage locations](docs/installing.md) · [Build from source](docs/building.md)
 · [Known limitations](#beta-notes)
 
@@ -34,6 +34,16 @@ third-party notices. Older development project formats are not supported.
 *Most power users start as casual users. It's the same app and the same project files, so the depth is there when you need it.*
 
 ## What's new
+
+**Beta 5** opens PDFs as editable pages (long ones as linked parts, one stacked
+card in the Library), exports guides to PowerPoint and Word, and adds sharing:
+kits of presets, a team kit folder, packed projects and edit locks for projects
+in shared folders. Images rotate by any angle (with Reset rotation) and resize
+by inches or centimeters, you can build custom sensitive types, presets get a
+right-click menu and Manage presets, and errors now say what to change and ring
+the control that fixes them.
+
+**Beta 4** renamed ClipCraft to ClipDesigner.
 
 **Beta 3** fixes beta 2: hand cursors appear only on rotation handles and the
 middle curve node, and stay visible while you drag; one Callout preset group with

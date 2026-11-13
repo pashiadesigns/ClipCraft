@@ -29,7 +29,7 @@ For a portable package, write notes at `releases/<version>.json`, commit the
 exact source, then run:
 
 ```powershell
-./scripts/package-github.ps1 -Version 1.0.0-beta.4
+./scripts/package-github.ps1 -Version 1.0.0-beta.5
 ```
 
 The script checks source cleanliness, runs tests, builds binaries, checks PE
@@ -49,5 +49,5 @@ The application build requires neither. Screenshots use synthetic test content.
 
 Portable builds include `install-start-menu.ps1` for one ClipDesigner shortcut.
 Run `scripts/build-msi.ps1 -Package <clean-payload-folder> -Output <new.msi>
--Version 1.0.0-beta.4` to build an unsigned per-user MSI with the pinned WiX toolset.
+-Version 1.0.0-beta.5` to build an unsigned per-user MSI with the pinned WiX toolset.
 The script downloads and verifies its build tool; it never installs the application.
