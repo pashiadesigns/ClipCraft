@@ -237,11 +237,31 @@ impl Editor {
                 // icon in its toolbar color, the current tool marked like
                 // its tile, muted section headings.
                 ui.spacing_mut().item_spacing.y = 2.;
-                ui.label(
-                    egui::RichText::new("Right-click to favorite. Drag within the same section.")
-                        .size(11.5)
-                        .color(crate::panel_ui::MUTED),
-                );
+                // As narrow as the longest name allows (user, 2026-11-13: the
+                // menu was too wide). Favorite and reordering are in the
+                // button's tooltip, not a line at the top.
+                let row_width = order
+                    .iter()
+                    .skip(visible)
+                    .filter_map(|id| TOOLS.iter().find(|t| t.id == *id))
+                    .map(|t| {
+                        ui.painter()
+                            .layout_no_wrap(
+                                t.name.to_owned(),
+                                egui::FontId::proportional(13.),
+                                egui::Color32::WHITE,
+                            )
+                            .size()
+                            .x
+                    })
+                    .fold(0., f32::max)
+                    .max(100.)
+                    + 54.;
+                ui.set_max_width(row_width);
+                #[cfg(test)]
+                ui.ctx().data_mut(|d| {
+                    d.insert_temp(egui::Id::unique("overflow-tool-width"), row_width)
+                });
                 let current = self.current_tool().id;
                 let mut last_group = None;
                 for id in order.iter().copied().skip(visible) {
@@ -266,7 +286,7 @@ impl Editor {
                         .push_id(("more-tool", id), |ui| {
                             ui.horizontal(|ui| {
                                 let (rect, response) = ui.allocate_exact_size(
-                                    egui::vec2(200.0, 32.0),
+                                    egui::vec2(row_width, 32.0),
                                     egui::Sense::click_and_drag(),
                                 );
                                 let label = tool.name;
@@ -345,7 +365,34 @@ impl Editor {
                     responses.push((id, response));
                 }
                 ui.separator();
-                if crate::controls::menu_action(ui, "Reset toolbar order").clicked() {
+                // A row like the tools above it (the shared menu action is
+                // 180 px wide, wider than this menu).
+                let (rect, reset) =
+                    ui.allocate_exact_size(egui::vec2(row_width, 28.), egui::Sense::click());
+                reset.widget_info(|| {
+                    egui::WidgetInfo::labeled(egui::Role::Button, true, "Reset toolbar order")
+                });
+                let p = ui.painter();
+                if reset.hovered() || reset.has_focus() {
+                    p.rect_filled(rect, 4., ui.visuals().widgets.hovered.weak_bg_fill);
+                }
+                crate::video_editor::ui::icon(
+                    p,
+                    egui::Rect::from_center_size(
+                        egui::pos2(rect.left() + 20., rect.center().y),
+                        egui::vec2(16., 16.),
+                    ),
+                    "Reset effect",
+                    ui.visuals().text_color(),
+                );
+                p.text(
+                    egui::pos2(rect.left() + 40., rect.center().y),
+                    egui::Align2::LEFT_CENTER,
+                    "Reset toolbar order",
+                    egui::FontId::proportional(13.),
+                    ui.visuals().text_color(),
+                );
+                if reset.clicked() {
                     reorder = Some(Choice::ResetToolbar);
                     ui.close();
                 }
