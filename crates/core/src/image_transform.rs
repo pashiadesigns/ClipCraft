@@ -43,6 +43,20 @@ pub struct Turn {
     pub offset: [f32; 2],
 }
 
+impl Turned {
+    /// The canvas grew or shrank around the turned picture (an object moved
+    /// past the edge): everything moved by `offset` and the picture was
+    /// padded, not changed. The record stays valid (BZ3); the shift joins the
+    /// last turn so Reset still lands every object where it was.
+    pub(crate) fn follow_canvas(&mut self, offset: [i32; 2], document: &Document) {
+        if let Some(last) = self.turns.last_mut() {
+            last.offset[0] += offset[0] as f32;
+            last.offset[1] += offset[1] as f32;
+        }
+        self.after = fingerprint(document.raster.as_deref(), [document.width, document.height]);
+    }
+}
+
 /// FNV-1a over the picture's PNG text and size.
 fn fingerprint(raster: Option<&RasterImage>, size: [u32; 2]) -> u64 {
     let start = (0xcbf2_9ce4_8422_2325_u64 ^ u64::from(size[0])).wrapping_mul(0x0100_0000_01b3)
@@ -349,6 +363,28 @@ impl Document {
         self.canvas_behavior.turned = None;
         self.annotations = annotations;
         self.auto_canvas_base = None;
+        // An object moved past the edge after the turn keeps its place: the
+        // canvas grows around it again, and a turned object's own (unturned)
+        // box may still reach past the edge, so it stays editable there (as
+        // after a turn, BW19).
+        let outside = |d: &Document, bounds: bool| {
+            let (w, h) = (d.width as f32, d.height as f32);
+            let out = |p: &[f32; 2]| p[0] < 0. || p[1] < 0. || p[0] > w || p[1] > h;
+            d.annotations.iter().any(|a| {
+                let (lo, hi) = a.bounds();
+                (bounds && (out(&lo) || out(&hi)))
+                    || [a.start, a.end].iter().chain(&a.points).any(out)
+            })
+        };
+        if outside(self, true) {
+            self.canvas_behavior.allow_overflow = true;
+            if self.video.is_none() && self.canvas_behavior.dynamic_expansion {
+                let plan = self.plan_object_bounds(&[], false)?;
+                *self = plan.apply(self)?;
+                self.canvas_behavior.allow_overflow =
+                    turned.allow_overflow || outside(self, false);
+            }
+        }
         Ok(true)
     }
     pub(crate) fn transform_image(&mut self, transform: ImageTransform) -> Result<bool> {
@@ -453,6 +489,64 @@ mod tests {
             turned_size
         );
         assert!(session.document.can_reset_rotation());
+    }
+    /// BZ3: shapes near the edges make the canvas grow after a turn (Keep
+    /// size and Grow to fit). Reset rotation stays offered while the canvas
+    /// grows and shrinks around the turned picture, and still brings back the
+    /// original picture with every object in its place.
+    #[test]
+    fn reset_rotation_survives_the_canvas_growing_around_objects() {
+        for grow in [false, true] {
+            let mut doc = photo(200, 100);
+            let mut corner = crate::templates::text(1, [2., 2., 60., 30.], "", 12., false);
+            corner.kind = crate::Kind::Rectangle;
+            let mut edge = corner.clone();
+            edge.id = 2;
+            edge.start = [150., 70.];
+            edge.end = [198., 98.];
+            doc.annotations.extend([corner.clone(), edge.clone()]);
+            let original = doc.base_image().unwrap();
+            let mut s = Session::new(doc).unwrap();
+            s.execute(Command::RotateImage {
+                degrees: 35.,
+                grow,
+                corners: None,
+            })
+            .unwrap();
+            assert!(s.document.can_reset_rotation(), "grow {grow}: after the turn");
+            // Drag the edge shape well past the left edge, then back.
+            for delta in [[-260., -40.], [260., 40.]] {
+                let shape = s.document.annotations.iter().find(|a| a.id == 2).unwrap();
+                let moved = crate::canvas_expansion::translated(
+                    std::slice::from_ref(shape),
+                    delta,
+                )
+                .unwrap();
+                s.execute(Command::MoveAndExpand {
+                    annotations: moved,
+                    duplicate: false,
+                })
+                .unwrap();
+                assert!(
+                    s.document.can_reset_rotation(),
+                    "grow {grow}: after moving by {delta:?} ({}x{})",
+                    s.document.width,
+                    s.document.height
+                );
+            }
+            s.execute(Command::ResetRotation).unwrap();
+            let d = &s.document;
+            assert_eq!([d.width, d.height], [200, 100], "grow {grow}");
+            assert_eq!(d.base_image().unwrap(), original, "grow {grow}");
+            for shape in [&corner, &edge] {
+                let back = d.annotations.iter().find(|a| a.id == shape.id).unwrap();
+                let (c, o) = (back.rotation().center, shape.rotation().center);
+                assert!(
+                    (c[0] - o[0]).abs() < 0.6 && (c[1] - o[1]).abs() < 0.6,
+                    "grow {grow}: {o:?} -> {c:?}"
+                );
+            }
+        }
     }
     /// A crop or resize after a turn changes the picture: Reset isn't offered.
     #[test]

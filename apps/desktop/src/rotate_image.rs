@@ -353,6 +353,59 @@ mod tests {
         assert!(!d.can_reset_rotation());
         assert!(e.status.starts_with("Rotated the image back"));
     }
+    /// BZ3: with real shapes near the edges, Reset stays on after the dialog
+    /// closes and after a later move grows the canvas.
+    #[test]
+    fn reset_rotation_stays_on_with_shapes_near_the_edges() {
+        let ctx = egui::Context::default();
+        let mut e = crate::canvas::tests::editor(&ctx);
+        e.session = crate::Session::new(crate::Document::blank(300, 200).unwrap()).unwrap();
+        for (start, end) in [([4., 4.], [90., 60.]), ([220., 140.], [296., 196.])] {
+            let a = e.new_annotation(crate::Kind::Rectangle, start, end);
+            e.execute(Command::Add { annotation: a });
+        }
+        for grow in [false, true] {
+            e.begin_rotate_image();
+            let d = e.rotate_image.as_mut().unwrap();
+            d.degrees = 40.;
+            d.text = "40°".into();
+            d.grow = grow;
+            for _ in 0..3 {
+                ctx.run_ui(Default::default(), |ui| e.show_rotate_image(ui.ctx()))
+                    .textures_delta
+                    .clear();
+            }
+            e.session
+                .execute(Command::RotateImage {
+                    degrees: 40.,
+                    grow,
+                    corners: None,
+                })
+                .unwrap();
+            e.rotate_image = None;
+            assert!(
+                crate::ribbon_settings::Action::ResetRotation.enabled_for_test(&e),
+                "grow {grow}: after the dialog closes"
+            );
+        }
+        let shape = e.session.document.annotations[1].clone();
+        let moved =
+            capture_core::canvas_expansion::translated(std::slice::from_ref(&shape), [200., 90.])
+                .unwrap();
+        e.execute(Command::MoveAndExpand {
+            annotations: moved,
+            duplicate: false,
+        });
+        assert!(crate::ribbon_settings::Action::ResetRotation.enabled_for_test(&e));
+        e.run_settings_action(crate::ribbon_settings::Action::ResetRotation);
+        assert!(
+            e.status.starts_with("Rotated the image back"),
+            "{} / {:?}",
+            e.status,
+            e.notice.text
+        );
+        assert!(!e.session.document.can_reset_rotation());
+    }
     #[test]
     fn angles_parse_with_or_without_the_degree_sign() {
         assert_eq!(RotateImage::parse("12°"), Some(12.));
